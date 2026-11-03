@@ -59,7 +59,7 @@ if ($NoStart) { $arguments += '--no-start' }
 $p = Start-Process $exe -ArgumentList $arguments -Wait -NoNewWindow -PassThru
 
 switch ($p.ExitCode) {
-    0 { Write-Host "`nDockyard is installed and running in the tray. Sign out and back in once so docker-users applies to the Windows engine." -ForegroundColor Green }
+    0 { Write-Host "`nDockyard is installed and running in the tray." -ForegroundColor Green }
     3010 { Write-Host "`nDockyard is installed. Reboot to finish enabling Windows containers." -ForegroundColor Yellow }
     default { throw "Install failed (exit code $($p.ExitCode)). See the output above." }
 }
