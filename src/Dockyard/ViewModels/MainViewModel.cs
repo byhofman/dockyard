@@ -215,7 +215,7 @@ sealed class MainViewModel : Observable
         if (items.FirstOrDefault(i => i.Component == Component.App) is { LatestRelease: { } release })
         {
             Log($"Downloading Dockyard {release.Tag}");
-            var exe = await Updates.DownloadApp(release.Tag);
+            var exe = await Updates.DownloadApp(release);
             Elevation.StartDetached("--machine-update", nameof(Component.App), "--source", exe);
             Log("Restarting Dockyard");
             ShutdownRequested?.Invoke();

@@ -100,20 +100,26 @@ static partial class Updates
         return version is null ? null : new Release(version, candidate.Groups[1].Value, null);
     }
 
-    // The repo is private, so this goes through the gh CLI and its stored login.
     static async Task<Release?> LatestApp()
     {
-        var r = await Shell.Run("gh", "release", "view", "-R", Paths.Repo, "--json", "tagName", "-q", ".tagName");
-        var tag = r.Output.Trim();
-        return r.ExitCode == 0 && ParseVersion(tag) is { } v ? new Release(v, tag, null) : null;
+        using var response = await Http.GetAsync($"https://api.github.com/repos/{Paths.Repo}/releases/latest");
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+        response.EnsureSuccessStatusCode();
+        var release = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
+        var tag = release["tag_name"]!.GetValue<string>();
+        var asset = release["assets"]!.AsArray().FirstOrDefault(a => a!["name"]!.GetValue<string>() == "Dockyard.exe");
+        return ParseVersion(tag) is { } v && asset is not null
+            ? new Release(v, tag, asset["browser_download_url"]!.GetValue<string>())
+            : null;
     }
 
-    public static async Task<string> DownloadApp(string tag)
+    public static async Task<string> DownloadApp(Release release)
     {
         var dir = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
         Directory.CreateDirectory(dir);
-        await Shell.Check("gh", "release", "download", tag, "-R", Paths.Repo, "-p", "Dockyard.exe", "-D", dir);
-        return Path.Combine(dir, "Dockyard.exe");
+        var exe = Path.Combine(dir, "Dockyard.exe");
+        await DownloadFile(release.DownloadUrl!, exe);
+        return exe;
     }
 
     public static async Task DownloadFile(string url, string target)

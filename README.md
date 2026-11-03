@@ -13,36 +13,39 @@ One self-contained exe (`Dockyard.exe`, .NET 10 + Avalonia, nothing to install f
 
 - Windows 11 with WSL 2. Mirrored networking recommended (`[wsl2] networkingMode=mirrored` in `~\.wslconfig`).
 - A WSL distro with systemd, launched once so its user exists (`winget install Canonical.Ubuntu.2404`).
-- `gh` logged in (`gh auth login`): the repo is private, so downloading Dockyard and its own update check go through `gh`.
-
 ## Install
 
-In an elevated PowerShell (no admin prompt then; from a normal shell you get one):
+In PowerShell, preferably elevated (then it also adds the Defender exclusions and there is no administrator prompt):
 
 ```pwsh
-# 1. Let Defender ASR run Dockyard (see Gotchas)
-Add-MpPreference -AttackSurfaceReductionOnlyExclusions `
-  "$env:USERPROFILE\Downloads\Dockyard.exe",
-  "C:\Program Files\Dockyard\Dockyard.exe"
+irm https://raw.githubusercontent.com/byhofman/dockyard/main/install.ps1 | iex
+```
 
-# 2a. Download the latest release ...
-gh release download -R byhofman/dockyard -p Dockyard.exe -D "$env:USERPROFILE\Downloads" --clobber
+It downloads the latest release to `Downloads\Dockyard.exe` and installs it silently. Then sign out and back in once (docker-users group).
 
-# 2b. ... or the latest build of main (gh extracts the artifact zip)
-$run = gh run list -R byhofman/dockyard -b main -w build -s success -L 1 --json databaseId -q '.[0].databaseId'
-Remove-Item "$env:USERPROFILE\Downloads\Dockyard.exe" -ErrorAction SilentlyContinue
-gh run download $run -R byhofman/dockyard -n Dockyard -D "$env:USERPROFILE\Downloads"
+With options:
 
-# 3. Install silently
+```pwsh
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/byhofman/dockyard/main/install.ps1))) -Distro Ubuntu-24.04 -Build
+```
+
+- `-Distro <name>`: WSL distro for Linux containers (default `Ubuntu-24.04`, or the one from a previous install)
+- `-Build`: the latest build of `main` instead of the latest release (needs the `gh` CLI, signed in)
+- `-NoStart`: don't start Dockyard afterwards
+
+Running the one-liner again is safe and updates everything that is out of date.
+
+### Manually
+
+```pwsh
+Invoke-WebRequest https://github.com/byhofman/dockyard/releases/latest/download/Dockyard.exe -OutFile "$env:USERPROFILE\Downloads\Dockyard.exe"
 $p = Start-Process "$env:USERPROFILE\Downloads\Dockyard.exe" -ArgumentList '--install' -Wait -NoNewWindow -PassThru
 $p.ExitCode   # 0 = done, 3010 = reboot to finish enabling Windows containers
 ```
 
-Then sign out and back in once (docker-users group).
+`Dockyard.exe --install` takes `--distro <name>` and `--no-start`; `--uninstall` removes everything again (images, containers and the Docker packages inside WSL are kept). Running `Dockyard.exe` without arguments opens the same setup as a window.
 
-Options for `--install`: `--distro <name>` (default `Ubuntu-24.04`, or the distro from a previous install) and `--no-start` (don't start Dockyard afterwards). `--uninstall` removes everything again (images, containers and the Docker packages inside WSL are kept). Running `Dockyard.exe` without arguments opens the same setup as a window.
-
-Re-running `--install` is safe and updates everything that is out of date.
+### What it installs
 
 Administrator step:
 
