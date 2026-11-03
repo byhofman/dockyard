@@ -13,18 +13,36 @@ One self-contained exe (`Dockyard.exe`, .NET 10 + Avalonia, nothing to install f
 
 - Windows 11 with WSL 2. Mirrored networking recommended (`[wsl2] networkingMode=mirrored` in `~\.wslconfig`).
 - A WSL distro with systemd, launched once so its user exists (`winget install Canonical.Ubuntu.2404`).
-- `gh` logged in, for Dockyard's own update check (the repo is private).
+- `gh` logged in (`gh auth login`): the repo is private, so downloading Dockyard and its own update check go through `gh`.
 
 ## Install
 
-Download `Dockyard.exe` from the latest release and run it:
+In an elevated PowerShell (no admin prompt then; from a normal shell you get one):
 
 ```pwsh
+# 1. Let Defender ASR run Dockyard (see Gotchas)
+Add-MpPreference -AttackSurfaceReductionOnlyExclusions `
+  "$env:USERPROFILE\Downloads\Dockyard.exe",
+  "C:\Program Files\Dockyard\Dockyard.exe"
+
+# 2a. Download the latest release ...
 gh release download -R byhofman/dockyard -p Dockyard.exe -D "$env:USERPROFILE\Downloads" --clobber
-& "$env:USERPROFILE\Downloads\Dockyard.exe"
+
+# 2b. ... or the latest build of main (gh extracts the artifact zip)
+$run = gh run list -R byhofman/dockyard -b main -w build -s success -L 1 --json databaseId -q '.[0].databaseId'
+Remove-Item "$env:USERPROFILE\Downloads\Dockyard.exe" -ErrorAction SilentlyContinue
+gh run download $run -R byhofman/dockyard -n Dockyard -D "$env:USERPROFILE\Downloads"
+
+# 3. Install silently
+$p = Start-Process "$env:USERPROFILE\Downloads\Dockyard.exe" -ArgumentList '--install' -Wait -NoNewWindow -PassThru
+$p.ExitCode   # 0 = done, 3010 = reboot to finish enabling Windows containers
 ```
 
-Pick the WSL distro, click **Install / Update** and approve the administrator prompt.
+Then sign out and back in once (docker-users group).
+
+Options for `--install`: `--distro <name>` (default `Ubuntu-24.04`, or the distro from a previous install) and `--no-start` (don't start Dockyard afterwards). `--uninstall` removes everything again (images, containers and the Docker packages inside WSL are kept). Running `Dockyard.exe` without arguments opens the same setup as a window.
+
+Re-running `--install` is safe and updates everything that is out of date.
 
 Administrator step:
 
