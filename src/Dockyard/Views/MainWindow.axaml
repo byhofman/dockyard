@@ -1,0 +1,166 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Dockyard.ViewModels"
+        x:Class="Dockyard.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Title="Dockyard"
+        Icon="avares://Dockyard/Assets/docker.ico"
+        Width="860" Height="700" MinWidth="720" MinHeight="520"
+        WindowStartupLocation="CenterScreen">
+
+  <Window.Resources>
+    <Flyout x:Key="ConfirmUninstall" Placement="TopEdgeAlignedRight">
+      <StackPanel Spacing="12" MaxWidth="320" x:DataType="vm:MainViewModel">
+        <TextBlock FontWeight="SemiBold" Text="Uninstall Dockyard?" />
+        <TextBlock TextWrapping="Wrap" Classes="muted"
+                   Text="Removes both Docker engines, the docker CLI, the contexts and Dockyard. Images, containers and the Docker packages inside WSL are kept." />
+        <Button Classes="dangerfill" Content="Uninstall" Command="{Binding UninstallCommand}" HorizontalAlignment="Right" />
+      </StackPanel>
+    </Flyout>
+  </Window.Resources>
+
+  <DockPanel>
+
+    <Border DockPanel.Dock="Top" Background="{StaticResource Surface}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="20,14">
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <StackPanel Orientation="Horizontal" Spacing="12">
+          <Image Source="avares://Dockyard/Assets/whale-blue.png" Width="34" Height="34" />
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock Classes="h1" Text="Dockyard" />
+            <TextBlock Classes="muted" FontSize="12" Text="Docker engines on demand, without Docker Desktop" />
+          </StackPanel>
+        </StackPanel>
+
+        <Border Grid.Column="2" IsVisible="{Binding IsDashboard}" Background="{StaticResource Bg}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="7" Padding="3" VerticalAlignment="Center">
+          <StackPanel Orientation="Horizontal" Spacing="2">
+            <Button Classes="segment" Classes.selected="{Binding IsLinuxActive}" Content="Linux" Command="{Binding Linux.UseCommand}" ToolTip.Tip="Switch the docker context to the Linux engine" />
+            <Button Classes="segment" Classes.selected="{Binding IsWindowsActive}" Content="Windows" Command="{Binding Windows.UseCommand}" ToolTip.Tip="Switch the docker context to the Windows engine" />
+          </StackPanel>
+        </Border>
+      </Grid>
+    </Border>
+
+    <Border DockPanel.Dock="Bottom" Background="{StaticResource Surface}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="20,8">
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" Width="80" MinWidth="80" VerticalAlignment="Center" Margin="0,0,12,0" />
+        <TextBlock Grid.Column="1" Classes="muted" Text="{Binding Status}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+        <TextBlock Grid.Column="2" Classes="muted mono" Text="{Binding Version}" VerticalAlignment="Center" />
+      </Grid>
+    </Border>
+
+    <ScrollViewer>
+      <StackPanel Margin="20" Spacing="22">
+
+        <!-- Setup -->
+        <StackPanel Spacing="10" IsVisible="{Binding IsSetupMode}">
+          <TextBlock Classes="h2" Text="SETUP" />
+          <Border Classes="card">
+            <StackPanel Spacing="14">
+              <TextBlock TextWrapping="Wrap" Text="Installs the Windows Docker engine (dockerd service), the docker CLI with compose and buildx, Docker CE inside a WSL distro, and Dockyard itself, which runs in the tray." />
+              <Grid ColumnDefinitions="Auto,240,*,Auto" RowDefinitions="Auto">
+                <TextBlock Text="WSL distro for Linux containers" VerticalAlignment="Center" Margin="0,0,12,0" />
+                <ComboBox Grid.Column="1" ItemsSource="{Binding Distros}" SelectedItem="{Binding SelectedDistro}" HorizontalAlignment="Stretch" />
+                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8">
+                  <Button Classes="danger" Content="Uninstall…" IsVisible="{Binding IsInstalled}" Flyout="{StaticResource ConfirmUninstall}" />
+                  <Button Classes="primary" Content="Install / Update" Command="{Binding InstallCommand}" />
+                </StackPanel>
+              </Grid>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <!-- Engines -->
+        <StackPanel Spacing="10" IsVisible="{Binding IsDashboard}">
+          <TextBlock Classes="h2" Text="ENGINES" />
+          <ItemsControl ItemsSource="{Binding EngineCards}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <UniformGrid Columns="2" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:EngineViewModel">
+                <Border Classes="card" Classes.active="{Binding IsActive}" Margin="0,0,10,0">
+                  <Grid RowDefinitions="Auto,Auto,Auto,Auto" ColumnDefinitions="*,Auto">
+                    <TextBlock Classes="title" Text="{Binding Title}" />
+                    <Border Grid.Column="1" Classes="pill accent" IsVisible="{Binding IsActive}">
+                      <TextBlock Text="ACTIVE CONTEXT" />
+                    </Border>
+                    <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Classes="muted" Text="{Binding Subtitle}" Margin="0,2,0,12" />
+                    <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="8" Margin="0,0,0,4">
+                      <Ellipse Classes="dot" Classes.on="{Binding IsRunning}" />
+                      <TextBlock Text="{Binding StatusText}" FontWeight="SemiBold" />
+                    </StackPanel>
+                    <Grid Grid.Row="3" Grid.ColumnSpan="2" ColumnDefinitions="*,Auto" Margin="0,8,0,0">
+                      <TextBlock Classes="muted mono" Text="{Binding Endpoint}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                        <Button Classes="link" Content="Use" Command="{Binding UseCommand}" IsVisible="{Binding IsInactive}" />
+                        <Button Classes.primary="{Binding IsStopped}" Content="{Binding ToggleText}" Command="{Binding ToggleCommand}" MinWidth="72" HorizontalContentAlignment="Center" />
+                      </StackPanel>
+                    </Grid>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+
+        <!-- Updates -->
+        <StackPanel Spacing="10" IsVisible="{Binding IsDashboard}">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Classes="h2" Text="UPDATES" VerticalAlignment="Bottom" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+              <Button Content="Check for updates" Command="{Binding CheckUpdatesCommand}" />
+              <Button Classes="primary" Content="Update all" Command="{Binding UpdateAllCommand}" />
+            </StackPanel>
+          </Grid>
+          <Border Classes="card" Padding="0">
+            <StackPanel>
+              <Grid ColumnDefinitions="*,110,110,140,96" Margin="18,12">
+                <TextBlock Classes="muted" FontSize="12" Text="Component" />
+                <TextBlock Grid.Column="1" Classes="muted" FontSize="12" Text="Installed" />
+                <TextBlock Grid.Column="2" Classes="muted" FontSize="12" Text="Latest" />
+                <TextBlock Grid.Column="3" Classes="muted" FontSize="12" Text="Status" />
+              </Grid>
+              <ItemsControl ItemsSource="{Binding Components}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ComponentViewModel">
+                    <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="18,10">
+                      <Grid ColumnDefinitions="*,110,110,140,96">
+                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Installed}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="2" Classes="mono" Text="{Binding Latest}" VerticalAlignment="Center" />
+                        <Border Grid.Column="3" Classes="pill" Classes.ok="{Binding IsUpToDate}" Classes.warn="{Binding IsAvailable}" Classes.bad="{Binding IsProblem}" ToolTip.Tip="{Binding Error}">
+                          <TextBlock Text="{Binding StatusText}" />
+                        </Border>
+                        <Button Grid.Column="4" Classes="primary" Content="Update" Command="{Binding UpdateCommand}" IsVisible="{Binding IsAvailable}" HorizontalAlignment="Right" />
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <!-- Settings -->
+        <StackPanel Spacing="10" IsVisible="{Binding IsDashboard}">
+          <TextBlock Classes="h2" Text="SETTINGS" />
+          <Border Classes="card">
+            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+              <ToggleSwitch IsChecked="{Binding StopOtherOnSwitch}" OnContent="Stop the other engine when switching" OffContent="Stop the other engine when switching" />
+              <ToggleSwitch Grid.Row="1" IsChecked="{Binding StartActiveAtLogon}" OnContent="Start the active engine at logon" OffContent="Start the active engine at logon" />
+              <Button Grid.Column="1" Grid.RowSpan="2" Classes="danger" Content="Uninstall…" VerticalAlignment="Center" Flyout="{StaticResource ConfirmUninstall}" />
+            </Grid>
+          </Border>
+        </StackPanel>
+
+        <!-- Activity -->
+        <Expander Header="Activity" IsExpanded="{Binding IsSetupMode, Mode=OneTime}" HorizontalAlignment="Stretch">
+          <SelectableTextBlock x:Name="LogBox" Classes="mono" Text="{Binding LogText}" TextWrapping="Wrap" MinHeight="80" />
+        </Expander>
+
+      </StackPanel>
+    </ScrollViewer>
+  </DockPanel>
+</Window>

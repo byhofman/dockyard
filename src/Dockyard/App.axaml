@@ -1,0 +1,176 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Dockyard.App"
+             Name="Dockyard"
+             RequestedThemeVariant="Dark">
+
+  <Application.Resources>
+    <Color x:Key="SystemAccentColor">#1D63ED</Color>
+    <SolidColorBrush x:Key="Bg" Color="#0E1117" />
+    <SolidColorBrush x:Key="Surface" Color="#161B23" />
+    <SolidColorBrush x:Key="SurfaceRaised" Color="#1D2330" />
+    <SolidColorBrush x:Key="Line" Color="#262D3B" />
+    <SolidColorBrush x:Key="Text" Color="#E7EBF3" />
+    <SolidColorBrush x:Key="Muted" Color="#8A94A6" />
+    <SolidColorBrush x:Key="Accent" Color="#1D63ED" />
+    <SolidColorBrush x:Key="AccentHover" Color="#3B7BF5" />
+    <SolidColorBrush x:Key="Ok" Color="#2FBF71" />
+    <SolidColorBrush x:Key="Warn" Color="#F0A92E" />
+    <SolidColorBrush x:Key="Bad" Color="#EF5350" />
+    <FontFamily x:Key="Mono">Cascadia Mono, Consolas</FontFamily>
+    <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="#161B23" />
+    <SolidColorBrush x:Key="ExpanderHeaderBackgroundPointerOver" Color="#1D2330" />
+    <SolidColorBrush x:Key="ExpanderHeaderBackgroundPressed" Color="#1D2330" />
+    <SolidColorBrush x:Key="ExpanderHeaderBorderBrush" Color="#262D3B" />
+    <SolidColorBrush x:Key="ExpanderHeaderBorderBrushPointerOver" Color="#262D3B" />
+    <SolidColorBrush x:Key="ExpanderHeaderBorderBrushPressed" Color="#262D3B" />
+    <SolidColorBrush x:Key="ExpanderContentBackground" Color="#161B23" />
+    <SolidColorBrush x:Key="ExpanderContentBorderBrush" Color="#262D3B" />
+  </Application.Resources>
+
+  <Application.Styles>
+    <FluentTheme />
+
+    <Style Selector="Window">
+      <Setter Property="Background" Value="{StaticResource Bg}" />
+      <Setter Property="Foreground" Value="{StaticResource Text}" />
+      <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI" />
+      <Setter Property="FontSize" Value="13" />
+    </Style>
+
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="{StaticResource Surface}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="18" />
+    </Style>
+    <Style Selector="Border.card.active">
+      <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+    </Style>
+
+    <Style Selector="TextBlock.h1">
+      <Setter Property="FontSize" Value="18" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.h2">
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+      <Setter Property="LetterSpacing" Value="1" />
+    </Style>
+    <Style Selector="TextBlock.title">
+      <Setter Property="FontSize" Value="15" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.muted">
+      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+    </Style>
+    <Style Selector="TextBlock.mono, SelectableTextBlock.mono">
+      <Setter Property="FontFamily" Value="{StaticResource Mono}" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontWeight" Value="Normal" />
+    </Style>
+
+    <Style Selector="Button">
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="14,6" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Background" Value="{StaticResource SurfaceRaised}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Button.primary">
+      <Setter Property="Background" Value="{StaticResource Accent}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource AccentHover}" />
+      <Setter Property="BorderBrush" Value="{StaticResource AccentHover}" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.danger">
+      <Setter Property="Foreground" Value="{StaticResource Bad}" />
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.link">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Foreground" Value="{StaticResource AccentHover}" />
+      <Setter Property="Padding" Value="6,4" />
+    </Style>
+
+    <Style Selector="Button.segment">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="5" />
+      <Setter Property="Padding" Value="16,5" />
+      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+    </Style>
+    <Style Selector="Button.segment.selected">
+      <Setter Property="Background" Value="{StaticResource Accent}" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.segment.selected:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#2A4A8F" />
+      <Setter Property="Foreground" Value="#C9D8FF" />
+    </Style>
+    <Style Selector="Button.dangerfill">
+      <Setter Property="Background" Value="{StaticResource Bad}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Bad}" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.segment.selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource AccentHover}" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+
+    <Style Selector="Border.pill">
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="8,2" />
+      <Setter Property="Background" Value="#262D3B" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+    <Style Selector="Border.pill > TextBlock">
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+    </Style>
+    <Style Selector="Border.pill.ok">
+      <Setter Property="Background" Value="#1A3A2A" />
+    </Style>
+    <Style Selector="Border.pill.ok > TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource Ok}" />
+    </Style>
+    <Style Selector="Border.pill.warn">
+      <Setter Property="Background" Value="#3D2F14" />
+    </Style>
+    <Style Selector="Border.pill.warn > TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource Warn}" />
+    </Style>
+    <Style Selector="Border.pill.bad">
+      <Setter Property="Background" Value="#3D1C1C" />
+    </Style>
+    <Style Selector="Border.pill.bad > TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource Bad}" />
+    </Style>
+    <Style Selector="Border.pill.accent">
+      <Setter Property="Background" Value="#16285A" />
+    </Style>
+    <Style Selector="Border.pill.accent > TextBlock">
+      <Setter Property="Foreground" Value="#8FB2FF" />
+    </Style>
+
+    <Style Selector="Ellipse.dot">
+      <Setter Property="Width" Value="8" />
+      <Setter Property="Height" Value="8" />
+      <Setter Property="Fill" Value="{StaticResource Muted}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Ellipse.dot.on">
+      <Setter Property="Fill" Value="{StaticResource Ok}" />
+    </Style>
+  </Application.Styles>
+</Application>
