@@ -7,6 +7,10 @@ public sealed partial class DockerClient
     public Task<List<ContainerSummary>> ListContainersAsync(bool all = true, CancellationToken ct = default) =>
         GetJson($"containers/json?all={Bool(all)}", ContainerJson.Default.ListContainerSummary, ct);
 
+    public async Task<ContainerSummary?> FindContainerAsync(string id, CancellationToken ct = default) =>
+        (await GetJson($"containers/json?all=1&filters={Filters(("id", id))}", ContainerJson.Default.ListContainerSummary, ct))
+        .FirstOrDefault();
+
     public Task<ContainerInspect> InspectContainerAsync(string id, CancellationToken ct = default) =>
         GetJson($"containers/{Esc(id)}/json", ContainerJson.Default.ContainerInspect, ct);
 

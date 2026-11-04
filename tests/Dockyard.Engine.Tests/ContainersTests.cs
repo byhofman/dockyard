@@ -30,6 +30,20 @@ public sealed class ContainersTests
     }
 
     [Fact]
+    public async Task Find_filters_by_id()
+    {
+        var stub = StubHandler.WithPing().Json("""[{"Id":"abc","Names":["/web"],"State":"running"}]""").Json("[]");
+        using var client = stub.Client();
+
+        var found = await client.FindContainerAsync("abc", Ct);
+        var missing = await client.FindContainerAsync("zzz", Ct);
+
+        Assert.Equal("""/v1.47/containers/json?all=1&filters={"id":["abc"]}""", Uri.UnescapeDataString(stub.Path(1)));
+        Assert.Equal("web", found!.Name);
+        Assert.Null(missing);
+    }
+
+    [Fact]
     public async Task Inspect_parses_details()
     {
         var stub = StubHandler.WithPing().Json("""

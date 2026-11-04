@@ -19,6 +19,7 @@ Spec: `docs/superpowers/specs/2026-11-04-dockyard-dashboard-design.md` (sections
 - No comments that narrate or justify design decisions; only comment genuinely non-obvious things.
 - Commit messages carry no `Co-Authored-By` or other model attribution.
 - Work on branch `ui-rework`.
+- Tests run on Microsoft.Testing.Platform (`global.json` → `"test": {"runner": "Microsoft.Testing.Platform"}`), required by xunit v3 on the .NET 10 SDK. Filters therefore use MTP syntax: `--filter "FullyQualifiedName~X"` in the steps below means `dotnet test --project tests/Dockyard.Engine.Tests --filter-class "*X"`, and `--filter "Category=Engine"` means `--filter-trait "Category=Engine"`.
 
 ---
 
