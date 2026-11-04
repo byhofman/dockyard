@@ -29,6 +29,9 @@ sealed class ContainerItem(string id) : Observable
     double[] cpuHistory = [], memoryHistory = [];
 
     public string Id { get; } = id;
+    public string ImageId { get; private set; } = "";
+    public IReadOnlyDictionary<string, string> Labels { get; private set; } = new Dictionary<string, string>();
+    public IReadOnlyList<string> VolumeNames { get; private set; } = [];
     public string ShortId => Id[..Math.Min(12, Id.Length)];
     public string Name { get => name; private set => Set(ref name, value); }
     public string Image { get => image; private set => Set(ref image, value); }
@@ -58,6 +61,9 @@ sealed class ContainerItem(string id) : Observable
     public void Update(ContainerSummary s)
     {
         Name = s.Name;
+        ImageId = s.ImageID;
+        Labels = s.Labels ?? [];
+        VolumeNames = (s.Mounts ?? []).Where(m => m.Type == "volume" && m.Name is not null).Select(m => m.Name!).ToList();
         Image = s.Image;
         State = s.State;
         Status = s.Status;

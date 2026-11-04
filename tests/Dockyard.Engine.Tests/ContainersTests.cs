@@ -14,7 +14,8 @@ public sealed class ContainersTests
             [{"Id":"abc123def4567890","Names":["/shop-api-1"],"Image":"node:22","ImageID":"sha256:1",
               "Command":"node server.js","Created":1793785824,"State":"running","Status":"Up 2 minutes",
               "Ports":[{"IP":"0.0.0.0","PrivatePort":80,"PublicPort":8080,"Type":"tcp"},{"PrivatePort":9229,"Type":"tcp"}],
-              "Labels":{"com.docker.compose.project":"shop"}}]
+              "Labels":{"com.docker.compose.project":"shop"},
+              "Mounts":[{"Type":"volume","Name":"pgdata","Source":"/var/lib/docker/volumes/pgdata/_data","Destination":"/data","RW":true}]}]
             """);
         using var client = stub.Client();
 
@@ -27,6 +28,7 @@ public sealed class ContainersTests
         Assert.Equal(8080, c.Ports[0].PublicPort);
         Assert.Null(c.Ports[1].PublicPort);
         Assert.Equal("shop", c.Labels!["com.docker.compose.project"]);
+        Assert.Equal("pgdata", c.Mounts![0].Name);
     }
 
     [Fact]
