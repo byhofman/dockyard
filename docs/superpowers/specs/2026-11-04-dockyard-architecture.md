@@ -26,7 +26,7 @@ The tray stays small because it ships in every install: no container lists, no l
 | # | Sub-project | Depends on | Contents |
 |---|---|---|---|
 | A | Engine client + dashboard | none | `Dockyard.Engine` and `Dockyard.Dashboard`: containers, compose, images, volumes, networks, disk. Windows first. Spec: `2026-11-04-dockyard-dashboard-design.md` |
-| B | Platform hosts | A | `IEngineHost` abstraction; current Windows host (WSL Docker CE + `dockerd` service) moved behind it; Linux host on the system `dockerd`; tray on Windows, Linux and macOS; dashboard and tray built for all three. Spec: `2026-11-04-dockyard-platform-hosts-design.md` |
+| B | Platform hosts | A | `IEngineHost` abstraction; Windows host moved behind it with the Linux engine on a dedicated Alpine-based `dockyard` WSL distro (image shared with C); Linux host on the system `dockerd`; tray on Windows, Linux and macOS; dashboard and tray built for all three. Spec: `2026-11-04-dockyard-platform-hosts-design.md` |
 | C | macOS VM | B | Own Swift helper on Apple Virtualization.framework: minimal Linux VM, virtiofs file sharing, docker socket over vsock to `~/.dockyard/docker.sock`, elastic memory, Rosetta for amd64, automatic localhost port forwarding from container events. Modelled on OrbStack's approach. Spec: `2026-11-04-dockyard-macos-vm-design.md` |
 | D | Packaging + updates | B, C | Engine-only / full on every OS with the dashboard as add-on; Windows exe + winget, Linux apt/dnf repo on GitHub Pages, macOS ad-hoc signed zip via install script (notarization once a Developer ID exists); self-update; CI matrix (`win-x64`, `linux-x64`, `osx-arm64`). Spec: `2026-11-04-dockyard-packaging-design.md` |
 
@@ -36,7 +36,7 @@ The tray stays small because it ships in every install: no container lists, no l
 - **Engine access:** Dockyard's own HTTP/1.1 client over named pipe, unix socket or TCP. Compose has no engine API and goes through the `docker compose` CLI plugin.
 - **Endpoint:** always the active docker context from `~/.docker`, exactly what the CLI uses. Dockyard never sets `DOCKER_HOST`.
 - **Per platform, one engine endpoint per engine:**
-  - Windows: `linux` context (Docker CE in WSL, `tcp://127.0.0.1:2375`) and `win` context (`dockerd` service, `npipe:////./pipe/docker_windows`).
+  - Windows: `linux` context (the `dockyard` WSL distro, `tcp://127.0.0.1:2375`) and `win` context (`dockerd` service, `npipe:////./pipe/docker_windows`).
   - Linux: the system `dockerd` (`unix:///var/run/docker.sock`).
   - macOS: the VM's forwarded socket (`unix://~/.dockyard/docker.sock`).
 - **Exec:** opens the user's own terminal with `docker exec -it`; no embedded terminal.
