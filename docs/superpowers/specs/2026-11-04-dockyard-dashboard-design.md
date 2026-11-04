@@ -24,7 +24,7 @@ Out (other sub-projects or later):
 
 ```
 src/Dockyard.Engine/              net10.0, no UI or Windows dependency
-  Transport/                      npipe, unix socket and tcp connections; HTTP/1.1 (content-length, chunked, upgrade/hijack)
+  Transport/                      SocketsHttpHandler with a ConnectCallback for npipe, unix socket and tcp
   Api/                            Containers, Images, Networks, Volumes, System (df, prune), Events, Logs, Stats, Exec probe
   Models/                         records + one JsonSerializerContext
   DockerContext.cs                reads ~/.docker/config.json and contexts/meta to resolve the active endpoint
@@ -33,7 +33,7 @@ src/Dockyard.Dashboard/           net10.0-windows (for now), native AOT, Avaloni
   Features/Containers|Compose|Images|Volumes|Networks|Disk/   one view + view model per feature
   Shell/                          main window, sidebar, top bar, toasts, terminal launcher
 src/Dockyard/                     existing tray + setup app; gains "Open dashboard"; moves to native AOT
-tests/Dockyard.Engine.Tests/      xUnit: unit (fake socket) + integration (real engines)
+tests/Dockyard.Engine.Tests/      xUnit: unit (stub handler, loopback listeners) + integration (real engines)
 tests/Dockyard.Dashboard.Tests/   xUnit: store, grouping, sampling rules
 ```
 
@@ -49,7 +49,7 @@ The existing Engines / Updates / Settings window stays in the tray exe, because 
   - Logs: the 8-byte-header multiplexed stream, demultiplexed into `(stream, line)`; raw stream when the container has a TTY.
   - Stats: `stream=true` JSON stream; CPU% and memory computed the same way the CLI does (`docker stats`).
   - Image pull: progress JSON stream, aggregated per layer.
-- Connections: a small pool per endpoint for short calls; long-lived streams get their own connection.
+- Connections: `SocketsHttpHandler` pools connections per endpoint and handles chunked/keep-alive; long-lived streams hold their own connection. No upgrade/hijack is needed because exec runs in an external terminal.
 
 ## Dashboard behaviour
 
@@ -115,7 +115,7 @@ Acceptance criteria, measured on the development laptop with the Linux engine ru
 ## Testing
 
 - `Dockyard.Engine.Tests`:
-  - Unit, against an in-memory fake socket: HTTP/1.1 parsing (content-length, chunked, upgrade), log demultiplexing, event parsing, stats calculation, error mapping, context resolution from a temp `~/.docker`.
+  - Unit: transport against loopback tcp/unix/npipe listeners with canned responses; API calls against a stub `HttpMessageHandler`; log demultiplexing, event parsing, stats calculation, error mapping, context resolution from a temp `~/.docker`.
   - Integration (trait `Engine`, skipped when the endpoint is unreachable): Linux engine at `tcp://127.0.0.1:2375` with `alpine`, Windows engine via npipe with `nanoserver`. Create, start, read logs, stop, remove, and assert the matching events arrive.
 - `Dockyard.Dashboard.Tests`: store applies events correctly, compose grouping, stats sampling rule (visible rows above 50).
 - AOT gate: CI publishes both executables with `PublishAot=true` and trim/AOT warnings (IL2xxx, IL3xxx) as errors.

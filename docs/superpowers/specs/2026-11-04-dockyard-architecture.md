@@ -33,7 +33,7 @@ The tray stays small because it ships in every install: no container lists, no l
 ## Shared decisions
 
 - **Stack:** .NET 10 with native AOT, Avalonia for all UI. No reflection-based serialization; JSON through source-generated contexts.
-- **Engine access:** Dockyard's own HTTP/1.1 client over named pipe, unix socket or TCP. Compose has no engine API and goes through the `docker compose` CLI plugin.
+- **Engine access:** Dockyard's own Engine API client on `HttpClient` with a custom connect callback for named pipe, unix socket or TCP. Compose has no engine API and goes through the `docker compose` CLI plugin.
 - **Endpoint:** always the active docker context from `~/.docker`, exactly what the CLI uses. Dockyard never sets `DOCKER_HOST`.
 - **Per platform, one engine endpoint per engine:**
   - Windows: `linux` context (the `dockyard` WSL distro, `tcp://127.0.0.1:2375`) and `win` context (`dockerd` service, `npipe:////./pipe/docker_windows`).
