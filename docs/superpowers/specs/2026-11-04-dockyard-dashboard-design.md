@@ -57,7 +57,7 @@ The existing Engines / Updates / Settings window stays in the tray exe, because 
 
 - Three columns: sidebar, list, detail pane. Below ~1000px window width the detail pane is an overlay over the list.
 - The detail pane is resizable with a splitter (and the compose output/logs area inside it); sizes persist in `dashboard.json`. Container logs can take over the whole pane.
-- Sidebar: Containers, Images, Volumes, Networks, Disk, each with an icon. Actions use icons (Material Design Icons, Apache-2.0) with a label where space allows and a tooltip otherwise.
+- Sidebar: Containers, Images, Volumes, Networks, Disk, each with an icon. Actions use icons (Fluent UI System Icons, Regular, MIT) with a label where space allows and a tooltip otherwise.
 - Inputs, combo boxes and buttons share one height (32px), radius and border style, with an accent focus border; light and dark variants.
 - Top bar: search (Ctrl+K filters the current list), the L/W context switch (Windows only; switching changes the docker context, the view follows), gear (settings in the tray app).
 - Light/dark follows the OS.
