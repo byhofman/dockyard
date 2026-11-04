@@ -257,6 +257,8 @@ sealed class MainViewModel : Observable
         }
     }
 
+    public void Note(string line) => Log(line);
+
     void Log(string line)
     {
         if (!Dispatcher.UIThread.CheckAccess())

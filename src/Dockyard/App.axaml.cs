@@ -61,8 +61,27 @@ public partial class App : Application
 
     async Task StartTray()
     {
+        if (OperatingSystem.IsLinux() && !await HasTrayHost())
+        {
+            ShowWindow();
+            vm.Note("No system tray found. On GNOME, install the AppIndicator extension to get the Dockyard tray icon; until then this window stays available.");
+        }
         await vm.StartTray();
         if (args.Any(a => a is "--settings" or "--start" or "--switch")) Handle(TrayCommand.FromArgs(args));
+    }
+
+    static async Task<bool> HasTrayHost()
+    {
+        try
+        {
+            var r = await Shell.Run("gdbus", "call", "--session", "--dest", "org.freedesktop.DBus", "--object-path", "/org/freedesktop/DBus",
+                "--method", "org.freedesktop.DBus.NameHasOwner", "org.kde.StatusNotifierWatcher");
+            return r.ExitCode != 0 || r.Output.Contains("true");
+        }
+        catch (Exception)
+        {
+            return true;
+        }
     }
 
     void Handle(TrayCommand command)
