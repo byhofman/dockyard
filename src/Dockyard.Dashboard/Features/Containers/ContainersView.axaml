@@ -1,0 +1,149 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:cont="using:Dockyard.Dashboard.Features.Containers"
+             xmlns:store="using:Dockyard.Dashboard.Store"
+             xmlns:shell="using:Dockyard.Dashboard.Shell"
+             x:Class="Dockyard.Dashboard.Features.Containers.ContainersView"
+             x:DataType="cont:ContainersViewModel">
+
+  <UserControl.DataTemplates>
+    <DataTemplate DataType="cont:ContainerDetailViewModel">
+      <cont:ContainerDetailView />
+    </DataTemplate>
+    <DataTemplate DataType="cont:ComposeDetailViewModel">
+      <cont:ComposeDetailView />
+    </DataTemplate>
+  </UserControl.DataTemplates>
+
+  <Grid x:Name="Root" ColumnDefinitions="*,5,440">
+    <DockPanel>
+      <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="16,10,16,0" IsVisible="{Binding Session.IsConnected}">
+        <TextBlock Classes="section" Text="CONTAINERS" VerticalAlignment="Center" />
+        <Button Grid.Column="1" Click="OpenComposeFile" ToolTip.Tip="Start a compose project from a compose file (docker compose up -d)">
+          <StackPanel Classes="label">
+            <PathIcon Data="{StaticResource IconOpenFile}" />
+            <TextBlock Text="Open compose file…" />
+          </StackPanel>
+        </Button>
+      </Grid>
+
+      <Panel>
+        <ListBox x:Name="List" Classes="rows" Padding="0,6" ItemsSource="{Binding Store.Rows}" SelectedItem="{Binding SelectedRow}"
+                 IsVisible="{Binding Session.IsConnected}">
+          <ListBox.DataTemplates>
+            <DataTemplate DataType="store:ProjectRow">
+              <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
+                <Button Classes="iconbtn" Padding="2" Margin="-6,0,4,0" ToolTip.Tip="Expand or collapse"
+                        Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).ToggleProjectCommand}" CommandParameter="{Binding}">
+                  <Panel>
+                    <PathIcon Data="{StaticResource IconChevronDown}" IsVisible="{Binding IsExpanded}" />
+                    <PathIcon Data="{StaticResource IconChevronRight}" IsVisible="{Binding !IsExpanded}" />
+                  </Panel>
+                </Button>
+                <PathIcon Grid.Column="1" Data="{StaticResource IconCompose}" Width="16" Height="16" Margin="0,0,10,0"
+                          Foreground="{DynamicResource Muted}" Classes.running="{Binding IsRunning}" />
+                <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                  <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Classes="muted small" Text="{Binding Location}" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <TextBlock Grid.Column="3" Classes="muted small" Text="{Binding Summary}" VerticalAlignment="Center" Margin="12,0" />
+                <StackPanel Grid.Column="4" Classes="rowactions" Orientation="Horizontal" VerticalAlignment="Center">
+                  <Button Classes="iconbtn" ToolTip.Tip="Start or stop the project"
+                          Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).ProjectStartStopCommand}" CommandParameter="{Binding}">
+                    <Panel>
+                      <PathIcon Data="{StaticResource IconStop}" IsVisible="{Binding IsRunning}" />
+                      <PathIcon Data="{StaticResource IconPlay}" IsVisible="{Binding !IsRunning}" />
+                    </Panel>
+                  </Button>
+                  <Button Classes="iconbtn" ToolTip.Tip="Restart"
+                          Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).ProjectRestartCommand}" CommandParameter="{Binding}">
+                    <PathIcon Data="{StaticResource IconRestart}" />
+                  </Button>
+                  <Button Classes="iconbtn danger" ToolTip.Tip="Down: remove containers and networks"
+                          Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).ProjectDownCommand}" CommandParameter="{Binding}">
+                    <PathIcon Data="{StaticResource IconDelete}" />
+                  </Button>
+                </StackPanel>
+              </Grid>
+            </DataTemplate>
+
+            <DataTemplate DataType="store:ContainerItem">
+              <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto">
+                <Border Width="26" IsVisible="{Binding InProject}" />
+                <Ellipse Grid.Column="1" Classes="dot" Classes.on="{Binding IsRunning}" />
+                <StackPanel Grid.Column="2" Margin="12,0" VerticalAlignment="Center">
+                  <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Classes="muted small" Text="{Binding Image}" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <ItemsControl Grid.Column="3" ItemsSource="{Binding Ports}" VerticalAlignment="Center">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <StackPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="store:PublishedPort">
+                      <Button Classes="link" ToolTip.Tip="{Binding Url}" CommandParameter="{Binding}"
+                              Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).OpenPortCommand}">
+                        <StackPanel Classes="label" Spacing="3">
+                          <TextBlock Text="{Binding HostPort}" />
+                          <PathIcon Data="{StaticResource IconOpenExternal}" Width="10" Height="10" />
+                        </StackPanel>
+                      </Button>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Grid.Column="4" Classes="muted mono" Text="{Binding UsageText}" MinWidth="120" TextAlignment="Right"
+                           VerticalAlignment="Center" />
+                <StackPanel Grid.Column="5" Classes="rowactions" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                  <Button Classes="iconbtn" ToolTip.Tip="Start or stop (S)"
+                          Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).ToggleCommand}" CommandParameter="{Binding}">
+                    <Panel>
+                      <PathIcon Data="{StaticResource IconStop}" IsVisible="{Binding IsRunning}" />
+                      <PathIcon Data="{StaticResource IconPlay}" IsVisible="{Binding IsStopped}" />
+                    </Panel>
+                  </Button>
+                  <Button Classes="iconbtn" ToolTip.Tip="Terminal (E)" IsEnabled="{Binding IsRunning}"
+                          Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).ExecCommand}" CommandParameter="{Binding}">
+                    <PathIcon Data="{StaticResource IconTerminal}" />
+                  </Button>
+                  <Button Classes="iconbtn danger" ToolTip.Tip="Remove (Del)"
+                          Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).AskRemoveCommand}" CommandParameter="{Binding}">
+                    <PathIcon Data="{StaticResource IconDelete}" />
+                  </Button>
+                </StackPanel>
+              </Grid>
+            </DataTemplate>
+          </ListBox.DataTemplates>
+        </ListBox>
+
+        <StackPanel Spacing="10" HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding IsEmpty}">
+          <PathIcon Data="{StaticResource IconContainers}" Width="40" Height="40" Foreground="{DynamicResource Muted}" />
+          <TextBlock Classes="muted" Text="No containers yet. Run one with docker run, or open a compose file." />
+        </StackPanel>
+
+        <StackPanel Spacing="14" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="460"
+                    IsVisible="{Binding Session.IsUnavailable}">
+          <PathIcon Data="{StaticResource IconContainers}" Width="40" Height="40" Foreground="{DynamicResource Muted}" />
+          <TextBlock Classes="title" HorizontalAlignment="Center" Text="The Docker engine is not running" />
+          <TextBlock Classes="muted" TextWrapping="Wrap" TextAlignment="Center" Text="{Binding Session.Error}" />
+          <Button Classes="primary" HorizontalAlignment="Center"
+                  IsVisible="{Binding $parent[Window].((shell:ShellViewModel)DataContext).CanStartEngine}"
+                  Command="{Binding $parent[Window].((shell:ShellViewModel)DataContext).StartEngineCommand}">
+            <StackPanel Classes="label">
+              <PathIcon Data="{StaticResource IconPlay}" />
+              <TextBlock Text="Start engine" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+      </Panel>
+    </DockPanel>
+
+    <GridSplitter x:Name="Splitter" Grid.Column="1" ResizeDirection="Columns" Background="Transparent" />
+
+    <Border x:Name="DetailHost" Grid.Column="2" Background="{DynamicResource Surface}"
+            BorderBrush="{DynamicResource Line}" BorderThickness="1,0,0,0">
+      <ContentControl Content="{Binding Detail}" />
+    </Border>
+  </Grid>
+</UserControl>

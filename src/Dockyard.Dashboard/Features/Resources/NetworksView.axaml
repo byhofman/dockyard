@@ -1,0 +1,85 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:res="using:Dockyard.Dashboard.Features.Resources"
+             xmlns:store="using:Dockyard.Dashboard.Store"
+             x:Class="Dockyard.Dashboard.Features.Resources.NetworksView"
+             x:DataType="res:NetworksViewModel">
+  <Grid x:Name="Layout" ColumnDefinitions="*,5,380">
+    <DockPanel>
+      <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="16,12,16,4">
+        <Grid ColumnDefinitions="*,140,Auto,Auto">
+          <TextBox PlaceholderText="New network name" Text="{Binding NewName}" />
+          <ComboBox Grid.Column="1" Margin="8,0" HorizontalAlignment="Stretch" ItemsSource="{Binding Drivers}" SelectedItem="{Binding NewDriver}" />
+          <Button Grid.Column="2" Classes="primary" Command="{Binding CreateCommand}" Margin="0,0,8,0">
+            <StackPanel Classes="label"><PathIcon Data="{StaticResource IconPlus}" /><TextBlock Text="Create" /></StackPanel>
+          </Button>
+          <Button Grid.Column="3" Command="{Binding PruneCommand}">
+            <StackPanel Classes="label"><PathIcon Data="{StaticResource IconPrune}" /><TextBlock Text="Prune unused" /></StackPanel>
+          </Button>
+        </Grid>
+        <TextBlock Classes="muted small" Text="{Binding Busy}" IsVisible="{Binding IsBusy}" />
+        <res:ConfirmBar DataContext="{Binding Confirm}" IsVisible="{Binding $parent[UserControl].((res:NetworksViewModel)DataContext).HasConfirm}" />
+      </StackPanel>
+      <ListBox Classes="rows" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" Padding="0,4">
+        <ListBox.ItemTemplate>
+          <DataTemplate DataType="res:NetworkRow">
+            <Grid ColumnDefinitions="*,140,110">
+              <StackPanel>
+                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                <TextBlock Classes="muted small" Text="{Binding Driver}" />
+              </StackPanel>
+              <TextBlock Grid.Column="1" Classes="mono muted" Text="{Binding Subnet}" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="2" Classes="muted small" Text="{Binding ContainersText}" TextAlignment="Right" VerticalAlignment="Center" />
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </DockPanel>
+
+    <GridSplitter x:Name="Splitter" Grid.Column="1" ResizeDirection="Columns" Background="Transparent" />
+
+    <Border x:Name="Panel" Grid.Column="2" Background="{DynamicResource Surface}"
+            BorderBrush="{DynamicResource Line}" BorderThickness="1,0,0,0">
+      <ScrollViewer>
+        <StackPanel Margin="18,14" Spacing="10">
+          <TextBlock Classes="title" Text="{Binding Selected.Name}" TextWrapping="Wrap" />
+          <TextBlock Classes="muted" Text="{Binding Selected.Driver}" />
+          <SelectableTextBlock Classes="mono muted" Text="{Binding Selected.Subnet}" />
+
+          <TextBlock Classes="section" Text="CONNECTED CONTAINERS" Margin="0,8,0,0" />
+          <ItemsControl ItemsSource="{Binding Members}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="res:NetworkMember">
+                <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                  <StackPanel>
+                    <TextBlock Text="{Binding Name}" />
+                    <TextBlock Classes="mono muted" Text="{Binding Address}" />
+                  </StackPanel>
+                  <Button Grid.Column="1" Classes="link" Content="Disconnect" VerticalAlignment="Center"
+                          Command="{Binding $parent[UserControl].((res:NetworksViewModel)DataContext).DisconnectCommand}" CommandParameter="{Binding}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <TextBlock Classes="section" Text="CONNECT A CONTAINER" Margin="0,8,0,0" />
+          <Grid ColumnDefinitions="*,Auto">
+            <ComboBox HorizontalAlignment="Stretch" ItemsSource="{Binding Candidates}" SelectedItem="{Binding ConnectCandidate}" PlaceholderText="Container">
+              <ComboBox.ItemTemplate>
+                <DataTemplate DataType="store:ContainerItem">
+                  <TextBlock Text="{Binding Name}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <Button Grid.Column="1" Content="Connect" Command="{Binding ConnectCommand}" Margin="8,0,0,0" />
+          </Grid>
+
+          <Button Classes="danger" HorizontalAlignment="Left" Margin="0,12,0,0" Command="{Binding RemoveCommand}"
+                  ToolTip.Tip="Built-in networks cannot be removed">
+            <StackPanel Classes="label"><PathIcon Data="{StaticResource IconDelete}" /><TextBlock Text="Remove network" /></StackPanel>
+          </Button>
+        </StackPanel>
+      </ScrollViewer>
+    </Border>
+  </Grid>
+</UserControl>

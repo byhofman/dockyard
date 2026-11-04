@@ -4,6 +4,7 @@ using System.Security.Principal;
 namespace Dockyard.Core;
 
 // Unattended install/uninstall: no window, progress on the calling console.
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
 static partial class Silent
 {
     public static bool IsSilent(string[] args) => args.Contains("--install") || args.Contains("--uninstall");
@@ -25,9 +26,9 @@ static partial class Silent
                 return 0;
             }
 
-            var distro = Opt("--distro") ?? Settings.Load().Distro;
-            var reboot = MachineStep(Log, uninstall: false);
-            UserSetup.Install(Log, distro).GetAwaiter().GetResult();
+            var image = Opt("--image");
+            var reboot = MachineStep(Log, uninstall: false, args.Contains("--engine-only"));
+            UserSetup.Install(Log, image).GetAwaiter().GetResult();
             if (!args.Contains("--no-start")) Shell.StartUnelevated(Paths.AppExe);
             Log(reboot ? "Done. Reboot to finish enabling Windows containers." : "Done. Sign out and back in once so docker-users applies to the Windows engine.");
             return reboot ? Elevation.RebootExitCode : 0;
@@ -39,10 +40,12 @@ static partial class Silent
         }
     }
 
-    static bool MachineStep(Action<string> log, bool uninstall)
+    static bool MachineStep(Action<string> log, bool uninstall, bool engineOnly = false)
     {
         if (!IsElevated)
-            return Elevation.Run(log, uninstall ? "--machine-uninstall" : "--machine-install").GetAwaiter().GetResult();
+            return (uninstall ? Elevation.Run(log, "--machine-uninstall")
+                : engineOnly ? Elevation.Run(log, "--machine-install", "--engine-only")
+                : Elevation.Run(log, "--machine-install")).GetAwaiter().GetResult();
 
         if (uninstall)
         {
@@ -50,7 +53,7 @@ static partial class Silent
             return false;
         }
         var identity = WindowsIdentity.GetCurrent();
-        return MachineSetup.Install(log, identity.User!.Value, identity.Name, Environment.ProcessId).GetAwaiter().GetResult();
+        return MachineSetup.Install(log, identity.User!.Value, identity.Name, Environment.ProcessId, engineOnly).GetAwaiter().GetResult();
     }
 
     static bool IsElevated => new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);

@@ -1,0 +1,53 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:res="using:Dockyard.Dashboard.Features.Resources"
+             x:Class="Dockyard.Dashboard.Features.Resources.DiskView"
+             x:DataType="res:DiskViewModel">
+  <ScrollViewer>
+    <StackPanel Margin="24,18" Spacing="14" MaxWidth="760" HorizontalAlignment="Left">
+      <Grid ColumnDefinitions="*,Auto,Auto">
+        <StackPanel>
+          <TextBlock Classes="title" Text="Disk usage" />
+          <TextBlock Classes="muted">
+            <Run Text="{Binding TotalText}" /><Run Text=" used, " /><Run Text="{Binding ReclaimableText}" /><Run Text=" can be reclaimed" />
+          </TextBlock>
+        </StackPanel>
+        <Button Grid.Column="1" Command="{Binding RefreshCommand}" Margin="24,0,8,0" VerticalAlignment="Center" ToolTip.Tip="Refresh">
+          <PathIcon Data="{StaticResource IconRefresh}" />
+        </Button>
+        <Button Grid.Column="2" Classes="dangerfill" Command="{Binding CleanAllCommand}" VerticalAlignment="Center">
+          <StackPanel Classes="label"><PathIcon Data="{StaticResource IconPrune}" /><TextBlock Text="Clean everything unused" /></StackPanel>
+        </Button>
+      </Grid>
+      <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsLoading}" />
+      <TextBlock Classes="muted small" Text="{Binding Busy}" IsVisible="{Binding IsBusy}" />
+      <res:ConfirmBar DataContext="{Binding Confirm}" IsVisible="{Binding $parent[UserControl].((res:DiskViewModel)DataContext).HasConfirm}" />
+
+      <ItemsControl ItemsSource="{Binding Categories}">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <StackPanel Spacing="10" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="res:DiskCategory">
+            <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="8" Padding="16,12">
+              <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
+                <TextBlock FontWeight="SemiBold" Text="{Binding Name}" />
+                <TextBlock Grid.Column="1" Classes="mono" Text="{Binding TotalText}" />
+                <ProgressBar Grid.Row="1" Grid.ColumnSpan="2" Margin="0,8" Maximum="1" Value="{Binding Fraction}" />
+                <TextBlock Grid.Row="2" Classes="muted small" VerticalAlignment="Center">
+                  <Run Text="{Binding ReclaimableText}" /><Run Text=" reclaimable" />
+                </TextBlock>
+                <Button Grid.Row="2" Grid.Column="1" Classes="iconbtn" ToolTip.Tip="Prune"
+                        Command="{Binding $parent[UserControl].((res:DiskViewModel)DataContext).PruneCommand}" CommandParameter="{Binding}">
+                  <StackPanel Classes="label"><PathIcon Data="{StaticResource IconPrune}" /><TextBlock Text="Prune" /></StackPanel>
+                </Button>
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

@@ -1,0 +1,24 @@
+name: dockyard
+arch: amd64
+platform: linux
+version: ${VERSION}
+section: admin
+priority: optional
+maintainer: Thomas Hofman <noreply@github.com>
+description: |
+  Docker engine tray: installs Docker CE on demand, starts and stops it, and keeps it up to date.
+homepage: https://github.com/byhofman/dockyard
+license: MIT
+contents:
+  - src: dist/linux/tray/Dockyard
+    dst: /usr/lib/dockyard/Dockyard
+    file_info: { mode: 0755 }
+  - src: /usr/lib/dockyard/Dockyard
+    dst: /usr/bin/dockyard
+    type: symlink
+  - src: packaging/linux/dockyard.desktop
+    dst: /usr/share/applications/dockyard.desktop
+  - src: src/Dockyard/Assets/whale-blue.png
+    dst: /usr/share/icons/hicolor/64x64/apps/dockyard.png
+scripts:
+  postinstall: packaging/linux/postinstall.sh

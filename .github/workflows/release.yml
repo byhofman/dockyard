@@ -9,30 +9,166 @@ on:
 permissions:
   contents: write
 
+env:
+  DOTNET_NOLOGO: true
+
 jobs:
-  build:
+  windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+
+      - name: Test
+        shell: pwsh
+        run: dotnet test --solution Dockyard.slnx
 
       - name: Publish
         shell: pwsh
         run: |
           $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME.TrimStart('v') } else { '0.0.0' }
-          dotnet publish src/Dockyard/Dockyard.csproj -c Release -o out -p:Version=$version
+          dotnet publish src/Dockyard/Dockyard.csproj -c Release -r win-x64 -o out -p:Version=$version -warnaserror
+          dotnet publish src/Dockyard.Dashboard/Dockyard.Dashboard.csproj -c Release -r win-x64 -o out/dashboard -p:Version=$version -warnaserror
+          Compress-Archive -Path out/dashboard/*.exe, out/dashboard/*.dll -DestinationPath out/Dockyard.Dashboard.zip
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Dockyard
-          path: out/Dockyard.exe
+          name: windows
+          path: |
+            out/Dockyard.exe
+            out/Dockyard.Dashboard.zip
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Test
+        run: dotnet test --solution Dockyard.slnx
+
+      - name: Publish and package
+        run: |
+          version=0.0.0; [ "$GITHUB_REF_TYPE" = tag ] && version="${GITHUB_REF_NAME#v}"
+          dotnet publish src/Dockyard/Dockyard.csproj -c Release -r linux-x64 -o dist/linux/tray -p:Version=$version -warnaserror
+          dotnet publish src/Dockyard.Dashboard/Dockyard.Dashboard.csproj -c Release -r linux-x64 -o dist/linux/dashboard -p:Version=$version -warnaserror
+          rm -f dist/linux/*/*.pdb
+          mkdir -p out/Dockyard && cp dist/linux/tray/* dist/linux/dashboard/* out/Dockyard/
+          tar -czf "out/Dockyard-$version-linux-x64.tar.gz" -C out Dockyard
+          for config in dockyard dockyard-dashboard; do
+            for packager in deb rpm; do
+              docker run --rm -v "$PWD:/work" -w /work -e VERSION="$version" goreleaser/nfpm \
+                pkg --config "packaging/linux/$config.yaml" --packager "$packager" --target out/
+            done
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            out/Dockyard-*-linux-x64.tar.gz
+            out/*.deb
+            out/*.rpm
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and test the Linux engine image
+        run: |
+          version=0.0.0; [ "$GITHUB_REF_TYPE" = tag ] && version="${GITHUB_REF_NAME#v}"
+          sh image/build.sh x86_64 "$version"
+          pwsh image/test.ps1 -Tarball "out/dockyard-linux-$version-x86_64.tar.gz"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image
+          path: out/dockyard-linux-*.tar.gz
+
+  vm-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Boot the VM image with QEMU/KVM
+        run: |
+          sudo chmod 666 /dev/kvm
+          sh image/build.sh x86_64 0.0.0 vm
+          docker run --rm --device /dev/kvm -v "$PWD/image/test-vm.sh:/test-vm.sh:ro" -v "$PWD/out:/out:ro" alpine:3.24 \
+            sh /test-vm.sh /out/dockyard-vm-0.0.0-x86_64.tar.gz
+
+  vm-image:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the aarch64 VM assets
+        run: |
+          version=0.0.0; [ "$GITHUB_REF_TYPE" = tag ] && version="${GITHUB_REF_NAME#v}"
+          sh image/build.sh aarch64 "$version" vm
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vm-image
+          path: out/dockyard-vm-*-aarch64.tar.gz
+
+  macos:
+    needs: [vm-image]
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Test
+        run: |
+          dotnet test --solution Dockyard.slnx
+          swift test --package-path macos/DockyardVM
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: vm-image
+          path: vm-image
+
+      - name: Publish and bundle
+        run: |
+          version=0.0.0; [ "$GITHUB_REF_TYPE" = tag ] && version="${GITHUB_REF_NAME#v}"
+          dotnet publish src/Dockyard/Dockyard.csproj -c Release -r osx-arm64 -o dist/macos -p:Version=$version -warnaserror
+          dotnet publish src/Dockyard.Dashboard/Dockyard.Dashboard.csproj -c Release -r osx-arm64 -o dist/macos -p:Version=$version -warnaserror
+          swift build -c release --package-path macos/DockyardVM
+          cp macos/DockyardVM/.build/release/dockyard-vm dist/macos/
+          mkdir -p dist/macos/vm && tar -xzf vm-image/dockyard-vm-*-aarch64.tar.gz -C dist/macos/vm
+          rm -f dist/macos/*.pdb
+          sh packaging/macos/build-app.sh "$version" dist/macos out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: |
+            out/Dockyard-*-macos*.zip
+            out/Dockyard-*-macos*.dmg
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: [windows, linux, image, vm-test, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
 
       - name: Release
-        if: github.ref_type == 'tag'
-        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create $env:GITHUB_REF_NAME out/Dockyard.exe --title $env:GITHUB_REF_NAME --generate-notes
+        run: |
+          cd dist
+          sha256sum * > SHA256SUMS
+          gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" * --title "$GITHUB_REF_NAME" --generate-notes
+

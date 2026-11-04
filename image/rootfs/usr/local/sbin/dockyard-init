@@ -1,0 +1,19 @@
+#!/bin/sh
+# Starts the Docker engine in the foreground: the WSL session (or VM agent) that runs this keeps the engine alive.
+set -eu
+
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+tcp="${DOCKYARD_TCP:-127.0.0.1:2375}"
+
+if ! grep -q ' /sys/fs/cgroup cgroup2 ' /proc/mounts; then
+  mkdir -p /sys/fs/cgroup
+  mount -t cgroup2 cgroup2 /sys/fs/cgroup
+fi
+
+mkdir -p /var/run /var/lib/docker
+rm -f /var/run/docker.sock /var/run/docker.pid
+
+if [ "$tcp" = none ]; then
+  exec dockerd -H unix:///var/run/docker.sock
+fi
+exec dockerd -H unix:///var/run/docker.sock -H "tcp://$tcp" --tls=false

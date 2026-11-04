@@ -2,3 +2,7 @@ bin/
 obj/
 *.user
 .vs/
+.superpowers/
+out/
+dist/
+packaging/winget/out/

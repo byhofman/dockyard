@@ -1,16 +1,20 @@
 using System.Globalization;
+using System.Runtime.Versioning;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Dockyard.Hosts;
 
 namespace Dockyard.Core;
 
-enum Component { Engine, Compose, Buildx, WslEngine, App }
-
-sealed record Release(Version Version, string Tag, string? DownloadUrl);
+enum Component { Engine, Compose, Buildx, LinuxEngine, App }
 
 static partial class Updates
 {
     public const string StaticIndex = "https://download.docker.com/win/static/stable/x86_64/";
+    public const string LinuxStaticIndex = "https://download.docker.com/linux/static/stable/x86_64/";
+    public const string LinuxComposeAsset = @"^docker-compose-linux-x86_64$";
+    public const string LinuxBuildxAsset = @"^buildx-v[\d.]+\.linux-amd64$";
+    public const string ImageAsset = @"^dockyard-linux-[\d.]+-x86_64\.tar\.gz$";
 
     // Defender ASR's prevalence/age rule blocks freshly published binaries.
     static readonly TimeSpan MinAge = TimeSpan.FromDays(14);
@@ -19,7 +23,7 @@ static partial class Updates
 
     static HttpClient CreateHttp()
     {
-        var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
         http.DefaultRequestHeaders.UserAgent.ParseAdd("dockyard");
         return http;
     }
@@ -29,29 +33,28 @@ static partial class Updates
         Component.Engine => "Docker Engine & CLI (Windows)",
         Component.Compose => "Docker Compose",
         Component.Buildx => "Docker Buildx",
-        Component.WslEngine => "Docker CE (WSL)",
+        Component.LinuxEngine => "Docker Engine (Linux, WSL)",
         Component.App => "Dockyard",
         _ => c.ToString(),
     };
 
-    public static bool NeedsElevation(Component c) => c is not Component.WslEngine;
-
-    public static async Task<Version?> Installed(Component c, string distro) => c switch
+    [SupportedOSPlatform("windows")]
+    public static async Task<Version?> Installed(Component c) => c switch
     {
         Component.Engine => File.Exists(Paths.DockerdExe) ? ParseVersion(await Shell.Check(Paths.DockerdExe, "--version")) : null,
         Component.Compose => await PluginVersion("docker-compose.exe", "version", "--short"),
         Component.Buildx => await PluginVersion("docker-buildx.exe", "version"),
-        Component.WslEngine => ParseVersion((await Shell.Run("wsl.exe", "-d", distro, "-e", "dpkg-query", "-W", "-f=${Version}", "docker-ce")).Output),
+        Component.LinuxEngine => await new WslDistro(ProcessRunner.Instance).DockerVersion(),
         Component.App => ParseVersion(Paths.AppVersion),
         _ => null,
     };
 
-    public static async Task<Release?> Latest(Component c, string distro) => c switch
+    public static async Task<Release?> Latest(Component c) => c switch
     {
         Component.Engine => await LatestStatic(),
         Component.Compose => await LatestGitHub("docker/compose", @"^docker-compose-windows-x86_64\.exe$"),
         Component.Buildx => await LatestGitHub("docker/buildx", @"^buildx-v[\d.]+\.windows-amd64\.exe$"),
-        Component.WslEngine => await LatestApt(distro),
+        Component.LinuxEngine => await LatestStatic(LinuxStaticIndex, "tgz"),
         Component.App => await LatestApp(),
         _ => null,
     };
@@ -62,17 +65,21 @@ static partial class Updates
         return File.Exists(path) ? ParseVersion((await Shell.Run(path, args)).Output) : null;
     }
 
-    public static async Task<Release> LatestStatic()
+    public static Task<Release> LatestStatic() => LatestStatic(StaticIndex, "zip");
+
+    public static async Task<Release> LatestStatic(string index, string extension) =>
+        PickStatic(await Http.GetStringAsync(index), index, extension, DateTime.UtcNow);
+
+    internal static Release PickStatic(string html, string index, string extension, DateTime now)
     {
-        var index = await Http.GetStringAsync(StaticIndex);
-        var candidates = StaticEntry().Matches(index)
+        var entry = new Regex($@"docker-(?<v>\d+\.\d+\.\d+)\.{Regex.Escape(extension)}</a>\s*(?<d>\d{{4}}-\d{{2}}-\d{{2}} \d{{2}}:\d{{2}})?");
+        var candidates = entry.Matches(html)
             .Select(m => (Version: Version.Parse(m.Groups["v"].Value), Date: ParseDate(m.Groups["d"].Value)))
             .ToList();
-        var eligible = candidates.Where(x => x.Date is null || DateTime.UtcNow - x.Date > MinAge).ToList();
+        var eligible = candidates.Where(x => x.Date is null || now - x.Date > MinAge).ToList();
         var best = (eligible.Count > 0 ? eligible : candidates).MaxBy(x => x.Version);
         if (best.Version is null) throw new InvalidOperationException("No Docker static release found");
-        var name = $"docker-{best.Version}.zip";
-        return new Release(best.Version, best.Version.ToString(), StaticIndex + name);
+        return new Release(best.Version, best.Version.ToString(), $"{index}docker-{best.Version}.{extension}");
     }
 
     public static async Task<Release> LatestGitHub(string repo, string assetPattern)
@@ -90,17 +97,7 @@ static partial class Updates
         throw new InvalidOperationException($"No suitable {repo} release found");
     }
 
-    static async Task<Release?> LatestApt(string distro)
-    {
-        await Shell.Check("wsl.exe", "-d", distro, "-u", "root", "--", "apt-get", "update", "-qq",
-            "-o", "Dir::Etc::sourcelist=sources.list.d/docker.list", "-o", "Dir::Etc::sourceparts=-", "-o", "APT::Get::List-Cleanup=0");
-        var policy = await Shell.Check("wsl.exe", "-d", distro, "--", "apt-cache", "policy", "docker-ce");
-        var candidate = AptCandidate().Match(policy);
-        var version = candidate.Success ? ParseVersion(candidate.Groups[1].Value) : null;
-        return version is null ? null : new Release(version, candidate.Groups[1].Value, null);
-    }
-
-    static async Task<Release?> LatestApp()
+    public static async Task<Release?> LatestApp()
     {
         using var response = await Http.GetAsync($"https://api.github.com/repos/{Paths.Repo}/releases/latest");
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
@@ -119,7 +116,28 @@ static partial class Updates
         Directory.CreateDirectory(dir);
         var exe = Path.Combine(dir, "Dockyard.exe");
         await DownloadFile(release.DownloadUrl!, exe);
+        var dashboard = $"https://github.com/{Paths.Repo}/releases/download/{release.Tag}/{Paths.DashboardZipName}";
+        try { await DownloadFile(dashboard, Path.Combine(dir, Paths.DashboardZipName)); }
+        catch (HttpRequestException) { }
         return exe;
+    }
+
+    public static Task<string> DownloadImage(string targetDir) => DownloadReleaseAsset(ImageAsset, targetDir, isPattern: true);
+
+    // From the same release as this build, or from the latest release for development builds.
+    public static async Task<string> DownloadReleaseAsset(string name, string targetDir, bool isPattern = false)
+    {
+        var url = Paths.AppVersion == "0.0.0"
+            ? $"https://api.github.com/repos/{Paths.Repo}/releases/latest"
+            : $"https://api.github.com/repos/{Paths.Repo}/releases/tags/v{Paths.AppVersion}";
+        var release = JsonNode.Parse(await Http.GetStringAsync(url))!;
+        var asset = release["assets"]!.AsArray().FirstOrDefault(a =>
+                isPattern ? Regex.IsMatch(a!["name"]!.GetValue<string>(), name) : a!["name"]!.GetValue<string>() == name)
+            ?? throw new InvalidOperationException($"Release {release["tag_name"]} has no {name}");
+        Directory.CreateDirectory(targetDir);
+        var target = Path.Combine(targetDir, asset["name"]!.GetValue<string>());
+        await DownloadFile(asset["browser_download_url"]!.GetValue<string>(), target);
+        return target;
     }
 
     public static async Task DownloadFile(string url, string target)
@@ -139,12 +157,6 @@ static partial class Updates
     static DateTime? ParseDate(string text) =>
         DateTime.TryParseExact(text, "yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var d)
             ? d : null;
-
-    [GeneratedRegex(@"docker-(?<v>\d+\.\d+\.\d+)\.zip</a>\s*(?<d>\d{4}-\d{2}-\d{2} \d{2}:\d{2})?")]
-    private static partial Regex StaticEntry();
-
-    [GeneratedRegex(@"Candidate:\s*(\S+)")]
-    private static partial Regex AptCandidate();
 
     [GeneratedRegex(@"\d+\.\d+\.\d+")]
     private static partial Regex VersionNumber();

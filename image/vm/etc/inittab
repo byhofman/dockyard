@@ -1,0 +1,5 @@
+::sysinit:/usr/local/sbin/dockyard-vm-init
+::respawn:/usr/bin/env DOCKYARD_TCP=none /usr/local/sbin/dockyard-init
+::respawn:/usr/local/sbin/dockyard-agent
+::shutdown:/usr/local/sbin/dockyard-vm-init stop
+::ctrlaltdel:/sbin/poweroff

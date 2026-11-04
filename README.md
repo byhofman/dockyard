@@ -2,17 +2,16 @@
 
 Docker on Windows without Docker Desktop. Linux and Windows containers behind one `docker` CLI, both engines started only when you need them, and one place to see and apply updates.
 
-One self-contained exe (`Dockyard.exe`, .NET 10 + Avalonia, nothing to install first) is the installer, the tray app and the dashboard.
+One self-contained exe (`Dockyard.exe`, .NET 10 + Avalonia, nothing to install first) is the installer, the tray app and the engine settings. The dashboard for containers, compose, images, volumes, networks and disk usage is a separate native (AOT) program, `Dockyard.Dashboard.exe`, that only runs while its window is open.
 
 | Context | Engine | Endpoint |
 |---|---|---|
-| `linux` (default) | Docker CE inside a WSL distro (default `Ubuntu-24.04`) | `tcp://127.0.0.1:2375` |
+| `linux` (default) | Docker inside Dockyard's own minimal WSL distro `dockyard` (Alpine with Docker's static binaries) | `tcp://127.0.0.1:2375` |
 | `win` | standalone `dockerd.exe` Windows service (ltsc2025 images, process isolation) | `npipe:////./pipe/docker_windows` |
 
 ## Requirements
 
-- Windows 11 with WSL 2. Mirrored networking recommended (`[wsl2] networkingMode=mirrored` in `~\.wslconfig`).
-- A WSL distro with systemd, launched once so its user exists (`winget install Canonical.Ubuntu.2404`).
+- Windows 11 with WSL 2 (`wsl --install --no-distribution`). Mirrored networking recommended (`[wsl2] networkingMode=mirrored` in `~\.wslconfig`). No Linux distro of your own is needed.
 ## Install
 
 In PowerShell, preferably elevated (then it also adds the Defender exclusions and there is no administrator prompt):
@@ -23,13 +22,14 @@ irm https://raw.githubusercontent.com/byhofman/dockyard/main/install.ps1 | iex
 
 It downloads the latest release to `Downloads\Dockyard.exe` and installs it silently. Then sign out and back in once (docker-users group).
 
+Every installer has an engine-only edition: the engines, the docker CLI and the tray without the dashboard (`install.ps1 -EngineOnly`, `Dockyard.exe --install --engine-only`, `install.sh --engine-only`, `install-mac.sh --engine-only`). The dashboard can be added or removed later under **Settings** in the tray window.
+
 With options:
 
 ```pwsh
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/byhofman/dockyard/main/install.ps1))) -Distro Ubuntu-24.04 -Build
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/byhofman/dockyard/main/install.ps1))) -Build
 ```
 
-- `-Distro <name>`: WSL distro for Linux containers (default `Ubuntu-24.04`, or the one from a previous install)
 - `-Build`: the latest build of `main` instead of the latest release (needs the `gh` CLI, signed in)
 - `-NoStart`: don't start Dockyard afterwards
 
@@ -43,7 +43,7 @@ $p = Start-Process "$env:USERPROFILE\Downloads\Dockyard.exe" -ArgumentList '--in
 $p.ExitCode   # 0 = done, 3010 = reboot to finish enabling Windows containers
 ```
 
-`Dockyard.exe --install` takes `--distro <name>` and `--no-start`; `--uninstall` removes everything again (images, containers and the Docker packages inside WSL are kept). Running `Dockyard.exe` without arguments opens the same setup as a window.
+`Dockyard.exe --install` takes `--image <dockyard-linux-*.tar.gz>` and `--no-start` (without `--image` it uses a `dockyard-linux-*-x86_64.tar.gz` next to the installer or downloads the one from the release); `--uninstall` removes everything again (the `dockyard` distro with your Linux images and containers is kept; `wsl --unregister dockyard` removes it). Running `Dockyard.exe` without arguments opens the same setup as a window.
 
 ### What it installs
 
@@ -52,26 +52,75 @@ Administrator step:
 - enables the Windows `Containers` feature
 - installs the static Docker binaries to `C:\Program Files\Docker` (machine PATH) plus the compose and buildx CLI plugins
 - registers the `docker` service: manual start, `docker-users` group on the pipe, start/stop rights for your account
-- copies Dockyard to `C:\Program Files\Dockyard\Dockyard.exe`
+- copies Dockyard to `C:\Program Files\Dockyard\Dockyard.exe` and extracts the dashboard (`Dockyard.Dashboard.zip`, next to the installer or from the release) beside it
 
 User step:
 
-- installs Docker CE in the WSL distro (download.docker.com, listening on `127.0.0.1:2375`, not autostarted)
+- imports the `dockyard` WSL distro into `%LOCALAPPDATA%\Dockyard\wsl` (Alpine with Docker's static binaries, buildx and compose; the engine listens on `127.0.0.1:2375` and only runs while Dockyard starts it)
+- upgrading from an earlier Dockyard that used Docker CE in your own distro: stops and disables that engine so it no longer claims port 2375; its packages, images and containers stay there (copy an image with `wsl -d Ubuntu-24.04 -u root -- docker save <image> | docker --context linux load`)
 - creates the `linux` and `win` contexts and pins Testcontainers to the Linux engine (`~\.testcontainers.properties`)
 - autostarts Dockyard at logon (HKCU Run)
 
 ## Using it
 
-Dockyard sits in the tray. The icon is the Docker whale with a badge for the active context (`L` or `W`); the whale is blue when that engine runs, gray when stopped and amber while busy. Right-click to switch context; click to open the dashboard:
+Dockyard sits in the tray. The icon is the Docker whale with a badge for the active context (`L` or `W`); the whale is blue when that engine runs, gray when stopped and amber while busy. Click to open the dashboard; right-click to switch context or open **Engines and settings…**:
 
 - **Linux / Windows** (top right): switch the docker context. This starts that engine and, by default, stops the other one.
 - **Engines**: status, endpoint and Start/Stop per engine.
-- **Updates**: installed vs latest for the Windows engine and CLI, compose, buildx, Docker CE in WSL and Dockyard itself, with per-component **Update** and **Update all**. Checked when the dashboard opens (at most every 6 hours) or on **Check for updates**; Docker CE in WSL is only checked automatically while the Linux engine runs, because checking starts the distro.
+- **Updates**: installed vs latest for the Windows engine and CLI, compose, buildx, the Linux engine in the `dockyard` distro and Dockyard itself, with per-component **Update** and **Update all**. Checked when the window opens (at most every 6 hours) or on **Check for updates**; the Linux engine is only checked automatically while it runs, because checking starts the distro. Updating it replaces Docker's binaries in place and leaves `/var/lib/docker` alone.
 - **Settings**: stop the other engine when switching, start the active engine at logon, uninstall.
 
 Settings live in `%APPDATA%\Dockyard\settings.json`. Run `Dockyard.exe --setup` from Program Files to reopen the installer.
 
-The Linux engine runs while Dockyard holds a hidden `wsl.exe` session open. On stop (or quit) WSL shuts the distro down about a minute later, unless another WSL session is open. Inside WSL, `docker.socket` still starts the engine on first use.
+The Linux engine runs while Dockyard holds a hidden `wsl.exe` session open. On stop (or quit) dockerd gets SIGTERM and WSL shuts the distro down about a minute later.
+
+### Dashboard
+
+The dashboard follows the active docker context (the same one the CLI uses) and updates live from the engine's event stream; it polls nothing and exits when you close it.
+
+- **Containers**: running and stopped containers with ports (click to open `http://127.0.0.1:<port>`) and live CPU/memory. Compose projects are expandable rows with their containers underneath. Per container: logs (follow, filter, timestamps), inspect (env, ports, mounts, networks, labels) and CPU/memory graphs; **Terminal** opens `docker exec -it` in Windows Terminal. A compose project has up, stop, restart, pull, down and merged logs; **Open compose file…** starts a project from a file and remembers it.
+- **Images**: pull with progress, tags, size, which containers use them, remove, prune dangling.
+- **Volumes**: size, which containers use them, remove, prune unused.
+- **Networks**: subnet, connected containers, connect/disconnect, create, remove, prune.
+- **Disk**: `docker system df` per category with what can be reclaimed; prune per category or **Clean everything unused**.
+
+Keys: `Ctrl+K` search, `S` start/stop, `R` restart, `E` terminal, `L` logs, `Del` remove (with confirmation), `Left`/`Right` collapse/expand a compose project. Panel sizes and recent compose files live in `%APPDATA%\Dockyard\dashboard.json`.
+
+## Linux
+
+On Linux, Dockyard manages the system Docker engine. On Debian, Ubuntu, Fedora, RHEL and derivatives:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install.sh | sh
+```
+
+It downloads the `dockyard` and `dockyard-dashboard` packages (.deb or .rpm) from the latest GitHub release, checks them against `SHA256SUMS`, installs them and runs `dockyard --install`. Run it again to update. Elsewhere, unpack `Dockyard-<version>-linux-x64.tar.gz` and run `./Dockyard/Dockyard --install`. The setup asks for one administrator prompt (pkexec):
+
+- installs Docker CE with buildx and compose from Docker's repository on Debian, Ubuntu and derivatives (apt) and Fedora/RHEL (dnf); on other distributions install Docker yourself first and Dockyard manages it
+- makes the engine start on demand: `docker.service` disabled, `docker.socket` enabled
+- adds you to the `docker` group (applies after signing out and back in) and installs a polkit rule so that group can start and stop the engine without a password (`/etc/polkit-1/rules.d/50-dockyard.rules`)
+- autostarts the tray at login (`~/.config/autostart/dockyard.desktop`)
+
+The tray uses the desktop's StatusNotifierItem tray (GNOME needs the AppIndicator extension). The engine uses the `default` context (`unix:///var/run/docker.sock`). Stopping the engine from Dockyard also stops `docker.socket`, so nothing restarts it until you start it again or reboot. `Dockyard --uninstall` removes the polkit rule and autostart and re-enables the distribution's default `docker.service`; packages, images and containers stay.
+
+## macOS (Apple silicon, macOS 14+)
+
+Linux containers run in a small VM on Apple's Virtualization.framework, started by Dockyard when you need it.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install-mac.sh | sh
+```
+
+It downloads the release with `curl`, checks it against `SHA256SUMS`, installs `~/Applications/Dockyard.app` and runs its setup. The release also has `Dockyard-<version>-macos.dmg` for a manual install. The app is ad-hoc signed (no Developer ID yet), so a browser download is quarantined and needs **System Settings → Privacy & Security → Open Anyway** once; the script avoids that. Dockyard updates itself from the Updates screen. The setup:
+
+- installs Docker's static `docker` CLI to `~/.dockyard/bin` (added to the PATH through `/etc/paths.d/dockyard`, one administrator prompt) and the compose and buildx plugins to `~/.docker/cli-plugins`
+- prepares the VM in `~/.dockyard`: settings (`vm.json`: all cores, half the RAM up to 8 GiB), the root disk (a copy-on-write clone of the image in the app) and a sparse 64 GB data disk for `/var/lib/docker`
+- creates and selects the docker context `dockyard` (`unix://~/.dockyard/docker.sock`)
+- starts Dockyard at login (`~/Library/LaunchAgents/com.byhofman.dockyard.plist`)
+
+Inside the VM: Alpine with Docker's static binaries, `/Users`, `/Volumes`, `/private/tmp` and `/private/var/folders` shared at the same paths (so `-v $PWD:/app` works), Rosetta for `linux/amd64` images when Rosetta is installed (`softwareupdate --install-rosetta`), published ports forwarded to `127.0.0.1` (or all interfaces for `0.0.0.0`), memory the guest does not use handed back to macOS, and the guest clock reset after the Mac wakes. Logs: `~/.dockyard/logs/vm-console.log`. For tools that insist on `/var/run/docker.sock`: `sudo ln -sf ~/.dockyard/docker.sock /var/run/docker.sock`.
+
+`scripts/mac-e2e.sh <Dockyard folder>` checks start time, containers, Rosetta, bind mounts, ports, compose, buildx, memory, clock and stop on a Mac.
 
 ## Without Dockyard running
 
@@ -82,15 +131,19 @@ docker --context win ...    # one command
 $env:DOCKER_CONTEXT = "win" # this shell only
 ```
 
-Start an engine first: `Start-Service docker` or `wsl -d Ubuntu-24.04 -u root -- systemctl start docker`. Don't set `DOCKER_HOST`: it overrides the contexts.
+Start an engine first: `Start-Service docker` or `wsl -d dockyard -u root -- /usr/local/sbin/dockyard-init` (keep that window open). Don't set `DOCKER_HOST`: it overrides the contexts.
 
 ## Build
 
 ```pwsh
+dotnet test --solution Dockyard.slnx
 dotnet publish src/Dockyard/Dockyard.csproj -c Release -o out
+dotnet publish src/Dockyard.Dashboard/Dockyard.Dashboard.csproj -c Release -r win-x64 -o out/dashboard
 ```
 
-Produces a trimmed, self-contained single `out/Dockyard.exe` (~38 MB; about 50 MB private memory while idle in the tray). Pushing a `v*` tag builds it and attaches it to a GitHub release.
+The first publish produces a trimmed, self-contained single `out/Dockyard.exe` (~40 MB; about 50 MB private memory while idle in the tray). The second is a native AOT build and needs the Visual Studio C++ build tools; CI builds it on `windows-latest` and ships it as `Dockyard.Dashboard.zip` (the exe plus Avalonia's native Skia and HarfBuzz libraries), which the installer extracts next to `Dockyard.exe`. Pushing a `v*` tag builds both and attaches them to a GitHub release.
+
+Integration tests (`Category=Engine`) run against the real Linux (`tcp://127.0.0.1:2375`) and Windows engines and are skipped when an engine is not running. `scripts/measure.ps1` checks the dashboard against its budgets (window < 300 ms, idle CPU < 1 %, < 120 MB private memory; tray < 60 MB).
 
 ## Gotchas
 
@@ -100,7 +153,8 @@ Produces a trimmed, self-contained single `out/Dockyard.exe` (~38 MB; about 50 M
   ```pwsh
   Add-MpPreference -AttackSurfaceReductionOnlyExclusions `
     "$env:USERPROFILE\Downloads\Dockyard.exe",
-    "C:\Program Files\Dockyard\Dockyard.exe"
+    "C:\Program Files\Dockyard\Dockyard.exe",
+    "C:\Program Files\Dockyard\Dockyard.Dashboard.exe"
   ```
 
   On an Intune-managed device this only works when local admin merge is allowed; otherwise add the paths to the Intune ASR policy. For the same reason Dockyard only offers Docker, compose and buildx releases that are at least 14 days old.
@@ -109,4 +163,4 @@ Produces a trimmed, self-contained single `out/Dockyard.exe` (~38 MB; about 50 M
 
 ## License
 
-MIT. `src/Dockyard/Assets/docker.ico` comes from [docker/cli](https://github.com/docker/cli/blob/master/cmd/docker/internal/assets/docker.ico) (Apache-2.0); the Docker logo is a trademark of Docker, Inc.
+MIT. The dashboard icons are [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons) (MIT, Microsoft). `src/Dockyard/Assets/docker.ico` comes from [docker/cli](https://github.com/docker/cli/blob/master/cmd/docker/internal/assets/docker.ico) (Apache-2.0); the Docker logo is a trademark of Docker, Inc.

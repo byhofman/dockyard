@@ -1,0 +1,25 @@
+name: dockyard-dashboard
+arch: amd64
+platform: linux
+version: ${VERSION}
+section: admin
+priority: optional
+maintainer: Thomas Hofman <noreply@github.com>
+description: |
+  Dockyard dashboard: containers, compose projects, images, volumes, networks and disk usage.
+homepage: https://github.com/byhofman/dockyard
+license: MIT
+depends:
+  - dockyard (= ${VERSION})
+overrides:
+  rpm:
+    depends:
+      - dockyard = ${VERSION}
+contents:
+  - src: dist/linux/dashboard/Dockyard.Dashboard
+    dst: /usr/lib/dockyard/Dockyard.Dashboard
+    file_info: { mode: 0755 }
+  - src: dist/linux/dashboard/libSkiaSharp.so
+    dst: /usr/lib/dockyard/libSkiaSharp.so
+  - src: dist/linux/dashboard/libHarfBuzzSharp.so
+    dst: /usr/lib/dockyard/libHarfBuzzSharp.so

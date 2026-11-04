@@ -1,0 +1,13 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:res="using:Dockyard.Dashboard.Features.Resources"
+             x:Class="Dockyard.Dashboard.Features.Resources.ConfirmBar"
+             x:DataType="res:ConfirmRequest">
+  <Border Background="{DynamicResource BadBg}" CornerRadius="6" Padding="12,8">
+    <Grid ColumnDefinitions="*,Auto,Auto">
+      <TextBlock Text="{Binding Message}" TextWrapping="Wrap" VerticalAlignment="Center" />
+      <Button Grid.Column="1" Classes="dangerfill" Content="{Binding ConfirmText}" Command="{Binding Accept}" Margin="10,0,6,0" />
+      <Button Grid.Column="2" Content="Cancel" Command="{Binding Cancel}" />
+    </Grid>
+  </Border>
+</UserControl>

@@ -14,6 +14,10 @@ static class Paths
     public static readonly string PluginDir = Path.Combine(DockerDir, "cli-plugins");
     public static readonly string AppDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Dockyard");
     public static readonly string AppExe = Path.Combine(AppDir, "Dockyard.exe");
+    public static readonly string DashboardExe = Path.Combine(AppDir, "Dockyard.Dashboard.exe");
+    public const string DashboardName = "Dockyard.Dashboard";
+    public const string DashboardZipName = "Dockyard.Dashboard.zip";
+    public static readonly string DashboardManifest = Path.Combine(AppDir, "dashboard.files");
     public static readonly string DaemonConfigDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "docker", "config");
     public static readonly string UserProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     public static readonly string SettingsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Dockyard");
@@ -28,7 +32,6 @@ static class Paths
     public const int LinuxPort = 2375;
     public static readonly string LinuxHost = $"tcp://127.0.0.1:{LinuxPort}";
     public const string ServiceName = "docker";
-    public const string DefaultDistro = "Ubuntu-24.04";
     public const string Repo = "byhofman/dockyard";
     public const string AppName = "Dockyard";
 
@@ -41,7 +44,7 @@ static class Paths
 
 sealed class Settings
 {
-    public string Distro { get; set; } = Paths.DefaultDistro;
+    public string? Distro { get; set; }
     public bool StopOtherOnSwitch { get; set; } = true;
     public bool StartActiveAtLogon { get; set; } = true;
 

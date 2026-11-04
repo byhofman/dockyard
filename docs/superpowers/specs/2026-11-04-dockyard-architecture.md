@@ -1,0 +1,42 @@
+# Dockyard architecture
+
+Umbrella design for turning Dockyard from a Windows-only engine switcher into a cross-platform Docker distribution with an optional dashboard. Each sub-project below gets its own spec, plan and implementation cycle; this document holds what they share.
+
+## Core values
+
+1. **Fast and lean.** Nothing runs when nothing is in use: engines start on demand, the dashboard process only exists while its window is open, nothing polls while idle.
+2. **Cross-platform.** Windows, Linux and macOS, with a tray on all three.
+3. **Native Docker only.** Plain `dockerd`, the normal `docker` CLI with buildx and compose, standard docker contexts. No Kubernetes, no custom networking layers, no wrapper CLI.
+4. **The dashboard is optional, and fast.** Engine-only installs get the engines, the CLI and the tray. The dashboard (containers, images, compose, volumes, networks) is an extra component. Simplicity and usability come before feature count.
+5. **Windows runs both Linux and Windows containers.**
+
+## Components
+
+| Component | Delivered in | Purpose |
+|---|---|---|
+| Engines + CLI | engine-only and full | `dockerd` per platform, `docker` CLI, buildx and compose plugins, docker contexts |
+| `Dockyard` (tray) | engine-only and full | Minimal: engine status, context switch, start/stop engines, update notice, settings and setup window, open dashboard (only when installed), quit |
+| `Dockyard.Dashboard` | full only | The dashboard window. Separate executable, started by the tray on demand, exits when its window closes |
+| `Dockyard.Engine` | library | Docker Engine API client used by the dashboard (and by the tray for engine status where useful) |
+
+The tray stays small because it ships in every install: no container lists, no logs, no engine API streams. Everything container-related lives in the dashboard.
+
+## Sub-projects
+
+| # | Sub-project | Depends on | Contents |
+|---|---|---|---|
+| A | Engine client + dashboard | none | `Dockyard.Engine` and `Dockyard.Dashboard`: containers, compose, images, volumes, networks, disk. Windows first. Spec: `2026-11-04-dockyard-dashboard-design.md` |
+| B | Platform hosts | A | `IEngineHost` abstraction; Windows host moved behind it with the Linux engine on a dedicated Alpine-based `dockyard` WSL distro (image shared with C); Linux host on the system `dockerd`; tray on Windows, Linux and macOS; dashboard and tray built for all three. Spec: `2026-11-04-dockyard-platform-hosts-design.md` |
+| C | macOS VM | B | Own Swift helper on Apple Virtualization.framework: minimal Linux VM, virtiofs file sharing, docker socket over vsock to `~/.dockyard/docker.sock`, elastic memory, Rosetta for amd64, automatic localhost port forwarding from container events. Modelled on OrbStack's approach. Spec: `2026-11-04-dockyard-macos-vm-design.md` |
+| D | Packaging + updates | B, C | Engine-only / full on every OS with the dashboard as add-on; Windows exe + winget, Linux apt/dnf repo on GitHub Pages, macOS ad-hoc signed zip via install script, then notarization and Homebrew once a Developer ID exists; self-update; CI matrix (`win-x64`, `linux-x64`, `osx-arm64`). Spec: `2026-11-04-dockyard-packaging-design.md` |
+
+## Shared decisions
+
+- **Stack:** .NET 10 with native AOT, Avalonia for all UI. No reflection-based serialization; JSON through source-generated contexts.
+- **Engine access:** Dockyard's own Engine API client on `HttpClient` with a custom connect callback for named pipe, unix socket or TCP. Compose has no engine API and goes through the `docker compose` CLI plugin.
+- **Endpoint:** always the active docker context from `~/.docker`, exactly what the CLI uses. Dockyard never sets `DOCKER_HOST`.
+- **Per platform, one engine endpoint per engine:**
+  - Windows: `linux` context (the `dockyard` WSL distro, `tcp://127.0.0.1:2375`) and `win` context (`dockerd` service, `npipe:////./pipe/docker_windows`).
+  - Linux: the system `dockerd` (`unix:///var/run/docker.sock`).
+  - macOS: the VM's forwarded socket (`unix://~/.dockyard/docker.sock`).
+- **Exec:** opens the user's own terminal with `docker exec -it`; no embedded terminal.

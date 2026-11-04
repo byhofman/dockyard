@@ -1,0 +1,102 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:cont="using:Dockyard.Dashboard.Features.Containers"
+             xmlns:res="using:Dockyard.Dashboard.Features.Resources"
+             x:Class="Dockyard.Dashboard.Features.Containers.ComposeDetailView"
+             x:DataType="cont:ComposeDetailViewModel">
+  <Grid x:Name="Layout" RowDefinitions="*,5,260">
+    <ScrollViewer>
+    <StackPanel Margin="18,14,14,8" Spacing="8">
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <PathIcon Data="{StaticResource IconCompose}" Width="18" Height="18" Margin="0,0,10,0" />
+        <TextBlock Grid.Column="1" Classes="title" Text="{Binding Project.Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+        <Button Grid.Column="2" Classes="iconbtn" Command="{Binding CloseCommand}" ToolTip.Tip="Close">
+          <PathIcon Data="{StaticResource IconClose}" />
+        </Button>
+      </Grid>
+      <TextBlock Classes="muted small" Text="{Binding Project.Location}" TextTrimming="LeadingCharacterEllipsis" ToolTip.Tip="{Binding Project.Location}" />
+      <Border Classes="pill" Classes.ok="{Binding Project.IsRunning}">
+        <TextBlock Text="{Binding Project.Summary}" />
+      </Border>
+
+      <WrapPanel ItemSpacing="6" LineSpacing="6" Margin="0,4,0,0">
+        <Button Classes="primary" Command="{Binding UpCommand}" ToolTip.Tip="docker compose up -d">
+          <StackPanel Classes="label"><PathIcon Data="{StaticResource IconPlay}" /><TextBlock Text="Up" /></StackPanel>
+        </Button>
+        <Button Command="{Binding StopCommand}">
+          <StackPanel Classes="label"><PathIcon Data="{StaticResource IconStop}" /><TextBlock Text="Stop" /></StackPanel>
+        </Button>
+        <Button Command="{Binding RestartCommand}">
+          <StackPanel Classes="label"><PathIcon Data="{StaticResource IconRestart}" /><TextBlock Text="Restart" /></StackPanel>
+        </Button>
+        <Button Command="{Binding PullCommand}">
+          <StackPanel Classes="label"><PathIcon Data="{StaticResource IconPull}" /><TextBlock Text="Pull" /></StackPanel>
+        </Button>
+        <Button Command="{Binding ToggleLogsCommand}">
+          <StackPanel Classes="label"><PathIcon Data="{StaticResource IconLogs}" /><TextBlock Text="Logs" /></StackPanel>
+        </Button>
+        <Button Classes="danger" Command="{Binding DownCommand}" ToolTip.Tip="Remove containers and networks; volumes are kept">
+          <StackPanel Classes="label"><PathIcon Data="{StaticResource IconDown}" /><TextBlock Text="Down" /></StackPanel>
+        </Button>
+        <Button Classes="link" Content="Forget" Command="{Binding ForgetCommand}" IsVisible="{Binding IsRecentOnly}"
+                ToolTip.Tip="Remove from the recent compose files" />
+      </WrapPanel>
+      <TextBlock Classes="muted small" Text="{Binding Busy}" IsVisible="{Binding IsBusy}" />
+      <res:ConfirmBar DataContext="{Binding Confirm}" IsVisible="{Binding $parent[UserControl].((cont:ComposeDetailViewModel)DataContext).HasConfirm}" />
+
+      <TextBlock Classes="section" Text="SERVICES" Margin="0,6,0,0" />
+      <ItemsControl ItemsSource="{Binding Project.Services}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="res:ComposeService">
+            <Grid ColumnDefinitions="*,Auto" Margin="0,3">
+              <StackPanel>
+                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                <TextBlock Classes="muted small" Text="{Binding State}" />
+              </StackPanel>
+              <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Classes="iconbtn" ToolTip.Tip="Start" CommandParameter="{Binding}"
+                        Command="{Binding $parent[UserControl].((cont:ComposeDetailViewModel)DataContext).ServiceStartCommand}">
+                  <PathIcon Data="{StaticResource IconPlay}" />
+                </Button>
+                <Button Classes="iconbtn" ToolTip.Tip="Stop" CommandParameter="{Binding}"
+                        Command="{Binding $parent[UserControl].((cont:ComposeDetailViewModel)DataContext).ServiceStopCommand}">
+                  <PathIcon Data="{StaticResource IconStop}" />
+                </Button>
+                <Button Classes="iconbtn" ToolTip.Tip="Restart" CommandParameter="{Binding}"
+                        Command="{Binding $parent[UserControl].((cont:ComposeDetailViewModel)DataContext).ServiceRestartCommand}">
+                  <PathIcon Data="{StaticResource IconRestart}" />
+                </Button>
+              </StackPanel>
+            </Grid>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </StackPanel>
+    </ScrollViewer>
+
+    <GridSplitter x:Name="Splitter" Grid.Row="1" ResizeDirection="Rows" Background="{DynamicResource Line}" />
+
+    <Panel x:Name="Bottom" Grid.Row="2" Background="{DynamicResource Bg}">
+    <Border IsVisible="{Binding ShowOutput}">
+      <ScrollViewer>
+        <ItemsControl ItemsSource="{Binding Output}" Margin="12,8">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="x:String">
+              <SelectableTextBlock Classes="mono" Text="{Binding}" TextWrapping="Wrap" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </Border>
+
+    <ListBox Classes="log" IsVisible="{Binding ShowLogs}" ItemsSource="{Binding Logs.Rows}" Background="{DynamicResource Bg}"
+             ScrollViewer.HorizontalScrollBarVisibility="Auto">
+      <ListBox.ItemTemplate>
+        <DataTemplate DataType="cont:LogRow">
+          <SelectableTextBlock Classes="mono" Classes.err="{Binding IsError}" Text="{Binding Text}" />
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+    </Panel>
+  </Grid>
+</UserControl>

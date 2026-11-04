@@ -1,0 +1,23 @@
+#!/bin/sh
+# dockyard-update <docker-static.tgz> [plugins-dir]: replaces the Docker binaries in place; /var/lib/docker is untouched.
+set -eu
+
+tgz="${1:?usage: dockyard-update <docker.tgz> [plugins-dir]}"
+plugins="${2:-}"
+
+if pidof dockerd >/dev/null 2>&1; then
+  echo "dockerd is running; stop the engine first" >&2
+  exit 3
+fi
+
+tar -xzf "$tgz" -C /usr/local/bin --strip-components=1
+if [ -n "$plugins" ]; then
+  for p in "$plugins"/docker-*; do
+    [ -f "$p" ] || continue
+    install -m 0755 "$p" "/usr/local/lib/docker/cli-plugins/$(basename "$p")"
+  done
+fi
+
+version="$(dockerd --version | sed -n 's/^Docker version \([^,]*\),.*/\1/p')"
+sed -i "s/^DOCKER_VERSION=.*/DOCKER_VERSION=$version/" /etc/dockyard-release
+echo "Docker $version"

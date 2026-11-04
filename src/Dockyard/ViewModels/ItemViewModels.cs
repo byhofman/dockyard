@@ -1,16 +1,18 @@
-using Dockyard.Core;
+using Dockyard.Hosts;
 
 namespace Dockyard.ViewModels;
 
-sealed class EngineViewModel(Engine engine, string title, string subtitle, string endpoint) : Observable
+sealed class EngineViewModel(EngineInfo info) : Observable
 {
     bool isRunning;
     bool isActive;
 
-    public Engine Engine { get; } = engine;
-    public string Title { get; } = title;
-    public string Subtitle { get; set; } = subtitle;
-    public string Endpoint { get; } = endpoint;
+    public EngineInfo Info { get; } = info;
+    public string Id => Info.Id;
+    public string Name => Info.Name;
+    public string Title => Info.Title;
+    public string Subtitle => Info.Subtitle;
+    public string Endpoint => Info.Endpoint;
     public required Command ToggleCommand { get; init; }
     public required Command UseCommand { get; init; }
 
@@ -34,15 +36,16 @@ sealed class EngineViewModel(Engine engine, string title, string subtitle, strin
 
 enum UpdateState { Unknown, Checking, UpToDate, Available, NotInstalled, NoRelease, Error }
 
-sealed class ComponentViewModel(Component component) : Observable
+sealed class ComponentViewModel(ComponentInfo info) : Observable
 {
     string installed = "–";
     string latest = "–";
     UpdateState state;
     string? error;
 
-    public Component Component { get; } = component;
-    public string Title { get; } = Updates.Title(component);
+    public ComponentInfo Info { get; } = info;
+    public string Id => Info.Id;
+    public string Title => Info.Title;
     public required Command UpdateCommand { get; init; }
     public Release? LatestRelease { get; set; }
 

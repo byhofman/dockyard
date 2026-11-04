@@ -1,0 +1,134 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:cont="using:Dockyard.Dashboard.Features.Containers"
+             xmlns:controls="using:Dockyard.Dashboard.Controls"
+             x:Class="Dockyard.Dashboard.Features.Containers.ContainerDetailView"
+             x:DataType="cont:ContainerDetailViewModel">
+
+  <DockPanel>
+    <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="18,14,14,10" IsVisible="{Binding !LogsExpanded}">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Classes="title" Text="{Binding Item.Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+        <Button Grid.Column="1" Classes="iconbtn" Command="{Binding CloseCommand}" ToolTip.Tip="Close">
+          <PathIcon Data="{StaticResource IconClose}" />
+        </Button>
+      </Grid>
+      <TextBlock Classes="muted small" Text="{Binding Item.Image}" TextTrimming="CharacterEllipsis" />
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Border Classes="pill" Classes.ok="{Binding Item.IsRunning}">
+          <TextBlock Text="{Binding Item.Status}" />
+        </Border>
+        <TextBlock Classes="muted mono" Text="{Binding Item.ShortId}" VerticalAlignment="Center" />
+      </StackPanel>
+
+      <WrapPanel Margin="0,4,0,0" ItemSpacing="6" LineSpacing="6">
+        <Button Command="{Binding Actions.ToggleCommand}" CommandParameter="{Binding Item}" ToolTip.Tip="Start or stop (S)">
+          <StackPanel Classes="label">
+            <Panel>
+              <PathIcon Data="{StaticResource IconStop}" IsVisible="{Binding Item.IsRunning}" />
+              <PathIcon Data="{StaticResource IconPlay}" IsVisible="{Binding Item.IsStopped}" />
+            </Panel>
+            <TextBlock Text="{Binding Item.ToggleText}" />
+          </StackPanel>
+        </Button>
+        <Button Command="{Binding Actions.RestartCommand}" CommandParameter="{Binding Item}" ToolTip.Tip="Restart (R)">
+          <StackPanel Classes="label"><PathIcon Data="{StaticResource IconRestart}" /><TextBlock Text="Restart" /></StackPanel>
+        </Button>
+        <Button Command="{Binding Actions.ExecCommand}" CommandParameter="{Binding Item}"
+                IsEnabled="{Binding Item.IsRunning}" ToolTip.Tip="Open a shell in your terminal (E)">
+          <StackPanel Classes="label"><PathIcon Data="{StaticResource IconTerminal}" /><TextBlock Text="Terminal" /></StackPanel>
+        </Button>
+        <Button Classes="danger" Command="{Binding AskRemoveCommand}" ToolTip.Tip="Remove (Del)">
+          <StackPanel Classes="label"><PathIcon Data="{StaticResource IconDelete}" /><TextBlock Text="Remove" /></StackPanel>
+        </Button>
+      </WrapPanel>
+
+      <Border IsVisible="{Binding ConfirmRemove}" Background="{DynamicResource BadBg}" CornerRadius="6" Padding="12,8">
+        <Grid ColumnDefinitions="*,Auto,Auto">
+          <TextBlock Text="Remove this container?" VerticalAlignment="Center" TextWrapping="Wrap" />
+          <Button Grid.Column="1" Classes="dangerfill" Content="Remove" Margin="8,0,6,0"
+                  Command="{Binding Actions.RemoveCommand}" CommandParameter="{Binding Item}" />
+          <Button Grid.Column="2" Content="Cancel" Command="{Binding CancelRemoveCommand}" />
+        </Grid>
+      </Border>
+    </StackPanel>
+
+    <TabControl SelectedIndex="{Binding SelectedTab}" Margin="8,0,0,0">
+      <TabItem Header="Logs">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="8,8,8,6">
+            <TextBox Width="190" PlaceholderText="Filter logs" Text="{Binding Logs.Search}">
+              <TextBox.InnerLeftContent>
+                <PathIcon Data="{StaticResource IconSearch}" Margin="10,0,0,0" Foreground="{DynamicResource Muted}" />
+              </TextBox.InnerLeftContent>
+            </TextBox>
+            <ToggleButton Content="Follow" IsChecked="{Binding Logs.Follow}" />
+            <ToggleButton Content="Timestamps" IsChecked="{Binding Logs.ShowTimestamps}" />
+            <ToggleButton IsChecked="{Binding LogsExpanded}" ToolTip.Tip="Give the logs the whole panel">
+              <PathIcon Data="{StaticResource IconExpand}" />
+            </ToggleButton>
+          </StackPanel>
+          <ListBox x:Name="LogList" Classes="log" ItemsSource="{Binding Logs.Rows}" Background="{DynamicResource Bg}"
+                   ScrollViewer.HorizontalScrollBarVisibility="Auto">
+            <ListBox.ItemTemplate>
+              <DataTemplate DataType="cont:LogRow">
+                <SelectableTextBlock Classes="mono" Classes.err="{Binding IsError}" Text="{Binding Text}" />
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </TabItem>
+
+      <TabItem Header="Inspect">
+        <ScrollViewer>
+          <ItemsControl ItemsSource="{Binding Inspect.Sections}" Margin="10,8,14,14">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="cont:InspectSection">
+                <StackPanel Spacing="4" Margin="0,0,0,14">
+                  <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Classes="section" Text="{Binding Title}" VerticalAlignment="Center" />
+                    <Button Grid.Column="1" Classes="iconbtn" Click="CopySection" ToolTip.Tip="Copy">
+                      <PathIcon Data="{StaticResource IconCopy}" />
+                    </Button>
+                  </Grid>
+                  <ItemsControl ItemsSource="{Binding Items}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="cont:KeyValue">
+                        <Grid ColumnDefinitions="130,*" Margin="0,2">
+                          <TextBlock Classes="muted small" Text="{Binding Key}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Key}" />
+                          <SelectableTextBlock Grid.Column="1" Classes="mono" Text="{Binding Value}" TextWrapping="Wrap" />
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </TabItem>
+
+      <TabItem Header="Stats">
+        <StackPanel Margin="12" Spacing="18">
+          <TextBlock Classes="muted" Text="Not running" IsVisible="{Binding Item.IsStopped}" />
+          <StackPanel Spacing="6" IsVisible="{Binding Item.IsRunning}">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Classes="section" Text="CPU" />
+              <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Item.CpuPercent, StringFormat={}{0:0.0} %}" />
+            </Grid>
+            <controls:Sparkline Height="70" Values="{Binding Item.CpuHistory}" Stroke="{StaticResource Accent}" />
+          </StackPanel>
+          <StackPanel Spacing="6" IsVisible="{Binding Item.IsRunning}">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Classes="section" Text="MEMORY" />
+              <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Item.UsageText}" />
+            </Grid>
+            <controls:Sparkline Height="70" Values="{Binding Item.MemoryHistory}" Stroke="{DynamicResource Ok}" />
+          </StackPanel>
+          <TextBlock Classes="muted small" TextWrapping="Wrap" IsVisible="{Binding Item.IsRunning}"
+                     Text="Last 60 seconds. Stats are only collected while this window is open." />
+        </StackPanel>
+      </TabItem>
+    </TabControl>
+  </DockPanel>
+</UserControl>
