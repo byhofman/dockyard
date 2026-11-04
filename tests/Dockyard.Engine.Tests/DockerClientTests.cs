@@ -62,3 +62,13 @@ public sealed class DockerClientTests
         await Assert.ThrowsAsync<EngineUnavailableException>(() => client.PingAsync(TestContext.Current.CancellationToken));
     }
 }
+
+public sealed class DockerClientTimeoutTests
+{
+    [Fact]
+    public async Task Missing_named_pipe_is_reported_as_unavailable()
+    {
+        using var client = new DockerClient(Transport.DockerEndpoint.Parse($"npipe:////./pipe/dy{Guid.NewGuid():N}"[..40]));
+        await Assert.ThrowsAsync<EngineUnavailableException>(() => client.PingAsync(TestContext.Current.CancellationToken));
+    }
+}

@@ -59,6 +59,7 @@ public sealed partial class DockerClient : IDisposable
         HttpResponseMessage res;
         try { res = await http.GetAsync("_ping", ct); }
         catch (HttpRequestException ex) { throw new EngineUnavailableException(Endpoint, ex); }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException && !ct.IsCancellationRequested) { throw new EngineUnavailableException(Endpoint, ex.InnerException); }
 
         using (res)
         {
@@ -87,6 +88,7 @@ public sealed partial class DockerClient : IDisposable
             res = await http.SendAsync(request, stream ? HttpCompletionOption.ResponseHeadersRead : HttpCompletionOption.ResponseContentRead, ct);
         }
         catch (HttpRequestException ex) { throw new EngineUnavailableException(Endpoint, ex); }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException && !ct.IsCancellationRequested) { throw new EngineUnavailableException(Endpoint, ex.InnerException); }
         await EnsureSuccess(res, ct);
         return res;
     }
