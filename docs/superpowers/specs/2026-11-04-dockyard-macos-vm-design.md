@@ -97,3 +97,10 @@ Started by `dockyard-init` before dockerd. Talks to the helper over vsock.
 
 - **CI (GitHub macOS runners, no nested virtualization):** `swift test` for config building, proxy framing and the balloon policy; agent unit tests (event → port list, memory parsing); image and kernel build; signing with an ad-hoc identity to check the entitlement is present.
 - **End-to-end on the user's Apple-silicon Mac** (manual script `scripts/mac-e2e.sh`, later a self-hosted runner): fresh install, start under budget, `docker run hello-world`, bind mount from `$HOME` (read and write), `-p 8080:80` reachable on `127.0.0.1:8080`, `--platform linux/amd64` image via Rosetta, `docker compose up`, buildx build, sleep/wake clock check, balloon returns memory after a large container exits, stop, uninstall.
+
+## Implementation notes
+
+- The root disk is not read-only inside the bundle: `dockyard-vm prepare` clones `root.img` from the app (APFS copy-on-write) to `~/.dockyard/root.img` whenever the bundled `dockyard-release` changes, and the VM boots it read-write. The signed bundle stays untouched and the data disk is never replaced.
+- All vsock connections are opened by the helper (docker 2375, forwards 2376, control 2377), so the host needs no vsock listener; the agent pushes ports and memory over the control connection.
+- The `/var/run/docker.sock` symlink is documented as a manual command instead of a Settings toggle for now.
+- Verification without a Mac: the x86_64 build of the VM assets boots under QEMU/KVM in CI (`image/test-vm.sh`: API through the agent, container run, port forward with half-close, control messages, poweroff, data persistence); `DockyardVMCore` and its socket proxies are tested with `swift test` on Linux; the Virtualization.framework code builds and is entitlement-signed in the `macos-14` job; `scripts/mac-e2e.sh` covers the rest on a real Mac.

@@ -38,7 +38,12 @@ sealed class EngineSession : Observable
         private set { if (Set(ref contextName, value)) Raise(nameof(EngineId)); }
     }
 
-    public string? EngineId => ContextName is "linux" or "win" ? ContextName : null;
+    public string? EngineId => ContextName switch
+    {
+        "linux" or "win" => ContextName,
+        "dockyard" or "default" when !OperatingSystem.IsWindows() => "linux",
+        _ => null,
+    };
 
     public event Action? Connected;
     public event Action<RouteAction>? ResourceChanged;

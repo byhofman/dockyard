@@ -3,3 +3,5 @@ rootfs/** text eol=lf
 Dockerfile text eol=lf
 vm/** text eol=lf
 extract-kernel.sh text eol=lf
+build.sh text eol=lf
+test-vm.sh text eol=lf

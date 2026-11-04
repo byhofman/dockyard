@@ -95,6 +95,19 @@ On Linux, Dockyard manages the system Docker engine. Unpack `Dockyard-<version>-
 
 The tray uses the desktop's StatusNotifierItem tray (GNOME needs the AppIndicator extension). The engine uses the `default` context (`unix:///var/run/docker.sock`). Stopping the engine from Dockyard also stops `docker.socket`, so nothing restarts it until you start it again or reboot. `Dockyard --uninstall` removes the polkit rule and autostart and re-enables the distribution's default `docker.service`; packages, images and containers stay.
 
+## macOS (Apple silicon, macOS 14+)
+
+Linux containers run in a small VM on Apple's Virtualization.framework, started by Dockyard when you need it. Unpack `Dockyard-<version>-osx-arm64.zip` and run `./Dockyard/Dockyard --install`:
+
+- installs Docker's static `docker` CLI to `~/.dockyard/bin` (added to the PATH through `/etc/paths.d/dockyard`, one administrator prompt) and the compose and buildx plugins to `~/.docker/cli-plugins`
+- prepares the VM in `~/.dockyard`: settings (`vm.json`: all cores, half the RAM up to 8 GiB), the root disk (a copy-on-write clone of the image in the app) and a sparse 64 GB data disk for `/var/lib/docker`
+- creates and selects the docker context `dockyard` (`unix://~/.dockyard/docker.sock`)
+- starts Dockyard at login (`~/Library/LaunchAgents/com.byhofman.dockyard.plist`)
+
+Inside the VM: Alpine with Docker's static binaries, `/Users`, `/Volumes`, `/private/tmp` and `/private/var/folders` shared at the same paths (so `-v $PWD:/app` works), Rosetta for `linux/amd64` images when Rosetta is installed (`softwareupdate --install-rosetta`), published ports forwarded to `127.0.0.1` (or all interfaces for `0.0.0.0`), memory the guest does not use handed back to macOS, and the guest clock reset after the Mac wakes. Logs: `~/.dockyard/logs/vm-console.log`. For tools that insist on `/var/run/docker.sock`: `sudo ln -sf ~/.dockyard/docker.sock /var/run/docker.sock`.
+
+`scripts/mac-e2e.sh <Dockyard folder>` checks start time, containers, Rosetta, bind mounts, ports, compose, buildx, memory, clock and stop on a Mac.
+
 ## Without Dockyard running
 
 ```pwsh

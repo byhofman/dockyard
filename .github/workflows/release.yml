@@ -81,7 +81,35 @@ jobs:
           name: image
           path: out/dockyard-linux-*.tar.gz
 
+  vm-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Boot the VM image with QEMU/KVM
+        run: |
+          sudo chmod 666 /dev/kvm
+          sh image/build.sh x86_64 0.0.0 vm
+          docker run --rm --device /dev/kvm -v "$PWD/image/test-vm.sh:/test-vm.sh:ro" -v "$PWD/out:/out:ro" alpine:3.24 \
+            sh /test-vm.sh /out/dockyard-vm-0.0.0-x86_64.tar.gz
+
+  vm-image:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the aarch64 VM assets
+        run: |
+          version=0.0.0; [ "$GITHUB_REF_TYPE" = tag ] && version="${GITHUB_REF_NAME#v}"
+          sh image/build.sh aarch64 "$version" vm
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vm-image
+          path: out/dockyard-vm-*-aarch64.tar.gz
+
   macos:
+    needs: [vm-image]
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -90,13 +118,26 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Test
-        run: dotnet test --solution Dockyard.slnx
+        run: |
+          dotnet test --solution Dockyard.slnx
+          swift test --package-path macos/DockyardVM
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: vm-image
+          path: vm-image
 
       - name: Publish
         run: |
           version=0.0.0; [ "$GITHUB_REF_TYPE" = tag ] && version="${GITHUB_REF_NAME#v}"
           dotnet publish src/Dockyard/Dockyard.csproj -c Release -r osx-arm64 -o out/Dockyard -p:Version=$version -warnaserror
           dotnet publish src/Dockyard.Dashboard/Dockyard.Dashboard.csproj -c Release -r osx-arm64 -o out/Dockyard -p:Version=$version -warnaserror
+          swift build -c release --package-path macos/DockyardVM
+          cp macos/DockyardVM/.build/release/dockyard-vm out/Dockyard/
+          codesign --force --sign - --entitlements macos/DockyardVM/dockyard-vm.entitlements out/Dockyard/dockyard-vm
+          codesign -d --entitlements - out/Dockyard/dockyard-vm | grep -q com.apple.security.virtualization
+          mkdir -p out/Dockyard/vm
+          tar -xzf vm-image/dockyard-vm-*-aarch64.tar.gz -C out/Dockyard/vm
           rm -f out/Dockyard/*.pdb
           (cd out && zip -qr "Dockyard-$version-osx-arm64.zip" Dockyard)
 
@@ -107,7 +148,7 @@ jobs:
 
   release:
     if: github.ref_type == 'tag'
-    needs: [windows, linux, image, macos]
+    needs: [windows, linux, image, vm-test, macos]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
