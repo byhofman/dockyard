@@ -56,7 +56,9 @@ The existing Engines / Updates / Settings window stays in the tray exe, because 
 ### Layout
 
 - Three columns: sidebar, list, detail pane. Below ~1000px window width the detail pane is an overlay over the list.
-- Sidebar: Containers, Compose, Images, Volumes, Networks, Disk.
+- The detail pane is resizable with a splitter (and the compose output/logs area inside it); sizes persist in `dashboard.json`. Container logs can take over the whole pane.
+- Sidebar: Containers, Images, Volumes, Networks, Disk, each with an icon. Actions use icons (Material Design Icons, Apache-2.0) with a label where space allows and a tooltip otherwise.
+- Inputs, combo boxes and buttons share one height (32px), radius and border style, with an accent focus border; light and dark variants.
 - Top bar: search (Ctrl+K filters the current list), the L/W context switch (Windows only; switching changes the docker context, the view follows), gear (settings in the tray app).
 - Light/dark follows the OS.
 - Keyboard: Up/Down move, Enter opens details, `S` start/stop, `R` restart, `E` exec, `L` logs, Del remove (with confirmation).
@@ -73,7 +75,10 @@ The existing Engines / Updates / Settings window stays in the tray exe, because 
 - Actions: start, stop, restart, remove (confirm; force when running), exec.
 - **Exec** launches the user's terminal: Windows Terminal (`wt.exe`) when present, otherwise a console window. Linux containers: `docker --context <ctx> exec -it <id> sh -c "command -v bash >/dev/null && exec bash || exec sh"`. Windows containers: `powershell`, falling back to `cmd` when the image has no PowerShell.
 
-### Compose
+### Compose (inside Containers, like Docker Desktop)
+
+- A compose project is an expandable row in the container list (chevron, `running/total`, path); its containers are indented under it. Projects and standalone containers are sorted together by name. Hover actions on the row: start/stop, restart, down.
+- Selecting the project row shows the project detail: actions, services, command output and merged logs.
 
 - Projects from container labels, plus a recent list of compose files opened through **Open compose file…** (path + project name, stored in `%APPDATA%\Dockyard\dashboard.json`), so a project shows even when it has no containers.
 - Project actions: up (`-d`), stop, restart, down, pull, merged logs. Service actions: start, stop, restart, logs.
