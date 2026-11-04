@@ -1039,7 +1039,7 @@ partial class CoreJson : JsonSerializerContext;
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `dotnet test tests/Dockyard.Engine.Tests --filter "FullyQualifiedName~DockerClientTests|FullyQualifiedName~RfcTimeTests"`
-Expected: PASS (10 tests). Also run `dotnet build src/Dockyard.Engine` and expect 0 warnings.
+Expected: PASS (11 tests). Also run `dotnet build src/Dockyard.Engine` and expect 0 warnings.
 
 - [ ] **Step 5: Commit**
 
@@ -1408,9 +1408,9 @@ public sealed class LogsTests
     public async Task Demuxes_frames_and_joins_partial_lines()
     {
         var bytes = Frame(1, "hello\nwor").Concat(Frame(1, "ld\n")).Concat(Frame(2, "oops\r\n")).Concat(Frame(1, "tail")).ToArray();
-        Assert.Equal(
-            [(LogStream.Stdout, "hello"), (LogStream.Stdout, "world"), (LogStream.Stderr, "oops"), (LogStream.Stdout, "tail")],
-            await Demux(bytes, tty: false));
+        List<(LogStream, string)> expected =
+            [(LogStream.Stdout, "hello"), (LogStream.Stdout, "world"), (LogStream.Stderr, "oops"), (LogStream.Stdout, "tail")];
+        Assert.Equal(expected, await Demux(bytes, tty: false));
     }
 
     [Fact]
@@ -1418,7 +1418,8 @@ public sealed class LogsTests
     {
         var euro = Encoding.UTF8.GetBytes("€\n");
         var bytes = FrameRaw(1, euro[..1]).Concat(FrameRaw(1, euro[1..])).ToArray();
-        Assert.Equal([(LogStream.Stdout, "€")], await Demux(bytes, tty: false));
+        List<(LogStream, string)> expected = [(LogStream.Stdout, "€")];
+        Assert.Equal(expected, await Demux(bytes, tty: false));
 
         static byte[] FrameRaw(byte stream, byte[] payload)
         {
@@ -1431,8 +1432,11 @@ public sealed class LogsTests
     }
 
     [Fact]
-    public async Task Tty_stream_is_raw_stdout() =>
-        Assert.Equal([(LogStream.Stdout, "a"), (LogStream.Stdout, "b")], await Demux(Encoding.UTF8.GetBytes("a\r\nb\n"), tty: true));
+    public async Task Tty_stream_is_raw_stdout()
+    {
+        List<(LogStream, string)> expected = [(LogStream.Stdout, "a"), (LogStream.Stdout, "b")];
+        Assert.Equal(expected, await Demux(Encoding.UTF8.GetBytes("a\r\nb\n"), tty: true));
+    }
 
     [Fact]
     public async Task LogsAsync_splits_timestamps()
@@ -1481,14 +1485,14 @@ static class LogDemuxer
     public static IAsyncEnumerable<(LogStream Stream, string Text)> ReadAsync(Stream stream, bool tty, CancellationToken ct) =>
         tty ? ReadRaw(stream, ct) : ReadMultiplexed(stream, ct);
 
-    static async IAsyncEnumerable<(LogStream, string)> ReadRaw(Stream stream, [EnumeratorCancellation] CancellationToken ct)
+    static async IAsyncEnumerable<(LogStream Stream, string Text)> ReadRaw(Stream stream, [EnumeratorCancellation] CancellationToken ct)
     {
         using var reader = new StreamReader(stream, Encoding.UTF8);
         while (await reader.ReadLineAsync(ct) is { } line) yield return (LogStream.Stdout, line);
     }
 
     // Each frame: [stream:1][0:3][size:4 big-endian][payload:size]. Lines may span frames.
-    static async IAsyncEnumerable<(LogStream, string)> ReadMultiplexed(Stream stream, [EnumeratorCancellation] CancellationToken ct)
+    static async IAsyncEnumerable<(LogStream Stream, string Text)> ReadMultiplexed(Stream stream, [EnumeratorCancellation] CancellationToken ct)
     {
         var header = new byte[8];
         var outBuffer = new LineBuffer();
