@@ -85,7 +85,7 @@ static class MachineSetup
     static async Task UpdateEngine(Action<string> log, bool onlyIfNewer)
     {
         var latest = await Updates.LatestStatic();
-        var current = await Updates.Installed(Component.Engine, Paths.DefaultDistro);
+        var current = await Updates.Installed(Component.Engine);
         if (onlyIfNewer && current >= latest.Version) { log($"Docker {current} is up to date"); return; }
 
         log($"Installing Docker {latest.Version}" + (current is null ? "" : $" (was {current})"));

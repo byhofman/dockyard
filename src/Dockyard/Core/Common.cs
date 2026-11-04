@@ -31,7 +31,6 @@ static class Paths
     public const int LinuxPort = 2375;
     public static readonly string LinuxHost = $"tcp://127.0.0.1:{LinuxPort}";
     public const string ServiceName = "docker";
-    public const string DefaultDistro = "Ubuntu-24.04";
     public const string Repo = "byhofman/dockyard";
     public const string AppName = "Dockyard";
 
@@ -44,7 +43,7 @@ static class Paths
 
 sealed class Settings
 {
-    public string Distro { get; set; } = Paths.DefaultDistro;
+    public string? Distro { get; set; }
     public bool StopOtherOnSwitch { get; set; } = true;
     public bool StartActiveAtLogon { get; set; } = true;
 

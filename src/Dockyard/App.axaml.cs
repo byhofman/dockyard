@@ -20,8 +20,7 @@ public partial class App : Application
     MainViewModel vm = null!;
     MainWindow? window;
     TrayIcon? tray;
-    NativeMenuItem? linuxItem;
-    NativeMenuItem? windowsItem;
+    readonly List<(string Engine, NativeMenuItem Item)> engineItems = [];
     IClassicDesktopStyleApplicationLifetime desktop = null!;
 
     public App() : this(AppMode.Setup, []) { }
@@ -40,7 +39,7 @@ public partial class App : Application
     public override void OnFrameworkInitializationCompleted()
     {
         desktop = (IClassicDesktopStyleApplicationLifetime)ApplicationLifetime!;
-        vm = new MainViewModel(setupMode: mode == AppMode.Setup);
+        vm = new MainViewModel(Hosts.HostFactory.Create(), setupMode: mode == AppMode.Setup);
         vm.ShutdownRequested += () => Dispatcher.UIThread.Post(Quit);
 
         if (mode == AppMode.Setup)
@@ -72,25 +71,39 @@ public partial class App : Application
         {
             case TrayCommandKind.Show: OpenDashboardOrWindow(); break;
             case TrayCommandKind.Settings: ShowWindow(); break;
-            case TrayCommandKind.Start: _ = vm.StartEngine(ToEngine(command.Engine)); break;
-            case TrayCommandKind.Switch: _ = vm.Switch(ToEngine(command.Engine)); break;
+            case TrayCommandKind.Start: _ = vm.StartEngine(command.Engine!); break;
+            case TrayCommandKind.Switch: _ = vm.Switch(command.Engine!); break;
         }
     }
 
-    static Engine ToEngine(string? id) => id == "win" ? Engine.Windows : Engine.Linux;
-
     void CreateTray()
     {
-        linuxItem = new NativeMenuItem("Linux containers") { ToggleType = MenuItemToggleType.Radio };
-        linuxItem.Click += (_, _) => _ = vm.Switch(Engine.Linux);
-        windowsItem = new NativeMenuItem("Windows containers") { ToggleType = MenuItemToggleType.Radio };
-        windowsItem.Click += (_, _) => _ = vm.Switch(Engine.Windows);
         var settings = new NativeMenuItem("Engines and settings…");
         settings.Click += (_, _) => ShowWindow();
         var quit = new NativeMenuItem("Quit");
         quit.Click += (_, _) => Quit();
 
-        var menu = new NativeMenu { linuxItem, windowsItem, new NativeMenuItemSeparator() };
+        var menu = new NativeMenu();
+        if (vm.EngineCards.Count > 1)
+        {
+            foreach (var engine in vm.EngineCards)
+            {
+                var item = new NativeMenuItem(engine.Title) { ToggleType = MenuItemToggleType.Radio };
+                var id = engine.Id;
+                item.Click += (_, _) => _ = vm.Switch(id);
+                engineItems.Add((id, item));
+                menu.Add(item);
+            }
+        }
+        else
+        {
+            var engine = vm.EngineCards[0];
+            var item = new NativeMenuItem(engine.ToggleText + " engine");
+            item.Click += (_, _) => engine.ToggleCommand.Execute(null);
+            engineItems.Add((engine.Id, item));
+            menu.Add(item);
+        }
+        menu.Add(new NativeMenuItemSeparator());
         if (HasDashboard)
         {
             var dashboard = new NativeMenuItem("Open dashboard");
@@ -110,15 +123,21 @@ public partial class App : Application
     void UpdateTray()
     {
         if (tray is null) return;
-        var activeEngine = vm.Active == Engine.Linux ? vm.Linux : vm.Windows;
+        var activeEngine = vm.ActiveEngine;
         var color = vm.IsBusy ? TrayIconRenderer.Busy : activeEngine.IsRunning ? TrayIconRenderer.Running : TrayIconRenderer.Stopped;
-        tray.Icon = TrayIconRenderer.Render(color, vm.Active == Engine.Linux ? "L" : "W");
+        var multiple = vm.EngineCards.Count > 1;
+        tray.Icon = TrayIconRenderer.Render(color, multiple ? activeEngine.Name[..1] : null);
         tray.ToolTipText = vm.IsBusy
             ? $"Dockyard: {vm.Busy}…"
-            : $"Dockyard: {Engines.Name(vm.Active)} containers\nLinux engine {vm.Linux.StatusText.ToLowerInvariant()}\nWindows engine {vm.Windows.StatusText.ToLowerInvariant()}";
-        linuxItem!.IsChecked = vm.IsLinuxActive;
-        windowsItem!.IsChecked = vm.IsWindowsActive;
-        linuxItem.IsEnabled = windowsItem.IsEnabled = !vm.IsBusy;
+            : "Dockyard\n" + string.Join("\n", vm.EngineCards.Select(e =>
+                $"{e.Name} engine {e.StatusText.ToLowerInvariant()}{(multiple && e.IsActive ? " (active)" : "")}"));
+        foreach (var (engine, item) in engineItems)
+        {
+            var card = vm.EngineCards.First(e => e.Id == engine);
+            if (multiple) item.IsChecked = card.IsActive;
+            else item.Header = card.ToggleText + " engine";
+            item.IsEnabled = !vm.IsBusy;
+        }
     }
 
     void OpenDashboardOrWindow()

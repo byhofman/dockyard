@@ -16,6 +16,8 @@ Out: macOS host and VM (C), installers/packages and the engine-only / full choic
 
 ## Projects
 
+Implementation note: the host abstraction lives in the tray project (`src/Dockyard/Hosts/`) instead of a separate `Dockyard.Host` library. The tray is its only consumer and the Windows update and elevation code it wraps already lives there; `tests/Dockyard.Tests` references the tray directly.
+
 ```
 src/Dockyard.Host/            net10.0
   IEngineHost.cs              engines, state, start/stop, install/uninstall, update components

@@ -1,44 +1,29 @@
-using System.Reflection;
+using System.Runtime.Versioning;
+using System.Text.RegularExpressions;
+using Dockyard.Hosts;
 using Microsoft.Win32;
 
 namespace Dockyard.Core;
 
-// Runs as the signed-in user: WSL distros, docker contexts and autostart are per user.
-static class UserSetup
+// Runs as the signed-in user: the WSL distro, docker contexts and autostart are per user.
+[SupportedOSPlatform("windows")]
+static partial class UserSetup
 {
     const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
-    public static async Task<string[]> ListDistros()
+    public static async Task Install(Action<string> log, string? image = null)
     {
-        var r = await Shell.Run("wsl.exe", "-l", "-q");
-        return r.ExitCode != 0 ? [] : r.Output.Split('\n').Select(l => l.Trim().Trim('\0')).Where(l => l.Length > 0).ToArray();
-    }
-
-    public static async Task Install(Action<string> log, string distro)
-    {
-        MigrateLegacy(log);
-        await SetupWsl(log, distro);
+        MigrateLegacySettings(log);
+        await SetupDistro(log, image);
+        await MigrateLegacyEngine(log);
         await CreateContexts(log);
 
         File.WriteAllText(Path.Combine(Paths.UserProfile, ".testcontainers.properties"), $"docker.host={Paths.LinuxHost}\n");
         log("Testcontainers pinned to the Linux engine");
 
-        var settings = Settings.Load();
-        settings.Distro = distro;
-        settings.Save();
-
         using (var key = Registry.CurrentUser.CreateSubKey(RunKey))
             key.SetValue(Paths.AppName, $"\"{Paths.AppExe}\"");
         log($"{Paths.AppName} autostarts at logon");
-    }
-
-    public static async Task UpdateWsl(Action<string> log, string distro)
-    {
-        log($"Upgrading Docker CE in WSL '{distro}'");
-        var r = await Shell.Run("wsl.exe", "-d", distro, "-u", "root", "--", "sh", "-c",
-            "DEBIAN_FRONTEND=noninteractive apt-get install -y --only-upgrade docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin");
-        foreach (var line in Lines(r.Output + r.Error).TakeLast(4)) log("  " + line);
-        if (r.ExitCode != 0) throw new InvalidOperationException($"apt-get upgrade failed ({r.ExitCode})");
     }
 
     public static async Task Uninstall(Action<string> log)
@@ -58,15 +43,70 @@ static class UserSetup
         var tc = Path.Combine(Paths.UserProfile, ".testcontainers.properties");
         if (File.Exists(tc) && File.ReadAllText(tc).Trim() == $"docker.host={Paths.LinuxHost}") File.Delete(tc);
 
-        var distro = Settings.Load().Distro;
-        if ((await ListDistros()).Contains(distro))
-            await Shell.Run("wsl.exe", "-d", distro, "-u", "root", "--", "systemctl", "stop", "docker.service", "docker.socket", "containerd.service");
+        var distro = new WslDistro(ProcessRunner.Instance);
+        if (await distro.Exists())
+        {
+            await distro.StopEngine();
+            log($"The '{distro.Name}' WSL distro with your Linux images and containers was kept; remove it with: wsl --unregister {distro.Name}");
+        }
         foreach (var dir in new[] { Paths.SettingsDir, Paths.LegacySettingsDir })
             if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
-        log($"Docker CE packages in WSL '{distro}' were left installed (apt remove docker-ce to drop them)");
     }
 
-    static void MigrateLegacy(Action<string> log)
+    // Prefers a dockyard-linux-*.tar.gz next to the installer, then the matching release asset.
+    public static string? FindLocalImage(string? explicitPath)
+    {
+        if (explicitPath is not null) return File.Exists(explicitPath) ? explicitPath : throw new FileNotFoundException("Image not found", explicitPath);
+        var dir = Path.GetDirectoryName(Paths.Self)!;
+        return Directory.EnumerateFiles(dir, "dockyard-linux-*-x86_64.tar.gz")
+            .Where(f => ImageName().IsMatch(Path.GetFileName(f)))
+            .OrderByDescending(f => Updates.ParseVersion(Path.GetFileName(f)))
+            .FirstOrDefault();
+    }
+
+    static async Task SetupDistro(Action<string> log, string? image)
+    {
+        var distro = new WslDistro(ProcessRunner.Instance);
+        if (await distro.Exists())
+        {
+            log($"WSL distro '{distro.Name}' already exists (Docker {await distro.DockerVersion()})");
+            return;
+        }
+
+        var tarball = FindLocalImage(image);
+        string? downloaded = null;
+        if (tarball is null)
+        {
+            log("Downloading the Linux engine image");
+            tarball = downloaded = await Updates.DownloadImage(Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}"));
+        }
+        try
+        {
+            log($"Importing WSL distro '{distro.Name}' into {WslDistro.InstallDir}");
+            await distro.Import(tarball);
+            log($"Linux engine: Docker {await distro.DockerVersion()}");
+        }
+        finally
+        {
+            if (downloaded is not null) Directory.Delete(Path.GetDirectoryName(downloaded)!, recursive: true);
+        }
+    }
+
+    static async Task MigrateLegacyEngine(Action<string> log)
+    {
+        var settings = Settings.Load();
+        if (settings.Distro is not { Length: > 0 } old || string.Equals(old, WslDistro.DefaultName, StringComparison.OrdinalIgnoreCase)) return;
+
+        if (await WslDistro.DisableLegacyEngine(ProcessRunner.Instance, old))
+        {
+            log($"Stopped and disabled Docker CE in '{old}' (packages, images and containers are kept there).");
+            log($"To copy an image: wsl -d {old} -u root -- docker save <image> | docker --context linux load");
+        }
+        settings.Distro = null;
+        settings.Save();
+    }
+
+    static void MigrateLegacySettings(Action<string> log)
     {
         using (var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true))
             key?.DeleteValue(Paths.LegacyName, throwOnMissingValue: false);
@@ -81,43 +121,6 @@ static class UserSetup
         if (Directory.Exists(Paths.LegacySettingsDir)) Directory.Delete(Paths.LegacySettingsDir, recursive: true);
     }
 
-    static async Task SetupWsl(Action<string> log, string distro)
-    {
-        if (!(await ListDistros()).Contains(distro))
-            throw new InvalidOperationException($"WSL distro '{distro}' not found. Install it, launch it once to create your user, then run setup again.");
-
-        var user = (await Shell.Check("wsl.exe", "-d", distro, "--", "whoami")).Trim();
-
-        // WSL keeps a handle on its --cd directory for a while after exiting, so only the file is removed.
-        var dir = Path.GetTempPath();
-        var script = $"dockyard-{Guid.NewGuid():N}.sh";
-        await using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("setup-wsl-docker.sh")!)
-        using (var reader = new StreamReader(stream))
-            await File.WriteAllTextAsync(Path.Combine(dir, script), (await reader.ReadToEndAsync()).Replace("\r\n", "\n"));
-
-        log($"Setting up Docker CE in WSL '{distro}' (user {user})");
-        ShellResult r;
-        try
-        {
-            r = await RunScript(distro, dir, script, user);
-            if (r.ExitCode == 2)
-            {
-                log("Enabled systemd in the distro; restarting it");
-                await Shell.Run("wsl.exe", "--terminate", distro);
-                r = await RunScript(distro, dir, script, user);
-            }
-        }
-        finally
-        {
-            try { File.Delete(Path.Combine(dir, script)); } catch (IOException) { }
-        }
-        foreach (var line in Lines(r.Output + r.Error)) log("  " + line);
-        if (r.ExitCode != 0) throw new InvalidOperationException($"WSL setup failed ({r.ExitCode})");
-    }
-
-    static Task<ShellResult> RunScript(string distro, string dir, string script, string user) =>
-        Shell.Run("wsl.exe", "-d", distro, "-u", "root", "--cd", dir, "--", "bash", script, user);
-
     static async Task CreateContexts(Action<string> log)
     {
         foreach (var (name, host) in new[] { ("linux", Paths.LinuxHost), ("win", Paths.WindowsHost) })
@@ -130,6 +133,6 @@ static class UserSetup
         log("Docker contexts: linux (default), win");
     }
 
-    static IEnumerable<string> Lines(string text) =>
-        text.Split('\n').Select(l => l.TrimEnd()).Where(l => l.Length > 0);
+    [GeneratedRegex(@"^dockyard-linux-\d+\.\d+\.\d+-x86_64\.tar\.gz$")]
+    private static partial Regex ImageName();
 }

@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Text;
 using Avalonia.Threading;
 using Dockyard.Core;
+using Dockyard.Hosts;
 
 namespace Dockyard.ViewModels;
 
@@ -10,45 +11,39 @@ sealed class MainViewModel : Observable
     static readonly TimeSpan AutoCheckInterval = TimeSpan.FromHours(6);
 
     readonly Settings settings = Settings.Load();
-    readonly Engines engines;
+    readonly IEngineHost host;
     readonly List<Command> commands = [];
     readonly StringBuilder log = new();
     readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromSeconds(10) };
     DateTime lastCheck = DateTime.MinValue;
     string? busy;
     string status = "Ready";
-    string? selectedDistro;
     bool isSetupMode;
     bool isInstalled;
-    Engine active;
+    string active;
 
-    public MainViewModel(bool setupMode)
+    public MainViewModel(IEngineHost host, bool setupMode)
     {
-        engines = new Engines(settings);
+        this.host = host;
         isSetupMode = setupMode;
+        active = host.Engines[0].Id;
 
-        Linux = new EngineViewModel(Engine.Linux, "Linux containers", settings.Distro, Paths.LinuxHost)
+        EngineCards = host.Engines.Select(e => new EngineViewModel(e)
         {
-            ToggleCommand = Cmd(() => Toggle(Engine.Linux)),
-            UseCommand = Cmd(() => Switch(Engine.Linux)),
-        };
-        Windows = new EngineViewModel(Engine.Windows, "Windows containers", "ltsc2025 · process isolation", Paths.WindowsHost)
-        {
-            ToggleCommand = Cmd(() => Toggle(Engine.Windows)),
-            UseCommand = Cmd(() => Switch(Engine.Windows)),
-        };
-        EngineCards = [Linux, Windows];
+            ToggleCommand = Cmd(() => Toggle(e.Id)),
+            UseCommand = Cmd(() => Switch(e.Id)),
+        }).ToList();
 
-        foreach (var c in Enum.GetValues<Component>())
+        foreach (var c in host.Components)
         {
             ComponentViewModel? item = null;
             item = new ComponentViewModel(c) { UpdateCommand = Cmd(() => UpdateComponents([item!]), () => item!.IsAvailable) };
             Components.Add(item);
         }
 
-        CheckUpdatesCommand = Cmd(() => Run("Checking for updates", () => CheckUpdates(includeWsl: true)));
+        CheckUpdatesCommand = Cmd(() => Run("Checking for updates", () => CheckUpdates(all: true)));
         UpdateAllCommand = Cmd(() => UpdateComponents(Components.Where(c => c.IsAvailable).ToList()), () => Components.Any(c => c.IsAvailable));
-        InstallCommand = Cmd(Install, () => SelectedDistro is not null);
+        InstallCommand = Cmd(Install);
         UninstallCommand = Cmd(Uninstall);
 
         timer.Tick += async (_, _) => await RefreshState();
@@ -58,11 +53,8 @@ sealed class MainViewModel : Observable
     public event Action? StateChanged;
     public event Action? ShutdownRequested;
 
-    public EngineViewModel Linux { get; }
-    public EngineViewModel Windows { get; }
     public IReadOnlyList<EngineViewModel> EngineCards { get; }
     public ObservableCollection<ComponentViewModel> Components { get; } = [];
-    public ObservableCollection<string> Distros { get; } = [];
 
     public Command CheckUpdatesCommand { get; }
     public Command UpdateAllCommand { get; }
@@ -70,11 +62,20 @@ sealed class MainViewModel : Observable
     public Command UninstallCommand { get; }
 
     public string Version => "v" + Paths.AppVersion;
-    public Engine Active => active;
-    public bool IsLinuxActive => active == Engine.Linux;
-    public bool IsWindowsActive => active == Engine.Windows;
+    public string Active => active;
+    public EngineViewModel ActiveEngine => EngineCards.FirstOrDefault(e => e.Id == active) ?? EngineCards[0];
+    public bool HasEngineSwitch => IsDashboard && EngineCards.Count > 1;
 
-    public bool IsSetupMode { get => isSetupMode; private set { if (Set(ref isSetupMode, value)) Raise(nameof(IsDashboard)); } }
+    public string SetupDescription => OperatingSystem.IsWindows()
+        ? "Installs the Windows Docker engine (dockerd service), the docker CLI with compose and buildx, a dedicated 'dockyard' WSL distro for Linux containers, and Dockyard itself, which runs in the tray."
+        : "Installs Docker CE with compose and buildx from Docker's repository, starts it on demand, and Dockyard itself, which runs in the tray.";
+
+    public bool IsSetupMode
+    {
+        get => isSetupMode;
+        private set { if (Set(ref isSetupMode, value)) Raise(nameof(IsDashboard), nameof(HasEngineSwitch)); }
+    }
+
     public bool IsDashboard => !IsSetupMode;
     public bool IsInstalled { get => isInstalled; private set => Set(ref isInstalled, value); }
 
@@ -94,12 +95,6 @@ sealed class MainViewModel : Observable
     public string Status { get => status; private set => Set(ref status, value); }
     public string LogText => log.ToString();
 
-    public string? SelectedDistro
-    {
-        get => selectedDistro;
-        set { if (Set(ref selectedDistro, value)) InstallCommand.Refresh(); }
-    }
-
     public bool StopOtherOnSwitch
     {
         get => settings.StopOtherOnSwitch;
@@ -116,57 +111,62 @@ sealed class MainViewModel : Observable
     {
         await RefreshState();
         if (settings.StartActiveAtLogon)
-            await Run($"Starting {Engines.Name(active)} engine", () => engines.Start(active));
+            await Run($"Starting {ActiveEngine.Name} engine", () => host.Start(active));
     }
 
-    public async Task LoadSetup()
+    public Task LoadSetup()
     {
-        var distros = await UserSetup.ListDistros();
-        Distros.Clear();
-        foreach (var d in distros) Distros.Add(d);
-        SelectedDistro = distros.Contains(settings.Distro) ? settings.Distro : distros.FirstOrDefault();
-        IsInstalled = File.Exists(Paths.AppExe);
-        if (distros.Length == 0)
-            Log("No WSL distro found. Install one (winget install Canonical.Ubuntu.2404), launch it once, then reopen Dockyard.");
+        IsInstalled = host.IsInstalled;
+        return Task.CompletedTask;
     }
 
     public async Task OnWindowShown()
     {
         await RefreshState();
         if (!IsSetupMode && !IsBusy && DateTime.UtcNow - lastCheck > AutoCheckInterval)
-            await Run("Checking for updates", () => CheckUpdates(includeWsl: Linux.IsRunning));
+            await Run("Checking for updates", () => CheckUpdates(all: false));
     }
 
-    public Task Switch(Engine target) => Run($"Switching to {Engines.Name(target)} containers", () => engines.Switch(target));
+    public Task Switch(string engine) => Run($"Switching to {Name(engine)} containers", async () =>
+    {
+        await host.Start(engine);
+        await host.UseContext(engine);
+        if (settings.StopOtherOnSwitch)
+            foreach (var other in EngineCards.Where(e => e.Id != engine)) await host.Stop(other.Id);
+    });
+
+    public Task StartEngine(string engine) => Run($"Starting {Name(engine)} engine", () => host.Start(engine));
 
     public void Shutdown()
     {
         timer.Stop();
-        engines.ReleaseKeepAlive();
+        host.ReleaseResources();
     }
 
-    public Task StartEngine(Engine e) => Run($"Starting {Engines.Name(e)} engine", () => engines.Start(e));
+    string Name(string engine) => EngineCards.FirstOrDefault(e => e.Id == engine)?.Name ?? engine;
 
-    Task Toggle(Engine e) => (e == Engine.Linux ? Linux : Windows).IsRunning
-        ? Run($"Stopping {Engines.Name(e)} engine", () => engines.Stop(e))
-        : Run($"Starting {Engines.Name(e)} engine", () => engines.Start(e));
+    async Task Toggle(string engine)
+    {
+        if (EngineCards.First(e => e.Id == engine).IsRunning)
+            await Run($"Stopping {Name(engine)} engine", () => host.Stop(engine));
+        else
+            await Run($"Starting {Name(engine)} engine", () => host.Start(engine));
+    }
 
     async Task RefreshState()
     {
-        var (linux, windows) = await Task.Run(() => (engines.IsRunning(Engine.Linux), engines.IsRunning(Engine.Windows)));
-        active = Engines.ActiveEngine();
-        Linux.IsRunning = linux;
-        Windows.IsRunning = windows;
-        Linux.IsActive = active == Engine.Linux;
-        Windows.IsActive = active == Engine.Windows;
-        Linux.Subtitle = settings.Distro;
-        Raise(nameof(Active), nameof(IsLinuxActive), nameof(IsWindowsActive));
+        foreach (var e in EngineCards) e.IsRunning = await host.IsRunning(e.Id);
+        active = host.ActiveEngine();
+        foreach (var e in EngineCards) e.IsActive = e.Id == active;
+        Raise(nameof(Active), nameof(ActiveEngine));
         StateChanged?.Invoke();
     }
 
-    async Task CheckUpdates(bool includeWsl)
+    async Task CheckUpdates(bool all)
     {
-        var targets = Components.Where(c => includeWsl || c.Component != Component.WslEngine).ToList();
+        var targets = Components
+            .Where(c => all || c.Info.CheckNeedsEngine is not { } needs || EngineCards.Any(e => e.Id == needs && e.IsRunning))
+            .ToList();
         foreach (var c in targets) c.State = UpdateState.Checking;
         await Task.WhenAll(targets.Select(Check));
         lastCheck = DateTime.UtcNow;
@@ -180,9 +180,9 @@ sealed class MainViewModel : Observable
     {
         try
         {
-            var installed = await Updates.Installed(c.Component, settings.Distro);
+            var installed = await host.Installed(c.Id);
             c.Installed = installed?.ToString() ?? "–";
-            var latest = await Updates.Latest(c.Component, settings.Distro);
+            var latest = await host.Latest(c.Id);
             c.LatestRelease = latest;
             c.Latest = latest?.Version.ToString() ?? "–";
             c.Error = null;
@@ -205,49 +205,32 @@ sealed class MainViewModel : Observable
 
     Task UpdateComponents(IReadOnlyList<ComponentViewModel> items) => Run("Updating", async () =>
     {
-        var machine = items.Where(i => i.Component is Component.Engine or Component.Compose or Component.Buildx).ToList();
-        if (machine.Count > 0)
-            await Elevation.Run(Log, "--machine-update", string.Join(',', machine.Select(m => m.Component)));
-
-        if (items.Any(i => i.Component == Component.WslEngine))
-            await UserSetup.UpdateWsl(Log, settings.Distro);
-
-        foreach (var item in items.Where(i => i.Component != Component.App)) await Check(item);
-
-        if (items.FirstOrDefault(i => i.Component == Component.App) is { LatestRelease: { } release })
+        if (await host.Update(Log, items.Select(i => (i.Id, i.LatestRelease)).ToList()))
         {
-            Log($"Downloading Dockyard {release.Tag}");
-            var exe = await Updates.DownloadApp(release);
-            Elevation.StartDetached("--machine-update", nameof(Component.App), "--source", exe);
-            Log("Restarting Dockyard");
             ShutdownRequested?.Invoke();
+            return;
         }
+        foreach (var item in items) await Check(item);
     });
 
     Task Install() => Run("Installing", async () =>
     {
-        var distro = SelectedDistro ?? throw new InvalidOperationException("Select a WSL distro");
-        Log("Administrator step");
-        var reboot = await Elevation.Run(Log, "--machine-install");
-        Log("User step");
-        await UserSetup.Install(Log, distro);
-        settings.Distro = distro;
+        var reboot = await host.Install(Log);
         IsInstalled = true;
-
-        if (!Paths.IsInstalledCopy) Shell.StartUnelevated(Paths.AppExe);
+        if (OperatingSystem.IsWindows() && !Paths.IsInstalledCopy) Shell.StartUnelevated(Paths.AppExe);
         Log(reboot
             ? "Done. Reboot to finish enabling Windows containers."
-            : "Done. Dockyard runs in the tray. Sign out and back in once so docker-users applies to the Windows engine.");
+            : OperatingSystem.IsWindows()
+                ? "Done. Dockyard runs in the tray. Sign out and back in once so docker-users applies to the Windows engine."
+                : "Done. Dockyard runs in the tray. Sign out and back in once so the docker group applies.");
         Status = "Installed";
     });
 
     Task Uninstall() => Run("Uninstalling", async () =>
     {
-        engines.ReleaseKeepAlive();
-        await UserSetup.Uninstall(Log);
-        await Elevation.Run(Log, "--machine-uninstall");
+        await host.Uninstall(Log);
         IsInstalled = false;
-        Log("Dockyard and both Docker engines were removed.");
+        Log("Dockyard was removed. Images and containers were kept.");
         if (Paths.IsInstalledCopy) ShutdownRequested?.Invoke();
     });
 

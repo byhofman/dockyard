@@ -25,9 +25,9 @@ static partial class Silent
                 return 0;
             }
 
-            var distro = Opt("--distro") ?? Settings.Load().Distro;
+            var image = Opt("--image");
             var reboot = MachineStep(Log, uninstall: false);
-            UserSetup.Install(Log, distro).GetAwaiter().GetResult();
+            UserSetup.Install(Log, image).GetAwaiter().GetResult();
             if (!args.Contains("--no-start")) Shell.StartUnelevated(Paths.AppExe);
             Log(reboot ? "Done. Reboot to finish enabling Windows containers." : "Done. Sign out and back in once so docker-users applies to the Windows engine.");
             return reboot ? Elevation.RebootExitCode : 0;
