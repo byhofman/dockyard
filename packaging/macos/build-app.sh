@@ -43,6 +43,11 @@ ditto -c -k --keepParent "$work/engine/Dockyard.app" "$out/Dockyard-$version-mac
 mkdir -p "$work/dmg"
 cp -R "$work/full/Dockyard.app" "$work/dmg/"
 ln -s /Applications "$work/dmg/Applications"
-hdiutil create -quiet -volname Dockyard -srcfolder "$work/dmg" -format UDZO "$out/Dockyard-$version-macos.dmg"
+# hdiutil fails intermittently on CI runners ("Resource busy"), so it gets a few attempts.
+for attempt in 1 2 3 4 5; do
+  if hdiutil create -volname Dockyard -srcfolder "$work/dmg" -format UDZO -ov "$out/Dockyard-$version-macos.dmg"; then break; fi
+  [ "$attempt" -eq 5 ] && exit 1
+  sleep 5
+done
 codesign -d --entitlements - "$work/full/Dockyard.app/Contents/MacOS/dockyard-vm" | grep -q com.apple.security.virtualization
 ls -la "$out"
