@@ -51,18 +51,28 @@ jobs:
       - name: Test
         run: dotnet test --solution Dockyard.slnx
 
-      - name: Publish
+      - name: Publish and package
         run: |
           version=0.0.0; [ "$GITHUB_REF_TYPE" = tag ] && version="${GITHUB_REF_NAME#v}"
-          dotnet publish src/Dockyard/Dockyard.csproj -c Release -r linux-x64 -o out/Dockyard -p:Version=$version -warnaserror
-          dotnet publish src/Dockyard.Dashboard/Dockyard.Dashboard.csproj -c Release -r linux-x64 -o out/Dockyard -p:Version=$version -warnaserror
-          rm -f out/Dockyard/*.pdb
+          dotnet publish src/Dockyard/Dockyard.csproj -c Release -r linux-x64 -o dist/linux/tray -p:Version=$version -warnaserror
+          dotnet publish src/Dockyard.Dashboard/Dockyard.Dashboard.csproj -c Release -r linux-x64 -o dist/linux/dashboard -p:Version=$version -warnaserror
+          rm -f dist/linux/*/*.pdb
+          mkdir -p out/Dockyard && cp dist/linux/tray/* dist/linux/dashboard/* out/Dockyard/
           tar -czf "out/Dockyard-$version-linux-x64.tar.gz" -C out Dockyard
+          for config in dockyard dockyard-dashboard; do
+            for packager in deb rpm; do
+              docker run --rm -v "$PWD:/work" -w /work -e VERSION="$version" goreleaser/nfpm \
+                pkg --config "packaging/linux/$config.yaml" --packager "$packager" --target out/
+            done
+          done
 
       - uses: actions/upload-artifact@v4
         with:
           name: linux
-          path: out/Dockyard-*-linux-x64.tar.gz
+          path: |
+            out/Dockyard-*-linux-x64.tar.gz
+            out/*.deb
+            out/*.rpm
 
   image:
     runs-on: ubuntu-latest
@@ -70,11 +80,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build and test the Linux engine image
-        shell: pwsh
         run: |
-          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME.TrimStart('v') } else { '0.0.0' }
-          ./image/build.ps1 -Arch x86_64 -Version $version
-          ./image/test.ps1 -Tarball "out/dockyard-linux-$version-x86_64.tar.gz"
+          version=0.0.0; [ "$GITHUB_REF_TYPE" = tag ] && version="${GITHUB_REF_NAME#v}"
+          sh image/build.sh x86_64 "$version"
+          pwsh image/test.ps1 -Tarball "out/dockyard-linux-$version-x86_64.tar.gz"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -127,24 +136,21 @@ jobs:
           name: vm-image
           path: vm-image
 
-      - name: Publish
+      - name: Publish and bundle
         run: |
           version=0.0.0; [ "$GITHUB_REF_TYPE" = tag ] && version="${GITHUB_REF_NAME#v}"
-          dotnet publish src/Dockyard/Dockyard.csproj -c Release -r osx-arm64 -o out/Dockyard -p:Version=$version -warnaserror
-          dotnet publish src/Dockyard.Dashboard/Dockyard.Dashboard.csproj -c Release -r osx-arm64 -o out/Dockyard -p:Version=$version -warnaserror
+          dotnet publish src/Dockyard/Dockyard.csproj -c Release -r osx-arm64 -o dist/macos -p:Version=$version -warnaserror
+          dotnet publish src/Dockyard.Dashboard/Dockyard.Dashboard.csproj -c Release -r osx-arm64 -o dist/macos -p:Version=$version -warnaserror
           swift build -c release --package-path macos/DockyardVM
-          cp macos/DockyardVM/.build/release/dockyard-vm out/Dockyard/
-          codesign --force --sign - --entitlements macos/DockyardVM/dockyard-vm.entitlements out/Dockyard/dockyard-vm
-          codesign -d --entitlements - out/Dockyard/dockyard-vm | grep -q com.apple.security.virtualization
-          mkdir -p out/Dockyard/vm
-          tar -xzf vm-image/dockyard-vm-*-aarch64.tar.gz -C out/Dockyard/vm
-          rm -f out/Dockyard/*.pdb
-          (cd out && zip -qr "Dockyard-$version-osx-arm64.zip" Dockyard)
+          cp macos/DockyardVM/.build/release/dockyard-vm dist/macos/
+          mkdir -p dist/macos/vm && tar -xzf vm-image/dockyard-vm-*-aarch64.tar.gz -C dist/macos/vm
+          rm -f dist/macos/*.pdb
+          sh packaging/macos/build-app.sh "$version" dist/macos out
 
       - uses: actions/upload-artifact@v4
         with:
           name: macos
-          path: out/Dockyard-*-osx-arm64.zip
+          path: out/Dockyard-*-macos*.zip
 
   release:
     if: github.ref_type == 'tag'
@@ -163,3 +169,58 @@ jobs:
           cd dist
           sha256sum * > SHA256SUMS
           gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" * --title "$GITHUB_REF_NAME" --generate-notes
+
+  pages:
+    if: github.ref_type == 'tag'
+    needs: [release]
+    runs-on: ubuntu-latest
+    env:
+      REPO_GPG_KEY: ${{ secrets.REPO_GPG_KEY }}
+      REPO_GPG_PASSPHRASE: ${{ secrets.REPO_GPG_PASSPHRASE }}
+    steps:
+      - uses: actions/checkout@v4
+        if: env.REPO_GPG_KEY != ''
+
+      - name: Publish the apt/dnf repository to gh-pages
+        if: env.REPO_GPG_KEY != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq apt-utils createrepo-c
+          echo "$REPO_GPG_KEY" | gpg --batch --import
+          mkdir pkgs
+          gh release download "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" -p '*.deb' -p '*.rpm' -D pkgs
+          git fetch origin gh-pages && git worktree add site origin/gh-pages || git worktree add --orphan -b gh-pages site
+          rm -rf site/apt site/rpm site/dockyard.asc
+          mkdir -p site/history && cp -n site/history/* pkgs/ 2>/dev/null || true
+          cp pkgs/* site/history/
+          sh packaging/linux/build-repo.sh site/history site
+          cd site
+          git config user.name "github-actions" && git config user.email "github-actions@users.noreply.github.com"
+          git add -A && git commit -qm "Repository for $GITHUB_REF_NAME" && git push origin HEAD:gh-pages
+
+  winget:
+    if: github.ref_type == 'tag'
+    needs: [release]
+    runs-on: windows-latest
+    env:
+      WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        if: env.WINGET_TOKEN != ''
+
+      - name: Update or submit the winget manifest
+        if: env.WINGET_TOKEN != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          $url = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:GITHUB_REF_NAME/Dockyard.exe"
+          Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+          ./wingetcreate.exe update byhofman.Dockyard --version $version --urls $url --submit --token $env:WINGET_TOKEN
+          if ($LASTEXITCODE -ne 0) {
+            gh release download $env:GITHUB_REF_NAME -R $env:GITHUB_REPOSITORY -p Dockyard.exe -D release
+            ./packaging/winget/render.ps1 -Version $version -Installer release/Dockyard.exe
+            ./wingetcreate.exe submit "packaging/winget/out/$version" --token $env:WINGET_TOKEN
+          }

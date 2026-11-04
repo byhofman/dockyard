@@ -87,3 +87,11 @@ Pushes to `main` and pull requests run all build jobs and upload artifacts; noth
 - Windows: install, `--engine-only`, `--add-dashboard`, upgrade from the previous release, uninstall, on the development laptop.
 - macOS: `install-mac.sh` on the user's Mac, including engine-only and self-update from the previous release.
 - `winget validate` on the generated manifest before opening the PR.
+
+## Implementation notes
+
+- Release assets as built by CI: `Dockyard.exe`, `Dockyard.Dashboard.zip`, `dockyard-linux-<v>-x86_64.tar.gz` (WSL image), `Dockyard-<v>-linux-x64.tar.gz`, `dockyard_<v>_amd64.deb`, `dockyard-dashboard_<v>_amd64.deb`, `dockyard-<v>-1.x86_64.rpm`, `dockyard-dashboard-<v>-1.x86_64.rpm`, `Dockyard-<v>-macos.zip`, `Dockyard-<v>-macos-engine-only.zip`, `SHA256SUMS`. The aarch64 VM assets are inside the macOS bundle (`Contents/Resources/vm`), not separate assets.
+- The rpm repository signs its metadata (`repo_gpgcheck=1`); the rpm files themselves are not signed (`gpgcheck=0`). The apt repository is signed through `InRelease`/`Release.gpg`.
+- `pages` keeps every published package under `history/` on `gh-pages` and regenerates the repository from it, so older versions stay installable.
+- `winget` tries `wingetcreate update` and falls back to submitting manifests rendered by `packaging/winget/render.ps1` (first release); manifests validate with `winget validate`.
+- Linux package lint (`lintian`, `rpmlint`) is not wired in yet; installation is verified instead (signed repository, full and engine-only, in ubuntu:24.04, debian:12 and fedora:41).
