@@ -19,27 +19,39 @@ public sealed class ContainerStoreTests
 
     static List<string> Describe(IEnumerable<object> rows) => rows.Select(r => r switch
     {
-        GroupHeader h => $"#{h.Title} {h.Summary}",
+        ProjectRow p => $"#{p.Name} {p.Summary}",
         ContainerItem i => i.Name,
         _ => "?",
     }).ToList();
 
     [Fact]
-    public void Groups_compose_projects_then_standalone()
+    public void Compose_projects_are_expandable_rows_sorted_with_containers()
     {
         var store = new ContainerStore();
         store.Reset([C("1", "redis"), C("2", "shop-db", project: "shop"), C("3", "shop-api", "exited", "shop"), C("4", "alpha-web", project: "alpha")]);
 
-        Assert.Equal(["#alpha 1/1 running", "alpha-web", "#shop 1/2 running", "shop-api", "shop-db", "#Standalone 1/1 running", "redis"],
-            Describe(store.Rows));
+        Assert.Equal(["#alpha 1/1 running", "alpha-web", "redis", "#shop 1/2 running", "shop-api", "shop-db"], Describe(store.Rows));
+
+        store.ToggleProject("shop");
+        Assert.Equal(["#alpha 1/1 running", "alpha-web", "redis", "#shop 1/2 running"], Describe(store.Rows));
+        Assert.False(store.FindProject("shop")!.IsExpanded);
     }
 
     [Fact]
-    public void Without_projects_there_are_no_headers()
+    public void Without_projects_there_are_only_containers()
     {
         var store = new ContainerStore();
         store.Reset([C("1", "b"), C("2", "a")]);
         Assert.Equal(["a", "b"], Describe(store.Rows));
+    }
+
+    [Fact]
+    public void Recent_compose_files_without_containers_show_as_projects()
+    {
+        var store = new ContainerStore();
+        store.Reset([C("1", "redis")]);
+        store.SetRecents([new Dockyard.Dashboard.Features.Resources.RecentCompose { Path = Path.Combine("src", "blog", "compose.yaml"), Project = "blog" }]);
+        Assert.Equal(["#blog not running", "redis"], Describe(store.Rows));
     }
 
     [Fact]

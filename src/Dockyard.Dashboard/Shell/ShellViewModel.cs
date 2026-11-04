@@ -2,15 +2,20 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using Avalonia.Threading;
 using Dockyard.Dashboard.Features.Containers;
+using Dockyard.Dashboard.Features.Resources;
 using Dockyard.Dashboard.Store;
 using Dockyard.Engine;
 using Dockyard.Shared;
 
 namespace Dockyard.Dashboard.Shell;
 
-sealed record Section(string Title, object Content);
+sealed record Section(string Title, object Content, Avalonia.Media.Geometry? Icon)
+{
+    public static Avalonia.Media.Geometry? Resource(string key) =>
+        Avalonia.Application.Current?.TryGetResource(key, null, out var value) == true ? value as Avalonia.Media.Geometry : null;
+}
 
-sealed record Toast(string Message);
+sealed record Toast(string Message, bool IsError);
 
 sealed class ShellViewModel : Observable
 {
@@ -21,7 +26,14 @@ sealed class ShellViewModel : Observable
     public ShellViewModel()
     {
         Containers = new ContainersViewModel(this, Session);
-        Sections = [new Section("Containers", Containers)];
+        Sections =
+        [
+            new Section("Containers", Containers, Section.Resource("IconContainers")),
+            new Section("Images", new ImagesViewModel(this, Session), Section.Resource("IconImages")),
+            new Section("Volumes", new VolumesViewModel(this, Session), Section.Resource("IconVolumes")),
+            new Section("Networks", new NetworksViewModel(this, Session), Section.Resource("IconNetworks")),
+            new Section("Disk", new DiskViewModel(this, Session), Section.Resource("IconDisk")),
+        ];
         currentSection = Sections[0];
 
         HasEngineSwitch = OperatingSystem.IsWindows() && DockerContext.Exists("linux") && DockerContext.Exists("win");
@@ -49,6 +61,7 @@ sealed class ShellViewModel : Observable
         {
             if (value is null || !Set(ref currentSection, value)) return;
             ApplySearch();
+            (value.Content as SectionViewModel)?.OnShown();
         }
     }
 
@@ -81,9 +94,12 @@ sealed class ShellViewModel : Observable
         Session.Stop();
     }
 
-    public void ShowError(string message)
+    public void ShowError(string message) => Show(new Toast(message, IsError: true));
+
+    public void ShowInfo(string message) => Show(new Toast(message, IsError: false));
+
+    void Show(Toast toast)
     {
-        var toast = new Toast(message);
         Toasts.Add(toast);
         DispatcherTimer.RunOnce(() => Toasts.Remove(toast), TimeSpan.FromSeconds(6));
     }

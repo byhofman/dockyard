@@ -1,0 +1,59 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:res="using:Dockyard.Dashboard.Features.Resources"
+             x:Class="Dockyard.Dashboard.Features.Resources.VolumesView"
+             x:DataType="res:VolumesViewModel">
+  <Grid x:Name="Layout" ColumnDefinitions="*,5,380">
+    <DockPanel>
+      <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="16,12,16,4">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Classes="muted small" Text="{Binding Busy}" VerticalAlignment="Center" />
+          <Button Grid.Column="1" Command="{Binding PruneCommand}">
+            <StackPanel Classes="label"><PathIcon Data="{StaticResource IconPrune}" /><TextBlock Text="Prune unused" /></StackPanel>
+          </Button>
+        </Grid>
+        <res:ConfirmBar DataContext="{Binding Confirm}" IsVisible="{Binding $parent[UserControl].((res:VolumesViewModel)DataContext).HasConfirm}" />
+      </StackPanel>
+      <ListBox Classes="rows" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" Padding="0,4">
+        <ListBox.ItemTemplate>
+          <DataTemplate DataType="res:VolumeRow">
+            <Grid ColumnDefinitions="*,200,90">
+              <StackPanel>
+                <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                <TextBlock Classes="muted small" Text="{Binding Driver}" />
+              </StackPanel>
+              <TextBlock Grid.Column="1" Classes="muted small" Text="{Binding UsageText}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="2" Classes="mono" Text="{Binding SizeText}" TextAlignment="Right" VerticalAlignment="Center" />
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </DockPanel>
+
+    <GridSplitter x:Name="Splitter" Grid.Column="1" ResizeDirection="Columns" Background="Transparent" />
+
+    <Border x:Name="Panel" Grid.Column="2" Background="{DynamicResource Surface}"
+            BorderBrush="{DynamicResource Line}" BorderThickness="1,0,0,0">
+      <ScrollViewer>
+        <StackPanel Margin="18,14" Spacing="10" DataContext="{Binding Selected}" x:DataType="res:VolumeRow">
+          <SelectableTextBlock Classes="title" Text="{Binding Name}" TextWrapping="Wrap" />
+          <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,Auto,Auto">
+            <TextBlock Classes="muted small" Text="Driver" />
+            <TextBlock Grid.Column="1" Text="{Binding Driver}" />
+            <TextBlock Grid.Row="1" Classes="muted small" Text="Size" />
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SizeText}" />
+            <TextBlock Grid.Row="2" Classes="muted small" Text="Mountpoint" />
+            <SelectableTextBlock Grid.Row="2" Grid.Column="1" Classes="mono" Text="{Binding Mountpoint}" TextWrapping="Wrap" />
+          </Grid>
+          <TextBlock Classes="section" Text="USED BY" Margin="0,6,0,0" />
+          <TextBlock Text="{Binding UsageText}" TextWrapping="Wrap" />
+          <Button Classes="danger" HorizontalAlignment="Left" Margin="0,8,0,0"
+                  Command="{Binding $parent[UserControl].((res:VolumesViewModel)DataContext).RemoveCommand}"
+                  ToolTip.Tip="Volumes in use by a container cannot be removed">
+            <StackPanel Classes="label"><PathIcon Data="{StaticResource IconDelete}" /><TextBlock Text="Remove" /></StackPanel>
+          </Button>
+        </StackPanel>
+      </ScrollViewer>
+    </Border>
+  </Grid>
+</UserControl>

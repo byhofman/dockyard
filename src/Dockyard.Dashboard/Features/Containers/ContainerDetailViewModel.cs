@@ -13,6 +13,7 @@ sealed class ContainerDetailViewModel : Observable, IDisposable
     readonly Action<string> showError;
     InspectViewModel? inspect;
     bool confirmRemove;
+    bool logsExpanded;
     int selectedTab;
     bool? tty;
     bool disposed;
@@ -39,6 +40,7 @@ sealed class ContainerDetailViewModel : Observable, IDisposable
 
     public InspectViewModel? Inspect { get => inspect; private set => Set(ref inspect, value); }
     public bool ConfirmRemove { get => confirmRemove; set => Set(ref confirmRemove, value); }
+    public bool LogsExpanded { get => logsExpanded; set => Set(ref logsExpanded, value); }
     public int SelectedTab { get => selectedTab; set => Set(ref selectedTab, value); }
 
     async Task Load()
@@ -88,6 +90,8 @@ sealed class ContainerDetailViewModel : Observable, IDisposable
 
 sealed record LogRow(string Text, bool IsError);
 
+sealed record LogSource(string Id, bool Tty, string? Prefix);
+
 sealed class LogsViewModel : Observable, IDisposable
 {
     readonly LogBuffer buffer = new();
@@ -123,7 +127,9 @@ sealed class LogsViewModel : Observable, IDisposable
         set { if (Set(ref search, value ?? "")) Rebuild(); }
     }
 
-    public void Start(DockerClient client, string id, bool tty)
+    public void Start(DockerClient client, string id, bool tty) => Start(client, [new LogSource(id, tty, null)]);
+
+    public void Start(DockerClient client, IReadOnlyList<LogSource> sources)
     {
         cts?.Cancel();
         cts = new CancellationTokenSource();
@@ -131,16 +137,19 @@ sealed class LogsViewModel : Observable, IDisposable
         buffer.Clear();
         Rows.Clear();
         var token = cts.Token;
-        _ = Task.Run(() => Pump(client, id, tty, token), token);
+        foreach (var source in sources) _ = Task.Run(() => Pump(client, source, token), token);
         flushTimer.Start();
     }
 
-    async Task Pump(DockerClient client, string id, bool tty, CancellationToken ct)
+    async Task Pump(DockerClient client, LogSource source, CancellationToken ct)
     {
         try
         {
-            await foreach (var line in client.LogsAsync(id, new LogOptions(Follow: true, Tail: 1000, Tty: tty), ct).ConfigureAwait(false))
-                lock (incoming) incoming.Add(line);
+            await foreach (var line in client.LogsAsync(source.Id, new LogOptions(Follow: true, Tail: 1000, Tty: source.Tty), ct).ConfigureAwait(false))
+            {
+                var entry = source.Prefix is null ? line : line with { Text = $"{source.Prefix} | {line.Text}" };
+                lock (incoming) incoming.Add(entry);
+            }
         }
         catch (Exception)
         {

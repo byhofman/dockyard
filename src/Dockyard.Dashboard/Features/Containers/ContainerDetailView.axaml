@@ -6,10 +6,12 @@
              x:DataType="cont:ContainerDetailViewModel">
 
   <DockPanel>
-    <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="18,14,14,10">
+    <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="18,14,14,10" IsVisible="{Binding !LogsExpanded}">
       <Grid ColumnDefinitions="*,Auto">
         <TextBlock Classes="title" Text="{Binding Item.Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-        <Button Grid.Column="1" Classes="icon" Content="✕" FontSize="12" Command="{Binding CloseCommand}" ToolTip.Tip="Close" />
+        <Button Grid.Column="1" Classes="iconbtn" Command="{Binding CloseCommand}" ToolTip.Tip="Close">
+          <PathIcon Data="{StaticResource IconClose}" />
+        </Button>
       </Grid>
       <TextBlock Classes="muted small" Text="{Binding Item.Image}" TextTrimming="CharacterEllipsis" />
       <StackPanel Orientation="Horizontal" Spacing="8">
@@ -20,12 +22,25 @@
       </StackPanel>
 
       <WrapPanel Margin="0,4,0,0" ItemSpacing="6" LineSpacing="6">
-        <Button Content="{Binding Item.ToggleText}" Command="{Binding Actions.ToggleCommand}" CommandParameter="{Binding Item}"
-                ToolTip.Tip="Start or stop (S)" />
-        <Button Content="Restart" Command="{Binding Actions.RestartCommand}" CommandParameter="{Binding Item}" ToolTip.Tip="Restart (R)" />
-        <Button Content="Terminal" Command="{Binding Actions.ExecCommand}" CommandParameter="{Binding Item}"
-                IsEnabled="{Binding Item.IsRunning}" ToolTip.Tip="Open a shell in your terminal (E)" />
-        <Button Classes="danger" Content="Remove" Command="{Binding AskRemoveCommand}" ToolTip.Tip="Remove (Del)" />
+        <Button Command="{Binding Actions.ToggleCommand}" CommandParameter="{Binding Item}" ToolTip.Tip="Start or stop (S)">
+          <StackPanel Classes="label">
+            <Panel>
+              <PathIcon Data="{StaticResource IconStop}" IsVisible="{Binding Item.IsRunning}" />
+              <PathIcon Data="{StaticResource IconPlay}" IsVisible="{Binding Item.IsStopped}" />
+            </Panel>
+            <TextBlock Text="{Binding Item.ToggleText}" />
+          </StackPanel>
+        </Button>
+        <Button Command="{Binding Actions.RestartCommand}" CommandParameter="{Binding Item}" ToolTip.Tip="Restart (R)">
+          <StackPanel Classes="label"><PathIcon Data="{StaticResource IconRestart}" /><TextBlock Text="Restart" /></StackPanel>
+        </Button>
+        <Button Command="{Binding Actions.ExecCommand}" CommandParameter="{Binding Item}"
+                IsEnabled="{Binding Item.IsRunning}" ToolTip.Tip="Open a shell in your terminal (E)">
+          <StackPanel Classes="label"><PathIcon Data="{StaticResource IconTerminal}" /><TextBlock Text="Terminal" /></StackPanel>
+        </Button>
+        <Button Classes="danger" Command="{Binding AskRemoveCommand}" ToolTip.Tip="Remove (Del)">
+          <StackPanel Classes="label"><PathIcon Data="{StaticResource IconDelete}" /><TextBlock Text="Remove" /></StackPanel>
+        </Button>
       </WrapPanel>
 
       <Border IsVisible="{Binding ConfirmRemove}" Background="{DynamicResource BadBg}" CornerRadius="6" Padding="12,8">
@@ -42,9 +57,16 @@
       <TabItem Header="Logs">
         <DockPanel>
           <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="8,8,8,6">
-            <TextBox Width="190" PlaceholderText="Filter logs" Text="{Binding Logs.Search}" />
+            <TextBox Width="190" PlaceholderText="Filter logs" Text="{Binding Logs.Search}">
+              <TextBox.InnerLeftContent>
+                <PathIcon Data="{StaticResource IconSearch}" Margin="10,0,0,0" Foreground="{DynamicResource Muted}" />
+              </TextBox.InnerLeftContent>
+            </TextBox>
             <ToggleButton Content="Follow" IsChecked="{Binding Logs.Follow}" />
             <ToggleButton Content="Timestamps" IsChecked="{Binding Logs.ShowTimestamps}" />
+            <ToggleButton IsChecked="{Binding LogsExpanded}" ToolTip.Tip="Give the logs the whole panel">
+              <PathIcon Data="{StaticResource IconExpand}" />
+            </ToggleButton>
           </StackPanel>
           <ListBox x:Name="LogList" Classes="log" ItemsSource="{Binding Logs.Rows}" Background="{DynamicResource Bg}"
                    ScrollViewer.HorizontalScrollBarVisibility="Auto">
@@ -65,7 +87,9 @@
                 <StackPanel Spacing="4" Margin="0,0,0,14">
                   <Grid ColumnDefinitions="*,Auto">
                     <TextBlock Classes="section" Text="{Binding Title}" VerticalAlignment="Center" />
-                    <Button Grid.Column="1" Classes="link" Content="Copy" Click="CopySection" />
+                    <Button Grid.Column="1" Classes="iconbtn" Click="CopySection" ToolTip.Tip="Copy">
+                      <PathIcon Data="{StaticResource IconCopy}" />
+                    </Button>
                   </Grid>
                   <ItemsControl ItemsSource="{Binding Items}">
                     <ItemsControl.ItemTemplate>

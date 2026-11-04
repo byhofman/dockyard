@@ -10,9 +10,13 @@ sealed record PublishedPort(int HostPort, int ContainerPort, string Protocol)
     public string Text => $"{HostPort}→{ContainerPort}/{Protocol}";
 }
 
-sealed record GroupHeader(string Title, int Running, int Total)
+sealed record ProjectRow(Features.Resources.ComposeProject Project, bool IsExpanded)
 {
-    public string Summary => $"{Running}/{Total} running";
+    public string Name => Project.Name;
+    public string Summary => Project.Summary;
+    public string Location => Project.Location;
+    public bool IsRunning => Project.IsRunning;
+    public string Chevron => IsExpanded ? "25BE" : "25B8";
 }
 
 sealed class ContainerItem(string id) : Observable
@@ -39,6 +43,7 @@ sealed class ContainerItem(string id) : Observable
     public string Project { get => project; private set => Set(ref project, value); }
     public string Service { get => service; private set => Set(ref service, value); }
     public IReadOnlyList<PublishedPort> Ports { get => ports; private set => Set(ref ports, value); }
+    public bool InProject => Project.Length > 0;
     public string PortsText => string.Join("  ", Ports.Select(p => p.Text));
 
     public string State
@@ -68,6 +73,7 @@ sealed class ContainerItem(string id) : Observable
         State = s.State;
         Status = s.Status;
         Project = s.Labels?.GetValueOrDefault(ProjectLabel) ?? "";
+        Raise(nameof(InProject));
         Service = s.Labels?.GetValueOrDefault(ServiceLabel) ?? "";
         var newPorts = PortsOf(s);
         if (!newPorts.SequenceEqual(Ports))
@@ -117,6 +123,8 @@ sealed class ContainerItem(string id) : Observable
 sealed class ContainerStore
 {
     readonly Dictionary<string, ContainerItem> items = new();
+    readonly HashSet<string> collapsed = [];
+    List<Features.Resources.RecentCompose> recents = [];
     string filter = "";
 
     public ObservableCollection<object> Rows { get; } = [];
@@ -170,9 +178,23 @@ sealed class ContainerStore
         Rebuild();
     }
 
+    public void SetRecents(IEnumerable<Features.Resources.RecentCompose> value)
+    {
+        recents = value.ToList();
+        Rebuild();
+    }
+
+    public void ToggleProject(string name)
+    {
+        if (!collapsed.Remove(name)) collapsed.Add(name);
+        Rebuild();
+    }
+
+    public ProjectRow? FindProject(string name) => Rows.OfType<ProjectRow>().FirstOrDefault(p => p.Name == name);
+
     void Rebuild()
     {
-        var rows = BuildRows(items.Values, filter);
+        var rows = BuildRows(items.Values, filter, recents, collapsed);
         if (rows.SequenceEqual(Rows)) return;
         RowsChanging?.Invoke();
         Rows.Clear();
@@ -180,26 +202,30 @@ sealed class ContainerStore
         RowsChanged?.Invoke();
     }
 
-    internal static List<object> BuildRows(IEnumerable<ContainerItem> all, string filter)
+    internal static List<object> BuildRows(IEnumerable<ContainerItem> all, string filter,
+        IEnumerable<Features.Resources.RecentCompose>? recents = null, IReadOnlySet<string>? collapsed = null)
     {
-        var matching = all.Where(i => Matches(i, filter)).ToList();
-        var groups = matching.Where(i => i.Project.Length > 0)
-            .GroupBy(i => i.Project, StringComparer.Ordinal)
-            .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        var standalone = matching.Where(i => i.Project.Length == 0).OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        var list = all.ToList();
+        var projects = Features.Resources.ComposeCatalog.Build(list, recents ?? []);
+        var entries = new List<(string Key, List<object> Rows)>();
 
-        var rows = new List<object>();
-        foreach (var g in groups)
+        foreach (var p in projects)
         {
-            var members = g.OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase).ToList();
-            rows.Add(new GroupHeader(g.Key, members.Count(m => m.IsRunning), members.Count));
-            rows.AddRange(members);
+            var projectMatches = filter.Length == 0 || p.Name.Contains(filter, StringComparison.OrdinalIgnoreCase);
+            var children = p.Services.SelectMany(s => s.Containers)
+                .Where(c => projectMatches || Matches(c, filter))
+                .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (!projectMatches && children.Count == 0) continue;
+            var expanded = collapsed?.Contains(p.Name) != true;
+            List<object> rows = [new ProjectRow(p, expanded)];
+            if (expanded) rows.AddRange(children);
+            entries.Add((p.Name, rows));
         }
-        if (groups.Count > 0 && standalone.Count > 0)
-            rows.Add(new GroupHeader("Standalone", standalone.Count(m => m.IsRunning), standalone.Count));
-        rows.AddRange(standalone);
-        return rows;
+        foreach (var c in list.Where(i => i.Project.Length == 0 && Matches(i, filter)))
+            entries.Add((c.Name, [c]));
+
+        return entries.OrderBy(e => e.Key, StringComparer.OrdinalIgnoreCase).SelectMany(e => e.Rows).ToList();
     }
 
     static bool Matches(ContainerItem i, string filter) =>

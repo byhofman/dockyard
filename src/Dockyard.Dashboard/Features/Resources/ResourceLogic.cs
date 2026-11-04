@@ -85,6 +85,18 @@ sealed class DashboardSettings
     const int MaxRecent = 10;
 
     public List<RecentCompose> RecentCompose { get; set; } = [];
+    public Dictionary<string, double> PanelSizes { get; set; } = [];
+
+    static DashboardSettings? current;
+    public static DashboardSettings Current => current ??= Load();
+
+    public double PanelSize(string key, double fallback) => PanelSizes.TryGetValue(key, out var v) && v > 0 ? v : fallback;
+
+    public void SetPanelSize(string key, double value)
+    {
+        PanelSizes[key] = Math.Round(value);
+        Save();
+    }
 
     static string File => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Dockyard", "dashboard.json");
 

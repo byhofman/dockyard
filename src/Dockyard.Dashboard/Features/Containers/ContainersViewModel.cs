@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using Dockyard.Dashboard.Features.Resources;
 using Dockyard.Dashboard.Shell;
 using Dockyard.Dashboard.Store;
 using Dockyard.Engine;
@@ -10,8 +11,9 @@ sealed class ContainersViewModel : Observable, ISearchable
 {
     readonly ShellViewModel shell;
     readonly StatsSampler sampler;
+    readonly DashboardSettings settings = DashboardSettings.Current;
     object? selectedRow;
-    ContainerDetailViewModel? detail;
+    IDisposable? detail;
     bool rebuilding;
 
     public ContainersViewModel(ShellViewModel shell, EngineSession session)
@@ -23,19 +25,25 @@ sealed class ContainersViewModel : Observable, ISearchable
         ToggleCommand = new Command<ContainerItem>(i => Act(i, c => i.IsRunning ? c.StopContainerAsync(i.Id) : c.StartContainerAsync(i.Id)));
         RestartCommand = new Command<ContainerItem>(i => Act(i, c => c.RestartContainerAsync(i.Id)));
         RemoveCommand = new Command<ContainerItem>(i => Act(i, c => c.RemoveContainerAsync(i.Id, force: i.IsRunning)));
+        AskRemoveCommand = new Command<ContainerItem>(i =>
+        {
+            SelectedRow = i;
+            if (Detail is ContainerDetailViewModel d) d.ConfirmRemove = true;
+            return Task.CompletedTask;
+        });
         ExecCommand = new Command<ContainerItem>(Exec);
         OpenPortCommand = new Command<PublishedPort>(OpenPort);
+        ToggleProjectCommand = new Command<ProjectRow>(p => { Store.ToggleProject(p.Name); return Task.CompletedTask; });
+        ProjectStartStopCommand = new Command<ProjectRow>(p => WithProject(p, d => d.StartOrStop()));
+        ProjectRestartCommand = new Command<ProjectRow>(p => WithProject(p, d => d.RestartCommand.CanExecute(null) ? Run(d.RestartCommand) : Task.CompletedTask));
+        ProjectDownCommand = new Command<ProjectRow>(p => WithProject(p, d => { d.AskDown(); return Task.CompletedTask; }));
 
+        Store.SetRecents(settings.RecentCompose);
         Store.RowsChanging += () => rebuilding = true;
         Store.RowsChanged += () =>
         {
             rebuilding = false;
-            if (detail is not null && Store.Get(detail.Item.Id) is { } item)
-            {
-                selectedRow = item;
-                Raise(nameof(SelectedRow));
-            }
-            else if (detail is not null) SelectedRow = null;
+            RestoreSelection();
             Raise(nameof(IsEmpty));
             sampler.Update();
         };
@@ -50,31 +58,31 @@ sealed class ContainersViewModel : Observable, ISearchable
     public Command<ContainerItem> ToggleCommand { get; }
     public Command<ContainerItem> RestartCommand { get; }
     public Command<ContainerItem> RemoveCommand { get; }
+    public Command<ContainerItem> AskRemoveCommand { get; }
     public Command<ContainerItem> ExecCommand { get; }
     public Command<PublishedPort> OpenPortCommand { get; }
+    public Command<ProjectRow> ToggleProjectCommand { get; }
+    public Command<ProjectRow> ProjectStartStopCommand { get; }
+    public Command<ProjectRow> ProjectRestartCommand { get; }
+    public Command<ProjectRow> ProjectDownCommand { get; }
 
     public object? SelectedRow
     {
         get => selectedRow;
         set
         {
-            if (rebuilding) return;
-            if (value is GroupHeader)
-            {
-                Raise(nameof(SelectedRow));
-                return;
-            }
-            if (!Set(ref selectedRow, value)) return;
-            ShowDetail(value as ContainerItem);
+            if (rebuilding || !Set(ref selectedRow, value)) return;
+            ShowDetail(value);
         }
     }
 
     public ContainerItem? Selected => selectedRow as ContainerItem;
+    public ProjectRow? SelectedProject => selectedRow as ProjectRow;
 
-    public ContainerDetailViewModel? Detail
+    public object? Detail
     {
         get => detail;
-        private set { if (Set(ref detail, value)) Raise(nameof(HasDetail)); }
+        private set { if (Set(ref detail, value as IDisposable)) Raise(nameof(HasDetail)); }
     }
 
     public bool HasDetail => Detail is not null;
@@ -85,17 +93,85 @@ sealed class ContainersViewModel : Observable, ISearchable
 
     public void CloseDetail() => SelectedRow = null;
 
+    public bool IsRecent(string project) => settings.RecentCompose.Any(r => r.Project == project);
+
+    public void ForgetRecent(string project)
+    {
+        settings.RecentCompose.RemoveAll(r => r.Project == project);
+        settings.Save();
+        Store.SetRecents(settings.RecentCompose);
+    }
+
+    public async Task OpenComposeFile(string path)
+    {
+        var name = ComposeCli.DefaultProjectName(path);
+        settings.AddRecent(path, name);
+        settings.Save();
+        Store.SetRecents(settings.RecentCompose);
+        if (Store.FindProject(name) is { } row)
+        {
+            SelectedRow = row;
+            if (Detail is ComposeDetailViewModel d) await d.Up();
+        }
+    }
+
     public void Shutdown()
     {
-        Detail?.Dispose();
+        detail?.Dispose();
         sampler.StopAll();
     }
 
-    void ShowDetail(ContainerItem? item)
+    void ShowDetail(object? row)
     {
-        if (Detail?.Item == item) return;
-        Detail?.Dispose();
-        Detail = item is null ? null : new ContainerDetailViewModel(this, Session, item, shell.ShowError);
+        switch (row)
+        {
+            case ContainerItem item when Detail is ContainerDetailViewModel d && d.Item == item:
+            case ProjectRow p when Detail is ComposeDetailViewModel cd && cd.Project.Name == p.Name:
+                return;
+        }
+        detail?.Dispose();
+        Detail = row switch
+        {
+            ContainerItem item => new ContainerDetailViewModel(this, Session, item, shell.ShowError),
+            ProjectRow p => new ComposeDetailViewModel(this, Session, p.Project, shell.ShowError),
+            _ => null,
+        };
+    }
+
+    void RestoreSelection()
+    {
+        object? row = Detail switch
+        {
+            ContainerDetailViewModel d => Store.Get(d.Item.Id),
+            ComposeDetailViewModel cd => Store.FindProject(cd.Project.Name),
+            _ => null,
+        };
+        if (row is ContainerItem item && !Store.Rows.Contains(item)) row = null;
+        if (Detail is ComposeDetailViewModel compose && row is ProjectRow p) compose.Update(p.Project);
+
+        if (row is not null)
+        {
+            selectedRow = row;
+            Raise(nameof(SelectedRow));
+        }
+        else if (Detail is ContainerDetailViewModel d && Store.Get(d.Item.Id) is not null)
+        {
+            selectedRow = null;
+            Raise(nameof(SelectedRow));
+        }
+        else if (Detail is not null) SelectedRow = null;
+    }
+
+    Task WithProject(ProjectRow row, Func<ComposeDetailViewModel, Task> action)
+    {
+        SelectedRow = row;
+        return Detail is ComposeDetailViewModel d ? action(d) : Task.CompletedTask;
+    }
+
+    static Task Run(System.Windows.Input.ICommand command)
+    {
+        command.Execute(null);
+        return Task.CompletedTask;
     }
 
     void OnSessionChanged(object? sender, PropertyChangedEventArgs e)
