@@ -68,6 +68,8 @@
             <StackPanel Spacing="14">
               <TextBlock TextWrapping="Wrap" Text="{Binding SetupDescription}" />
               <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto">
+                <CheckBox IsChecked="{Binding EngineOnly}" Content="Engine only (no dashboard)" VerticalAlignment="Center"
+                          ToolTip.Tip="Install the engines, the docker CLI and the tray without the dashboard. You can add it later in Settings." />
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
                   <Button Classes="danger" Content="Uninstall…" IsVisible="{Binding IsInstalled}" Flyout="{StaticResource ConfirmUninstall}" />
                   <Button Classes="primary" Content="Install / Update" Command="{Binding InstallCommand}" />
@@ -155,10 +157,16 @@
         <StackPanel Spacing="10" IsVisible="{Binding IsDashboard}">
           <TextBlock Classes="h2" Text="SETTINGS" />
           <Border Classes="card">
-            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
-              <ToggleSwitch IsChecked="{Binding StopOtherOnSwitch}" OnContent="Stop the other engine when switching" OffContent="Stop the other engine when switching" />
+            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
+              <ToggleSwitch IsChecked="{Binding StopOtherOnSwitch}" IsVisible="{Binding HasEngineSwitch}"
+                            OnContent="Stop the other engine when switching" OffContent="Stop the other engine when switching" />
               <ToggleSwitch Grid.Row="1" IsChecked="{Binding StartActiveAtLogon}" OnContent="Start the active engine at logon" OffContent="Start the active engine at logon" />
-              <Button Grid.Column="1" Grid.RowSpan="2" Classes="danger" Content="Uninstall…" VerticalAlignment="Center" Flyout="{StaticResource ConfirmUninstall}" />
+              <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="10" Margin="0,10,0,0">
+                <TextBlock VerticalAlignment="Center" Text="{Binding DashboardText}" />
+                <Button Content="Add dashboard" Command="{Binding AddDashboardCommand}" IsVisible="{Binding !HasDashboard}" />
+                <Button Classes="danger" Content="Remove dashboard" Command="{Binding RemoveDashboardCommand}" IsVisible="{Binding HasDashboard}" />
+              </StackPanel>
+              <Button Grid.Column="1" Grid.RowSpan="3" Classes="danger" Content="Uninstall…" VerticalAlignment="Center" Flyout="{StaticResource ConfirmUninstall}" />
             </Grid>
           </Border>
         </StackPanel>

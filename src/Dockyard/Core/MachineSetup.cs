@@ -17,14 +17,14 @@ static class MachineSetup
     ];
 
     // Returns true when a reboot is needed.
-    public static async Task<bool> Install(Action<string> log, string userSid, string userName, int keepPid)
+    public static async Task<bool> Install(Action<string> log, string userSid, string userName, int keepPid, bool engineOnly = false)
     {
         var reboot = await EnableContainersFeature(log);
         await UpdateEngine(log, onlyIfNewer: true);
         AddToMachinePath(Paths.DockerDir);
         foreach (var plugin in Plugins) await UpdatePlugin(log, plugin.Component);
         await ConfigureWindowsEngine(log, userSid, userName);
-        InstallApp(log, Paths.Self, keepPid);
+        await InstallApp(log, Paths.Self, keepPid, engineOnly);
         RemoveLegacy(log, keepPid);
         return reboot;
     }
@@ -36,7 +36,7 @@ static class MachineSetup
             case Component.Engine: await UpdateEngine(log, onlyIfNewer: false); break;
             case Component.Compose or Component.Buildx: await UpdatePlugin(log, component); break;
             case Component.App:
-                InstallApp(log, source ?? throw new ArgumentException("--source is required for the app update"), keepPid);
+                await InstallApp(log, source ?? throw new ArgumentException("--source is required for the app update"), keepPid, engineOnly: !File.Exists(Paths.DashboardExe));
                 Shell.StartUnelevated(Paths.AppExe);
                 break;
             default: throw new ArgumentException($"{component} is not a machine component");
@@ -159,11 +159,9 @@ static class MachineSetup
         log($"Windows engine: on demand, start/stop allowed for {userName}");
     }
 
-    static void InstallApp(Action<string> log, string source, int keepPid)
+    static async Task InstallApp(Action<string> log, string source, int keepPid, bool engineOnly)
     {
-        var zip = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(source))!, Paths.DashboardZipName);
         var isInstalledCopy = string.Equals(Path.GetFullPath(source), Paths.AppExe, StringComparison.OrdinalIgnoreCase);
-        if (isInstalledCopy && !File.Exists(zip)) return;
         StopApps(keepPid);
         Directory.CreateDirectory(Paths.AppDir);
         if (!isInstalledCopy)
@@ -171,25 +169,61 @@ static class MachineSetup
             File.Copy(source, Paths.AppExe, overwrite: true);
             log($"Installed {Paths.AppExe}");
         }
-        InstallDashboard(log, zip);
+        if (engineOnly) log("Engine-only install: the dashboard was not installed");
+        else await InstallDashboard(log, Path.GetDirectoryName(Path.GetFullPath(source))!);
     }
 
-    static void InstallDashboard(Action<string> log, string zip)
+    public static async Task SetDashboard(Action<string> log, bool installed, int keepPid)
     {
+        StopApps(keepPid, dashboardOnly: true);
+        if (installed) await InstallDashboard(log, Path.GetDirectoryName(Paths.Self)!);
+        else RemoveDashboard(log);
+    }
+
+    // Uses Dockyard.Dashboard.zip next to the installer, or downloads the one from this release.
+    static async Task InstallDashboard(Action<string> log, string sourceDir)
+    {
+        var zip = Path.Combine(sourceDir, Paths.DashboardZipName);
+        string? downloaded = null;
         if (!File.Exists(zip))
         {
-            log($"{Paths.DashboardZipName} not found next to the installer; the dashboard was not installed");
-            return;
+            log("Downloading the dashboard");
+            zip = downloaded = await Updates.DownloadReleaseAsset(Paths.DashboardZipName, Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}"));
         }
-        using var archive = ZipFile.OpenRead(zip);
-        foreach (var entry in archive.Entries.Where(e => e.Name.Length > 0))
+        try
         {
-            var target = Path.GetFullPath(Path.Combine(Paths.AppDir, entry.FullName));
-            if (!target.StartsWith(Paths.AppDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) continue;
-            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-            entry.ExtractToFile(target, overwrite: true);
+            var files = new List<string>();
+            using (var archive = ZipFile.OpenRead(zip))
+            {
+                foreach (var entry in archive.Entries.Where(e => e.Name.Length > 0))
+                {
+                    var target = Path.GetFullPath(Path.Combine(Paths.AppDir, entry.FullName));
+                    if (!target.StartsWith(Paths.AppDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) continue;
+                    Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                    entry.ExtractToFile(target, overwrite: true);
+                    files.Add(entry.FullName);
+                }
+            }
+            File.WriteAllLines(Paths.DashboardManifest, files);
+            log($"Installed {Paths.DashboardExe}");
         }
-        log($"Installed {Paths.DashboardExe}");
+        finally
+        {
+            if (downloaded is not null) Directory.Delete(Path.GetDirectoryName(downloaded)!, recursive: true);
+        }
+    }
+
+    static void RemoveDashboard(Action<string> log)
+    {
+        var files = File.Exists(Paths.DashboardManifest) ? File.ReadAllLines(Paths.DashboardManifest) : [Path.GetFileName(Paths.DashboardExe)];
+        foreach (var file in files.Where(f => f.Length > 0))
+        {
+            var target = Path.GetFullPath(Path.Combine(Paths.AppDir, file));
+            if (!target.StartsWith(Paths.AppDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) continue;
+            try { File.Delete(target); } catch (IOException) { log($"  in use, left behind: {target}"); }
+        }
+        File.Delete(Paths.DashboardManifest);
+        log("Removed the dashboard");
     }
 
     static void RemoveLegacy(Action<string> log, int keepPid)
@@ -200,9 +234,11 @@ static class MachineSetup
         log($"Removed the old {Paths.LegacyName} from {Paths.LegacyTrayDir}");
     }
 
-    static void StopApps(int keepPid)
+    static void StopApps(int keepPid, bool dashboardOnly = false)
     {
-        foreach (var p in Process.GetProcessesByName(Paths.AppName).Concat(Process.GetProcessesByName(Paths.DashboardName)))
+        var processes = Process.GetProcessesByName(Paths.DashboardName).AsEnumerable();
+        if (!dashboardOnly) processes = processes.Concat(Process.GetProcessesByName(Paths.AppName));
+        foreach (var p in processes)
         {
             try
             {

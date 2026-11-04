@@ -26,7 +26,11 @@ interface IEngineHost
     Task<bool> Update(Action<string> log, IReadOnlyList<(string Component, Release? Release)> components);
 
     // Returns true when a reboot is needed to finish.
-    Task<bool> Install(Action<string> log);
+    Task<bool> Install(Action<string> log, bool engineOnly);
+
+    bool HasDashboard { get; }
+    // Returns true when Dockyard itself is being replaced and should exit.
+    Task<bool> SetDashboard(Action<string> log, bool installed);
     Task Uninstall(Action<string> log);
 
     void ReleaseResources();

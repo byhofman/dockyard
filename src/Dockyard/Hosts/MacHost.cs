@@ -25,7 +25,9 @@ static class MacLayout
     public static string VmConfig => Path.Combine(DataDir, "vm.json");
     public static string RootRelease => Path.Combine(DataDir, "root-release");
     public static string Helper => Path.Combine(AppContext.BaseDirectory, "dockyard-vm");
-    public static string Assets => Path.Combine(AppContext.BaseDirectory, "vm");
+    public static string Assets => Directory.Exists(Path.Combine(AppContext.BaseDirectory, "..", "Resources", "vm"))
+        ? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "Resources", "vm"))
+        : Path.Combine(AppContext.BaseDirectory, "vm");
     public static string LaunchAgent => Path.Combine(Home, "Library", "LaunchAgents", LaunchAgentLabel + ".plist");
 
     public static string LaunchAgentPlist(string exe) => $"""
@@ -54,6 +56,24 @@ static class MacLayout
         ["-e", $"do shell script \"{command.Replace("\\", "\\\\").Replace("\"", "\\\"")}\" with administrator privileges"];
 
     public static string PathsEntry(string binDir) => $"echo '{binDir}' > /etc/paths.d/dockyard && chmod 644 /etc/paths.d/dockyard";
+
+    public static string ZipAsset(bool engineOnly) => engineOnly ? @"^Dockyard-[\d.]+-macos-engine-only\.zip$" : @"^Dockyard-[\d.]+-macos\.zip$";
+
+    public static string? Bundle(string baseDirectory)
+    {
+        var contents = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(baseDirectory));
+        var bundle = contents is null ? null : Path.GetDirectoryName(contents);
+        return bundle is not null && bundle.EndsWith(".app", StringComparison.Ordinal) ? bundle : null;
+    }
+
+    public static string SwapScript(int pid, string newBundle, string bundle) => $"""
+        #!/bin/sh
+        while kill -0 {pid} 2>/dev/null; do sleep 0.2; done
+        rm -rf '{bundle}.old'
+        mv '{bundle}' '{bundle}.old' && mv '{newBundle}' '{bundle}' && rm -rf '{bundle}.old'
+        open '{bundle}' --args --tray
+
+        """;
 
     public static Version? DockerVersion(string release) => release.Split('\n')
         .Where(l => l.StartsWith("DOCKER_VERSION=", StringComparison.Ordinal))
@@ -153,14 +173,44 @@ sealed class MacHost(ICommandRunner runner) : IEngineHost
                     if (running) await Start(Engine);
                     break;
                 case "App":
-                    log("Update Dockyard by running the install script again (curl -fsSL …/install-mac.sh | sh)");
-                    break;
+                    await SelfUpdate(log, engineOnly: !HasDashboard);
+                    return true;
             }
         }
         return false;
     }
 
-    public async Task<bool> Install(Action<string> log)
+    public bool HasDashboard => File.Exists(Path.Combine(AppContext.BaseDirectory, "Dockyard.Dashboard"));
+
+    public async Task<bool> SetDashboard(Action<string> log, bool installed)
+    {
+        if (installed)
+        {
+            await SelfUpdate(log, engineOnly: false);
+            return true;
+        }
+        var dashboard = Path.Combine(AppContext.BaseDirectory, "Dockyard.Dashboard");
+        if (File.Exists(dashboard)) File.Delete(dashboard);
+        log("Removed the dashboard");
+        return false;
+    }
+
+    // Downloads the release zip (no quarantine attribute, so Gatekeeper does not block it) and swaps the
+    // app bundle once this process has exited.
+    async Task SelfUpdate(Action<string> log, bool engineOnly)
+    {
+        var bundle = MacLayout.Bundle(AppContext.BaseDirectory)
+            ?? throw new InvalidOperationException("Dockyard is not running from Dockyard.app; run install-mac.sh again");
+        var dir = Path.Combine(Path.GetTempPath(), $"dockyard-update-{Guid.NewGuid():N}");
+        var zip = await Updates.DownloadReleaseAsset(MacLayout.ZipAsset(engineOnly), dir, isPattern: true);
+        await runner.Check("/usr/bin/ditto", "-x", "-k", zip, dir);
+        var script = Path.Combine(dir, "swap.sh");
+        await File.WriteAllTextAsync(script, MacLayout.SwapScript(Environment.ProcessId, Path.Combine(dir, "Dockyard.app"), bundle));
+        Process.Start(new ProcessStartInfo("/bin/sh", [script]) { UseShellExecute = false })?.Dispose();
+        log($"Replacing {bundle} and restarting");
+    }
+
+    public async Task<bool> Install(Action<string> log, bool engineOnly)
     {
         if ((await runner.Run("/usr/bin/arch", "-x86_64", "/usr/bin/true")).ExitCode != 0)
             log("Rosetta is not installed, so amd64 images will not run: softwareupdate --install-rosetta --agree-to-license");

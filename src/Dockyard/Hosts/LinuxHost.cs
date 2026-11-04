@@ -107,7 +107,26 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
         return false;
     }
 
-    public async Task<bool> Install(Action<string> log)
+    public bool HasDashboard => File.Exists(Path.Combine(AppContext.BaseDirectory, "Dockyard.Dashboard"));
+
+    public async Task<bool> SetDashboard(Action<string> log, bool installed)
+    {
+        var os = OsRelease.Parse(await File.ReadAllTextAsync("/etc/os-release"));
+        string[] command = (os.PackageManager, installed) switch
+        {
+            ("apt", true) => ["apt-get", "install", "-y", "dockyard-dashboard"],
+            ("apt", false) => ["apt-get", "remove", "-y", "dockyard-dashboard"],
+            ("dnf", true) => ["dnf", "-y", "install", "dockyard-dashboard"],
+            ("dnf", false) => ["dnf", "-y", "remove", "dockyard-dashboard"],
+            _ => throw new InvalidOperationException("Install or remove the dockyard-dashboard package with your package manager"),
+        };
+        var r = await runner.Run("pkexec", command);
+        foreach (var line in Lines(r.Output + r.Error).TakeLast(4)) log("  " + line);
+        if (r.ExitCode != 0) throw new InvalidOperationException($"{command[0]} failed ({r.ExitCode})");
+        return false;
+    }
+
+    public async Task<bool> Install(Action<string> log, bool engineOnly)
     {
         await RunSetup(log, "install", Environment.UserName);
         await WriteAutostart();

@@ -122,15 +122,18 @@ static partial class Updates
         return exe;
     }
 
-    // The Linux engine image from the same release as this build, or from the latest release for development builds.
-    public static async Task<string> DownloadImage(string targetDir)
+    public static Task<string> DownloadImage(string targetDir) => DownloadReleaseAsset(ImageAsset, targetDir, isPattern: true);
+
+    // From the same release as this build, or from the latest release for development builds.
+    public static async Task<string> DownloadReleaseAsset(string name, string targetDir, bool isPattern = false)
     {
         var url = Paths.AppVersion == "0.0.0"
             ? $"https://api.github.com/repos/{Paths.Repo}/releases/latest"
             : $"https://api.github.com/repos/{Paths.Repo}/releases/tags/v{Paths.AppVersion}";
         var release = JsonNode.Parse(await Http.GetStringAsync(url))!;
-        var asset = release["assets"]!.AsArray().FirstOrDefault(a => Regex.IsMatch(a!["name"]!.GetValue<string>(), ImageAsset))
-            ?? throw new InvalidOperationException($"Release {release["tag_name"]} has no Linux engine image");
+        var asset = release["assets"]!.AsArray().FirstOrDefault(a =>
+                isPattern ? Regex.IsMatch(a!["name"]!.GetValue<string>(), name) : a!["name"]!.GetValue<string>() == name)
+            ?? throw new InvalidOperationException($"Release {release["tag_name"]} has no {name}");
         Directory.CreateDirectory(targetDir);
         var target = Path.Combine(targetDir, asset["name"]!.GetValue<string>());
         await DownloadFile(asset["browser_download_url"]!.GetValue<string>(), target);

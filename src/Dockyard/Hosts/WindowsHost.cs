@@ -76,10 +76,18 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
         return false;
     }
 
-    public async Task<bool> Install(Action<string> log)
+    public bool HasDashboard => File.Exists(Path.Combine(AppContext.BaseDirectory, "Dockyard.Dashboard.exe"));
+
+    public async Task<bool> SetDashboard(Action<string> log, bool installed)
+    {
+        await Elevation.Run(log, "--machine-dashboard", installed ? "add" : "remove");
+        return false;
+    }
+
+    public async Task<bool> Install(Action<string> log, bool engineOnly)
     {
         log("Administrator step");
-        var reboot = await Elevation.Run(log, "--machine-install");
+        var reboot = engineOnly ? await Elevation.Run(log, "--machine-install", "--engine-only") : await Elevation.Run(log, "--machine-install");
         log("User step");
         await UserSetup.Install(log);
         return reboot;

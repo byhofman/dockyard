@@ -20,6 +20,7 @@ sealed class MainViewModel : Observable
     string status = "Ready";
     bool isSetupMode;
     bool isInstalled;
+    bool engineOnly;
     string active;
 
     public MainViewModel(IEngineHost host, bool setupMode)
@@ -44,6 +45,8 @@ sealed class MainViewModel : Observable
         CheckUpdatesCommand = Cmd(() => Run("Checking for updates", () => CheckUpdates(all: true)));
         UpdateAllCommand = Cmd(() => UpdateComponents(Components.Where(c => c.IsAvailable).ToList()), () => Components.Any(c => c.IsAvailable));
         InstallCommand = Cmd(Install);
+        AddDashboardCommand = Cmd(() => SetDashboard(true));
+        RemoveDashboardCommand = Cmd(() => SetDashboard(false));
         UninstallCommand = Cmd(Uninstall);
 
         timer.Tick += async (_, _) => await RefreshState();
@@ -60,6 +63,12 @@ sealed class MainViewModel : Observable
     public Command UpdateAllCommand { get; }
     public Command InstallCommand { get; }
     public Command UninstallCommand { get; }
+    public Command AddDashboardCommand { get; }
+    public Command RemoveDashboardCommand { get; }
+
+    public bool EngineOnly { get => engineOnly; set => Set(ref engineOnly, value); }
+    public bool HasDashboard => host.HasDashboard;
+    public string DashboardText => HasDashboard ? "Dashboard installed" : "Dashboard not installed (engine-only)";
 
     public string Version => "v" + Paths.AppVersion;
     public string Active => active;
@@ -215,7 +224,7 @@ sealed class MainViewModel : Observable
 
     Task Install() => Run("Installing", async () =>
     {
-        var reboot = await host.Install(Log);
+        var reboot = await host.Install(Log, EngineOnly);
         IsInstalled = true;
         if (OperatingSystem.IsWindows() && !Paths.IsInstalledCopy) Shell.StartUnelevated(Paths.AppExe);
         Log(reboot
@@ -224,6 +233,16 @@ sealed class MainViewModel : Observable
                 ? "Done. Dockyard runs in the tray. Sign out and back in once so docker-users applies to the Windows engine."
                 : "Done. Dockyard runs in the tray. Sign out and back in once so the docker group applies.");
         Status = "Installed";
+    });
+
+    Task SetDashboard(bool installed) => Run(installed ? "Adding the dashboard" : "Removing the dashboard", async () =>
+    {
+        if (await host.SetDashboard(Log, installed))
+        {
+            ShutdownRequested?.Invoke();
+            return;
+        }
+        Raise(nameof(HasDashboard), nameof(DashboardText));
     });
 
     Task Uninstall() => Run("Uninstalling", async () =>

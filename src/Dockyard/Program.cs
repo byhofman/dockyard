@@ -19,7 +19,7 @@ static class Program
         }
         else if (args.Contains("--install") || args.Contains("--uninstall"))
         {
-            return RunUnattended(args.Contains("--uninstall"));
+            return RunUnattended(args.Contains("--uninstall"), args.Contains("--engine-only"));
         }
 
         var installed = OperatingSystem.IsWindows() ? Paths.IsInstalledCopy : Hosts.HostFactory.Create().IsInstalled;
@@ -35,13 +35,13 @@ static class Program
         return Build(AppMode.Tray, args).StartWithClassicDesktopLifetime(args, ShutdownMode.OnExplicitShutdown);
     }
 
-    static int RunUnattended(bool uninstall)
+    static int RunUnattended(bool uninstall, bool engineOnly)
     {
         var host = Hosts.HostFactory.Create();
         try
         {
             if (uninstall) host.Uninstall(Console.WriteLine).GetAwaiter().GetResult();
-            else host.Install(Console.WriteLine).GetAwaiter().GetResult();
+            else host.Install(Console.WriteLine, engineOnly).GetAwaiter().GetResult();
             Console.WriteLine(uninstall ? "Dockyard was removed." : "Done. Sign out and back in once so the docker group applies.");
             return 0;
         }

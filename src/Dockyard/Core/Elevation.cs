@@ -10,7 +10,7 @@ namespace Dockyard.Core;
 static class Elevation
 {
     public const int RebootExitCode = 3010;
-    public static readonly string[] Modes = ["--machine-install", "--machine-update", "--machine-uninstall"];
+    public static readonly string[] Modes = ["--machine-install", "--machine-update", "--machine-uninstall", "--machine-dashboard"];
 
     public static bool IsWorker(string[] args) => args.Any(a => Modes.Contains(a));
 
@@ -86,7 +86,12 @@ static class Elevation
                     MachineSetup.Update(Log, Enum.Parse<Component>(name), Opt("--source"), keepPid).GetAwaiter().GetResult();
                 return 0;
             }
-            var reboot = MachineSetup.Install(Log, Arg("--user-sid"), Arg("--user-name"), keepPid).GetAwaiter().GetResult();
+            if (Opt("--machine-dashboard") is { } dashboard)
+            {
+                MachineSetup.SetDashboard(Log, dashboard == "add", keepPid).GetAwaiter().GetResult();
+                return 0;
+            }
+            var reboot = MachineSetup.Install(Log, Arg("--user-sid"), Arg("--user-name"), keepPid, args.Contains("--engine-only")).GetAwaiter().GetResult();
             return reboot ? RebootExitCode : 0;
         }
         catch (Exception ex)

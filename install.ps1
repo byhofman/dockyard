@@ -8,10 +8,12 @@
     & ([scriptblock]::Create((irm https://raw.githubusercontent.com/byhofman/dockyard/main/install.ps1))) -NoStart
 
   -Build installs the latest build of main instead of the latest release (needs the gh CLI).
+  -EngineOnly installs the engines, the docker CLI and the tray without the dashboard.
   Run it elevated to also add the Defender ASR exclusions and skip the administrator prompt.
 #>
 param(
     [switch]$Build,
+    [switch]$EngineOnly,
     [switch]$NoStart
 )
 
@@ -52,7 +54,7 @@ if ($Build) {
     if (-not $asset) { throw "Release $($release.tag_name) has no Dockyard.exe." }
     Invoke-WebRequest $asset.browser_download_url -OutFile $exe -UseBasicParsing
     $dashboardAsset = $release.assets | Where-Object name -eq 'Dockyard.Dashboard.zip' | Select-Object -First 1
-    if ($dashboardAsset) { Invoke-WebRequest $dashboardAsset.browser_download_url -OutFile $zip -UseBasicParsing }
+    if ($dashboardAsset -and -not $EngineOnly) { Invoke-WebRequest $dashboardAsset.browser_download_url -OutFile $zip -UseBasicParsing }
     $imageAsset = $release.assets | Where-Object name -like 'dockyard-linux-*-x86_64.tar.gz' | Select-Object -First 1
     if ($imageAsset) { Invoke-WebRequest $imageAsset.browser_download_url -OutFile (Join-Path (Split-Path $exe) $imageAsset.name) -UseBasicParsing }
     Write-Host "Release $($release.tag_name)"
@@ -61,6 +63,7 @@ if ($Build) {
 Step 'Install'
 $arguments = @('--install')
 if ($NoStart) { $arguments += '--no-start' }
+if ($EngineOnly) { $arguments += '--engine-only' }
 $p = Start-Process $exe -ArgumentList $arguments -Wait -NoNewWindow -PassThru
 
 switch ($p.ExitCode) {
