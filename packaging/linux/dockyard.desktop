@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Dockyard
+Comment=Docker engine tray and dashboard
+Exec=/usr/lib/dockyard/Dockyard
+Icon=dockyard
+Terminal=false
+Categories=Development;System;
