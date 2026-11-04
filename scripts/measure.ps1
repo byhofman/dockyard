@@ -13,13 +13,21 @@ $ErrorActionPreference = 'Stop'
 Get-Process Dockyard.Dashboard -ErrorAction SilentlyContinue | Stop-Process
 Start-Sleep -Milliseconds 500
 
+# The dashboard reports when its window opened, measured from its own process start (DOCKYARD_TRACE_STARTUP);
+# polling from here would add PowerShell's process-start and polling overhead to the number.
+$trace = Join-Path ([IO.Path]::GetTempPath()) "dockyard-startup-$PID.txt"
+$env:DOCKYARD_TRACE_STARTUP = '1'
+$p = Start-Process $Dashboard -PassThru -RedirectStandardError $trace
+Remove-Item Env:\DOCKYARD_TRACE_STARTUP
 $clock = [Diagnostics.Stopwatch]::StartNew()
-$p = Start-Process $Dashboard -PassThru
-while ($p.MainWindowHandle -eq 0 -and $clock.ElapsedMilliseconds -lt 15000) {
-    Start-Sleep -Milliseconds 10
-    $p.Refresh()
+$windowMs = $null
+while ($null -eq $windowMs -and $clock.ElapsedMilliseconds -lt 15000) {
+    Start-Sleep -Milliseconds 50
+    $line = Get-Content $trace -ErrorAction SilentlyContinue | Where-Object { $_ -match 'window opened' } | Select-Object -First 1
+    if ($line -match 'startup\s+(\d+) ms') { $windowMs = [int]$Matches[1] }
 }
-$windowMs = $clock.ElapsedMilliseconds
+if ($null -eq $windowMs) { throw 'The dashboard did not report an opened window within 15 s' }
+$p.Refresh()
 
 Start-Sleep 3
 $p.Refresh()
