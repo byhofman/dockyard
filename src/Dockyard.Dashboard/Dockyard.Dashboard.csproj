@@ -19,6 +19,7 @@
 
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <InvariantGlobalization>true</InvariantGlobalization>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
     <UseSystemResourceKeys>true</UseSystemResourceKeys>
     <DebugType>none</DebugType>
   </PropertyGroup>

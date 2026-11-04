@@ -26,7 +26,7 @@ public partial class App : Application
             window.Activate();
         }));
 
-        vm.Start();
+        window.Opened += (_, _) => Dispatcher.UIThread.Post(vm.Start, DispatcherPriority.Background);
         base.OnFrameworkInitializationCompleted();
     }
 }
