@@ -39,6 +39,13 @@ public static class DockerContext
         return new(name, DockerEndpoint.Parse(endpoint));
     }
 
+    public static bool Exists(string name, string? configDir = null) =>
+        name == "default" ||
+        File.Exists(Path.Combine(configDir ?? ConfigDir(Environment.GetEnvironmentVariable), "contexts", "meta", Hash(name), "meta.json"));
+
+    public static string? CurrentContextName(string? configDir = null) =>
+        ReadCurrentContext(configDir ?? ConfigDir(Environment.GetEnvironmentVariable));
+
     static string? ReadCurrentContext(string configDir)
     {
         var file = Path.Combine(configDir, "config.json");

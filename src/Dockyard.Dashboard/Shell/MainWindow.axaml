@@ -1,0 +1,81 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="using:Dockyard.Dashboard.Shell"
+        xmlns:cont="using:Dockyard.Dashboard.Features.Containers"
+        x:Class="Dockyard.Dashboard.Shell.MainWindow"
+        x:DataType="shell:ShellViewModel"
+        Title="Dockyard"
+        Icon="avares://Dockyard.Dashboard/Assets/docker.ico"
+        Width="1240" Height="760" MinWidth="720" MinHeight="480"
+        WindowStartupLocation="CenterScreen">
+
+  <Window.DataTemplates>
+    <DataTemplate DataType="cont:ContainersViewModel">
+      <cont:ContainersView />
+    </DataTemplate>
+  </Window.DataTemplates>
+
+  <Panel>
+    <DockPanel>
+      <Border DockPanel.Dock="Top" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="16,10">
+        <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+          <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+            <Image Source="avares://Dockyard.Dashboard/Assets/whale-blue.png" Width="26" Height="26" />
+            <TextBlock Classes="h1" Text="Dockyard" VerticalAlignment="Center" />
+          </StackPanel>
+
+          <TextBox x:Name="SearchBox" Grid.Column="1" Margin="40,0,16,0" MaxWidth="380" HorizontalAlignment="Stretch"
+                   PlaceholderText="Search  (Ctrl+K)" Text="{Binding Search}" VerticalAlignment="Center" />
+
+          <Border Grid.Column="2" Classes="pill warn" Margin="0,0,12,0" IsVisible="{Binding Session.IsReconnecting}">
+            <TextBlock Text="Reconnecting…" />
+          </Border>
+
+          <Border Grid.Column="3" IsVisible="{Binding HasEngineSwitch}" Background="{DynamicResource Bg}" BorderBrush="{DynamicResource Line}"
+                  BorderThickness="1" CornerRadius="7" Padding="3" VerticalAlignment="Center" Margin="0,0,8,0">
+            <StackPanel Orientation="Horizontal" Spacing="2">
+              <Button Classes="segment" Classes.selected="{Binding IsLinuxActive}" Content="Linux" Command="{Binding SwitchLinuxCommand}"
+                      ToolTip.Tip="Switch to Linux containers" />
+              <Button Classes="segment" Classes.selected="{Binding IsWindowsActive}" Content="Windows" Command="{Binding SwitchWindowsCommand}"
+                      ToolTip.Tip="Switch to Windows containers" />
+            </StackPanel>
+          </Border>
+
+          <Button Grid.Column="4" Classes="icon" Content="⚙" Command="{Binding SettingsCommand}" ToolTip.Tip="Engines, updates and settings" />
+        </Grid>
+      </Border>
+
+      <Grid ColumnDefinitions="170,*">
+        <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0">
+          <ListBox Classes="sidebar" Margin="0,10" ItemsSource="{Binding Sections}" SelectedItem="{Binding CurrentSection}">
+            <ListBox.ItemTemplate>
+              <DataTemplate DataType="shell:Section">
+                <TextBlock Text="{Binding Title}" />
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </Border>
+        <ContentControl Grid.Column="1" Content="{Binding CurrentSection.Content}" />
+      </Grid>
+    </DockPanel>
+
+    <ItemsControl ItemsSource="{Binding Toasts}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="16" MaxWidth="420">
+      <ItemsControl.ItemsPanel>
+        <ItemsPanelTemplate>
+          <StackPanel Spacing="8" />
+        </ItemsPanelTemplate>
+      </ItemsControl.ItemsPanel>
+      <ItemsControl.ItemTemplate>
+        <DataTemplate DataType="shell:Toast">
+          <Border Background="{DynamicResource BadBg}" BorderBrush="{DynamicResource Bad}" BorderThickness="1" CornerRadius="8" Padding="12,8">
+            <Grid ColumnDefinitions="*,Auto">
+              <SelectableTextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+              <Button Grid.Column="1" Classes="icon" Content="✕" FontSize="11" VerticalAlignment="Top" Margin="8,-4,-6,0"
+                      Click="DismissToast" />
+            </Grid>
+          </Border>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+  </Panel>
+</Window>

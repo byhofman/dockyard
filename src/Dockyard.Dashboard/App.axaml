@@ -1,0 +1,219 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Dockyard.Dashboard.App"
+             Name="Dockyard"
+             RequestedThemeVariant="Default">
+
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="Bg" Color="#0E1117" />
+          <SolidColorBrush x:Key="Surface" Color="#161B23" />
+          <SolidColorBrush x:Key="SurfaceRaised" Color="#1D2330" />
+          <SolidColorBrush x:Key="Selected" Color="#1B2A4A" />
+          <SolidColorBrush x:Key="Line" Color="#262D3B" />
+          <SolidColorBrush x:Key="Text" Color="#E7EBF3" />
+          <SolidColorBrush x:Key="Muted" Color="#8A94A6" />
+          <SolidColorBrush x:Key="Ok" Color="#2FBF71" />
+          <SolidColorBrush x:Key="OkBg" Color="#1A3A2A" />
+          <SolidColorBrush x:Key="Warn" Color="#F0A92E" />
+          <SolidColorBrush x:Key="WarnBg" Color="#3D2F14" />
+          <SolidColorBrush x:Key="Bad" Color="#EF5350" />
+          <SolidColorBrush x:Key="BadBg" Color="#3D1C1C" />
+          <SolidColorBrush x:Key="PillBg" Color="#262D3B" />
+          <SolidColorBrush x:Key="LinkText" Color="#6F9CFF" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="Bg" Color="#F5F6F8" />
+          <SolidColorBrush x:Key="Surface" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="SurfaceRaised" Color="#EEF0F4" />
+          <SolidColorBrush x:Key="Selected" Color="#DCE7FD" />
+          <SolidColorBrush x:Key="Line" Color="#DFE3EA" />
+          <SolidColorBrush x:Key="Text" Color="#1A1F29" />
+          <SolidColorBrush x:Key="Muted" Color="#5F6B7D" />
+          <SolidColorBrush x:Key="Ok" Color="#178A4E" />
+          <SolidColorBrush x:Key="OkBg" Color="#DDF3E6" />
+          <SolidColorBrush x:Key="Warn" Color="#A86D00" />
+          <SolidColorBrush x:Key="WarnBg" Color="#FCEFD6" />
+          <SolidColorBrush x:Key="Bad" Color="#C9302C" />
+          <SolidColorBrush x:Key="BadBg" Color="#FBE1E0" />
+          <SolidColorBrush x:Key="PillBg" Color="#E8EBF0" />
+          <SolidColorBrush x:Key="LinkText" Color="#1D63ED" />
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+      <Color x:Key="SystemAccentColor">#1D63ED</Color>
+      <SolidColorBrush x:Key="Accent" Color="#1D63ED" />
+      <SolidColorBrush x:Key="AccentHover" Color="#3B7BF5" />
+      <FontFamily x:Key="Mono">Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace</FontFamily>
+    </ResourceDictionary>
+  </Application.Resources>
+
+  <Application.Styles>
+    <FluentTheme />
+
+    <Style Selector="Window">
+      <Setter Property="Background" Value="{DynamicResource Bg}" />
+      <Setter Property="Foreground" Value="{DynamicResource Text}" />
+      <Setter Property="FontSize" Value="13" />
+    </Style>
+
+    <Style Selector="TextBlock.h1">
+      <Setter Property="FontSize" Value="16" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.title">
+      <Setter Property="FontSize" Value="16" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.section">
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+      <Setter Property="LetterSpacing" Value="0.8" />
+    </Style>
+    <Style Selector="TextBlock.muted, SelectableTextBlock.muted">
+      <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+    </Style>
+    <Style Selector="TextBlock.small">
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="TextBlock.mono, SelectableTextBlock.mono">
+      <Setter Property="FontFamily" Value="{StaticResource Mono}" />
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="SelectableTextBlock.err">
+      <Setter Property="Foreground" Value="{DynamicResource Bad}" />
+    </Style>
+
+    <Style Selector="Button">
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="12,5" />
+      <Setter Property="Background" Value="{DynamicResource SurfaceRaised}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Line}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Button.primary">
+      <Setter Property="Background" Value="{StaticResource Accent}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource AccentHover}" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.danger">
+      <Setter Property="Foreground" Value="{DynamicResource Bad}" />
+    </Style>
+    <Style Selector="Button.dangerfill">
+      <Setter Property="Background" Value="{DynamicResource Bad}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Bad}" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.link">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Foreground" Value="{DynamicResource LinkText}" />
+      <Setter Property="Padding" Value="4,1" />
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="Button.icon">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="8,4" />
+      <Setter Property="FontSize" Value="15" />
+    </Style>
+    <Style Selector="Button.segment">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="5" />
+      <Setter Property="Padding" Value="14,4" />
+      <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+    </Style>
+    <Style Selector="Button.segment.selected">
+      <Setter Property="Background" Value="{StaticResource Accent}" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.segment.selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource AccentHover}" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+
+    <Style Selector="Border.pill">
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="8,2" />
+      <Setter Property="Background" Value="{DynamicResource PillBg}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+    <Style Selector="Border.pill > TextBlock">
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+    </Style>
+    <Style Selector="Border.pill.ok">
+      <Setter Property="Background" Value="{DynamicResource OkBg}" />
+    </Style>
+    <Style Selector="Border.pill.ok > TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource Ok}" />
+    </Style>
+    <Style Selector="Border.pill.warn">
+      <Setter Property="Background" Value="{DynamicResource WarnBg}" />
+    </Style>
+    <Style Selector="Border.pill.warn > TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource Warn}" />
+    </Style>
+
+    <Style Selector="Ellipse.dot">
+      <Setter Property="Width" Value="8" />
+      <Setter Property="Height" Value="8" />
+      <Setter Property="Fill" Value="{DynamicResource Muted}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Ellipse.dot.on">
+      <Setter Property="Fill" Value="{DynamicResource Ok}" />
+    </Style>
+
+    <Style Selector="ListBox">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ListBox.rows ListBoxItem">
+      <Setter Property="Padding" Value="10,6" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Margin" Value="6,1" />
+    </Style>
+    <Style Selector="ListBox.rows ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Selected}" />
+    </Style>
+    <Style Selector="ListBox.rows ListBoxItem.header">
+      <Setter Property="Padding" Value="10,12,10,2" />
+    </Style>
+    <Style Selector="ListBox.sidebar ListBoxItem">
+      <Setter Property="Padding" Value="14,8" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Margin" Value="8,1" />
+    </Style>
+    <Style Selector="ListBox.sidebar ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Selected}" />
+    </Style>
+    <Style Selector="ListBox.log ListBoxItem">
+      <Setter Property="Padding" Value="10,0" />
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
+    <Style Selector="ListBox.log ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ListBox.log ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource SurfaceRaised}" />
+    </Style>
+
+    <Style Selector="TabControl">
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="TabItem">
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="MinHeight" Value="34" />
+      <Setter Property="Padding" Value="12,0" />
+    </Style>
+  </Application.Styles>
+</Application>

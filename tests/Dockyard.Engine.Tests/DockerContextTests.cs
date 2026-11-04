@@ -72,6 +72,17 @@ public sealed class DockerContextTests : IDisposable
     }
 
     [Fact]
+    public void Exists_checks_context_metadata()
+    {
+        WriteContext("linux", "tcp://127.0.0.1:2375");
+        WriteConfig("linux");
+        Assert.True(DockerContext.Exists("linux", dir));
+        Assert.True(DockerContext.Exists("default", dir));
+        Assert.False(DockerContext.Exists("win", dir));
+        Assert.Equal("linux", DockerContext.CurrentContextName(dir));
+    }
+
+    [Fact]
     public void DOCKER_CONFIG_sets_config_dir() =>
         Assert.Equal(dir, DockerContext.ConfigDir(Env(("DOCKER_CONFIG", dir))));
 }

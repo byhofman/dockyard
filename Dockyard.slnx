@@ -1,9 +1,11 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/Dockyard.Dashboard/Dockyard.Dashboard.csproj" />
     <Project Path="src/Dockyard.Engine/Dockyard.Engine.csproj" />
     <Project Path="src/Dockyard/Dockyard.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Dockyard.Dashboard.Tests/Dockyard.Dashboard.Tests.csproj" />
     <Project Path="tests/Dockyard.Engine.Tests/Dockyard.Engine.Tests.csproj" />
   </Folder>
 </Solution>
