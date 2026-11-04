@@ -30,9 +30,9 @@ sealed partial class Agent(ITransport transport, Action<string> log)
             Trim(ct));
     }
 
-    async Task Serve(int port, Func<NetworkStream, CancellationToken, Task> handle, CancellationToken ct)
+    async Task Serve(int port, Func<IConnection, CancellationToken, Task> handle, CancellationToken ct)
     {
-        Socket listener;
+        IListener listener;
         try
         {
             listener = transport.Listen(port);
@@ -49,42 +49,64 @@ sealed partial class Agent(ITransport transport, Action<string> log)
             var client = await listener.AcceptAsync(ct);
             _ = Task.Run(async () =>
             {
-                using var stream = new NetworkStream(client, ownsSocket: true);
-                try { await handle(stream, ct); }
+                using var connection = client;
+                try { await handle(connection, ct); }
                 catch (Exception e) when (e is IOException or SocketException or OperationCanceledException) { }
                 catch (Exception e) { log($"port {port}: {e.Message}"); }
             }, ct);
         }
     }
 
-    static async Task ProxyDocker(NetworkStream client, CancellationToken ct)
+    static async Task ProxyDocker(IConnection client, CancellationToken ct)
     {
-        using var docker = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
         for (var attempt = 0; ; attempt++)
         {
+            var docker = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
             try
             {
                 await docker.ConnectAsync(new UnixDomainSocketEndPoint(DockerSocket), ct);
-                break;
             }
             catch (SocketException) when (attempt < 100)
             {
+                docker.Dispose();
                 await Task.Delay(200, ct);
+                continue;
             }
+            catch
+            {
+                docker.Dispose();
+                throw;
+            }
+            using var engine = new SocketConnection(docker);
+            await Pump.Both(client, engine, ct);
+            return;
         }
-        await Pump.Both(client.Socket, docker, ct);
     }
 
-    static async Task Forward(NetworkStream client, CancellationToken ct)
+    static async Task<SocketConnection> ConnectTcp(int port, CancellationToken ct)
     {
-        var line = await ReadLine(client, ct);
+        var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        try
+        {
+            await socket.ConnectAsync(IPAddress.Loopback, port, ct);
+            return new SocketConnection(socket);
+        }
+        catch
+        {
+            socket.Dispose();
+            throw;
+        }
+    }
+
+    static async Task Forward(IConnection client, CancellationToken ct)
+    {
+        var line = await ReadLine(client.Stream, ct);
         if (line is null || ForwardHeader.Parse(line) is not { } header) return;
 
         if (header.Protocol == ForwardProtocol.Tcp)
         {
-            using var target = new TcpClient();
-            await target.ConnectAsync(IPAddress.Loopback, header.Port, ct);
-            await Pump.Both(client.Socket, target.Client, ct);
+            using var target = await ConnectTcp(header.Port, ct);
+            await Pump.Both(client, target, ct);
             return;
         }
 
@@ -96,10 +118,10 @@ sealed partial class Agent(ITransport transport, Action<string> log)
             while (!linked.IsCancellationRequested)
             {
                 var result = await udp.ReceiveAsync(linked.Token);
-                await client.WriteAsync(UdpFrame.Encode(result.Buffer), linked.Token);
+                await client.Stream.WriteAsync(UdpFrame.Encode(result.Buffer), linked.Token);
             }
         }, linked.Token);
-        while (await UdpFrame.ReadAsync(client, ct) is { } datagram) await udp.SendAsync(datagram, ct);
+        while (await UdpFrame.ReadAsync(client.Stream, ct) is { } datagram) await udp.SendAsync(datagram, ct);
         await linked.CancelAsync();
         try { await replies; } catch (Exception) { }
     }
@@ -118,14 +140,14 @@ sealed partial class Agent(ITransport transport, Action<string> log)
         return null;
     }
 
-    async Task Control(NetworkStream client, CancellationToken ct)
+    async Task Control(IConnection client, CancellationToken ct)
     {
-        var writer = new StreamWriter(client, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
+        var writer = new StreamWriter(client.Stream, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
         lock (controlLock) control = writer;
         log("control connected");
         Send(new ControlMessage { Type = "ports", Ports = ports });
 
-        using var reader = new StreamReader(client);
+        using var reader = new StreamReader(client.Stream);
         try
         {
             while (await reader.ReadLineAsync(ct) is { } line)

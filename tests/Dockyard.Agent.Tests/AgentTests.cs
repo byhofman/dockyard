@@ -82,15 +82,55 @@ public sealed class AgentTests
     [Fact]
     public void Vsock_address_layout_matches_sockaddr_vm()
     {
-        var address = new VsockEndPoint(3, 2375).Serialize();
-        Assert.Equal(16, address.Size);
-        Assert.Equal((AddressFamily)40, address.Family);
-        Assert.Equal([0x47, 0x09, 0, 0], new[] { address[4], address[5], address[6], address[7] });
-        Assert.Equal([3, 0, 0, 0], new[] { address[8], address[9], address[10], address[11] });
+        Assert.Equal([40, 0, 0, 0, 0x47, 0x09, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0], VsockTransport.Address(3, 2375));
+        Assert.Equal([0xFF, 0xFF, 0xFF, 0xFF], VsockTransport.Address(VsockTransport.AnyCid, 1)[8..12]);
+    }
 
-        var parsed = (VsockEndPoint)new VsockEndPoint(0, 0).Create(address);
-        Assert.Equal(3u, parsed.Cid);
-        Assert.Equal(2375u, parsed.Port);
+    [Fact]
+    public async Task Pump_passes_half_close_and_keeps_the_reply_direction_open()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var server = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        server.Start();
+        var port = ((System.Net.IPEndPoint)server.LocalEndpoint).Port;
+
+        var echo = Task.Run(async () =>
+        {
+            using var s = await server.AcceptSocketAsync(ct);
+            var buffer = new byte[64];
+            var received = new List<byte>();
+            int n;
+            while ((n = await s.ReceiveAsync(buffer, ct)) > 0) received.AddRange(buffer[..n]);
+            await s.SendAsync(received.ToArray(), ct);
+            s.Shutdown(SocketShutdown.Send);
+        }, ct);
+
+        var (client, agentSide) = await Pair(ct);
+        var target = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        await target.ConnectAsync(System.Net.IPAddress.Loopback, port, ct);
+        var pump = Pump.Both(new SocketConnection(agentSide), new SocketConnection(target), ct);
+
+        await client.SendAsync("hello"u8.ToArray(), ct);
+        client.Shutdown(SocketShutdown.Send);
+        var reply = new byte[16];
+        var count = await client.ReceiveAsync(reply, ct);
+        Assert.Equal("hello", System.Text.Encoding.ASCII.GetString(reply, 0, count));
+        await pump;
+        await echo;
+        server.Stop();
+        client.Dispose();
+    }
+
+    static async Task<(Socket Client, Socket Server)> Pair(CancellationToken ct)
+    {
+        var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        var client = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        var accept = listener.AcceptSocketAsync(ct).AsTask();
+        await client.ConnectAsync((System.Net.IPEndPoint)listener.LocalEndpoint, ct);
+        var server = await accept;
+        listener.Stop();
+        return (client, server);
     }
 
     [Fact]

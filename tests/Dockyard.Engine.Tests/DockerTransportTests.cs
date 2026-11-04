@@ -57,7 +57,7 @@ public sealed class DockerTransportTests
     [Fact]
     public async Task Named_pipe_endpoint_reaches_listener()
     {
-        var name = $"dockyard-test-{Guid.NewGuid():N}";
+        var name = $"dy{Guid.NewGuid():N}"[..14];
         var server = Task.Run(async () =>
         {
             using var pipe = new NamedPipeServerStream(name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);

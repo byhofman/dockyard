@@ -49,7 +49,7 @@ static class MacLayout
         </dict>
         </plist>
 
-        """;
+        """.ReplaceLineEndings("\n");
 
     // One administrator prompt: AppleScript runs the shell command with administrator privileges.
     public static string[] AdminShell(string command) =>
@@ -73,7 +73,7 @@ static class MacLayout
         mv '{bundle}' '{bundle}.old' && mv '{newBundle}' '{bundle}' && rm -rf '{bundle}.old'
         open '{bundle}' --args --tray
 
-        """;
+        """.ReplaceLineEndings("\n");
 
     public static Version? DockerVersion(string release) => release.Split('\n')
         .Where(l => l.StartsWith("DOCKER_VERSION=", StringComparison.Ordinal))

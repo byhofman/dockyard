@@ -1,85 +1,146 @@
-using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 
 namespace Dockyard.Agent;
 
-// struct sockaddr_vm: family(2) reserved(2) port(4) cid(4) flags(1) zero(3)
-sealed class VsockEndPoint(uint cid, uint port) : EndPoint
+interface IConnection : IDisposable
 {
-    public const AddressFamily VsockFamily = (AddressFamily)40;
-    public const uint AnyCid = 0xFFFFFFFF;
-    const int Size = 16;
+    Stream Stream { get; }
+    void ShutdownSend();
+}
 
-    public uint Cid { get; } = cid;
-    public uint Port { get; } = port;
-    public override AddressFamily AddressFamily => VsockFamily;
-
-    public override SocketAddress Serialize()
-    {
-        var address = new SocketAddress(VsockFamily, Size);
-        Span<byte> bytes = stackalloc byte[4];
-        BinaryPrimitives.WriteUInt32LittleEndian(bytes, Port);
-        for (var i = 0; i < 4; i++) address[4 + i] = bytes[i];
-        BinaryPrimitives.WriteUInt32LittleEndian(bytes, Cid);
-        for (var i = 0; i < 4; i++) address[8 + i] = bytes[i];
-        return address;
-    }
-
-    public override EndPoint Create(SocketAddress socketAddress)
-    {
-        Span<byte> bytes = stackalloc byte[8];
-        for (var i = 0; i < 8; i++) bytes[i] = socketAddress[4 + i];
-        return new VsockEndPoint(BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..]), BinaryPrimitives.ReadUInt32LittleEndian(bytes));
-    }
-
-    public override string ToString() => $"vsock:{Cid}:{Port}";
+interface IListener : IDisposable
+{
+    Task<IConnection> AcceptAsync(CancellationToken ct);
 }
 
 interface ITransport
 {
-    Socket Listen(int port);
+    IListener Listen(int port);
 }
 
-sealed class VsockTransport : ITransport
+sealed class SocketConnection(Socket socket) : IConnection
 {
-    public Socket Listen(int port)
+    readonly NetworkStream stream = new(socket, ownsSocket: true);
+    public Stream Stream => stream;
+
+    public void ShutdownSend()
     {
-        var socket = new Socket(VsockEndPoint.VsockFamily, SocketType.Stream, ProtocolType.Unspecified);
-        socket.Bind(new VsockEndPoint(VsockEndPoint.AnyCid, (uint)port));
-        socket.Listen(64);
-        return socket;
+        try { socket.Shutdown(SocketShutdown.Send); }
+        catch (Exception e) when (e is SocketException or ObjectDisposedException) { }
     }
+
+    public void Dispose() => stream.Dispose();
 }
 
 sealed class TcpTransport : ITransport
 {
-    public Socket Listen(int port)
+    public IListener Listen(int port)
     {
         var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
         socket.Bind(new IPEndPoint(IPAddress.Any, port));
         socket.Listen(64);
-        return socket;
+        return new Listener(socket);
     }
+
+    sealed class Listener(Socket socket) : IListener
+    {
+        public async Task<IConnection> AcceptAsync(CancellationToken ct) => new SocketConnection(await socket.AcceptAsync(ct));
+        public void Dispose() => socket.Dispose();
+    }
+}
+
+// .NET cannot build a SocketAddress for AF_VSOCK on Unix, so vsock sockets go straight through libc.
+sealed partial class VsockTransport : ITransport
+{
+    const int AfVsock = 40;
+    const int SockStream = 1;
+    const int ShutWr = 1;
+    const int ShutRdWr = 2;
+    public const uint AnyCid = 0xFFFFFFFF;
+
+    public IListener Listen(int port)
+    {
+        var fd = socket(AfVsock, SockStream, 0);
+        if (fd < 0) throw new SocketException(Marshal.GetLastPInvokeError());
+        var address = Address(AnyCid, (uint)port);
+        if (bind(fd, address, address.Length) != 0 || listen(fd, 64) != 0)
+        {
+            var error = Marshal.GetLastPInvokeError();
+            close(fd);
+            throw new SocketException(error);
+        }
+        return new Listener(fd);
+    }
+
+    // struct sockaddr_vm (Linux): family(2) reserved(2) port(4) cid(4) flags(1) zero(3)
+    internal static byte[] Address(uint cid, uint port)
+    {
+        var bytes = new byte[16];
+        BitConverter.TryWriteBytes(bytes.AsSpan(0, 2), (ushort)AfVsock);
+        BitConverter.TryWriteBytes(bytes.AsSpan(4, 4), port);
+        BitConverter.TryWriteBytes(bytes.AsSpan(8, 4), cid);
+        return bytes;
+    }
+
+    sealed class Listener(int fd) : IListener
+    {
+        public async Task<IConnection> AcceptAsync(CancellationToken ct)
+        {
+            using var registration = ct.Register(() => shutdown(fd, ShutRdWr));
+            var client = await Task.Run(() => accept(fd, 0, 0), CancellationToken.None);
+            ct.ThrowIfCancellationRequested();
+            if (client < 0) throw new SocketException(Marshal.GetLastPInvokeError());
+            return new FdConnection(client);
+        }
+
+        public void Dispose()
+        {
+            shutdown(fd, ShutRdWr);
+            close(fd);
+        }
+    }
+
+    sealed class FdConnection(int fd) : IConnection
+    {
+        public Stream Stream { get; } = new FileStream(new SafeFileHandle(fd, ownsHandle: true), FileAccess.ReadWrite, bufferSize: 0);
+        public void ShutdownSend() => shutdown(fd, ShutWr);
+        public void Dispose() => Stream.Dispose();
+    }
+
+    [LibraryImport("libc", SetLastError = true)]
+    private static partial int socket(int domain, int type, int protocol);
+
+    [LibraryImport("libc", SetLastError = true)]
+    private static partial int bind(int fd, byte[] address, int length);
+
+    [LibraryImport("libc", SetLastError = true)]
+    private static partial int listen(int fd, int backlog);
+
+    [LibraryImport("libc", SetLastError = true)]
+    private static partial int accept(int fd, nint address, nint length);
+
+    [LibraryImport("libc", SetLastError = true)]
+    private static partial int shutdown(int fd, int how);
+
+    [LibraryImport("libc", SetLastError = true)]
+    private static partial int close(int fd);
 }
 
 static class Pump
 {
     // Copies both ways. When one side stops sending, its end-of-stream is passed on (half-close) and the
     // other direction keeps flowing until it ends too: attach/exec and HTTP/1.0 clients rely on that.
-    public static async Task Both(Socket a, Socket b, CancellationToken ct)
-    {
-        using var aStream = new NetworkStream(a, ownsSocket: false);
-        using var bStream = new NetworkStream(b, ownsSocket: false);
-        await Task.WhenAll(Copy(aStream, bStream, b, ct), Copy(bStream, aStream, a, ct));
-    }
+    public static Task Both(IConnection a, IConnection b, CancellationToken ct) =>
+        Task.WhenAll(Copy(a, b, ct), Copy(b, a, ct));
 
-    static async Task Copy(Stream from, Stream to, Socket toSocket, CancellationToken ct)
+    static async Task Copy(IConnection from, IConnection to, CancellationToken ct)
     {
-        try { await from.CopyToAsync(to, 64 * 1024, ct); }
+        try { await from.Stream.CopyToAsync(to.Stream, 64 * 1024, ct); }
         catch (Exception e) when (e is IOException or ObjectDisposedException or SocketException or OperationCanceledException) { }
-        try { toSocket.Shutdown(SocketShutdown.Send); }
-        catch (Exception e) when (e is SocketException or ObjectDisposedException) { }
+        to.ShutdownSend();
     }
 }
