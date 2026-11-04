@@ -58,7 +58,13 @@ When a Developer ID exists (switch, no redesign):
 
 - sign with the Developer ID Application certificate and hardened runtime (`APPLE_CERT_P12`, `APPLE_CERT_PASSWORD` secrets);
 - notarize and staple with `xcrun notarytool` (`APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD` secrets);
-- add a `.dmg` and a Homebrew cask in a `byhofman/homebrew-tap` repository.
+- add a `.dmg`;
+- Homebrew (the intended long-term install path on macOS):
+  - cask `dockyard` in a new `byhofman/homebrew-tap` repository: `brew install --cask byhofman/tap/dockyard`; the publish job bumps version and checksum on each tag;
+  - once the tap is stable and the project meets Homebrew's notability rules, submit the cask to `homebrew/cask` so `brew install --cask dockyard` works without the tap;
+  - with a cask installed, Dockyard's self-update is disabled and the Updates screen points to `brew upgrade` (`auto_updates false`).
+
+Homebrew waits for notarization because Homebrew quarantines cask downloads and is removing casks that fail Gatekeeper; an unsigned cask would hit the same Gatekeeper block as a manual download.
 
 ## CI
 

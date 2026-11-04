@@ -28,7 +28,7 @@ The tray stays small because it ships in every install: no container lists, no l
 | A | Engine client + dashboard | none | `Dockyard.Engine` and `Dockyard.Dashboard`: containers, compose, images, volumes, networks, disk. Windows first. Spec: `2026-11-04-dockyard-dashboard-design.md` |
 | B | Platform hosts | A | `IEngineHost` abstraction; Windows host moved behind it with the Linux engine on a dedicated Alpine-based `dockyard` WSL distro (image shared with C); Linux host on the system `dockerd`; tray on Windows, Linux and macOS; dashboard and tray built for all three. Spec: `2026-11-04-dockyard-platform-hosts-design.md` |
 | C | macOS VM | B | Own Swift helper on Apple Virtualization.framework: minimal Linux VM, virtiofs file sharing, docker socket over vsock to `~/.dockyard/docker.sock`, elastic memory, Rosetta for amd64, automatic localhost port forwarding from container events. Modelled on OrbStack's approach. Spec: `2026-11-04-dockyard-macos-vm-design.md` |
-| D | Packaging + updates | B, C | Engine-only / full on every OS with the dashboard as add-on; Windows exe + winget, Linux apt/dnf repo on GitHub Pages, macOS ad-hoc signed zip via install script (notarization once a Developer ID exists); self-update; CI matrix (`win-x64`, `linux-x64`, `osx-arm64`). Spec: `2026-11-04-dockyard-packaging-design.md` |
+| D | Packaging + updates | B, C | Engine-only / full on every OS with the dashboard as add-on; Windows exe + winget, Linux apt/dnf repo on GitHub Pages, macOS ad-hoc signed zip via install script, then notarization and Homebrew once a Developer ID exists; self-update; CI matrix (`win-x64`, `linux-x64`, `osx-arm64`). Spec: `2026-11-04-dockyard-packaging-design.md` |
 
 ## Shared decisions
 
