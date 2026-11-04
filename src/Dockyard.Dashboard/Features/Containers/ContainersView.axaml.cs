@@ -29,16 +29,30 @@ public partial class ContainersView : UserControl
 
     ContainersViewModel? ViewModel => DataContext as ContainersViewModel;
 
+    protected override void OnDataContextChanged(EventArgs e)
+    {
+        base.OnDataContextChanged(e);
+        if (ViewModel is { } vm)
+            vm.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName == nameof(ContainersViewModel.HasDetail)) UpdateLayoutMode();
+            };
+        UpdateLayoutMode();
+    }
+
     protected override void OnSizeChanged(SizeChangedEventArgs e)
     {
         base.OnSizeChanged(e);
-        var isNarrow = e.NewSize.Width < NarrowWidth;
-        if (isNarrow == narrow) return;
-        narrow = isNarrow;
-        Root.ColumnDefinitions[1].Width = narrow ? new GridLength(0) : new GridLength(440);
-        Grid.SetColumn(DetailHost, 0);
-        Grid.SetColumnSpan(DetailHost, narrow ? 2 : 1);
-        if (!narrow) Grid.SetColumn(DetailHost, 1);
+        narrow = e.NewSize.Width < NarrowWidth;
+        UpdateLayoutMode();
+    }
+
+    void UpdateLayoutMode()
+    {
+        var sideBySide = !narrow && ViewModel?.HasDetail == true;
+        Root.ColumnDefinitions[1].Width = sideBySide ? new GridLength(440) : new GridLength(0);
+        Grid.SetColumn(DetailHost, sideBySide ? 1 : 0);
+        Grid.SetColumnSpan(DetailHost, sideBySide ? 1 : 2);
     }
 
     void OnListKeyDown(object? sender, KeyEventArgs e)

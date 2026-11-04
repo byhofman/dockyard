@@ -31,6 +31,7 @@
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
     <EmbeddedResource Include="setup-wsl-docker.sh" LogicalName="setup-wsl-docker.sh" />
+    <Compile Include="..\Shared\LocalPipe.cs" Link="Shared\LocalPipe.cs" />
   </ItemGroup>
 
   <ItemGroup>

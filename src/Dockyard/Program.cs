@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Dockyard.Core;
+using Dockyard.Shared;
 
 namespace Dockyard;
 
@@ -20,13 +21,13 @@ static class Program
         using var mutex = new Mutex(true, @"Local\Dockyard", out var first);
         if (!first)
         {
-            if (EventWaitHandle.TryOpenExisting(App.ShowEventName, out var show)) show.Set();
+            LocalPipe.TrySend(LocalPipe.TrayName, TrayCommand.FromArgs(args).ToString(), timeoutMs: 3000);
             return 0;
         }
-        return Build(AppMode.Tray).StartWithClassicDesktopLifetime(args, ShutdownMode.OnExplicitShutdown);
+        return Build(AppMode.Tray, args).StartWithClassicDesktopLifetime(args, ShutdownMode.OnExplicitShutdown);
     }
 
-    static AppBuilder Build(AppMode mode) => AppBuilder.Configure(() => new App(mode)).UsePlatformDetect();
+    static AppBuilder Build(AppMode mode, string[]? args = null) => AppBuilder.Configure(() => new App(mode, args ?? [])).UsePlatformDetect();
 
     // Used by the XAML previewer.
     public static AppBuilder BuildAvaloniaApp() => Build(AppMode.Setup);

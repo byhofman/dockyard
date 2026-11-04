@@ -145,6 +145,8 @@ sealed class MainViewModel : Observable
         engines.ReleaseKeepAlive();
     }
 
+    public Task StartEngine(Engine e) => Run($"Starting {Engines.Name(e)} engine", () => engines.Start(e));
+
     Task Toggle(Engine e) => (e == Engine.Linux ? Linux : Windows).IsRunning
         ? Run($"Stopping {Engines.Name(e)} engine", () => engines.Stop(e))
         : Run($"Starting {Engines.Name(e)} engine", () => engines.Start(e));
