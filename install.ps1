@@ -20,6 +20,8 @@ $ErrorActionPreference = 'Stop'
 $repo = 'byhofman/dockyard'
 $exe = Join-Path $env:USERPROFILE 'Downloads\Dockyard.exe'
 $installed = Join-Path $env:ProgramFiles 'Dockyard\Dockyard.exe'
+$dashboard = Join-Path $env:ProgramFiles 'Dockyard\Dockyard.Dashboard.exe'
+$zip = Join-Path $env:USERPROFILE 'Downloads\Dockyard.Dashboard.zip'
 $elevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
 function Step($text) { Write-Host "`n== $text" -ForegroundColor Cyan }
@@ -30,14 +32,14 @@ if (-not (wsl.exe -l -q 2>$null)) {
 
 Step 'Defender ASR exclusions'
 if ($elevated) {
-    Add-MpPreference -AttackSurfaceReductionOnlyExclusions $exe, $installed
-    Write-Host "Excluded $exe and $installed"
+    Add-MpPreference -AttackSurfaceReductionOnlyExclusions $exe, $installed, $dashboard
+    Write-Host "Excluded $exe, $installed and $dashboard"
 } else {
     Write-Warning 'Not elevated, skipped. If Defender blocks Dockyard (event 1121), run this again from an elevated PowerShell.'
 }
 
-Step 'Download Dockyard.exe'
-Remove-Item $exe -Force -ErrorAction SilentlyContinue
+Step 'Download Dockyard'
+Remove-Item $exe, $zip -Force -ErrorAction SilentlyContinue
 if ($Build) {
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw '-Build needs the gh CLI (GitHub only serves build artifacts to signed-in users).' }
     $run = gh run list -R $repo -b main -w build -s success -L 1 --json databaseId -q '.[0].databaseId'
@@ -49,6 +51,8 @@ if ($Build) {
     $asset = $release.assets | Where-Object name -eq 'Dockyard.exe' | Select-Object -First 1
     if (-not $asset) { throw "Release $($release.tag_name) has no Dockyard.exe." }
     Invoke-WebRequest $asset.browser_download_url -OutFile $exe -UseBasicParsing
+    $dashboardAsset = $release.assets | Where-Object name -eq 'Dockyard.Dashboard.zip' | Select-Object -First 1
+    if ($dashboardAsset) { Invoke-WebRequest $dashboardAsset.browser_download_url -OutFile $zip -UseBasicParsing }
     Write-Host "Release $($release.tag_name)"
 }
 

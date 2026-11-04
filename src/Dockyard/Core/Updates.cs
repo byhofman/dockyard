@@ -119,6 +119,9 @@ static partial class Updates
         Directory.CreateDirectory(dir);
         var exe = Path.Combine(dir, "Dockyard.exe");
         await DownloadFile(release.DownloadUrl!, exe);
+        var dashboard = $"https://github.com/{Paths.Repo}/releases/download/{release.Tag}/{Paths.DashboardZipName}";
+        try { await DownloadFile(dashboard, Path.Combine(dir, Paths.DashboardZipName)); }
+        catch (HttpRequestException) { }
         return exe;
     }
 

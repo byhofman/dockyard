@@ -160,11 +160,35 @@ static class MachineSetup
 
     static void InstallApp(Action<string> log, string source, int keepPid)
     {
-        if (string.Equals(Path.GetFullPath(source), Paths.AppExe, StringComparison.OrdinalIgnoreCase)) return;
+        var zip = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(source))!, Paths.DashboardZipName);
+        var isInstalledCopy = string.Equals(Path.GetFullPath(source), Paths.AppExe, StringComparison.OrdinalIgnoreCase);
+        if (isInstalledCopy && !File.Exists(zip)) return;
         StopApps(keepPid);
         Directory.CreateDirectory(Paths.AppDir);
-        File.Copy(source, Paths.AppExe, overwrite: true);
-        log($"Installed {Paths.AppExe}");
+        if (!isInstalledCopy)
+        {
+            File.Copy(source, Paths.AppExe, overwrite: true);
+            log($"Installed {Paths.AppExe}");
+        }
+        InstallDashboard(log, zip);
+    }
+
+    static void InstallDashboard(Action<string> log, string zip)
+    {
+        if (!File.Exists(zip))
+        {
+            log($"{Paths.DashboardZipName} not found next to the installer; the dashboard was not installed");
+            return;
+        }
+        using var archive = ZipFile.OpenRead(zip);
+        foreach (var entry in archive.Entries.Where(e => e.Name.Length > 0))
+        {
+            var target = Path.GetFullPath(Path.Combine(Paths.AppDir, entry.FullName));
+            if (!target.StartsWith(Paths.AppDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) continue;
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            entry.ExtractToFile(target, overwrite: true);
+        }
+        log($"Installed {Paths.DashboardExe}");
     }
 
     static void RemoveLegacy(Action<string> log, int keepPid)
@@ -177,11 +201,12 @@ static class MachineSetup
 
     static void StopApps(int keepPid)
     {
-        foreach (var p in Process.GetProcessesByName(Paths.AppName))
+        foreach (var p in Process.GetProcessesByName(Paths.AppName).Concat(Process.GetProcessesByName(Paths.DashboardName)))
         {
             try
             {
-                if (string.Equals(p.MainModule?.FileName, Paths.AppExe, StringComparison.OrdinalIgnoreCase)) Kill(p, keepPid);
+                var file = p.MainModule?.FileName;
+                if (string.Equals(file, Paths.AppExe, StringComparison.OrdinalIgnoreCase) || string.Equals(file, Paths.DashboardExe, StringComparison.OrdinalIgnoreCase)) Kill(p, keepPid);
             }
             catch { }
         }

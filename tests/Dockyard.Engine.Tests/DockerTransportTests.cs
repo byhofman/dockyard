@@ -24,9 +24,9 @@ public sealed class DockerTransportTests
             var port = ((IPEndPoint)listener.LocalEndpoint).Port;
             var server = Task.Run(async () =>
             {
-                using var client = await listener.AcceptTcpClientAsync();
+                using var client = await listener.AcceptTcpClientAsync(TestContext.Current.CancellationToken);
                 await CannedHttp.ServeOnce(client.GetStream());
-            });
+            }, TestContext.Current.CancellationToken);
             Assert.Equal("OK", await Ping(DockerEndpoint.Parse($"tcp://127.0.0.1:{port}")));
             await server;
         }
@@ -44,10 +44,10 @@ public sealed class DockerTransportTests
         {
             var server = Task.Run(async () =>
             {
-                using var socket = await listen.AcceptAsync();
+                using var socket = await listen.AcceptAsync(TestContext.Current.CancellationToken);
                 using var stream = new NetworkStream(socket);
                 await CannedHttp.ServeOnce(stream);
-            });
+            }, TestContext.Current.CancellationToken);
             Assert.Equal("OK", await Ping(DockerEndpoint.Parse("unix://" + path)));
             await server;
         }
@@ -61,9 +61,9 @@ public sealed class DockerTransportTests
         var server = Task.Run(async () =>
         {
             using var pipe = new NamedPipeServerStream(name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
-            await pipe.WaitForConnectionAsync();
+            await pipe.WaitForConnectionAsync(TestContext.Current.CancellationToken);
             await CannedHttp.ServeOnce(pipe);
-        });
+        }, TestContext.Current.CancellationToken);
         Assert.Equal("OK", await Ping(DockerEndpoint.Parse($"npipe:////./pipe/{name}")));
         await server;
     }
