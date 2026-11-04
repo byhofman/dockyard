@@ -1,0 +1,57 @@
+#!/bin/sh
+# Boot of the Dockyard VM on macOS (busybox init sysinit). dockerd and dockyard-agent are respawned by /etc/inittab.
+set -u
+
+if [ "${1:-}" = stop ]; then
+  if pid="$(pidof dockerd)"; then
+    kill -TERM $pid
+    i=0; while pidof dockerd >/dev/null && [ $i -lt 100 ]; do sleep 0.2; i=$((i + 1)); done
+  fi
+  sync
+  exit 0
+fi
+
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev 2>/dev/null
+mkdir -p /dev/pts /dev/shm
+mount -t devpts devpts /dev/pts
+mount -t tmpfs -o mode=1777 shm /dev/shm
+mount -o remount,rw /
+mount -t tmpfs -o mode=0755 tmpfs /run
+mount -t tmpfs -o mode=1777 tmpfs /tmp
+mount -t cgroup2 cgroup2 /sys/fs/cgroup
+mount -t binfmt_misc binfmt_misc /proc/sys/fs/binfmt_misc 2>/dev/null
+hostname dockyard
+ip link set lo up
+
+for m in virtio_net virtio_blk virtio_balloon virtio_console virtiofs vmw_vsock_virtio_transport vsock overlay br_netfilter; do
+  modprobe -q "$m" 2>/dev/null || true
+done
+
+if ! blkid /dev/vdb >/dev/null 2>&1; then
+  mkfs.ext4 -q -L dockyard-data /dev/vdb
+fi
+mkdir -p /var/lib/docker
+mount -t ext4 /dev/vdb /var/lib/docker
+
+mkdir -p /mnt/host
+if mount -t virtiofs dockyard /mnt/host 2>/dev/null; then
+  for pair in Users:/Users Volumes:/Volumes private_tmp:/private/tmp private_var_folders:/private/var/folders; do
+    src="/mnt/host/${pair%%:*}"; dst="${pair#*:}"
+    [ -d "$src" ] || continue
+    mkdir -p "$dst"
+    mount --bind "$src" "$dst"
+  done
+fi
+
+mkdir -p /mnt/rosetta
+if mount -t virtiofs rosetta /mnt/rosetta 2>/dev/null && [ -x /mnt/rosetta/rosetta ]; then
+  echo ':rosetta:M::\x7fELF\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x3e\x00:\xff\xff\xff\xff\xff\xfe\xfe\x00\xff\xff\xff\xff\xff\xff\xff\xff\xfe\xff\xff\xff:/mnt/rosetta/rosetta:CF' \
+    > /proc/sys/fs/binfmt_misc/register
+fi
+
+ip link set eth0 up
+udhcpc -i eth0 -b -S -t 20 -T 1 >/dev/null 2>&1
+i=0; while ! ip -4 addr show eth0 | grep -q inet && [ $i -lt 50 ]; do sleep 0.2; i=$((i + 1)); done
+echo "dockyard-vm-init: ready ($(ip -4 -o addr show eth0 | awk '{print $4}'))" > /dev/console

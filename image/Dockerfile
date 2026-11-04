@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1
+# Build context: the repository root (image/build.ps1, image/build-vm.ps1).
 ARG ALPINE=3.24
 FROM alpine:${ALPINE} AS rootfs
 ARG DOCKER
@@ -16,8 +17,38 @@ RUN set -eu; \
     wget -qO /usr/local/lib/docker/cli-plugins/docker-compose "https://github.com/docker/compose/releases/download/v$COMPOSE/docker-compose-linux-$c"; \
     chmod +x /usr/local/lib/docker/cli-plugins/*; \
     printf 'VERSION=%s\nDOCKER_VERSION=%s\n' "$IMAGE_VERSION" "$DOCKER" > /etc/dockyard-release
-COPY rootfs/ /
+COPY image/rootfs/ /
 RUN chmod 0755 /usr/local/sbin/dockyard-init /usr/local/sbin/dockyard-update
 
 FROM scratch AS export
 COPY --from=rootfs / /
+
+FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS agent
+RUN apk add --no-cache clang build-base zlib-dev
+WORKDIR /src
+COPY src/Dockyard.Engine/ src/Dockyard.Engine/
+COPY src/Dockyard.Agent/ src/Dockyard.Agent/
+RUN case "$(uname -m)" in x86_64) rid=linux-musl-x64 ;; aarch64) rid=linux-musl-arm64 ;; esac; \
+    dotnet publish src/Dockyard.Agent/Dockyard.Agent.csproj -c Release -r "$rid" -o /agent -warnaserror
+
+FROM rootfs AS vm
+RUN apk add --no-cache linux-virt mkinitfs \
+ && echo 'features="base ext4 virtio"' > /etc/mkinitfs/mkinitfs.conf \
+ && mkinitfs -o /boot/initramfs-virt "$(ls /lib/modules)"
+COPY image/vm/ /
+COPY --from=agent /agent/dockyard-agent /usr/local/sbin/dockyard-agent
+RUN chmod 0755 /usr/local/sbin/dockyard-vm-init /usr/local/sbin/dockyard-agent
+
+FROM alpine:${ALPINE} AS vm-assets
+RUN apk add --no-cache e2fsprogs gzip zstd
+COPY --from=vm / /rootfs
+COPY image/extract-kernel.sh /extract-kernel.sh
+RUN set -eu; mkdir /assets; \
+    sh /extract-kernel.sh /rootfs/boot/vmlinuz-virt /assets/kernel; \
+    cp /rootfs/boot/initramfs-virt /assets/initramfs; \
+    rm -f /rootfs/boot/vmlinuz-virt /rootfs/boot/initramfs-virt; \
+    cp /rootfs/etc/dockyard-release /assets/dockyard-release; \
+    mke2fs -q -t ext4 -L dockyard-root -d /rootfs /assets/root.img 1536M
+
+FROM scratch AS vm-export
+COPY --from=vm-assets /assets/ /

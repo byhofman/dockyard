@@ -1,3 +1,5 @@
 rootfs/** text eol=lf
 *.sh text eol=lf
 Dockerfile text eol=lf
+vm/** text eol=lf
+extract-kernel.sh text eol=lf
