@@ -10,6 +10,7 @@ static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        Shell.StartupTrace.Mark("main");
         if (LocalPipe.TrySend(LocalPipe.DashboardName, "show")) return 0;
         return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args, ShutdownMode.OnMainWindowClose);
     }
