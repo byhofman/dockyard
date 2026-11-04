@@ -52,7 +52,10 @@ static class Program
         }
     }
 
-    static AppBuilder Build(AppMode mode, string[]? args = null) => AppBuilder.Configure(() => new App(mode, args ?? [])).UsePlatformDetect();
+    static AppBuilder Build(AppMode mode, string[]? args = null) => AppBuilder.Configure(() => new App(mode, args ?? []))
+        .UsePlatformDetect()
+        .With(new Win32PlatformOptions { RenderingMode = [Win32RenderingMode.Software] })
+        .With(new SkiaOptions { MaxGpuResourceSizeBytes = 8 * 1024 * 1024 });
 
     // Used by the XAML previewer.
     public static AppBuilder BuildAvaloniaApp() => Build(AppMode.Setup);
