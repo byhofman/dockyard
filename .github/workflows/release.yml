@@ -150,7 +150,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: macos
-          path: out/Dockyard-*-macos*.zip
+          path: |
+            out/Dockyard-*-macos*.zip
+            out/Dockyard-*-macos*.dmg
 
   release:
     if: github.ref_type == 'tag'
@@ -170,57 +172,3 @@ jobs:
           sha256sum * > SHA256SUMS
           gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" * --title "$GITHUB_REF_NAME" --generate-notes
 
-  pages:
-    if: github.ref_type == 'tag'
-    needs: [release]
-    runs-on: ubuntu-latest
-    env:
-      REPO_GPG_KEY: ${{ secrets.REPO_GPG_KEY }}
-      REPO_GPG_PASSPHRASE: ${{ secrets.REPO_GPG_PASSPHRASE }}
-    steps:
-      - uses: actions/checkout@v4
-        if: env.REPO_GPG_KEY != ''
-
-      - name: Publish the apt/dnf repository to gh-pages
-        if: env.REPO_GPG_KEY != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq apt-utils createrepo-c
-          echo "$REPO_GPG_KEY" | gpg --batch --import
-          mkdir pkgs
-          gh release download "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" -p '*.deb' -p '*.rpm' -D pkgs
-          git fetch origin gh-pages && git worktree add site origin/gh-pages || git worktree add --orphan -b gh-pages site
-          rm -rf site/apt site/rpm site/dockyard.asc
-          mkdir -p site/history && cp -n site/history/* pkgs/ 2>/dev/null || true
-          cp pkgs/* site/history/
-          sh packaging/linux/build-repo.sh site/history site
-          cd site
-          git config user.name "github-actions" && git config user.email "github-actions@users.noreply.github.com"
-          git add -A && git commit -qm "Repository for $GITHUB_REF_NAME" && git push origin HEAD:gh-pages
-
-  winget:
-    if: github.ref_type == 'tag'
-    needs: [release]
-    runs-on: windows-latest
-    env:
-      WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
-    steps:
-      - uses: actions/checkout@v4
-        if: env.WINGET_TOKEN != ''
-
-      - name: Update or submit the winget manifest
-        if: env.WINGET_TOKEN != ''
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $version = $env:GITHUB_REF_NAME.TrimStart('v')
-          $url = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:GITHUB_REF_NAME/Dockyard.exe"
-          Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
-          ./wingetcreate.exe update byhofman.Dockyard --version $version --urls $url --submit --token $env:WINGET_TOKEN
-          if ($LASTEXITCODE -ne 0) {
-            gh release download $env:GITHUB_REF_NAME -R $env:GITHUB_REPOSITORY -p Dockyard.exe -D release
-            ./packaging/winget/render.ps1 -Version $version -Installer release/Dockyard.exe
-            ./wingetcreate.exe submit "packaging/winget/out/$version" --token $env:WINGET_TOKEN
-          }

@@ -1,6 +1,7 @@
 #!/bin/sh
 # build-app.sh <version> <dist> <out>: Dockyard.app from the published files in <dist> (Dockyard, Dockyard.Dashboard
-# and its dylibs, dockyard-vm, vm/), ad-hoc signed, zipped as Dockyard-<version>-macos.zip and -macos-engine-only.zip.
+# and its dylibs, dockyard-vm, vm/), ad-hoc signed (no certificate needed), as Dockyard-<version>-macos.zip,
+# -macos-engine-only.zip and Dockyard-<version>-macos.dmg.
 set -eu
 version="$1"; dist="$2"; out="$3"
 here="$(cd "$(dirname "$0")" && pwd)"; root="$here/../.."
@@ -37,5 +38,11 @@ bundle "$work/full" 1
 bundle "$work/engine" 0
 ditto -c -k --keepParent "$work/full/Dockyard.app" "$out/Dockyard-$version-macos.zip"
 ditto -c -k --keepParent "$work/engine/Dockyard.app" "$out/Dockyard-$version-macos-engine-only.zip"
+
+# Disk image for manual download: Dockyard.app next to an Applications link.
+mkdir -p "$work/dmg"
+cp -R "$work/full/Dockyard.app" "$work/dmg/"
+ln -s /Applications "$work/dmg/Applications"
+hdiutil create -quiet -volname Dockyard -srcfolder "$work/dmg" -format UDZO "$out/Dockyard-$version-macos.dmg"
 codesign -d --entitlements - "$work/full/Dockyard.app/Contents/MacOS/dockyard-vm" | grep -q com.apple.security.virtualization
 ls -la "$out"

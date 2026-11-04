@@ -1,8 +1,11 @@
 #!/bin/sh
-# Dockyard installer for Linux:  curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install.sh | sh
+# Dockyard installer for Linux, from the latest GitHub release:
+#   curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install.sh | sh
 # Options (after "sh -s --"): --engine-only  (tray and engine without the dashboard)   --no-setup  (packages only)
+# Running it again updates Dockyard.
 set -eu
-repo="${DOCKYARD_REPO_URL:-https://byhofman.github.io/dockyard}"
+repo="${DOCKYARD_REPO:-byhofman/dockyard}"
+releases="${DOCKYARD_RELEASES_URL:-https://github.com/$repo/releases}"
 engine_only=0; setup=1
 for arg in "$@"; do
   case "$arg" in
@@ -12,20 +15,42 @@ for arg in "$@"; do
 done
 
 sudo=""; [ "$(id -u)" -eq 0 ] || sudo="sudo"
-packages="dockyard"; [ $engine_only -eq 1 ] || packages="dockyard dockyard-dashboard"
+[ "$(uname -m)" = x86_64 ] || { echo "Dockyard for Linux is built for x86_64" >&2; exit 1; }
+
+if [ -z "${DOCKYARD_VERSION:-}" ]; then
+  tag="$(curl -fsSL "https://api.github.com/repos/$repo/releases/latest" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)"
+  [ -n "$tag" ] || { echo "No Dockyard release found" >&2; exit 1; }
+  version="${tag#v}"
+else
+  version="$DOCKYARD_VERSION"; tag="v$version"
+fi
 
 if command -v apt-get >/dev/null 2>&1; then
-  $sudo install -m 0755 -d /etc/apt/keyrings
-  curl -fsSL "$repo/dockyard.asc" | $sudo tee /etc/apt/keyrings/dockyard.asc >/dev/null
-  echo "deb [signed-by=/etc/apt/keyrings/dockyard.asc] $repo/apt stable main" | $sudo tee /etc/apt/sources.list.d/dockyard.list >/dev/null
-  $sudo apt-get update -qq
-  $sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $packages
+  files="dockyard_${version}_amd64.deb"; [ $engine_only -eq 1 ] || files="$files dockyard-dashboard_${version}_amd64.deb"
 elif command -v dnf >/dev/null 2>&1; then
-  curl -fsSL "$repo/rpm/dockyard.repo" | $sudo tee /etc/yum.repos.d/dockyard.repo >/dev/null
-  $sudo dnf -y -q install $packages
+  files="dockyard-${version}-1.x86_64.rpm"; [ $engine_only -eq 1 ] || files="$files dockyard-dashboard-${version}-1.x86_64.rpm"
 else
-  echo "No apt or dnf found. Download Dockyard-<version>-linux-x64.tar.gz from https://github.com/byhofman/dockyard/releases instead." >&2
+  echo "No apt or dnf found. Download Dockyard-$version-linux-x64.tar.gz from $releases instead." >&2
   exit 1
+fi
+
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+echo "Downloading Dockyard $version"
+curl -fsSL -o "$tmp/SHA256SUMS" "$releases/download/$tag/SHA256SUMS"
+for f in $files; do
+  curl -fsSL -o "$tmp/$f" "$releases/download/$tag/$f"
+  (cd "$tmp" && grep " $f\$" SHA256SUMS | sha256sum -c - >/dev/null) || { echo "Checksum mismatch for $f" >&2; exit 1; }
+done
+
+paths=""; for f in $files; do paths="$paths $tmp/$f"; done
+chmod a+r "$tmp" $paths
+if command -v apt-get >/dev/null 2>&1; then
+  # shellcheck disable=SC2086
+  $sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $paths
+else
+  # shellcheck disable=SC2086
+  $sudo dnf -y -q install $paths
 fi
 
 if [ $setup -eq 1 ] && [ "$(id -u)" -ne 0 ]; then

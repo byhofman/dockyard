@@ -103,7 +103,7 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
             if (r.ExitCode != 0) throw new InvalidOperationException($"{command[0]} failed ({r.ExitCode})");
         }
         if (components.Any(c => c.Component == "App"))
-            log("Update Dockyard with your package manager (apt upgrade dockyard / dnf upgrade dockyard)");
+            log("Update Dockyard by running the install script again: curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install.sh | sh");
         return false;
     }
 
@@ -112,17 +112,33 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
     public async Task<bool> SetDashboard(Action<string> log, bool installed)
     {
         var os = OsRelease.Parse(await File.ReadAllTextAsync("/etc/os-release"));
+        string? package = null;
+        if (installed)
+        {
+            // The dashboard package of this release, downloaded from GitHub.
+            var pattern = os.PackageManager == "dnf" ? @"^dockyard-dashboard-[\d.]+-1\.x86_64\.rpm$" : @"^dockyard-dashboard_[\d.]+_amd64\.deb$";
+            log("Downloading the dashboard");
+            package = await Updates.DownloadReleaseAsset(pattern, Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}"), isPattern: true);
+            File.SetUnixFileMode(Path.GetDirectoryName(package)!, (UnixFileMode)0b111_101_101);
+        }
         string[] command = (os.PackageManager, installed) switch
         {
-            ("apt", true) => ["apt-get", "install", "-y", "dockyard-dashboard"],
+            ("apt", true) => ["env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y", package!],
             ("apt", false) => ["apt-get", "remove", "-y", "dockyard-dashboard"],
-            ("dnf", true) => ["dnf", "-y", "install", "dockyard-dashboard"],
+            ("dnf", true) => ["dnf", "-y", "install", package!],
             ("dnf", false) => ["dnf", "-y", "remove", "dockyard-dashboard"],
             _ => throw new InvalidOperationException("Install or remove the dockyard-dashboard package with your package manager"),
         };
-        var r = await runner.Run("pkexec", command);
-        foreach (var line in Lines(r.Output + r.Error).TakeLast(4)) log("  " + line);
-        if (r.ExitCode != 0) throw new InvalidOperationException($"{command[0]} failed ({r.ExitCode})");
+        try
+        {
+            var r = await runner.Run("pkexec", command);
+            foreach (var line in Lines(r.Output + r.Error).TakeLast(4)) log("  " + line);
+            if (r.ExitCode != 0) throw new InvalidOperationException($"Package manager failed ({r.ExitCode})");
+        }
+        finally
+        {
+            if (package is not null) Directory.Delete(Path.GetDirectoryName(package)!, recursive: true);
+        }
         return false;
     }
 

@@ -20,7 +20,7 @@ In PowerShell, preferably elevated (then it also adds the Defender exclusions an
 irm https://raw.githubusercontent.com/byhofman/dockyard/main/install.ps1 | iex
 ```
 
-It downloads the latest release to `Downloads\Dockyard.exe` and installs it silently. Then sign out and back in once (docker-users group). Or with winget: `winget install byhofman.Dockyard`.
+It downloads the latest release to `Downloads\Dockyard.exe` and installs it silently. Then sign out and back in once (docker-users group).
 
 Every installer has an engine-only edition: the engines, the docker CLI and the tray without the dashboard (`install.ps1 -EngineOnly`, `Dockyard.exe --install --engine-only`, `install.sh --engine-only`, `install-mac.sh --engine-only`). The dashboard can be added or removed later under **Settings** in the tray window.
 
@@ -94,7 +94,7 @@ On Linux, Dockyard manages the system Docker engine. On Debian, Ubuntu, Fedora, 
 curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install.sh | sh
 ```
 
-It adds Dockyard's signed apt or dnf repository (`https://byhofman.github.io/dockyard`), installs the `dockyard` and `dockyard-dashboard` packages (updates then come with `apt upgrade` / `dnf upgrade`) and runs `dockyard --install`. Elsewhere, unpack `Dockyard-<version>-linux-x64.tar.gz` and run `./Dockyard/Dockyard --install`. The setup asks for one administrator prompt (pkexec):
+It downloads the `dockyard` and `dockyard-dashboard` packages (.deb or .rpm) from the latest GitHub release, checks them against `SHA256SUMS`, installs them and runs `dockyard --install`. Run it again to update. Elsewhere, unpack `Dockyard-<version>-linux-x64.tar.gz` and run `./Dockyard/Dockyard --install`. The setup asks for one administrator prompt (pkexec):
 
 - installs Docker CE with buildx and compose from Docker's repository on Debian, Ubuntu and derivatives (apt) and Fedora/RHEL (dnf); on other distributions install Docker yourself first and Dockyard manages it
 - makes the engine start on demand: `docker.service` disabled, `docker.socket` enabled
@@ -111,7 +111,7 @@ Linux containers run in a small VM on Apple's Virtualization.framework, started 
 curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install-mac.sh | sh
 ```
 
-It downloads the release with `curl`, checks it against `SHA256SUMS`, installs `~/Applications/Dockyard.app` and runs its setup. The app is ad-hoc signed until there is a Developer ID: a zip downloaded with a browser is quarantined and needs **System Settings → Privacy & Security → Open Anyway**; the script avoids that. Dockyard updates itself from the Updates screen. The setup:
+It downloads the release with `curl`, checks it against `SHA256SUMS`, installs `~/Applications/Dockyard.app` and runs its setup. The release also has `Dockyard-<version>-macos.dmg` for a manual install. The app is ad-hoc signed (no Developer ID yet), so a browser download is quarantined and needs **System Settings → Privacy & Security → Open Anyway** once; the script avoids that. Dockyard updates itself from the Updates screen. The setup:
 
 - installs Docker's static `docker` CLI to `~/.dockyard/bin` (added to the PATH through `/etc/paths.d/dockyard`, one administrator prompt) and the compose and buildx plugins to `~/.docker/cli-plugins`
 - prepares the VM in `~/.dockyard`: settings (`vm.json`: all cores, half the RAM up to 8 GiB), the root disk (a copy-on-write clone of the image in the app) and a sparse 64 GB data disk for `/var/lib/docker`
