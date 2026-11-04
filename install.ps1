@@ -44,7 +44,7 @@ if ($Build) {
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw '-Build needs the gh CLI (GitHub only serves build artifacts to signed-in users).' }
     $run = gh run list -R $repo -b main -w build -s success -L 1 --json databaseId -q '.[0].databaseId'
     if (-not $run) { throw "No successful build of $repo found." }
-    gh run download $run -R $repo -n Dockyard -D (Split-Path $exe)
+    foreach ($artifact in 'windows', 'image') { gh run download $run -R $repo -n $artifact -D (Split-Path $exe) }
     Write-Host "Latest build of main (run $run)"
 } else {
     $release = Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest" -Headers @{ 'User-Agent' = 'dockyard-install' }

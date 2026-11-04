@@ -31,6 +31,7 @@ sealed class FakeRunner : ICommandRunner
     static string Describe(string file, string[] args) => string.Join(' ', [file, .. args]);
 }
 
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
 public sealed class WindowsHostTests
 {
     [Fact]

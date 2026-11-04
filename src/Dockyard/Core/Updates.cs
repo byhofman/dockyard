@@ -8,7 +8,6 @@ namespace Dockyard.Core;
 
 enum Component { Engine, Compose, Buildx, LinuxEngine, App }
 
-[SupportedOSPlatform("windows")]
 static partial class Updates
 {
     public const string StaticIndex = "https://download.docker.com/win/static/stable/x86_64/";
@@ -39,6 +38,7 @@ static partial class Updates
         _ => c.ToString(),
     };
 
+    [SupportedOSPlatform("windows")]
     public static async Task<Version?> Installed(Component c) => c switch
     {
         Component.Engine => File.Exists(Paths.DockerdExe) ? ParseVersion(await Shell.Check(Paths.DockerdExe, "--version")) : null,
@@ -97,7 +97,7 @@ static partial class Updates
         throw new InvalidOperationException($"No suitable {repo} release found");
     }
 
-    static async Task<Release?> LatestApp()
+    public static async Task<Release?> LatestApp()
     {
         using var response = await Http.GetAsync($"https://api.github.com/repos/{Paths.Repo}/releases/latest");
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return null;

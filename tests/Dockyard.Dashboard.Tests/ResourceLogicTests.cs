@@ -65,17 +65,18 @@ public sealed class ResourceLogicTests
     }
 
     [Theory]
-    [InlineData(@"C:\src\My Shop!\compose.yaml", "myshop")]
-    [InlineData(@"C:\src\api_v2-x\docker-compose.yml", "api_v2-x")]
-    public void Default_project_name_follows_compose(string file, string expected) =>
-        Assert.Equal(expected, ComposeCli.DefaultProjectName(file));
+    [InlineData("My Shop!", "compose.yaml", "myshop")]
+    [InlineData("api_v2-x", "docker-compose.yml", "api_v2-x")]
+    public void Default_project_name_follows_compose(string dir, string file, string expected) =>
+        Assert.Equal(expected, ComposeCli.DefaultProjectName(Path.Combine(Path.GetTempPath(), dir, file)));
 
     [Fact]
     public void Recents_are_newest_first_deduplicated_and_capped()
     {
         var s = new DashboardSettings();
-        for (var i = 0; i < 12; i++) s.AddRecent($@"C:\p{i}\compose.yaml", $"p{i}");
-        s.AddRecent(@"C:\P5\compose.yaml", "p5");
+        string File(int i) => Path.Combine(Path.GetTempPath(), $"p{i}", "compose.yaml");
+        for (var i = 0; i < 12; i++) s.AddRecent(File(i), $"p{i}");
+        s.AddRecent(File(5), "p5");
 
         Assert.Equal(10, s.RecentCompose.Count);
         Assert.Equal("p5", s.RecentCompose[0].Project);

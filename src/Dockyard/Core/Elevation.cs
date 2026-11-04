@@ -6,6 +6,7 @@ using System.Text;
 namespace Dockyard.Core;
 
 // The elevated half of Dockyard: the UI starts a copy of itself with "runas" and tails its log file.
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
 static class Elevation
 {
     public const int RebootExitCode = 3010;

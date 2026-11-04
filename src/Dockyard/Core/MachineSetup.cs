@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 namespace Dockyard.Core;
 
 // Runs elevated. Everything per-user lives in UserSetup.
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
 static class MachineSetup
 {
     static readonly (Component Component, string File, string Repo, string Pattern)[] Plugins =

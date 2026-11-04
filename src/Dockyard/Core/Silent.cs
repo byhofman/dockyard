@@ -4,6 +4,7 @@ using System.Security.Principal;
 namespace Dockyard.Core;
 
 // Unattended install/uninstall: no window, progress on the calling console.
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
 static partial class Silent
 {
     public static bool IsSilent(string[] args) => args.Contains("--install") || args.Contains("--uninstall");

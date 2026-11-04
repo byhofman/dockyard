@@ -40,7 +40,7 @@ public sealed class LogicTests
     [Fact]
     public void Exec_linux_container_without_windows_terminal()
     {
-        var cmd = ExecCommand.Build("linux", "abc", "web", windowsContainer: false, windowsTerminal: null);
+        var cmd = ExecCommand.Build("linux", "abc", "web", windowsContainer: false, TerminalApp.WindowsConsole);
         Assert.Equal("docker", cmd.File);
         Assert.Equal(["--context", "linux", "exec", "-it", "abc", "sh", "-c", "command -v bash >/dev/null && exec bash || exec sh"], cmd.Args);
     }
@@ -48,10 +48,31 @@ public sealed class LogicTests
     [Fact]
     public void Exec_windows_container_in_windows_terminal()
     {
-        var cmd = ExecCommand.Build("win", "abc", "iis", windowsContainer: true, windowsTerminal: @"C:\wt.exe");
+        var cmd = ExecCommand.Build("win", "abc", "iis", windowsContainer: true, new TerminalApp(TerminalKind.WindowsTerminal, @"C:\wt.exe"));
         Assert.Equal(@"C:\wt.exe", cmd.File);
         Assert.Equal(["-w", "new", "--title", "iis", "--", "docker", "--context", "win", "exec", "-it", "abc",
             "cmd", "/c", "where powershell >nul 2>&1 && powershell || cmd"], cmd.Args);
+    }
+
+    [Theory]
+    [InlineData("/usr/bin/gnome-terminal", "--title|web|--|docker")]
+    [InlineData("/usr/bin/konsole", "-e|docker")]
+    [InlineData("/usr/bin/kitty", "--title|web|docker")]
+    public void Exec_in_linux_terminals(string terminal, string prefix)
+    {
+        var cmd = ExecCommand.Build("default", "abc", "web", windowsContainer: false, new TerminalApp(TerminalKind.Linux, terminal));
+        Assert.Equal(terminal, cmd.File);
+        Assert.Equal(prefix.Split('|'), cmd.Args.Take(prefix.Split('|').Length));
+        Assert.Equal("command -v bash >/dev/null && exec bash || exec sh", cmd.Args[^1]);
+    }
+
+    [Fact]
+    public void Exec_in_mac_terminal_quotes_for_shell_and_applescript()
+    {
+        var cmd = ExecCommand.Build("dockyard", "abc", "web", windowsContainer: false, TerminalApp.MacTerminal);
+        Assert.Equal("osascript", cmd.File);
+        Assert.Equal("tell application \"Terminal\" to do script \"docker --context dockyard exec -it abc sh -c 'command -v bash >/dev/null && exec bash || exec sh'\"",
+            cmd.Args[1]);
     }
 
     [Fact]

@@ -160,7 +160,7 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
             keepAlive = runner.Spawn("wsl.exe", distro.KeepAliveArgs());
         }
         var proc = keepAlive;
-        await WaitFor(IsLinuxRunning, TimeSpan.FromSeconds(90), "Linux engine", failed: () => proc.HasExited);
+        await Wait.For(IsLinuxRunning, TimeSpan.FromSeconds(90), "Linux engine", failed: () => proc.HasExited);
     }
 
     async Task StopLinux()
@@ -177,7 +177,7 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
             if (sc.Status == ServiceControllerStatus.Stopped) sc.Start();
             await Task.Run(() => sc.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(60)));
         }
-        await WaitFor(() => PipeExists(Paths.WindowsPipeName), TimeSpan.FromSeconds(30), "Windows engine");
+        await Wait.For(() => PipeExists(Paths.WindowsPipeName), TimeSpan.FromSeconds(30), "Windows engine");
     }
 
     static async Task StopWindows()
@@ -193,17 +193,6 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
         if (WaitNamedPipe($@"\\.\pipe\{name}", 1)) return true;
         const int ErrorSemTimeout = 121;
         return Marshal.GetLastPInvokeError() == ErrorSemTimeout;
-    }
-
-    internal static async Task WaitFor(Func<bool> ready, TimeSpan timeout, string what, Func<bool>? failed = null)
-    {
-        var until = DateTime.UtcNow + timeout;
-        while (!await Task.Run(ready))
-        {
-            if (failed?.Invoke() == true) throw new InvalidOperationException($"{what} failed to start");
-            if (DateTime.UtcNow > until) throw new System.TimeoutException($"{what} not ready after {timeout.TotalSeconds:0}s");
-            await Task.Delay(500);
-        }
     }
 
     [LibraryImport("kernel32.dll", EntryPoint = "WaitNamedPipeW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]

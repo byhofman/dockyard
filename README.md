@@ -84,6 +84,17 @@ The dashboard follows the active docker context (the same one the CLI uses) and 
 
 Keys: `Ctrl+K` search, `S` start/stop, `R` restart, `E` terminal, `L` logs, `Del` remove (with confirmation), `Left`/`Right` collapse/expand a compose project. Panel sizes and recent compose files live in `%APPDATA%\Dockyard\dashboard.json`.
 
+## Linux
+
+On Linux, Dockyard manages the system Docker engine. Unpack `Dockyard-<version>-linux-x64.tar.gz` (the tray `Dockyard` and the dashboard `Dockyard.Dashboard`) and run `./Dockyard/Dockyard --install`, or start `./Dockyard/Dockyard` for the same setup as a window. One administrator prompt (pkexec):
+
+- installs Docker CE with buildx and compose from Docker's repository on Debian, Ubuntu and derivatives (apt) and Fedora/RHEL (dnf); on other distributions install Docker yourself first and Dockyard manages it
+- makes the engine start on demand: `docker.service` disabled, `docker.socket` enabled
+- adds you to the `docker` group (applies after signing out and back in) and installs a polkit rule so that group can start and stop the engine without a password (`/etc/polkit-1/rules.d/50-dockyard.rules`)
+- autostarts the tray at login (`~/.config/autostart/dockyard.desktop`)
+
+The tray uses the desktop's StatusNotifierItem tray (GNOME needs the AppIndicator extension). The engine uses the `default` context (`unix:///var/run/docker.sock`). Stopping the engine from Dockyard also stops `docker.socket`, so nothing restarts it until you start it again or reboot. `Dockyard --uninstall` removes the polkit rule and autostart and re-enables the distribution's default `docker.service`; packages, images and containers stay.
+
 ## Without Dockyard running
 
 ```pwsh

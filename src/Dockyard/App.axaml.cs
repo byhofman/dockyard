@@ -31,7 +31,7 @@ public partial class App : Application
         this.args = args;
     }
 
-    static string DashboardExe => Path.Combine(AppContext.BaseDirectory, "Dockyard.Dashboard.exe");
+    static string DashboardExe => Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "Dockyard.Dashboard.exe" : "Dockyard.Dashboard");
     static bool HasDashboard => File.Exists(DashboardExe);
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);

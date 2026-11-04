@@ -201,8 +201,12 @@ sealed class ContainersViewModel : Observable, ISearchable
             shell.ShowError($"{item.Name} is not running.");
             return Task.CompletedTask;
         }
-        var command = Features.Containers.ExecCommand.Build(Session.ContextName, item.Id, item.Name, Session.IsWindowsEngine,
-            Features.Containers.ExecCommand.FindWindowsTerminal());
+        if (Features.Containers.ExecCommand.FindTerminal() is not { } terminal)
+        {
+            shell.ShowError("No terminal found. Set the TERMINAL environment variable to your terminal emulator.");
+            return Task.CompletedTask;
+        }
+        var command = Features.Containers.ExecCommand.Build(Session.ContextName, item.Id, item.Name, Session.IsWindowsEngine, terminal);
         try
         {
             var psi = new ProcessStartInfo(command.File) { UseShellExecute = false, CreateNoWindow = false };
