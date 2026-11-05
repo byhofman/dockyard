@@ -57,8 +57,9 @@ static class Program
 
     static AppBuilder Build(AppMode mode, string[]? args = null) => AppBuilder.Configure(() => new App(mode, args ?? []))
         .UsePlatformDetect()
-        // The default dock policy overrides LSUIElement and gives the tray a Dock icon and the app switcher entry of a foreground app.
-        .With(new MacOSPlatformOptions { ShowInDock = mode == AppMode.Setup })
+        // The default dock policy overrides LSUIElement with a Dock icon, and Avalonia's app delegate activates the app when it
+        // finishes launching, which would take keyboard focus from whatever the user is doing at every tray start.
+        .With(new MacOSPlatformOptions { ShowInDock = mode == AppMode.Setup, DisableAvaloniaAppDelegate = mode == AppMode.Tray })
         .With(new Win32PlatformOptions { RenderingMode = [Win32RenderingMode.Software] })
         .With(new SkiaOptions { MaxGpuResourceSizeBytes = 8 * 1024 * 1024 });
 
