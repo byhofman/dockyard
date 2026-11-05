@@ -17,7 +17,6 @@ static class Paths
     public static readonly string DashboardExe = Path.Combine(AppDir, "Dockyard.Dashboard.exe");
     public const string DashboardName = "Dockyard.Dashboard";
     public const string DashboardZipName = "Dockyard.Dashboard.zip";
-    public static readonly string DashboardManifest = Path.Combine(AppDir, "dashboard.files");
     public static readonly string DaemonConfigDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "docker", "config");
     public static readonly string UserProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     public static readonly string SettingsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Dockyard");
@@ -40,6 +39,8 @@ static class Paths
 
     public static string AppVersion =>
         (Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0").Split('+')[0];
+
+    public static readonly string WslConfigFile = Path.Combine(UserProfile, ".wslconfig");
 }
 
 sealed class Settings

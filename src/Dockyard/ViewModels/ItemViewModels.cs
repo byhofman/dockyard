@@ -34,7 +34,7 @@ sealed class EngineViewModel(EngineInfo info) : Observable
     public string ToggleText => IsRunning ? "Stop" : "Start";
 }
 
-enum UpdateState { Unknown, Checking, UpToDate, Available, NotInstalled, NoRelease, Error }
+enum UpdateState { Unknown, Checking, UpToDate, Available, NotInstalled, NoRelease, Error, OptionalInstalled, OptionalAbsent }
 
 sealed class ComponentViewModel(ComponentInfo info) : Observable
 {
@@ -47,6 +47,8 @@ sealed class ComponentViewModel(ComponentInfo info) : Observable
     public string Id => Info.Id;
     public string Title => Info.Title;
     public required Command UpdateCommand { get; init; }
+    public Command? AddCommand { get; init; }
+    public Command? RemoveCommand { get; init; }
     public Release? LatestRelease { get; set; }
 
     public string Installed { get => installed; set => Set(ref installed, value); }
@@ -59,12 +61,14 @@ sealed class ComponentViewModel(ComponentInfo info) : Observable
         set
         {
             if (Set(ref state, value))
-                Raise(nameof(StatusText), nameof(IsAvailable), nameof(IsUpToDate), nameof(IsProblem), nameof(IsNeutral));
+                Raise(nameof(StatusText), nameof(IsAvailable), nameof(IsUpToDate), nameof(IsProblem), nameof(IsNeutral), nameof(CanAdd), nameof(CanRemove));
         }
     }
 
     public bool IsAvailable => State == UpdateState.Available;
-    public bool IsUpToDate => State == UpdateState.UpToDate;
+    public bool IsUpToDate => State is UpdateState.UpToDate or UpdateState.OptionalInstalled;
+    public bool CanAdd => State == UpdateState.OptionalAbsent;
+    public bool CanRemove => State == UpdateState.OptionalInstalled;
     public bool IsProblem => State is UpdateState.Error or UpdateState.NotInstalled;
     public bool IsNeutral => State is UpdateState.Unknown or UpdateState.Checking;
 
@@ -76,6 +80,8 @@ sealed class ComponentViewModel(ComponentInfo info) : Observable
         UpdateState.NotInstalled => "Not installed",
         UpdateState.NoRelease => "No release",
         UpdateState.Error => "Check failed",
+        UpdateState.OptionalInstalled => "Installed",
+        UpdateState.OptionalAbsent => "Not installed",
         _ => "Not checked",
     };
 }

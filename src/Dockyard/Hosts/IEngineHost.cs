@@ -7,6 +7,9 @@ sealed record ComponentInfo(string Id, string Title, string? CheckNeedsEngine = 
 
 sealed record Release(Version Version, string Tag, string? DownloadUrl);
 
+// Silent: nothing may pop up, so a step that would need a prompt uses what works without one, or says what was skipped.
+sealed record InstallRequest(bool Dashboard, string? Image = null, bool Silent = false);
+
 interface IEngineHost
 {
     IReadOnlyList<EngineInfo> Engines { get; }
@@ -25,13 +28,24 @@ interface IEngineHost
     // Returns true when Dockyard itself is being replaced and should exit.
     Task<bool> Update(Action<string> log, IReadOnlyList<(string Component, Release? Release)> components);
 
+    // Installs, or brings an existing install up to date and in line with the request, keeping images and containers.
     // Returns true when a reboot is needed to finish.
-    Task<bool> Install(Action<string> log, bool engineOnly);
+    Task<bool> Install(Action<string> log, InstallRequest request);
+
+    // Finishes an install that had to wait for a reboot.
+    Task Resume(Action<string> log) => Task.CompletedTask;
+
+    void StartApp();
+    string DoneMessage(bool reboot);
+    void Reboot() { }
+
+    // True for the tray and for a copy an earlier script placed; false for the wizard run from a download.
+    bool RunsFromInstallLocation { get; }
 
     bool HasDashboard { get; }
     // Returns true when Dockyard itself is being replaced and should exit.
     Task<bool> SetDashboard(Action<string> log, bool installed);
-    Task Uninstall(Action<string> log);
+    Task Uninstall(Action<string> log, bool removeData);
 
     void ReleaseResources();
 }

@@ -76,28 +76,79 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
         return false;
     }
 
-    public bool HasDashboard => File.Exists(Path.Combine(AppContext.BaseDirectory, "Dockyard.Dashboard.exe"));
+    public bool RunsFromInstallLocation => Paths.IsInstalledCopy;
+
+    public bool HasDashboard => File.Exists(Paths.DashboardExe);
 
     public async Task<bool> SetDashboard(Action<string> log, bool installed)
     {
-        await Elevation.Run(log, "--machine-dashboard", installed ? "add" : "remove");
+        if (Elevation.IsElevated) await MachineSetup.SetDashboard(log, installed, Environment.ProcessId);
+        else await Elevation.Run(log, "--machine-dashboard", installed ? "add" : "remove");
         return false;
     }
 
-    public async Task<bool> Install(Action<string> log, bool engineOnly)
+    public async Task<bool> Install(Action<string> log, InstallRequest request)
     {
         log("Administrator step");
-        var reboot = engineOnly ? await Elevation.Run(log, "--machine-install", "--engine-only") : await Elevation.Run(log, "--machine-install");
+        var reboot = await MachineInstall(log, request.Dashboard);
         log("User step");
-        await UserSetup.Install(log);
+        var hadDistro = await distro.Exists();
+        try
+        {
+            await UserSetup.Install(log, request.Image);
+        }
+        catch (Exception ex) when (reboot)
+        {
+            // WSL does not work until the restart its install asked for, and the rest of setup needs WSL.
+            log($"The Linux engine has to wait for the restart ({ex.Message})");
+            UserSetup.ResumeAfterReboot(request.Silent, log);
+            return true;
+        }
+        if (hadDistro) await UpdateLinuxEngineIfNewer(log);
         return reboot;
     }
 
-    public async Task Uninstall(Action<string> log)
+    public async Task Resume(Action<string> log)
+    {
+        log("Finishing the setup after the restart");
+        await UserSetup.Install(log);
+    }
+
+    public void StartApp() => Shell.StartUnelevated(Paths.AppExe);
+
+    public string DoneMessage(bool reboot) => reboot
+        ? "Restart Windows to finish. Dockyard carries on by itself after the restart."
+        : "Done. Dockyard runs in the tray.";
+
+    public void Reboot() => Shell.Spawn("shutdown.exe", "/r", "/t", "5", "/d", "p:4:1").Dispose();
+
+    public async Task Uninstall(Action<string> log, bool removeData)
     {
         ReleaseResources();
-        await UserSetup.Uninstall(log);
-        await Elevation.Run(log, "--machine-uninstall");
+        await UserSetup.Uninstall(log, removeData);
+        if (Elevation.IsElevated) await MachineSetup.Uninstall(log, Environment.ProcessId);
+        else await Elevation.Run(log, "--machine-uninstall");
+    }
+
+    static async Task<bool> MachineInstall(Action<string> log, bool dashboard)
+    {
+        if (!Elevation.IsElevated)
+            return dashboard ? await Elevation.Run(log, "--machine-install") : await Elevation.Run(log, "--machine-install", "--engine-only");
+        var (sid, name) = Elevation.CurrentUser;
+        return await MachineSetup.Install(log, sid, name, Environment.ProcessId, engineOnly: !dashboard);
+    }
+
+    async Task UpdateLinuxEngineIfNewer(Action<string> log)
+    {
+        try
+        {
+            if (await Latest(nameof(Component.LinuxEngine)) is { } latest && await Installed(nameof(Component.LinuxEngine)) is { } installed && latest.Version > installed)
+                await UpdateLinuxEngine(log, latest);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
+        {
+            log($"The Linux engine was left as it is ({ex.Message}); Updates in the tray window can try again");
+        }
     }
 
     public void ReleaseResources()

@@ -5,26 +5,46 @@ using Dockyard.Shared;
 
 namespace Dockyard;
 
-// One exe: run from Program Files it is the tray app; anywhere else (or with --setup) it is the installer;
-// --install/--uninstall run setup unattended; --machine-* is the elevated half of setup.
+// One exe: run from where it is installed it is the tray app; anywhere else (or with --setup) it is the wizard;
+// --silent is the wizard without a window; --machine-* is the elevated half of setup.
 static class Program
 {
     [STAThread]
     public static int Main(string[] args)
     {
-        if (OperatingSystem.IsWindows())
-        {
-            if (Elevation.IsWorker(args)) return Elevation.Worker(args);
-            if (Silent.IsSilent(args)) return Silent.Run(args);
-        }
-        else if (args.Contains("--install") || args.Contains("--uninstall"))
-        {
-            return RunUnattended(args.Contains("--uninstall"), args.Contains("--engine-only"));
-        }
+        if (OperatingSystem.IsWindows() && Elevation.IsWorker(args)) return Elevation.Worker(args);
 
-        var installed = OperatingSystem.IsWindows() ? Paths.IsInstalledCopy : Hosts.HostFactory.Create().IsInstalled;
-        if (!(installed || args.Contains("--tray")) || args.Contains("--setup"))
-            return Build(AppMode.Setup).StartWithClassicDesktopLifetime(args, ShutdownMode.OnMainWindowClose);
+        SetupOptions options;
+        try
+        {
+            options = SetupOptions.Parse(args);
+        }
+        catch (SetupUsageException ex)
+        {
+            AttachParentConsole();
+            Console.Error.WriteLine(ex.Message);
+            Console.Error.WriteLine(SetupOptions.Usage);
+            return Installer.WrongArguments;
+        }
+        if (options.ShowVersion || options.ShowHelp)
+        {
+            AttachParentConsole();
+            Console.WriteLine(options.ShowVersion ? Paths.AppVersion : SetupOptions.Usage);
+            return 0;
+        }
+        if (options.Silent) return RunSilent(options);
+
+        var host = Hosts.HostFactory.Create();
+        var isTray = host.RunsFromInstallLocation && host.IsInstalled || args.Contains("--tray");
+        if (!isTray || options.OpenSetup)
+        {
+            if (OperatingSystem.IsLinux() && !Hosts.LinuxLayout.HasDisplay(Environment.GetEnvironmentVariable("DISPLAY"), Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")))
+            {
+                Console.WriteLine("No display, so setup runs without a window.");
+                return RunSilent(options);
+            }
+            return Build(AppMode.Setup, args).StartWithClassicDesktopLifetime(args, ShutdownMode.OnMainWindowClose);
+        }
 
         // On Unix "Local" means this login session, and launchd gives every app its own, so it would never see the running tray.
         using var mutex = OperatingSystem.IsWindows()
@@ -38,21 +58,27 @@ static class Program
         return Build(AppMode.Tray, args).StartWithClassicDesktopLifetime(args, ShutdownMode.OnExplicitShutdown);
     }
 
-    static int RunUnattended(bool uninstall, bool engineOnly)
+    static int RunSilent(SetupOptions options)
     {
-        var host = Hosts.HostFactory.Create();
-        try
+        AttachParentConsole();
+        Action<string> log = Console.WriteLine;
+        Action<string> error = Console.Error.WriteLine;
+        // A resume runs at logon with no console to report to.
+        if (options.Resume && OperatingSystem.IsWindows())
         {
-            if (uninstall) host.Uninstall(Console.WriteLine).GetAwaiter().GetResult();
-            else host.Install(Console.WriteLine, engineOnly).GetAwaiter().GetResult();
-            Console.WriteLine(uninstall ? "Dockyard was removed." : OperatingSystem.IsLinux() ? "Done. Sign out and back in once so the docker group applies." : "Done.");
-            return 0;
+            var file = Path.Combine(Paths.SettingsDir, "resume.log");
+            Directory.CreateDirectory(Paths.SettingsDir);
+            log = line => File.AppendAllLines(file, [line]);
+            error = log;
         }
-        catch (Exception ex)
-        {
-            Console.WriteLine("ERROR: " + ex.Message);
-            return 1;
-        }
+        return Installer.RunSilent(Hosts.HostFactory.Create(), options, log, error).GetAwaiter().GetResult();
+    }
+
+    static void AttachParentConsole()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        NativeConsole.AttachConsole(-1);
+        Console.WriteLine();
     }
 
     static AppBuilder Build(AppMode mode, string[]? args = null) => AppBuilder.Configure(() => new App(mode, args ?? []))
@@ -65,4 +91,11 @@ static class Program
 
     // Used by the XAML previewer.
     public static AppBuilder BuildAvaloniaApp() => Build(AppMode.Setup);
+}
+
+static partial class NativeConsole
+{
+    [System.Runtime.InteropServices.LibraryImport("kernel32.dll")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    public static partial bool AttachConsole(int processId);
 }

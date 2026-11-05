@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Security.Principal;
 using System.ServiceProcess;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace Dockyard.Core;
@@ -20,6 +20,8 @@ static class MachineSetup
     public static async Task<bool> Install(Action<string> log, string userSid, string userName, int keepPid, bool engineOnly = false)
     {
         var reboot = await EnableContainersFeature(log);
+        reboot |= await InstallWsl(log);
+        await AddDefenderExclusions(log);
         await UpdateEngine(log, onlyIfNewer: true);
         AddToMachinePath(Paths.DockerDir);
         foreach (var plugin in Plugins) await UpdatePlugin(log, plugin.Component);
@@ -51,9 +53,12 @@ static class MachineSetup
             log("Removing docker service");
             await StopService();
             await Shell.Check("sc.exe", "delete", Paths.ServiceName);
+            RemoveEventSource();
         }
         await Shell.Run("powershell.exe", "-NoProfile", "-Command",
             $"Remove-MpPreference -ControlledFolderAccessAllowedApplications '{Paths.DockerdExe}'");
+        await Shell.Run("powershell.exe", "-NoProfile", "-Command",
+            $"Remove-MpPreference -AttackSurfaceReductionOnlyExclusions {string.Join(',', ExcludedFromAsr.Select(p => $"'{p}'"))}");
         await Shell.Run("net.exe", "localgroup", "docker-users", "/delete");
         RemoveFromMachinePath(Paths.DockerDir);
         RemoveLegacy(log, keepPid);
@@ -68,7 +73,33 @@ static class MachineSetup
                 try { File.Delete(file); } catch (IOException) { log($"  in use, left behind: {file}"); }
             }
         }
-        log($"Images and containers under {Path.GetDirectoryName(Paths.DaemonConfigDir)} were left in place");
+        log($"Windows images and containers under {Path.GetDirectoryName(Paths.DaemonConfigDir)} were left in place");
+    }
+
+    // Returns true when a reboot has to finish the WSL install.
+    static async Task<bool> InstallWsl(Action<string> log)
+    {
+        if ((await Shell.Run("wsl.exe", "--status")).ExitCode == 0) { log("WSL is ready"); return false; }
+
+        log("Installing WSL");
+        var install = await Shell.Run("wsl.exe", "--install", "--no-distribution");
+        if (install.ExitCode is not (0 or Elevation.RebootExitCode))
+            throw new InvalidOperationException($"wsl --install failed ({install.ExitCode}): {(install.Error + install.Output).Replace("\0", "").Trim()}");
+
+        if (install.ExitCode == 0 && (await Shell.Run("wsl.exe", "--status")).ExitCode == 0) { log("WSL is ready"); return false; }
+        log("WSL is installed; a restart finishes it");
+        return true;
+    }
+
+    static IEnumerable<string> ExcludedFromAsr => new[] { Paths.AppExe, Paths.DashboardExe };
+
+    // Defender's prevalence/age rule (event 1121) blocks every new build, and an exclusion goes by path because a hash changes with each build.
+    static async Task AddDefenderExclusions(Action<string> log)
+    {
+        var paths = ExcludedFromAsr.Append(Paths.Self).Distinct(StringComparer.OrdinalIgnoreCase).Select(p => $"'{p}'");
+        var r = await Shell.Run("powershell.exe", "-NoProfile", "-Command",
+            $"Add-MpPreference -AttackSurfaceReductionOnlyExclusions {string.Join(',', paths)}");
+        log(r.ExitCode == 0 ? "Defender: Dockyard is excluded from the prevalence rule" : "Defender exclusions were not added (managed device?); ask your administrator if Defender blocks Dockyard");
     }
 
     static async Task<bool> EnableContainersFeature(Action<string> log)
@@ -129,7 +160,7 @@ static class MachineSetup
         if ((await Shell.Run("net.exe", "localgroup", "docker-users")).ExitCode != 0)
             await Shell.Check("net.exe", "localgroup", "docker-users", "/add", "/comment:Access to the Windows Docker engine");
         var add = await Shell.Run("net.exe", "localgroup", "docker-users", userName, "/add");
-        if (add.ExitCode == 0) log($"Added {userName} to docker-users (applies after sign-out)");
+        if (add.ExitCode == 0) log($"Added {userName} to docker-users");
         else if (!(add.Output + add.Error).Contains("1378"))
             throw new InvalidOperationException($"Adding {userName} to docker-users failed: {(add.Error + add.Output).Trim()}");
 
@@ -139,12 +170,16 @@ static class MachineSetup
             $"Add-MpPreference -ControlledFolderAccessAllowedApplications '{Paths.DockerdExe}'");
 
         Directory.CreateDirectory(Paths.DaemonConfigDir);
-        File.WriteAllText(Path.Combine(Paths.DaemonConfigDir, "daemon.json"),
-            JsonSerializer.Serialize(new DaemonConfig([Paths.WindowsHost], "docker-users"), DaemonConfigJson.Default.DaemonConfig));
+        var daemonJson = Path.Combine(Paths.DaemonConfigDir, "daemon.json");
+        var existing = File.Exists(daemonJson) ? File.ReadAllText(daemonJson) : null;
+        var config = DaemonJson.WithAccessFor(existing, Paths.WindowsHost, ResolvesTo(userName, userSid) ? userName : null);
+        File.WriteAllText(daemonJson, config);
+        var changed = existing != config;
 
         if (!ServiceExists())
         {
             log("Registering docker service");
+            RemoveEventSource();
             await Shell.Check(Paths.DockerdExe, "--register-service");
         }
         await Shell.Check("sc.exe", "config", Paths.ServiceName, "start=", "demand");
@@ -157,6 +192,27 @@ static class MachineSetup
             await Shell.Check("sc.exe", "sdset", Paths.ServiceName, sddl);
         }
         log($"Windows engine: on demand, start/stop allowed for {userName}");
+
+        if (changed && ServiceStatus() == ServiceControllerStatus.Running)
+        {
+            await StopService();
+            using var sc = new ServiceController(Paths.ServiceName);
+            sc.Start();
+            await Task.Run(() => sc.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(60)));
+        }
+    }
+
+    // dockerd refuses to start when it cannot resolve a name in "group", so only a name that resolves goes in.
+    static bool ResolvesTo(string userName, string userSid)
+    {
+        try
+        {
+            return new NTAccount(userName).Translate(typeof(SecurityIdentifier)).Value == userSid;
+        }
+        catch (Exception e) when (e is IdentityNotMappedException or SystemException)
+        {
+            return false;
+        }
     }
 
     static async Task InstallApp(Action<string> log, string source, int keepPid, bool engineOnly)
@@ -166,11 +222,30 @@ static class MachineSetup
         Directory.CreateDirectory(Paths.AppDir);
         if (!isInstalledCopy)
         {
-            File.Copy(source, Paths.AppExe, overwrite: true);
+            ReplaceAppExe(source);
             log($"Installed {Paths.AppExe}");
         }
-        if (engineOnly) log("Engine-only install: the dashboard was not installed");
-        else await InstallDashboard(log, Path.GetDirectoryName(Path.GetFullPath(source))!);
+        if (!engineOnly) await InstallDashboard(log, Path.GetDirectoryName(Path.GetFullPath(source))!);
+        else if (File.Exists(Paths.DashboardExe)) RemoveDashboard(log);
+        else log("The dashboard is not installed");
+    }
+
+    // A running exe cannot be overwritten but can be renamed, and the worker doing this may be running from that very
+    // file. Earlier versions copied over it, which is why their tray could never update itself.
+    static void ReplaceAppExe(string source)
+    {
+        var old = Paths.AppExe + ".old";
+        try { File.Delete(old); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        if (File.Exists(Paths.AppExe)) File.Move(Paths.AppExe, old, overwrite: true);
+        try
+        {
+            File.Copy(source, Paths.AppExe);
+        }
+        catch
+        {
+            if (!File.Exists(Paths.AppExe)) File.Move(old, Paths.AppExe);
+            throw;
+        }
     }
 
     public static async Task SetDashboard(Action<string> log, bool installed, int keepPid)
@@ -192,19 +267,7 @@ static class MachineSetup
         }
         try
         {
-            var files = new List<string>();
-            using (var archive = ZipFile.OpenRead(zip))
-            {
-                foreach (var entry in archive.Entries.Where(e => e.Name.Length > 0))
-                {
-                    var target = Path.GetFullPath(Path.Combine(Paths.AppDir, entry.FullName));
-                    if (!target.StartsWith(Paths.AppDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) continue;
-                    Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                    entry.ExtractToFile(target, overwrite: true);
-                    files.Add(entry.FullName);
-                }
-            }
-            File.WriteAllLines(Paths.DashboardManifest, files);
+            DashboardFiles.Extract(zip, Paths.AppDir);
             log($"Installed {Paths.DashboardExe}");
         }
         finally
@@ -215,14 +278,7 @@ static class MachineSetup
 
     static void RemoveDashboard(Action<string> log)
     {
-        var files = File.Exists(Paths.DashboardManifest) ? File.ReadAllLines(Paths.DashboardManifest) : [Path.GetFileName(Paths.DashboardExe)];
-        foreach (var file in files.Where(f => f.Length > 0))
-        {
-            var target = Path.GetFullPath(Path.Combine(Paths.AppDir, file));
-            if (!target.StartsWith(Paths.AppDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) continue;
-            try { File.Delete(target); } catch (IOException) { log($"  in use, left behind: {target}"); }
-        }
-        File.Delete(Paths.DashboardManifest);
+        DashboardFiles.Remove(Paths.AppDir, Path.GetFileName(Paths.DashboardExe), log);
         log("Removed the dashboard");
     }
 
@@ -263,6 +319,11 @@ static class MachineSetup
         }
     }
 
+    // dockerd refuses to register when its event source is left over, and "sc delete" leaves it. Without this,
+    // installing again after an uninstall fails.
+    static void RemoveEventSource() =>
+        Microsoft.Win32.Registry.LocalMachine.DeleteSubKeyTree(@"SYSTEM\CurrentControlSet\Services\EventLog\Application\" + Paths.ServiceName, throwOnMissingSubKey: false);
+
     static bool ServiceExists() => ServiceController.GetServices().Any(s => s.ServiceName == Paths.ServiceName);
 
     static ServiceControllerStatus ServiceStatus()
@@ -295,9 +356,3 @@ static class MachineSetup
     }
 }
 
-sealed record DaemonConfig(
-    [property: System.Text.Json.Serialization.JsonPropertyName("hosts")] string[] Hosts,
-    [property: System.Text.Json.Serialization.JsonPropertyName("group")] string Group);
-
-[System.Text.Json.Serialization.JsonSerializable(typeof(DaemonConfig))]
-partial class DaemonConfigJson : System.Text.Json.Serialization.JsonSerializerContext;

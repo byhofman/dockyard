@@ -8,6 +8,12 @@ namespace Dockyard.Core;
 
 enum Component { Engine, Compose, Buildx, LinuxEngine, App }
 
+// Offered by the wizard and the tray window next to the components that always come with Dockyard.
+static class OptionalComponents
+{
+    public const string Dashboard = "Dashboard";
+}
+
 static partial class Updates
 {
     public const string StaticIndex = "https://download.docker.com/win/static/stable/x86_64/";
@@ -45,7 +51,8 @@ static partial class Updates
         Component.Compose => await PluginVersion("docker-compose.exe", "version", "--short"),
         Component.Buildx => await PluginVersion("docker-buildx.exe", "version"),
         Component.LinuxEngine => await new WslDistro(ProcessRunner.Instance).DockerVersion(),
-        Component.App => ParseVersion(Paths.AppVersion),
+        // The wizard runs from elsewhere and can be newer than what is installed, so not this process's own version.
+        Component.App => File.Exists(Paths.AppExe) ? ParseVersion(System.Diagnostics.FileVersionInfo.GetVersionInfo(Paths.AppExe).ProductVersion) : null,
         _ => null,
     };
 
@@ -58,6 +65,22 @@ static partial class Updates
         Component.App => await LatestApp(),
         _ => null,
     };
+
+    // GitHub allows 60 anonymous API calls an hour per address, too few on shared CI runners.
+    static HttpRequestMessage GitHubApi(string url)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, url);
+        if (Environment.GetEnvironmentVariable("DOCKYARD_GITHUB_TOKEN") is { Length: > 0 } token)
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        return request;
+    }
+
+    static async Task<string> GetGitHubApi(string url)
+    {
+        using var response = await Http.SendAsync(GitHubApi(url));
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync();
+    }
 
     static async Task<Version?> PluginVersion(string exe, params string[] args)
     {
@@ -84,7 +107,7 @@ static partial class Updates
 
     public static async Task<Release> LatestGitHub(string repo, string assetPattern)
     {
-        var releases = JsonNode.Parse(await Http.GetStringAsync($"https://api.github.com/repos/{repo}/releases?per_page=20"))!.AsArray();
+        var releases = JsonNode.Parse(await GetGitHubApi($"https://api.github.com/repos/{repo}/releases?per_page=20"))!.AsArray();
         foreach (var r in releases)
         {
             if (r is null || r["prerelease"]!.GetValue<bool>() || r["draft"]!.GetValue<bool>()) continue;
@@ -99,7 +122,7 @@ static partial class Updates
 
     public static async Task<Release?> LatestApp(string assetPattern = @"^Dockyard\.exe$")
     {
-        using var response = await Http.GetAsync($"https://api.github.com/repos/{Paths.Repo}/releases/latest");
+        using var response = await Http.SendAsync(GitHubApi($"https://api.github.com/repos/{Paths.Repo}/releases/latest"));
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
         response.EnsureSuccessStatusCode();
         var release = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
@@ -114,11 +137,8 @@ static partial class Updates
     {
         var dir = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
         Directory.CreateDirectory(dir);
-        var exe = Path.Combine(dir, "Dockyard.exe");
-        await DownloadFile(release.DownloadUrl!, exe);
-        var dashboard = $"https://github.com/{Paths.Repo}/releases/download/{release.Tag}/{Paths.DashboardZipName}";
-        try { await DownloadFile(dashboard, Path.Combine(dir, Paths.DashboardZipName)); }
-        catch (HttpRequestException) { }
+        var exe = await DownloadReleaseAsset(Path.GetFileName(new Uri(release.DownloadUrl!).LocalPath), dir, tag: release.Tag);
+        if (File.Exists(Paths.DashboardExe)) await DownloadReleaseAsset(Paths.DashboardZipName, dir, tag: release.Tag);
         return exe;
     }
 
@@ -130,15 +150,39 @@ static partial class Updates
         : appVersion == "0.0.0" ? $"https://api.github.com/repos/{Paths.Repo}/releases/latest"
         : $"https://api.github.com/repos/{Paths.Repo}/releases/tags/v{appVersion}";
 
+    // Without a tag: an asset next to the running wizard wins, for offline installs and for testing a build before its release.
+    public static async Task<string> ReleaseAssetOrLocal(string pattern, string targetDir, string? tag)
+    {
+        var local = tag is not null ? null : Directory.EnumerateFiles(Path.GetDirectoryName(Paths.Self)!)
+            .FirstOrDefault(f => Regex.IsMatch(Path.GetFileName(f), pattern));
+        if (local is null) return await DownloadReleaseAsset(pattern, targetDir, isPattern: true, tag);
+        Directory.CreateDirectory(targetDir);
+        var copy = Path.Combine(targetDir, Path.GetFileName(local));
+        File.Copy(local, copy);
+        return copy;
+    }
+
     public static async Task<string> DownloadReleaseAsset(string name, string targetDir, bool isPattern = false, string? tag = null)
     {
-        var release = JsonNode.Parse(await Http.GetStringAsync(ReleaseApiUrl(Paths.AppVersion, tag)))!;
-        var asset = release["assets"]!.AsArray().FirstOrDefault(a =>
+        var release = JsonNode.Parse(await GetGitHubApi(ReleaseApiUrl(Paths.AppVersion, tag)))!;
+        var assets = release["assets"]!.AsArray();
+        var asset = assets.FirstOrDefault(a =>
                 isPattern ? Regex.IsMatch(a!["name"]!.GetValue<string>(), name) : a!["name"]!.GetValue<string>() == name)
             ?? throw new InvalidOperationException($"Release {release["tag_name"]} has no {name}");
+        var sums = assets.FirstOrDefault(a => a!["name"]!.GetValue<string>() == "SHA256SUMS")
+            ?? throw new InvalidOperationException($"Release {release["tag_name"]} has no SHA256SUMS");
         Directory.CreateDirectory(targetDir);
         var target = Path.Combine(targetDir, asset["name"]!.GetValue<string>());
         await DownloadFile(asset["browser_download_url"]!.GetValue<string>(), target);
+        try
+        {
+            Checksums.Verify(await Http.GetStringAsync(sums["browser_download_url"]!.GetValue<string>()), target);
+        }
+        catch
+        {
+            File.Delete(target);
+            throw;
+        }
         return target;
     }
 

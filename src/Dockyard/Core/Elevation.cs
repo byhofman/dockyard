@@ -14,6 +14,17 @@ static class Elevation
 
     public static bool IsWorker(string[] args) => args.Any(a => Modes.Contains(a));
 
+    public static bool IsElevated => new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
+
+    public static (string Sid, string Name) CurrentUser
+    {
+        get
+        {
+            using var identity = WindowsIdentity.GetCurrent();
+            return (identity.User!.Value, identity.Name);
+        }
+    }
+
     // Returns true when the worker reports a reboot is needed.
     public static async Task<bool> Run(Action<string> log, string mode, params string[] extra)
     {
@@ -48,8 +59,8 @@ static class Elevation
 
     static Process Start(string mode, string[] extra, string logFile, int keepPid)
     {
-        var identity = WindowsIdentity.GetCurrent();
-        string[] args = [mode, .. extra, "--user-sid", identity.User!.Value, "--user-name", identity.Name, "--log", logFile, "--keep-pid", keepPid.ToString()];
+        var (sid, name) = CurrentUser;
+        string[] args = [mode, .. extra, "--user-sid", sid, "--user-name", name, "--log", logFile, "--keep-pid", keepPid.ToString()];
         try
         {
             return Process.Start(new ProcessStartInfo(Paths.Self, string.Join(' ', args.Select(Shell.Quote)))
@@ -61,6 +72,10 @@ static class Elevation
         catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
         {
             throw new InvalidOperationException("Administrator approval was declined");
+        }
+        catch (Win32Exception ex)
+        {
+            throw new InvalidOperationException($"Could not ask for administrator rights ({ex.Message}). In a session without a desktop, run this from an elevated shell.");
         }
     }
 

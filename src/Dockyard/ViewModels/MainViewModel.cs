@@ -20,12 +20,18 @@ sealed class MainViewModel : Observable
     string status = "Ready";
     bool isSetupMode;
     bool isInstalled;
-    bool engineOnly;
+    bool includeDashboard;
+    bool removeData;
+    bool needsReboot;
+    string installedVersion = "–";
+    readonly SetupOptions options;
     string active;
 
-    public MainViewModel(IEngineHost host, bool setupMode)
+    public MainViewModel(IEngineHost host, bool setupMode, SetupOptions? options = null)
     {
         this.host = host;
+        this.options = options ?? new SetupOptions();
+        includeDashboard = this.options.Dashboard ?? true;
         isSetupMode = setupMode;
         active = host.Engines[0].Id;
 
@@ -42,16 +48,25 @@ sealed class MainViewModel : Observable
             Components.Add(item);
         }
 
+        Dashboard = new ComponentViewModel(new ComponentInfo(OptionalComponents.Dashboard, "Dashboard"))
+        {
+            UpdateCommand = Cmd(() => Task.CompletedTask, () => false),
+            AddCommand = Cmd(() => SetDashboard(true)),
+            RemoveCommand = Cmd(() => SetDashboard(false)),
+        };
+        Components.Add(Dashboard);
+        RefreshDashboard();
+
         CheckUpdatesCommand = Cmd(() => Run("Checking for updates", () => CheckUpdates(all: true)));
         UpdateAllCommand = Cmd(() => UpdateComponents(Components.Where(c => c.IsAvailable).ToList()), () => Components.Any(c => c.IsAvailable));
         InstallCommand = Cmd(Install);
-        AddDashboardCommand = Cmd(() => SetDashboard(true));
-        RemoveDashboardCommand = Cmd(() => SetDashboard(false));
         UninstallCommand = Cmd(Uninstall);
+        RebootCommand = Cmd(() => { host.Reboot(); return Task.CompletedTask; });
 
         timer.Tick += async (_, _) => await RefreshState();
-        timer.Start();
     }
+
+    public void StartPolling() => timer.Start();
 
     public event Action? StateChanged;
     public event Action? ShutdownRequested;
@@ -63,12 +78,17 @@ sealed class MainViewModel : Observable
     public Command UpdateAllCommand { get; }
     public Command InstallCommand { get; }
     public Command UninstallCommand { get; }
-    public Command AddDashboardCommand { get; }
-    public Command RemoveDashboardCommand { get; }
+    public Command RebootCommand { get; }
+    public ComponentViewModel Dashboard { get; }
 
-    public bool EngineOnly { get => engineOnly; set => Set(ref engineOnly, value); }
+    public bool IncludeDashboard { get => includeDashboard; set => Set(ref includeDashboard, value); }
+    public bool RemoveData { get => removeData; set => Set(ref removeData, value); }
     public bool HasDashboard => host.HasDashboard;
-    public string DashboardText => HasDashboard ? "Dashboard installed" : "Dashboard not installed (engine-only)";
+    public bool NeedsReboot { get => needsReboot; private set => Set(ref needsReboot, value); }
+    public string InstalledVersion { get => installedVersion; private set { if (Set(ref installedVersion, value)) Raise(nameof(ManageText)); } }
+    public string ManageText => InstalledVersion == Paths.AppVersion
+        ? $"Dockyard {InstalledVersion} is installed. Running the setup again keeps your images, containers and settings."
+        : $"Dockyard {InstalledVersion} is installed. Update brings it to {Paths.AppVersion} and keeps your images, containers and settings.";
 
     public string Version => "v" + Paths.AppVersion;
     public string Active => active;
@@ -84,11 +104,20 @@ sealed class MainViewModel : Observable
     public bool IsSetupMode
     {
         get => isSetupMode;
-        private set { if (Set(ref isSetupMode, value)) Raise(nameof(IsDashboard), nameof(HasEngineSwitch)); }
+        private set { if (Set(ref isSetupMode, value)) Raise(nameof(IsDashboard), nameof(HasEngineSwitch), nameof(ShowInstall), nameof(ShowManage), nameof(ShowWizardManage)); }
     }
 
     public bool IsDashboard => !IsSetupMode;
-    public bool IsInstalled { get => isInstalled; private set => Set(ref isInstalled, value); }
+    public bool IsInstalled
+    {
+        get => isInstalled;
+        private set { if (Set(ref isInstalled, value)) Raise(nameof(ShowInstall), nameof(ShowManage), nameof(ShowWizardManage)); }
+    }
+
+    // The wizard installs once; on an existing install it is the same manage view as the tray window.
+    public bool ShowInstall => IsSetupMode && !IsInstalled;
+    public bool ShowManage => !IsSetupMode || IsInstalled;
+    public bool ShowWizardManage => IsSetupMode && IsInstalled;
 
     public string? Busy
     {
@@ -125,11 +154,24 @@ sealed class MainViewModel : Observable
             await Run($"Starting {ActiveEngine.Name} engine", () => host.Start(active));
     }
 
-    public Task LoadSetup()
+    public async Task LoadSetup()
     {
         IsInstalled = host.IsInstalled;
-        return Task.CompletedTask;
+        await RefreshState();
+        if (options.Resume)
+        {
+            await Run("Finishing the setup", async () =>
+            {
+                await host.Resume(Log);
+                host.StartApp();
+                Log(host.DoneMessage(reboot: false));
+                IsInstalled = true;
+            });
+        }
+        if (IsInstalled) await Run("Checking for updates", () => CheckUpdates(all: false));
     }
+
+    void RefreshDashboard() => Dashboard.State = host.HasDashboard ? UpdateState.OptionalInstalled : UpdateState.OptionalAbsent;
 
     public async Task OnWindowShown()
     {
@@ -169,6 +211,7 @@ sealed class MainViewModel : Observable
         foreach (var e in EngineCards) e.IsRunning = await host.IsRunning(e.Id);
         active = host.ActiveEngine();
         foreach (var e in EngineCards) e.IsActive = e.Id == active;
+        RefreshDashboard();
         Raise(nameof(Active), nameof(ActiveEngine));
         StateChanged?.Invoke();
     }
@@ -176,6 +219,7 @@ sealed class MainViewModel : Observable
     async Task CheckUpdates(bool all)
     {
         var targets = Components
+            .Where(c => c != Dashboard)
             .Where(c => all || c.Info.CheckNeedsEngine is not { } needs || EngineCards.Any(e => e.Id == needs && e.IsRunning))
             .ToList();
         foreach (var c in targets) c.State = UpdateState.Checking;
@@ -193,6 +237,7 @@ sealed class MainViewModel : Observable
         {
             var installed = await host.Installed(c.Id);
             c.Installed = installed?.ToString() ?? "–";
+            if (c.Id == nameof(Component.App)) InstalledVersion = c.Installed;
             var latest = await host.Latest(c.Id);
             c.LatestRelease = latest;
             c.Latest = latest?.Version.ToString() ?? "–";
@@ -216,6 +261,13 @@ sealed class MainViewModel : Observable
 
     Task UpdateComponents(IReadOnlyList<ComponentViewModel> items) => Run("Updating", async () =>
     {
+        // The wizard is the new version: installing it also does what the jump from an old version needs, such as
+        // moving to the dockyard distro, which replacing only the app would skip.
+        if (IsSetupMode && items.Any(i => i.Id == nameof(Component.App)))
+        {
+            await InstallCore();
+            items = items.Where(i => i.Id != nameof(Component.App)).ToList();
+        }
         if (await host.Update(Log, items.Select(i => (i.Id, i.LatestRelease)).ToList()))
         {
             ShutdownRequested?.Invoke();
@@ -224,19 +276,20 @@ sealed class MainViewModel : Observable
         foreach (var item in items) await Check(item);
     });
 
-    Task Install() => Run("Installing", async () =>
+    Task Install() => Run("Installing", InstallCore);
+
+    async Task InstallCore()
     {
-        var reboot = await host.Install(Log, EngineOnly);
+        var dashboard = IsInstalled ? DashboardChoice.Resolve(options.Dashboard, true, host.HasDashboard, host.RunsFromInstallLocation) : IncludeDashboard;
+        var reboot = await host.Install(Log, new InstallRequest(dashboard));
         IsInstalled = true;
-        if (OperatingSystem.IsWindows() && !Paths.IsInstalledCopy) Shell.StartUnelevated(Paths.AppExe);
-        if (OperatingSystem.IsMacOS() && IsSetupMode) Shell.Spawn(Paths.Self, "--tray").Dispose();
-        Log(reboot
-            ? "Done. Reboot to finish enabling Windows containers."
-            : OperatingSystem.IsWindows()
-                ? "Done. Dockyard runs in the tray. Sign out and back in once so docker-users applies to the Windows engine."
-                : OperatingSystem.IsMacOS() ? "Done. Dockyard runs in the menu bar." : "Done. Dockyard runs in the tray. Sign out and back in once so the docker group applies.");
-        Status = "Installed";
-    });
+        NeedsReboot = reboot;
+        RefreshDashboard();
+        if (!reboot && options.Start) host.StartApp();
+        Log(host.DoneMessage(reboot));
+        Status = reboot ? "Restart to finish" : "Installed";
+        foreach (var c in Components.Where(c => c != Dashboard)) await Check(c);
+    }
 
     Task SetDashboard(bool installed) => Run(installed ? "Adding the dashboard" : "Removing the dashboard", async () =>
     {
@@ -245,15 +298,16 @@ sealed class MainViewModel : Observable
             ShutdownRequested?.Invoke();
             return;
         }
-        Raise(nameof(HasDashboard), nameof(DashboardText));
+        RefreshDashboard();
+        Raise(nameof(HasDashboard));
     });
 
     Task Uninstall() => Run("Uninstalling", async () =>
     {
-        await host.Uninstall(Log);
+        await host.Uninstall(Log, RemoveData);
         IsInstalled = false;
-        Log("Dockyard was removed. Images and containers were kept.");
-        if (Paths.IsInstalledCopy) ShutdownRequested?.Invoke();
+        Log(RemoveData ? "Dockyard was removed, with its images and containers." : "Dockyard was removed. Images and containers were kept.");
+        if (!IsSetupMode) ShutdownRequested?.Invoke();
     });
 
     async Task Run(string what, Func<Task> action)

@@ -13,7 +13,8 @@
       <StackPanel Spacing="12" MaxWidth="320" x:DataType="vm:MainViewModel">
         <TextBlock FontWeight="SemiBold" Text="Uninstall Dockyard?" />
         <TextBlock TextWrapping="Wrap" Classes="muted"
-                   Text="Removes both Docker engines, the docker CLI, the contexts and Dockyard. Images, containers and the Docker packages inside WSL are kept." />
+                   Text="Removes Dockyard, its engines, the docker CLI and the contexts." />
+        <CheckBox IsChecked="{Binding RemoveData}" Content="Also delete my images and containers" />
         <Button Classes="dangerfill" Content="Uninstall" Command="{Binding UninstallCommand}" HorizontalAlignment="Right" />
       </StackPanel>
     </Flyout>
@@ -62,22 +63,38 @@
       <StackPanel Margin="20" Spacing="22">
 
         <!-- Setup -->
-        <StackPanel Spacing="10" IsVisible="{Binding IsSetupMode}">
+        <StackPanel Spacing="10" IsVisible="{Binding ShowInstall}">
           <TextBlock Classes="h2" Text="SETUP" />
           <Border Classes="card">
             <StackPanel Spacing="14">
               <TextBlock TextWrapping="Wrap" Text="{Binding SetupDescription}" />
               <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto">
-                <CheckBox IsChecked="{Binding EngineOnly}" Content="Engine only (no dashboard)" VerticalAlignment="Center"
-                          ToolTip.Tip="Install the engines, the docker CLI and the tray without the dashboard. You can add it later in Settings." />
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                  <Button Classes="danger" Content="Uninstall…" IsVisible="{Binding IsInstalled}" Flyout="{StaticResource ConfirmUninstall}" />
-                  <Button Classes="primary" Content="Install / Update" Command="{Binding InstallCommand}" />
-                </StackPanel>
+                <CheckBox IsChecked="{Binding IncludeDashboard}" Content="Include the dashboard" VerticalAlignment="Center"
+                          ToolTip.Tip="A window for your containers, images, volumes, networks and disk use. You can add or remove it later here or in the tray window." />
+                <Button Grid.Column="1" Classes="primary" Content="Install" Command="{Binding InstallCommand}" />
               </Grid>
             </StackPanel>
           </Border>
         </StackPanel>
+
+        <!-- The wizard on an existing install -->
+        <StackPanel Spacing="10" IsVisible="{Binding ShowWizardManage}">
+          <TextBlock Classes="h2" Text="MANAGE" />
+          <Border Classes="card">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,16,0" Text="{Binding ManageText}" />
+              <Button Grid.Column="1" Classes="primary" Content="Update" Command="{Binding InstallCommand}" />
+            </Grid>
+          </Border>
+        </StackPanel>
+
+        <!-- A reboot the install asked for -->
+        <Border Classes="card" IsVisible="{Binding NeedsReboot}">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,16,0" Text="Windows has to restart to finish. Dockyard carries on by itself afterwards." />
+            <Button Grid.Column="1" Classes="primary" Content="Restart now" Command="{Binding RebootCommand}" />
+          </Grid>
+        </Border>
 
         <!-- Engines -->
         <StackPanel Spacing="10" IsVisible="{Binding IsDashboard}">
@@ -116,9 +133,9 @@
         </StackPanel>
 
         <!-- Updates -->
-        <StackPanel Spacing="10" IsVisible="{Binding IsDashboard}">
+        <StackPanel Spacing="10" IsVisible="{Binding ShowManage}">
           <Grid ColumnDefinitions="*,Auto">
-            <TextBlock Classes="h2" Text="UPDATES" VerticalAlignment="Bottom" />
+            <TextBlock Classes="h2" Text="COMPONENTS" VerticalAlignment="Bottom" />
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
               <Button Content="Check for updates" Command="{Binding CheckUpdatesCommand}" />
               <Button Classes="primary" Content="Update all" Command="{Binding UpdateAllCommand}" />
@@ -144,6 +161,8 @@
                           <TextBlock Text="{Binding StatusText}" />
                         </Border>
                         <Button Grid.Column="4" Classes="primary" Content="Update" Command="{Binding UpdateCommand}" IsVisible="{Binding IsAvailable}" HorizontalAlignment="Right" />
+                        <Button Grid.Column="4" Classes="primary" Content="Add" Command="{Binding AddCommand}" IsVisible="{Binding CanAdd}" HorizontalAlignment="Right" />
+                        <Button Grid.Column="4" Classes="danger" Content="Remove" Command="{Binding RemoveCommand}" IsVisible="{Binding CanRemove}" HorizontalAlignment="Right" />
                       </Grid>
                     </Border>
                   </DataTemplate>
@@ -154,19 +173,14 @@
         </StackPanel>
 
         <!-- Settings -->
-        <StackPanel Spacing="10" IsVisible="{Binding IsDashboard}">
+        <StackPanel Spacing="10" IsVisible="{Binding ShowManage}">
           <TextBlock Classes="h2" Text="SETTINGS" />
           <Border Classes="card">
-            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
+            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
               <ToggleSwitch IsChecked="{Binding StopOtherOnSwitch}" IsVisible="{Binding HasEngineSwitch}"
                             OnContent="Stop the other engine when switching" OffContent="Stop the other engine when switching" />
               <ToggleSwitch Grid.Row="1" IsChecked="{Binding StartActiveAtLogon}" OnContent="Start the active engine at logon" OffContent="Start the active engine at logon" />
-              <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="10" Margin="0,10,0,0">
-                <TextBlock VerticalAlignment="Center" Text="{Binding DashboardText}" />
-                <Button Content="Add dashboard" Command="{Binding AddDashboardCommand}" IsVisible="{Binding !HasDashboard}" />
-                <Button Classes="danger" Content="Remove dashboard" Command="{Binding RemoveDashboardCommand}" IsVisible="{Binding HasDashboard}" />
-              </StackPanel>
-              <Button Grid.Column="1" Grid.RowSpan="3" Classes="danger" Content="Uninstall…" VerticalAlignment="Center" Flyout="{StaticResource ConfirmUninstall}" />
+              <Button Grid.Column="1" Grid.RowSpan="2" Classes="danger" Content="Uninstall…" VerticalAlignment="Center" Flyout="{StaticResource ConfirmUninstall}" />
             </Grid>
           </Border>
         </StackPanel>

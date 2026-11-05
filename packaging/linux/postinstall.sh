@@ -1,2 +1,2 @@
 #!/bin/sh
-echo "Dockyard is installed. Finish the setup as your own user (not root): dockyard --install"
+echo "Dockyard is installed. Open it once, or run dockyard --silent as your own user, to finish the setup."
