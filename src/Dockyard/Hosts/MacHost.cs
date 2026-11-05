@@ -27,10 +27,26 @@ static class MacLayout
     public static string PluginLinksDir => Path.Combine(DataDir, "plugin-links");
     public static string PreviousContextFile => Path.Combine(DataDir, "previous-context");
     public static string RootRelease => Path.Combine(DataDir, "root-release");
-    public static string Helper => Path.Combine(AppContext.BaseDirectory, "dockyard-vm");
-    public static string Assets => Directory.Exists(Path.Combine(AppContext.BaseDirectory, "..", "Resources", "vm"))
-        ? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "Resources", "vm"))
-        : Path.Combine(AppContext.BaseDirectory, "vm");
+    public static string UserApplications => Path.Combine(Home, "Applications");
+
+    // Where the app belongs: where it already is when that is an Applications folder, otherwise ~/Applications.
+    public static string InstallLocation(string baseDirectory, string userApplications)
+    {
+        var bundle = Bundle(baseDirectory);
+        var folder = bundle is null ? null : Path.GetDirectoryName(bundle);
+        return folder == "/Applications" || folder == userApplications ? bundle! : Path.Combine(userApplications, "Dockyard.app");
+    }
+
+    // The files of the app that is or will be installed. A folder that is no bundle (a development build) is its own install.
+    public static string AppBase => Bundle(AppContext.BaseDirectory) is null
+        ? AppContext.BaseDirectory
+        : Path.Combine(InstallLocation(AppContext.BaseDirectory, UserApplications), "Contents", "MacOS");
+
+    public static string InstalledExe => Path.Combine(AppBase, "Dockyard");
+    public static string Helper => Path.Combine(AppBase, "dockyard-vm");
+    public static string Assets => Directory.Exists(Path.Combine(AppBase, "..", "Resources", "vm"))
+        ? Path.GetFullPath(Path.Combine(AppBase, "..", "Resources", "vm"))
+        : Path.Combine(AppBase, "vm");
     public static string LaunchAgent => Path.Combine(Home, "Library", "LaunchAgents", LaunchAgentLabel + ".plist");
 
     public static string LaunchAgentPlist(string exe) => $"""
@@ -62,9 +78,15 @@ static class MacLayout
 
     public static string ZipAsset(bool engineOnly) => engineOnly ? @"^Dockyard-[\d.]+-macos-engine-only\.zip$" : @"^Dockyard-[\d.]+-macos\.zip$";
 
-    // A disk image goes away when ejected and a translocated copy on restart, but the login item and vm.json would keep pointing there.
-    public static bool IsTemporaryLocation(string baseDirectory) =>
-        Regex.IsMatch(baseDirectory, @"^/Volumes/Dockyard( \d+)?/") || baseDirectory.Contains("/AppTranslocation/", StringComparison.Ordinal);
+    // Everything of the dashboard in the bundle: the tray links none of the dylibs, the engine-only edition leaves them out too.
+    public static IEnumerable<string> DashboardFiles(string macosDir) =>
+        !Directory.Exists(macosDir) ? [] : Directory.GetFiles(macosDir).Where(f => Path.GetFileName(f) == "Dockyard.Dashboard" || f.EndsWith(".dylib", StringComparison.Ordinal));
+
+    public static Version? BundleVersion(string infoPlist)
+    {
+        var m = Regex.Match(infoPlist, @"<key>CFBundleShortVersionString</key>\s*<string>([^<]+)</string>");
+        return m.Success ? Updates.ParseVersion(m.Groups[1].Value) : null;
+    }
 
     // Another Docker app's plugin is usually a symlink into its bundle; it is put back on uninstall.
     public static void SetAsideLinkedPlugin(string plugin, string linksDir)
@@ -178,9 +200,16 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null) : IEngineHo
         "Cli" => File.Exists(MacLayout.DockerCli) ? Updates.ParseVersion((await runner.Run(MacLayout.DockerCli, "--version")).Output) : null,
         "Compose" => await Plugin("docker-compose", "version", "--short"),
         "Buildx" => await Plugin("docker-buildx", "version"),
-        "App" => Updates.ParseVersion(Paths.AppVersion),
+        "App" => InstalledAppVersion(),
         _ => null,
     };
+
+    // The wizard runs from a download and can be newer than what is installed.
+    static Version? InstalledAppVersion()
+    {
+        var plist = Path.Combine(MacLayout.AppBase, "..", "Info.plist");
+        return File.Exists(plist) ? MacLayout.BundleVersion(File.ReadAllText(plist)) : Updates.ParseVersion(Paths.AppVersion);
+    }
 
     public async Task<Release?> Latest(string component) => component switch
     {
@@ -217,26 +246,67 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null) : IEngineHo
         return false;
     }
 
-    public bool HasDashboard => File.Exists(Path.Combine(AppContext.BaseDirectory, "Dockyard.Dashboard"));
+    public bool RunsFromInstallLocation => Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory) == Path.TrimEndingDirectorySeparator(MacLayout.AppBase);
+
+    public bool HasDashboard => File.Exists(Path.Combine(MacLayout.AppBase, "Dockyard.Dashboard"));
 
     public async Task<bool> SetDashboard(Action<string> log, bool installed)
     {
-        if (installed)
-        {
-            await SelfUpdate(log, engineOnly: false, tag: null);
-            return true;
-        }
-        var dashboard = Path.Combine(AppContext.BaseDirectory, "Dockyard.Dashboard");
-        if (File.Exists(dashboard)) File.Delete(dashboard);
-        log("Removed the dashboard");
+        if (installed) await AddDashboard(log);
+        else await RemoveDashboard(log);
         return false;
+    }
+
+    // From this bundle when it has the dashboard (the wizard), otherwise from the release of this version.
+    async Task AddDashboard(Action<string> log)
+    {
+        string? downloaded = null;
+        try
+        {
+            var source = AppContext.BaseDirectory;
+            if (!File.Exists(Path.Combine(source, "Dockyard.Dashboard")))
+            {
+                log("Downloading the dashboard");
+                downloaded = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
+                var zip = await Updates.DownloadReleaseAsset(MacLayout.ZipAsset(engineOnly: false), downloaded, isPattern: true);
+                await runner.Check("/usr/bin/ditto", "-x", "-k", zip, downloaded);
+                source = Path.Combine(downloaded, "Dockyard.app", "Contents", "MacOS");
+            }
+            foreach (var file in MacLayout.DashboardFiles(source))
+            {
+                var target = Path.Combine(MacLayout.AppBase, Path.GetFileName(file));
+                // A new inode: macOS kills a process whose signed file was overwritten in place.
+                File.Delete(target);
+                File.Copy(file, target);
+            }
+            await SealBundle();
+            log("Added the dashboard");
+        }
+        finally
+        {
+            if (downloaded is not null) Directory.Delete(downloaded, recursive: true);
+        }
+    }
+
+    async Task RemoveDashboard(Action<string> log)
+    {
+        foreach (var file in MacLayout.DashboardFiles(MacLayout.AppBase)) File.Delete(file);
+        await SealBundle();
+        log("Removed the dashboard");
+    }
+
+    // Only the bundle's own seal changes: signing it without --deep leaves dockyard-vm and its entitlements alone.
+    async Task SealBundle()
+    {
+        if (MacLayout.Bundle(MacLayout.AppBase + Path.DirectorySeparatorChar) is { } bundle)
+            await runner.Run("/usr/bin/codesign", "--force", "--sign", "-", bundle);
     }
 
     // Downloads the release zip (no quarantine attribute, so Gatekeeper does not block it) and swaps the
     // app bundle once this process has exited.
     async Task SelfUpdate(Action<string> log, bool engineOnly, string? tag)
     {
-        var bundle = MacLayout.Bundle(AppContext.BaseDirectory)
+        var bundle = MacLayout.Bundle(MacLayout.AppBase + Path.DirectorySeparatorChar)
             ?? throw new InvalidOperationException("Dockyard is not running from Dockyard.app; run install-mac.sh again");
         var dir = Path.Combine(Path.GetTempPath(), $"dockyard-update-{Guid.NewGuid():N}");
         var zip = await Updates.DownloadReleaseAsset(MacLayout.ZipAsset(engineOnly), dir, isPattern: true, tag);
@@ -247,26 +317,17 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null) : IEngineHo
         log($"Replacing {bundle} and restarting");
     }
 
-    public async Task<bool> Install(Action<string> log, bool engineOnly)
+    public async Task<bool> Install(Action<string> log, InstallRequest request)
     {
-        if (MacLayout.IsTemporaryLocation(AppContext.BaseDirectory))
-            throw new InvalidOperationException("Move Dockyard.app to Applications and open it from there");
-
-        if ((await runner.Run("/usr/bin/arch", "-x86_64", "/usr/bin/true")).ExitCode != 0)
-            log("Rosetta is not installed, so amd64 images will not run: softwareupdate --install-rosetta --agree-to-license");
+        await InstallBundle(log, request.Dashboard);
 
         await InstallCli(log, await Updates.LatestStatic(MacLayout.CliIndex, "tgz"));
         await InstallPlugin(log, "docker-compose", await Updates.LatestGitHub("docker/compose", MacLayout.ComposeAsset));
         await InstallPlugin(log, "docker-buildx", await Updates.LatestGitHub("docker/buildx", MacLayout.BuildxAsset));
 
-        if (!File.Exists("/etc/paths.d/dockyard"))
-        {
-            log("Administrator step: adding ~/.dockyard/bin to the PATH (/etc/paths.d/dockyard)");
-            var r = await runner.Run("/usr/bin/osascript", MacLayout.AdminShell(MacLayout.PathsEntry(MacLayout.BinDir)));
-            if (r.ExitCode != 0) log("PATH entry skipped (approval declined); add ~/.dockyard/bin to your PATH yourself");
-        }
+        await AdministratorSteps(log, request.Silent);
 
-        await Prepare(log);
+        await PrepareForInstall(log);
 
         var host = "unix://" + MacLayout.DockerSocket;
         var exists = (await runner.Run(MacLayout.DockerCli, "context", "inspect", MacLayout.Context)).ExitCode == 0;
@@ -277,14 +338,79 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null) : IEngineHo
         log($"Docker context '{MacLayout.Context}' → {host}");
 
         Directory.CreateDirectory(Path.GetDirectoryName(MacLayout.LaunchAgent)!);
-        await File.WriteAllTextAsync(MacLayout.LaunchAgent, MacLayout.LaunchAgentPlist(Paths.Self));
+        await File.WriteAllTextAsync(MacLayout.LaunchAgent, MacLayout.LaunchAgentPlist(MacLayout.InstalledExe));
         log($"{Paths.AppName} starts at login ({MacLayout.LaunchAgent})");
         return false;
     }
 
-    public async Task Uninstall(Action<string> log)
+    public void StartApp()
+    {
+        if (MacLayout.Bundle(MacLayout.AppBase + Path.DirectorySeparatorChar) is { } bundle) Shell.Spawn("/usr/bin/open", bundle, "--args", "--tray").Dispose();
+        else Shell.Spawn(MacLayout.InstalledExe, "--tray").Dispose();
+    }
+
+    public string DoneMessage(bool reboot) => "Done. Dockyard runs in the menu bar.";
+
+    // Copies the wizard's bundle to where the app belongs, from a download, a disk image or a translocated copy.
+    // The login item and vm.json point at it, so it has to stay there. Nothing under ~/.dockyard is touched.
+    async Task InstallBundle(Action<string> log, bool dashboard)
+    {
+        if (RunsFromInstallLocation)
+        {
+            if (HasDashboard && !dashboard) await RemoveDashboard(log);
+            else if (!HasDashboard && dashboard) await AddDashboard(log);
+            return;
+        }
+
+        var source = MacLayout.Bundle(AppContext.BaseDirectory)!;
+        var target = MacLayout.InstallLocation(AppContext.BaseDirectory, MacLayout.UserApplications);
+        var incoming = target + ".new";
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        if (Directory.Exists(incoming)) Directory.Delete(incoming, recursive: true);
+        await runner.Check("/usr/bin/ditto", source, incoming);
+        await runner.Run("/usr/bin/xattr", "-dr", "com.apple.quarantine", incoming);
+        // Only that install's tray: its VM keeps running, and a Dockyard somewhere else is none of this setup's business.
+        await runner.Run("/usr/bin/pkill", "-f", Path.Combine(target, "Contents", "MacOS", "Dockyard"));
+        if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
+        Directory.Move(incoming, target);
+        log($"Installed {target}");
+        if (!dashboard) await RemoveDashboard(log);
+    }
+
+    // Rosetta and the PATH entry need an administrator. A silent setup shows no dialog: then it needs passwordless sudo,
+    // and without that the rest of Dockyard still works and the log says what is left.
+    async Task AdministratorSteps(Action<string> log, bool silent)
+    {
+        List<string> steps = [];
+        var rosetta = (await runner.Run("/usr/bin/arch", "-x86_64", "/usr/bin/true")).ExitCode == 0;
+        if (!rosetta) steps.Add("/usr/sbin/softwareupdate --install-rosetta --agree-to-license");
+        if (!File.Exists("/etc/paths.d/dockyard")) steps.Add(MacLayout.PathsEntry(MacLayout.BinDir));
+        if (steps.Count == 0) return;
+
+        var script = string.Join(" ; ", steps);
+        log("Administrator step: " + (rosetta ? "adding ~/.dockyard/bin to the PATH" : "installing Rosetta for amd64 images and adding ~/.dockyard/bin to the PATH"));
+        var r = silent
+            ? await runner.Run("/usr/bin/sudo", "-n", "/bin/sh", "-c", script)
+            : await runner.Run("/usr/bin/osascript", MacLayout.AdminShell(script));
+        if (r.ExitCode != 0)
+            log($"Skipped ({(silent ? "no passwordless sudo" : "approval declined")}). {MacLayout.BinDir} is not on the PATH until the wizard runs with an administrator's approval" + (rosetta ? "." : ", and amd64 images need Rosetta."));
+    }
+
+    // A VM running on the previous image has to stop for the new one; with the same image it can keep running.
+    async Task PrepareForInstall(Action<string> log)
+    {
+        var bundled = Path.Combine(MacLayout.Assets, "dockyard-release");
+        var changed = File.Exists(MacLayout.RootRelease) && File.Exists(bundled) && await File.ReadAllTextAsync(MacLayout.RootRelease) != await File.ReadAllTextAsync(bundled);
+        var restart = changed && ping();
+        if (restart) await Stop(Engine);
+        await Prepare(log);
+        if (restart) await Start(Engine);
+    }
+
+    public async Task Uninstall(Action<string> log, bool removeData)
     {
         await Stop(Engine);
+        if (!RunsFromInstallLocation) await runner.Run("/usr/bin/pkill", "-f", MacLayout.InstalledExe);
         if (File.Exists(MacLayout.LaunchAgent)) File.Delete(MacLayout.LaunchAgent);
         if (File.Exists(MacLayout.DockerCli))
         {
@@ -292,13 +418,22 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null) : IEngineHo
             await runner.Run(MacLayout.DockerCli, "context", "use", MacLayout.ContextToRestore(previous));
             await runner.Run(MacLayout.DockerCli, "context", "rm", "-f", MacLayout.Context);
         }
-        if (File.Exists("/etc/paths.d/dockyard"))
+        if (await IsOurPathEntry())
             await runner.Run("/usr/bin/osascript", MacLayout.AdminShell("rm -f /etc/paths.d/dockyard"));
         if (Directory.Exists(MacLayout.BinDir)) Directory.Delete(MacLayout.BinDir, recursive: true);
         foreach (var plugin in new[] { "docker-compose", "docker-buildx" })
             MacLayout.RemovePlugin(Path.Combine(MacLayout.PluginDir, plugin), MacLayout.PluginLinksDir);
-        log($"Your images and containers were kept in {Path.Combine(MacLayout.DataDir, "data.img")}; delete ~/.dockyard to remove them");
+        if (MacLayout.Bundle(MacLayout.AppBase + Path.DirectorySeparatorChar) is { } bundle && Directory.Exists(bundle)) Directory.Delete(bundle, recursive: true);
+        if (removeData)
+        {
+            if (Directory.Exists(MacLayout.DataDir)) Directory.Delete(MacLayout.DataDir, recursive: true);
+            log("Removed your images and containers");
+        }
+        else log($"Your images and containers were kept in {Path.Combine(MacLayout.DataDir, "data.img")}");
     }
+
+    static async Task<bool> IsOurPathEntry() =>
+        File.Exists("/etc/paths.d/dockyard") && (await File.ReadAllTextAsync("/etc/paths.d/dockyard")).Trim() == MacLayout.BinDir;
 
     public void ReleaseResources()
     {

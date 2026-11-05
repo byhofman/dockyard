@@ -5,6 +5,7 @@ set -eu
 action="${1:?usage: setup-linux.sh install <user> | uninstall | packages}"
 user="${2:-}"
 rule=/etc/polkit-1/rules.d/50-dockyard.rules
+socket_dropin_dir=/etc/systemd/system/docker.socket.d
 
 . /etc/os-release
 family=""
@@ -12,6 +13,8 @@ for id in ${ID:-} ${ID_LIKE:-}; do
   case "$id" in
     ubuntu|debian) family=apt ;;
     fedora|rhel|centos) family=dnf ;;
+    arch) family=pacman ;;
+    opensuse*|suse|sles) family=zypper ;;
   esac
   [ -n "$family" ] && break
 done
@@ -47,19 +50,58 @@ install_packages() {
       dnf config-manager addrepo --from-repofile="$url" 2>/dev/null || dnf config-manager --add-repo "$url"
       dnf -y -q install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
       ;;
+    pacman) pacman -Sy --noconfirm --needed docker docker-buildx docker-compose ;;
+    zypper) zypper --non-interactive install docker docker-buildx docker-compose ;;
     *)
-      echo "Unsupported distribution '${ID:-unknown}': install Docker CE yourself (https://docs.docker.com/engine/install/), then run setup again." >&2
+      echo "Dockyard does not know how to install Docker on '${ID:-unknown}'. Install it with your distribution's package manager and run the wizard again." >&2
       exit 4
       ;;
   esac
   echo "Installed $(dockerd --version)"
 }
 
+# The tray icon needs a StatusNotifierItem host; Ubuntu ships one, other GNOME desktops have it as a package.
+install_tray_host() {
+  command -v gnome-shell >/dev/null 2>&1 || return 0
+  case "$family" in
+    apt) DEBIAN_FRONTEND=noninteractive apt-get install -y -qq gnome-shell-extension-appindicator >/dev/null 2>&1 || true ;;
+    dnf) dnf -y -q install gnome-shell-extension-appindicator >/dev/null 2>&1 || true ;;
+  esac
+}
+
+install_acl() {
+  command -v setfacl >/dev/null 2>&1 && return 0
+  case "$family" in
+    apt) DEBIAN_FRONTEND=noninteractive apt-get install -y -qq acl >/dev/null 2>&1 || true ;;
+    dnf) dnf -y -q install acl >/dev/null 2>&1 || true ;;
+    pacman) pacman -S --noconfirm --needed acl >/dev/null 2>&1 || true ;;
+    zypper) zypper --non-interactive install acl >/dev/null 2>&1 || true ;;
+  esac
+}
+
+# Group membership only reaches sessions started after it changed. An ACL on the socket lets the user's current
+# session use docker right away, without signing out, and the drop-in renews it whenever systemd recreates the socket.
+grant_socket_access() {
+  [ -n "$user" ] || return 0
+  install_acl
+  setfacl_bin="$(command -v setfacl 2>/dev/null)" || { echo "setfacl is not available: docker access applies after signing out and back in"; return 0; }
+  if has_systemd; then
+    mkdir -p "$socket_dropin_dir"
+    cat > "$socket_dropin_dir/dockyard.conf" <<EOF
+[Socket]
+ExecStartPost=-$setfacl_bin -m u:$user:rw /run/docker.sock
+EOF
+    systemctl daemon-reload
+  fi
+  if [ -S /run/docker.sock ]; then "$setfacl_bin" -m "u:$user:rw" /run/docker.sock; fi
+  echo "$user can use docker right away"
+}
+
 configure() {
   getent group docker >/dev/null || groupadd docker
   if [ -n "$user" ]; then
     usermod -aG docker "$user"
-    echo "Added $user to the docker group (applies after signing out and back in)"
+    echo "Added $user to the docker group"
   fi
 
   if has_systemd; then
@@ -85,11 +127,19 @@ EOF
 
 case "$action" in
   packages) install_packages ;;
-  install) install_packages; configure ;;
+  install) install_packages; configure; grant_socket_access; install_tray_host ;;
   uninstall)
     rm -f "$rule"
-    if has_systemd; then systemctl enable docker.service containerd.service >/dev/null 2>&1 || true; fi
-    echo "Removed $rule; Docker packages, images and containers were kept"
+    rm -rf "$socket_dropin_dir"
+    if has_systemd; then
+      systemctl daemon-reload
+      systemctl enable docker.service containerd.service >/dev/null 2>&1 || true
+    fi
+    case "$family" in
+      apt) DEBIAN_FRONTEND=noninteractive apt-get remove -y -qq dockyard-dashboard dockyard >/dev/null 2>&1 || true ;;
+      dnf) dnf -y -q remove dockyard-dashboard dockyard >/dev/null 2>&1 || true ;;
+    esac
+    echo "Removed Dockyard; Docker packages, images and containers were kept"
     ;;
   *) echo "unknown action: $action" >&2; exit 2 ;;
 esac

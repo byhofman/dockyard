@@ -20,6 +20,7 @@ public partial class App : Application
     MainViewModel vm = null!;
     MainWindow? window;
     TrayIcon? tray;
+    NativeMenuItem? dashboardItem;
     readonly List<(string Engine, NativeMenuItem Item)> engineItems = [];
     IClassicDesktopStyleApplicationLifetime desktop = null!;
 
@@ -39,7 +40,8 @@ public partial class App : Application
     public override void OnFrameworkInitializationCompleted()
     {
         desktop = (IClassicDesktopStyleApplicationLifetime)ApplicationLifetime!;
-        vm = new MainViewModel(Hosts.HostFactory.Create(), setupMode: mode == AppMode.Setup);
+        vm = new MainViewModel(Hosts.HostFactory.Create(), setupMode: mode == AppMode.Setup, SetupOptions.Parse(args));
+        vm.StartPolling();
         vm.ShutdownRequested += () => Dispatcher.UIThread.Post(Quit);
 
         if (mode == AppMode.Setup)
@@ -123,12 +125,9 @@ public partial class App : Application
             menu.Add(item);
         }
         menu.Add(new NativeMenuItemSeparator());
-        if (HasDashboard)
-        {
-            var dashboard = new NativeMenuItem("Open dashboard");
-            dashboard.Click += (_, _) => OpenDashboard();
-            menu.Add(dashboard);
-        }
+        dashboardItem = new NativeMenuItem("Open dashboard") { IsVisible = HasDashboard };
+        dashboardItem.Click += (_, _) => OpenDashboard();
+        menu.Add(dashboardItem);
         menu.Add(settings);
         menu.Add(new NativeMenuItemSeparator());
         menu.Add(quit);
@@ -142,6 +141,8 @@ public partial class App : Application
     void UpdateTray()
     {
         if (tray is null) return;
+        // The dashboard can come and go while the tray runs, from its own window or from the wizard.
+        if (dashboardItem is not null) dashboardItem.IsVisible = HasDashboard;
         var activeEngine = vm.ActiveEngine;
         var color = vm.IsBusy ? TrayIconRenderer.Busy : activeEngine.IsRunning ? TrayIconRenderer.Running : TrayIconRenderer.Stopped;
         var multiple = vm.EngineCards.Count > 1;

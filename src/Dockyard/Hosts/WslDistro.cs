@@ -29,6 +29,8 @@ sealed class WslDistro(ICommandRunner runner, string name = WslDistro.DefaultNam
         await runner.Check("wsl.exe", "--import", Name, dir, tarball, "--version", "2");
     }
 
+    public Task Unregister() => runner.Check("wsl.exe", "--unregister", Name);
+
     public string[] KeepAliveArgs(string? tcp = null) => tcp is null
         ? ["-d", Name, "-u", "root", "--", InitPath]
         : ["-d", Name, "-u", "root", "--", "env", $"DOCKYARD_TCP={tcp}", InitPath];

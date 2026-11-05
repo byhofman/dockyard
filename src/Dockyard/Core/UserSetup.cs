@@ -10,6 +10,9 @@ namespace Dockyard.Core;
 static partial class UserSetup
 {
     const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    const string RunOnceKey = @"Software\Microsoft\Windows\CurrentVersion\RunOnce";
+    // Windows 11 22H2; older builds ignore the setting and warn at every WSL start.
+    const int MirroredNetworkingBuild = 22621;
 
     public static async Task Install(Action<string> log, string? image = null)
     {
@@ -17,6 +20,7 @@ static partial class UserSetup
         await SetupDistro(log, image);
         await MigrateLegacyEngine(log);
         await CreateContexts(log);
+        SetMirroredNetworking(log);
 
         File.WriteAllText(Path.Combine(Paths.UserProfile, ".testcontainers.properties"), $"docker.host={Paths.LinuxHost}\n");
         log("Testcontainers pinned to the Linux engine");
@@ -26,7 +30,24 @@ static partial class UserSetup
         log($"{Paths.AppName} autostarts at logon");
     }
 
-    public static async Task Uninstall(Action<string> log)
+    // Silent setups log to a file: after a restart there is no console to report to.
+    public static void ResumeAfterReboot(bool silent, Action<string> log)
+    {
+        using var key = Registry.CurrentUser.CreateSubKey(RunOnceKey);
+        key.SetValue(Paths.AppName, $"\"{Paths.AppExe}\" {(silent ? "--silent" : "--setup")} --resume");
+        log("Setup carries on by itself after the restart");
+    }
+
+    static void SetMirroredNetworking(Action<string> log)
+    {
+        if (Environment.OSVersion.Version.Build < MirroredNetworkingBuild) return;
+        var existing = File.Exists(Paths.WslConfigFile) ? File.ReadAllText(Paths.WslConfigFile) : null;
+        if (WslConfig.WithMirroredNetworking(existing) is not { } updated) return;
+        File.WriteAllText(Paths.WslConfigFile, updated);
+        log("WSL uses mirrored networking from its next start (~/.wslconfig)");
+    }
+
+    public static async Task Uninstall(Action<string> log, bool removeData = false)
     {
         using (var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true))
         {
@@ -43,11 +64,19 @@ static partial class UserSetup
         var tc = Path.Combine(Paths.UserProfile, ".testcontainers.properties");
         if (File.Exists(tc) && File.ReadAllText(tc).Trim() == $"docker.host={Paths.LinuxHost}") File.Delete(tc);
 
+        if (File.Exists(Paths.WslConfigFile) && WslConfig.WithoutDockyardLine(File.ReadAllText(Paths.WslConfigFile)) is { } restored)
+            File.WriteAllText(Paths.WslConfigFile, restored);
+
         var distro = new WslDistro(ProcessRunner.Instance);
         if (await distro.Exists())
         {
             await distro.StopEngine();
-            log($"The '{distro.Name}' WSL distro with your Linux images and containers was kept; remove it with: wsl --unregister {distro.Name}");
+            if (removeData)
+            {
+                await distro.Unregister();
+                log($"Removed the '{distro.Name}' WSL distro with its Linux images and containers");
+            }
+            else log($"The '{distro.Name}' WSL distro with your Linux images and containers was kept");
         }
         foreach (var dir in new[] { Paths.SettingsDir, Paths.LegacySettingsDir })
             if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);

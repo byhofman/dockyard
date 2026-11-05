@@ -20,12 +20,52 @@ sealed record OsRelease(string Id, IReadOnlyList<string> IdLike, string? Codenam
             values.GetValueOrDefault("UBUNTU_CODENAME") ?? values.GetValueOrDefault("VERSION_CODENAME"));
     }
 
+    public bool HasPackages => PackageManager is "apt" or "dnf";
+
     public string? PackageManager => new[] { Id }.Concat(IdLike).Select(id => id switch
     {
         "ubuntu" or "debian" => "apt",
         "fedora" or "rhel" or "centos" => "dnf",
         _ => null,
     }).FirstOrDefault(p => p is not null);
+}
+
+// How the steps that need root get it, in order of least interruption. A silent setup without a terminal or a
+// desktop has no one to ask: then there is no way, and setup says so instead of hanging on a prompt.
+static class LinuxElevation
+{
+    public static string[]? Prefix(bool isRoot, bool passwordlessSudo, bool hasDisplay, bool hasPkexec, bool hasSudo, bool hasTerminal)
+    {
+        if (isRoot) return [];
+        if (passwordlessSudo) return ["sudo", "-n"];
+        if (hasDisplay && hasPkexec) return ["pkexec"];
+        if (hasTerminal && hasSudo) return ["sudo"];
+        if (hasTerminal && hasPkexec) return ["pkexec"];
+        return null;
+    }
+}
+
+// Where the app lives: packages put it in /usr/lib/dockyard; without apt or dnf the tarball goes in the user's home.
+static class LinuxLayout
+{
+    public const string PackageDir = "/usr/lib/dockyard";
+    public static string HomeDir => Path.Combine(Paths.UserProfile, ".local", "lib", "dockyard");
+    public static string HomeLink => Path.Combine(Paths.UserProfile, ".local", "bin", "dockyard");
+    public static string InstallDir => File.Exists(Path.Combine(PackageDir, "Dockyard")) ? PackageDir : HomeDir;
+    public static string InstalledExe => Path.Combine(InstallDir, "Dockyard");
+    public static string Dashboard => Path.Combine(InstallDir, "Dockyard.Dashboard");
+    public static string VersionFile => Path.Combine(HomeDir, "version");
+
+    public static string DashboardPackage(string? packageManager) =>
+        packageManager == "dnf" ? @"^dockyard-dashboard-[\d.]+-1\.x86_64\.rpm$" : @"^dockyard-dashboard_[\d.]+_amd64\.deb$";
+    public static string AppPackage(string? packageManager) =>
+        packageManager == "dnf" ? @"^dockyard-[\d.]+-1\.x86_64\.rpm$" : @"^dockyard_[\d.]+_amd64\.deb$";
+    public const string Tarball = @"^Dockyard-[\d.]+-linux-x64\.tar\.gz$";
+
+    public static readonly string[] DashboardFiles = ["Dockyard.Dashboard", "libSkiaSharp.so", "libHarfBuzzSharp.so"];
+
+    public static bool HasDisplay(string? display, string? waylandDisplay) =>
+        !string.IsNullOrEmpty(display) || !string.IsNullOrEmpty(waylandDisplay);
 }
 
 [SupportedOSPlatform("linux")]
@@ -73,9 +113,25 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
         "Engine" => Updates.ParseVersion((await runner.Run("dockerd", "--version")).Output),
         "Compose" => Updates.ParseVersion((await runner.Run("docker", "compose", "version", "--short")).Output),
         "Buildx" => Updates.ParseVersion((await runner.Run("docker", "buildx", "version")).Output),
-        "App" => Updates.ParseVersion(Paths.AppVersion),
+        "App" => await InstalledAppVersion(),
         _ => null,
     };
+
+    // The wizard runs from a download and can be newer than what is installed.
+    async Task<Version?> InstalledAppVersion()
+    {
+        if (!File.Exists(LinuxLayout.InstalledExe)) return null;
+        if (LinuxLayout.InstallDir == LinuxLayout.HomeDir)
+            return File.Exists(LinuxLayout.VersionFile) ? Updates.ParseVersion(await File.ReadAllTextAsync(LinuxLayout.VersionFile)) : null;
+        var dpkg = await TryRun("dpkg-query", "-W", "-f", "${Version}", "dockyard");
+        return Updates.ParseVersion(dpkg is { ExitCode: 0 } ? dpkg.Output : (await TryRun("rpm", "-q", "--qf", "%{VERSION}", "dockyard"))?.Output);
+    }
+
+    async Task<ShellResult?> TryRun(string file, params string[] args)
+    {
+        try { return await runner.Run(file, args); }
+        catch (System.ComponentModel.Win32Exception) { return null; }
+    }
 
     public async Task<Release?> Latest(string component) => component switch
     {
@@ -98,73 +154,207 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
                 _ => throw new InvalidOperationException("Update Docker with your distribution's package manager"),
             };
             log($"Updating Docker packages with {command[0]}");
-            var r = await runner.Run("pkexec", ["env", "DEBIAN_FRONTEND=noninteractive", .. command]);
+            var r = await RunElevated(["env", "DEBIAN_FRONTEND=noninteractive", .. command]);
             foreach (var line in Lines(r.Output + r.Error).TakeLast(6)) log("  " + line);
             if (r.ExitCode != 0) throw new InvalidOperationException($"{command[0]} failed ({r.ExitCode})");
         }
-        if (components.Any(c => c.Component == "App"))
-            log("Update Dockyard by running the install script again: curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install.sh | sh");
+        if (components.FirstOrDefault(c => c.Component == "App") is { Release: { } app })
+        {
+            await InstallApp(log, HasDashboard, app.Tag);
+            // The tray still holds the single-instance lock, so the new one starts just after this process exits.
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("/bin/sh", ["-c", $"sleep 2; exec \"{LinuxLayout.InstalledExe}\" --tray"]) { UseShellExecute = false })?.Dispose();
+            return true;
+        }
         return false;
     }
 
-    public bool HasDashboard => File.Exists(Path.Combine(AppContext.BaseDirectory, "Dockyard.Dashboard"));
+    public bool RunsFromInstallLocation => string.Equals(
+        Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory), LinuxLayout.InstallDir, StringComparison.Ordinal);
+
+    public bool HasDashboard => File.Exists(LinuxLayout.Dashboard);
 
     public async Task<bool> SetDashboard(Action<string> log, bool installed)
     {
         var os = OsRelease.Parse(await File.ReadAllTextAsync("/etc/os-release"));
-        string? package = null;
+        if (LinuxLayout.InstallDir == LinuxLayout.HomeDir)
+        {
+            if (installed) await InstallFromTarball(log, dashboard: true, tag: null);
+            else
+            {
+                foreach (var name in LinuxLayout.DashboardFiles) File.Delete(Path.Combine(LinuxLayout.HomeDir, name));
+                log("Removed the dashboard");
+            }
+            return false;
+        }
         if (installed)
         {
-            // The dashboard package of this release, downloaded from GitHub.
-            var pattern = os.PackageManager == "dnf" ? @"^dockyard-dashboard-[\d.]+-1\.x86_64\.rpm$" : @"^dockyard-dashboard_[\d.]+_amd64\.deb$";
-            log("Downloading the dashboard");
-            package = await Updates.DownloadReleaseAsset(pattern, Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}"), isPattern: true);
-            File.SetUnixFileMode(Path.GetDirectoryName(package)!, (UnixFileMode)0b111_101_101);
+            // A wizard newer than what is installed brings the matching app along: the dashboard package depends on its exact version.
+            var withApp = await InstalledAppVersion() != Updates.ParseVersion(Paths.AppVersion);
+            await InstallPackages(log, os.PackageManager, app: withApp, dashboard: true, tag: null);
         }
-        string[] command = (os.PackageManager, installed) switch
-        {
-            ("apt", true) => ["env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y", package!],
-            ("apt", false) => ["apt-get", "remove", "-y", "dockyard-dashboard"],
-            ("dnf", true) => ["dnf", "-y", "install", package!],
-            ("dnf", false) => ["dnf", "-y", "remove", "dockyard-dashboard"],
-            _ => throw new InvalidOperationException("Install or remove the dockyard-dashboard package with your package manager"),
-        };
-        try
-        {
-            var r = await runner.Run("pkexec", command);
-            foreach (var line in Lines(r.Output + r.Error).TakeLast(4)) log("  " + line);
-            if (r.ExitCode != 0) throw new InvalidOperationException($"Package manager failed ({r.ExitCode})");
-        }
-        finally
-        {
-            if (package is not null) Directory.Delete(Path.GetDirectoryName(package)!, recursive: true);
-        }
+        else await RemoveDashboardPackage(log, os.PackageManager);
         return false;
     }
 
-    public async Task<bool> Install(Action<string> log, bool engineOnly)
+    public async Task<bool> Install(Action<string> log, InstallRequest request)
     {
-        await RunSetup(log, "install", Environment.UserName);
-        await WriteAutostart();
-        log($"{Paths.AppName} autostarts at login ({AutostartFile})");
-        if ((await runner.Run("docker", "context", "show")).Output.Trim() is { Length: > 0 } current && current != "default")
-            log($"The active docker context is '{current}'; Dockyard manages the 'default' context (docker context use default)");
+        await InstallApp(log, request.Dashboard, tag: null);
+        await RunSetup(log, "install", SetupUser);
+        if (Environment.UserName == "root")
+            log("Running as root: the tray autostart is set up the first time you run setup as your own user");
+        else
+        {
+            await WriteAutostart();
+            log($"{Paths.AppName} autostarts at login ({AutostartFile})");
+        }
+        await TryRun("gnome-extensions", "enable", "appindicatorsupport@rgcjonas.gmail.com");
+        if ((await TryRun("docker", "context", "show"))?.Output.Trim() is { Length: > 0 } current && current != "default")
+        {
+            await TryRun("docker", "context", "use", "default");
+            log($"The docker context was '{current}'; Dockyard manages 'default', which is selected now");
+        }
         return false;
     }
 
-    public async Task Uninstall(Action<string> log)
+    public void StartApp()
+    {
+        if (!LinuxLayout.HasDisplay(Environment.GetEnvironmentVariable("DISPLAY"), Environment.GetEnvironmentVariable("WAYLAND_DISPLAY"))) return;
+        Shell.Spawn(LinuxLayout.InstalledExe, "--tray").Dispose();
+    }
+
+    public string DoneMessage(bool reboot) => "Done. Dockyard and the docker command are ready.";
+
+    public async Task Uninstall(Action<string> log, bool removeData)
     {
         if (File.Exists(AutostartFile)) File.Delete(AutostartFile);
         await RunSetup(log, "uninstall");
+        if (Directory.Exists(LinuxLayout.HomeDir)) Directory.Delete(LinuxLayout.HomeDir, recursive: true);
+        if (new FileInfo(LinuxLayout.HomeLink).LinkTarget is not null) File.Delete(LinuxLayout.HomeLink);
         if (Directory.Exists(Paths.SettingsDir)) Directory.Delete(Paths.SettingsDir, recursive: true);
+        if (removeData) log("Images and containers belong to the system's Docker and were kept; docker system prune removes them");
     }
 
     public void ReleaseResources() { }
 
+    static string SetupUser => Environment.UserName == "root" ? Environment.GetEnvironmentVariable("SUDO_USER") ?? "" : Environment.UserName;
+
+    // Puts the app in place. A copy running from where it is installed only has to line up the dashboard.
+    async Task InstallApp(Action<string> log, bool dashboard, string? tag)
+    {
+        var os = OsRelease.Parse(await File.ReadAllTextAsync("/etc/os-release"));
+        var replace = tag is not null || !RunsFromInstallLocation;
+        if (!os.HasPackages)
+        {
+            if (replace) await InstallFromTarball(log, dashboard, tag);
+            else if (HasDashboard != dashboard) await SetDashboard(log, dashboard);
+            return;
+        }
+        if (replace) await InstallPackages(log, os.PackageManager, app: true, dashboard, tag);
+        if (HasDashboard && !dashboard) await RemoveDashboardPackage(log, os.PackageManager);
+        else if (!HasDashboard && dashboard) await InstallPackages(log, os.PackageManager, app: false, dashboard: true, tag);
+    }
+
+    async Task InstallPackages(Action<string> log, string? packageManager, bool app, bool dashboard, string? tag)
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
+        try
+        {
+            List<string> packages = [];
+            log("Downloading Dockyard");
+            if (app) packages.Add(await Updates.ReleaseAssetOrLocal(LinuxLayout.AppPackage(packageManager), dir, tag));
+            if (dashboard) packages.Add(await Updates.ReleaseAssetOrLocal(LinuxLayout.DashboardPackage(packageManager), dir, tag));
+            // apt hands local packages to its unprivileged _apt user.
+            File.SetUnixFileMode(dir, (UnixFileMode)0b111_101_101);
+            foreach (var package in packages) File.SetUnixFileMode(package, (UnixFileMode)0b110_100_100);
+            string[] command = packageManager == "dnf"
+                ? ["dnf", "-y", "-q", "install", .. packages]
+                : ["env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y", "-qq", "--allow-downgrades", .. packages];
+            log($"Installing {string.Join(", ", packages.Select(Path.GetFileName))}");
+            var r = await RunElevated(command);
+            foreach (var line in Lines(r.Output + r.Error).TakeLast(4)) log("  " + line);
+            if (r.ExitCode != 0) throw new InvalidOperationException($"{command[0]} failed ({r.ExitCode}): {Lines(r.Error).LastOrDefault()}");
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    async Task RemoveDashboardPackage(Action<string> log, string? packageManager)
+    {
+        string[] command = packageManager == "dnf"
+            ? ["dnf", "-y", "-q", "remove", "dockyard-dashboard"]
+            : ["env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "remove", "-y", "-qq", "dockyard-dashboard"];
+        var r = await RunElevated(command);
+        foreach (var line in Lines(r.Output + r.Error).TakeLast(4)) log("  " + line);
+        if (r.ExitCode != 0) throw new InvalidOperationException($"Removing the dashboard failed ({r.ExitCode}): {Lines(r.Error).LastOrDefault()}");
+        log("Removed the dashboard");
+    }
+
+    // Neither apt nor dnf: the release's tarball in the user's home, no root needed for the app itself.
+    async Task InstallFromTarball(Action<string> log, bool dashboard, string? tag)
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
+        try
+        {
+            log("Downloading Dockyard");
+            var tarball = await Updates.ReleaseAssetOrLocal(LinuxLayout.Tarball, dir, tag);
+            await runner.Check("tar", "-xzf", tarball, "-C", dir);
+            Directory.CreateDirectory(LinuxLayout.HomeDir);
+            foreach (var file in Directory.GetFiles(Path.Combine(dir, "Dockyard")))
+            {
+                var name = Path.GetFileName(file);
+                if (dashboard || !LinuxLayout.DashboardFiles.Contains(name)) File.Move(file, Path.Combine(LinuxLayout.HomeDir, name), overwrite: true);
+            }
+            if (!dashboard)
+                foreach (var name in LinuxLayout.DashboardFiles) File.Delete(Path.Combine(LinuxLayout.HomeDir, name));
+            await File.WriteAllTextAsync(LinuxLayout.VersionFile, Updates.ParseVersion(Path.GetFileName(tarball))?.ToString() ?? "");
+            Directory.CreateDirectory(Path.GetDirectoryName(LinuxLayout.HomeLink)!);
+            File.Delete(LinuxLayout.HomeLink);
+            File.CreateSymbolicLink(LinuxLayout.HomeLink, Path.Combine(LinuxLayout.HomeDir, "Dockyard"));
+            log($"Installed {LinuxLayout.HomeDir}");
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    async Task<ShellResult> RunElevated(string[] command)
+    {
+        var prefix = await ElevationPrefix() ?? throw new InvalidOperationException(
+            "This step needs root, and there is no way to ask here: no passwordless sudo, desktop or terminal. Run it as root or from a terminal.");
+        string[] full = [.. prefix, .. command];
+        return await runner.Run(full[0], full[1..]);
+    }
+
+    async Task<string[]?> ElevationPrefix() => LinuxElevation.Prefix(
+        isRoot: Environment.UserName == "root",
+        passwordlessSudo: (await TryRun("sudo", "-n", "true"))?.ExitCode == 0,
+        hasDisplay: LinuxLayout.HasDisplay(Environment.GetEnvironmentVariable("DISPLAY"), Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")),
+        hasPkexec: OnPath("pkexec"),
+        hasSudo: OnPath("sudo"),
+        hasTerminal: HasTerminal());
+
+    static bool OnPath(string file) => (Environment.GetEnvironmentVariable("PATH") ?? "").Split(':').Any(dir => dir.Length > 0 && File.Exists(Path.Combine(dir, file)));
+
+    static bool HasTerminal()
+    {
+        try
+        {
+            using var tty = File.Open("/dev/tty", FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
     async Task WriteAutostart()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(AutostartFile)!);
-        await File.WriteAllTextAsync(AutostartFile, DesktopEntry.Autostart(Paths.Self));
+        await File.WriteAllTextAsync(AutostartFile, DesktopEntry.Autostart(LinuxLayout.InstalledExe));
     }
 
     async Task RunSetup(Action<string> log, params string[] args)
@@ -175,8 +365,8 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
             await File.WriteAllTextAsync(script, (await reader.ReadToEndAsync()).Replace("\r\n", "\n"));
         try
         {
-            log("Administrator step (pkexec)");
-            var r = await runner.Run("pkexec", ["sh", script, .. args]);
+            log("Administrator step");
+            var r = await RunElevated(["sh", script, .. args]);
             foreach (var line in Lines(r.Output + r.Error)) log("  " + line);
             if (r.ExitCode == 126 || r.ExitCode == 127) throw new InvalidOperationException("Administrator approval was declined");
             if (r.ExitCode != 0) throw new InvalidOperationException($"Setup failed ({r.ExitCode})");

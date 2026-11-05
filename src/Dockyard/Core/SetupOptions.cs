@@ -1,0 +1,80 @@
+namespace Dockyard.Core;
+
+sealed class SetupUsageException(string message) : Exception(message);
+
+enum SetupAction { Install, Uninstall }
+
+sealed record SetupOptions
+{
+    public const string Usage = """
+        Usage: Dockyard [--silent] [--dashboard | --no-dashboard] [--no-start] [--image <file>]
+               Dockyard --silent --uninstall [--remove-data]
+               Dockyard --version
+
+          --silent        No window: install, or update what is installed. Progress goes to the console.
+          --dashboard     Add the dashboard, also on an existing install.
+          --no-dashboard  Leave the dashboard out, or remove it from an existing install.
+                          Without either: a new install gets it, an existing install keeps what it has.
+          --no-start      Do not start Dockyard afterwards.
+          --image <file>  Windows: the Linux engine image to import instead of downloading it.
+          --uninstall     Remove Dockyard. Images and containers stay unless --remove-data is given too.
+
+        Exit code: 0 done, 3010 done after a reboot (Windows; setup resumes by itself), 2 wrong arguments, 1 failed.
+        """;
+
+    static readonly string[] WindowArguments = ["--setup", "--tray", "--settings"];
+    static readonly string[] WindowArgumentsWithValue = ["--start", "--switch"];
+
+    public bool Silent { get; init; }
+    public SetupAction Action { get; init; }
+    public bool? Dashboard { get; init; }
+    public bool Start { get; init; } = true;
+    public string? Image { get; init; }
+    public bool RemoveData { get; init; }
+    public bool Resume { get; init; }
+    public bool OpenSetup { get; init; }
+    public bool ShowVersion { get; init; }
+    public bool ShowHelp { get; init; }
+
+    public static SetupOptions Parse(IReadOnlyList<string> args)
+    {
+        var options = new SetupOptions();
+        for (var i = 0; i < args.Count; i++)
+        {
+            var arg = args[i];
+            options = arg switch
+            {
+                "--silent" => options with { Silent = true },
+                // --install is the name earlier one-liners and scripts use.
+                "--install" => options with { Silent = true, Action = SetupAction.Install },
+                "--uninstall" => options with { Silent = true, Action = SetupAction.Uninstall },
+                "--dashboard" => options with { Dashboard = Choose(options.Dashboard, true) },
+                "--no-dashboard" or "--engine-only" => options with { Dashboard = Choose(options.Dashboard, false) },
+                "--no-start" => options with { Start = false },
+                "--remove-data" => options with { RemoveData = true },
+                "--resume" => options with { Resume = true },
+                "--setup" => options with { OpenSetup = true },
+                "--image" => options with { Image = ++i < args.Count ? args[i] : throw new SetupUsageException("--image needs a file") },
+                "--version" => options with { ShowVersion = true },
+                "--help" or "-h" => options with { ShowHelp = true },
+                _ when WindowArguments.Contains(arg) => options,
+                _ when WindowArgumentsWithValue.Contains(arg) => ++i < args.Count ? options : throw new SetupUsageException($"{arg} needs a value"),
+                _ => throw new SetupUsageException($"Unknown argument: {arg}"),
+            };
+        }
+        if (options.RemoveData && options.Action != SetupAction.Uninstall)
+            throw new SetupUsageException("--remove-data only goes with --uninstall");
+        return options;
+    }
+
+    static bool Choose(bool? current, bool wanted) => current is null || current == wanted
+        ? wanted
+        : throw new SetupUsageException("--dashboard and --no-dashboard exclude each other");
+}
+
+static class DashboardChoice
+{
+    // A copy running from where it is installed was put there by an earlier script, which already chose the edition.
+    public static bool Resolve(bool? requested, bool isInstalled, bool hasDashboard, bool runsFromInstallLocation) =>
+        requested ?? (!isInstalled && !runsFromInstallLocation || hasDashboard);
+}

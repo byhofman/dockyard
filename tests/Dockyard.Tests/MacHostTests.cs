@@ -157,13 +157,32 @@ public sealed class MacInstallTests : IDisposable
         Assert.Equal(expected, MacLayout.ContextToRestore(saved));
 
     [Theory]
-    [InlineData("/Volumes/Dockyard/Dockyard.app/Contents/MacOS/", true)]
-    [InlineData("/Volumes/Dockyard 1/Dockyard.app/Contents/MacOS/", true)]
-    [InlineData("/private/var/folders/x/AppTranslocation/ABC/d/Dockyard.app/Contents/MacOS/", true)]
-    [InlineData("/Applications/Dockyard.app/Contents/MacOS/", false)]
-    [InlineData("/Volumes/External/Applications/Dockyard.app/Contents/MacOS/", false)]
-    public void Install_refuses_to_run_from_a_location_that_goes_away(string baseDirectory, bool temporary) =>
-        Assert.Equal(temporary, MacLayout.IsTemporaryLocation(baseDirectory));
+    [InlineData("/Applications/Dockyard.app/Contents/MacOS/", "/Applications/Dockyard.app")]
+    [InlineData("/Users/a/Applications/Dockyard.app/Contents/MacOS/", "/Users/a/Applications/Dockyard.app")]
+    [InlineData("/Volumes/Dockyard/Dockyard.app/Contents/MacOS/", "/Users/a/Applications/Dockyard.app")]
+    [InlineData("/Volumes/Dockyard 1/Dockyard.app/Contents/MacOS/", "/Users/a/Applications/Dockyard.app")]
+    [InlineData("/private/var/folders/x/AppTranslocation/ABC/d/Dockyard.app/Contents/MacOS/", "/Users/a/Applications/Dockyard.app")]
+    [InlineData("/Users/a/Library/Caches/Dockyard/installer/Dockyard.app/Contents/MacOS/", "/Users/a/Applications/Dockyard.app")]
+    public void Install_location_keeps_an_applications_folder_and_moves_everything_else(string baseDirectory, string expected) =>
+        Assert.Equal(expected, MacLayout.InstallLocation(baseDirectory, "/Users/a/Applications"));
+
+    [Fact]
+    public void Bundle_version_comes_from_the_installed_info_plist()
+    {
+        const string plist = "<key>CFBundleShortVersionString</key>\n  <string>1.2.3</string>";
+        Assert.Equal(new Version(1, 2, 3), MacLayout.BundleVersion(plist));
+        Assert.Null(MacLayout.BundleVersion("<key>Other</key><string>1.2.3</string>"));
+    }
+
+    [Fact]
+    public void Dashboard_files_are_the_dashboard_and_its_libraries_only()
+    {
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        foreach (var name in new[] { "Dockyard", "dockyard-vm", "Dockyard.Dashboard", "libSkiaSharp.dylib" }) File.WriteAllText(Path.Combine(dir, name), "");
+        Assert.Equal(["Dockyard.Dashboard", "libSkiaSharp.dylib"], MacLayout.DashboardFiles(dir).Select(Path.GetFileName).Order());
+        Directory.Delete(dir, recursive: true);
+        Assert.Empty(MacLayout.DashboardFiles(dir));
+    }
 
     [Fact]
     public void Self_update_downloads_the_offered_release_not_the_running_one()
