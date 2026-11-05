@@ -49,7 +49,7 @@
 
 | | |
 |---|---|
-| **Claim** | Its comparison marks container domains, automatic HTTPS, volume and image file access, and containers in the menu bar as OrbStack yes, Docker Desktop no. Colima also lacks domains, HTTPS and file access. |
+| **Claim** | Its comparison marks container domains, automatic HTTPS, volume and image file access, and containers in the menu bar as OrbStack yes, Docker Desktop no. Colima also lacks domains, HTTPS and file access. The same table lists OrbStack as "No admin required", ticks host networking for both products, and says SSH agent forwarding "Requires special path" on Docker Desktop. |
 | **Bar / Grade** | `market` · **claimed** |
 | **Sources** | [vs Docker Desktop, January 2025](https://docs.orbstack.dev/compare/docker-desktop), [vs Colima, undated](https://docs.orbstack.dev/compare/colima) — read: `full` |
 | **Population / Scope** | A vendor's own, partly stale comparison. |

@@ -29,10 +29,10 @@ Dockyard already matches OrbStack on the Docker basics, so the must-haves are in
 
 | ID | Feature | Dockyard today | Evidence | Reason |
 |---|---|---|---|---|
-| `DOK-7` | `host.docker.internal` reaches the host | Absent ([F-02-02](findings/02-dockyard-today.md)), `source` | OrbStack `verified` ([F-01-03](findings/01-orbstack-inventory.md)); Docker Desktop `documented` ([F-03-01](findings/03-gaps-and-demand.md)) | Workflow test: both products a user would leave offer it automatically, and tooling and tutorials assume it. |
-| `DOK-8` | `localhost` reaches published ports on Windows | Hangs, per the README ([F-02-04](findings/02-dockyard-today.md)), `source` | OrbStack docs: "available on localhost" ([F-01-05](findings/01-orbstack-inventory.md)), `documented` | Workflow test: the most common URL a developer types hangs. |
+| `DOK-7` | `host.docker.internal` reaches the host | Absent ([F-02-02](findings/02-dockyard-today.md)), `source` | OrbStack `verified` ([F-01-03](findings/01-orbstack-inventory.md)); Docker Desktop `documented` ([F-03-01](findings/03-gaps-and-demand.md)) | Workflow test: OrbStack and Docker Desktop both provide it automatically, and Docker documents it as the way to reach host services. |
+| `DOK-8` | `localhost` reaches published ports on Windows | Hangs, per the README ([F-02-04](findings/02-dockyard-today.md)), `source` | OrbStack docs: "available on localhost" ([F-01-05](findings/01-orbstack-inventory.md)), `documented` | Workflow test: a plain `localhost` URL hangs instead of connecting. |
 | `DOK-9` | Tools find the engine without setup on macOS | Manual symlink, and Testcontainers pinned on Windows only ([F-02-05](findings/02-dockyard-today.md)), `source` | OrbStack `verified` ([F-01-03](findings/01-orbstack-inventory.md)) | Workflow test: tools that ignore contexts need manual setup. |
-| `DOK-10` | Registry logins go to the OS credential store | Never configured ([F-02-06](findings/02-dockyard-today.md)), `source` | OrbStack `verified` ([F-01-03](findings/01-orbstack-inventory.md)); Docker: base64 without a store ([F-03-02](findings/03-gaps-and-demand.md)), `normative` | Workflow test, unsafe by default. Dockyard is meant to be public, so this matters more than convenience. |
+| `DOK-10` | Registry logins go to the OS credential store | Never configured ([F-02-06](findings/02-dockyard-today.md)), `source` | OrbStack `verified` ([F-01-03](findings/01-orbstack-inventory.md)); Docker: base64 without a store ([F-03-02](findings/03-gaps-and-demand.md)), `normative` | Workflow test: unsafe by default. |
 | `DOK-11` | `--net host` servers reachable on macOS | Not forwarded ([F-02-03](findings/02-dockyard-today.md)), `source` | OrbStack `verified` ([F-01-03](findings/01-orbstack-inventory.md)); Docker Desktop opt-in `documented` ([F-03-01](findings/03-gaps-and-demand.md)) | Workflow test: the command succeeds, yet the server cannot be reached. |
 | `DOK-12` | Engine configuration on the Linux engine | No supported route on macOS or WSL ([F-02-07](findings/02-dockyard-today.md)), `source` | OrbStack `documented` ([F-01-05](findings/01-orbstack-inventory.md)) | Workflow test: private registries, mirrors and subnet clashes cannot be handled, with no route at all on macOS if the root disk is read-only as specified. |
 | `DOK-13` | Import from Docker Desktop | Absent; the README covers only a manual image copy from Dockyard's old engine ([F-02-08](findings/02-dockyard-today.md)), `source` | OrbStack `documented` ([F-01-06](findings/01-orbstack-inventory.md)) | Workflow test: volumes hold data that cannot be pulled again, and switching means moving them by hand. |
@@ -47,10 +47,10 @@ Dockyard already matches OrbStack on the Docker basics, so the must-haves are in
 
 | Feature | Evidence | Reason |
 |---|---|---|
-| Debug Shell for distroless containers | `documented`, Pro only ([F-01-08](findings/01-orbstack-inventory.md)) | Dockyard's terminal action needs a shell in the image, so distroless images cannot use it. OrbStack charges for this, so it is not a free-tier expectation, and no issue reached the top 25. |
+| Debug Shell for distroless containers | `documented`, Pro only ([F-01-08](findings/01-orbstack-inventory.md)) | Dockyard's terminal action runs `docker exec` with a shell ([F-02-01](findings/02-dockyard-today.md)), which a distroless image does not have. OrbStack charges for this, so it is not a free-tier expectation, and no issue reached the top 25. |
 | Custom domains, wildcards, per-domain ports | Label form `verified` ([F-01-01](findings/01-orbstack-inventory.md)); #1165, 34 thumbs-up ([F-03-05](findings/03-gaps-and-demand.md)) | Extends `DOK-15`, which has to exist first. |
 | Direct container IP access | `verified` ([F-01-01](findings/01-orbstack-inventory.md)); #33, 39 thumbs-up ([F-03-05](findings/03-gaps-and-demand.md)) | Real demand, but ports and domains cover the same need. |
-| Files in images | `verified` ([F-01-04](findings/01-orbstack-inventory.md)) | Read-only debugging; `docker save` and a throwaway container already work. |
+| Files in images | `verified` ([F-01-04](findings/01-orbstack-inventory.md)) | Read-only debugging; standard Docker commands can already reach image contents. |
 | Volume clone, export and import | `documented`, CLI help observed ([F-01-04](findings/01-orbstack-inventory.md)) | Useful for backups; a helper container can do it. |
 | SSH agent forwarding | `documented` ([F-01-09](findings/01-orbstack-inventory.md)), Docker Desktop too ([F-03-01](findings/03-gaps-and-demand.md)) | Matters for running containers that use private Git; no issue reached the top 25. |
 | Root CA added inside containers | `verified` ([F-01-02](findings/01-orbstack-inventory.md)) | Only matters once `DOK-16` exists and containers call each other over HTTPS. |
@@ -65,10 +65,10 @@ Dockyard already matches OrbStack on the Docker basics, so the must-haves are in
 |---|---|---|
 | CRIU checkpoint and restore | `documented`, added v2.2.0 ([F-01-09](findings/01-orbstack-inventory.md)) | Experimental in Docker, recent, and no demand signal found. |
 | Engine exposed over the network | `documented` ([F-01-09](findings/01-orbstack-inventory.md)) | OrbStack's docs call it "extremely dangerous". |
-| Remote Debug Shell | `documented` ([F-01-08](findings/01-orbstack-inventory.md)) | Dockyard is a local desktop tool. |
+| Remote Debug Shell | `documented` ([F-01-09](findings/01-orbstack-inventory.md)) | Dockyard is a local desktop tool. |
 | 32-bit Arm and Intel emulation | `documented` ([F-01-09](findings/01-orbstack-inventory.md)) | Rare, with no demand signal; amd64 is already covered. |
 | Custom icon labels; one-click Supabase | `documented` ([F-01-09](findings/01-orbstack-inventory.md)) | Cosmetic or tied to one product. |
-| Organisations, SAML, licence management | `documented` ([F-01-08](findings/01-orbstack-inventory.md)) | These exist to sell seats, and Dockyard is free. |
+| Organisations, SAML, licence management | `documented` ([F-01-09](findings/01-orbstack-inventory.md)) | These exist to sell seats, and Dockyard is free. |
 
 Podman, `docker sandbox` and Docker MCP Gateway draw large demand on OrbStack's tracker ([F-03-05](findings/03-gaps-and-demand.md)), but they are not OrbStack features, so they are not classified here.
 

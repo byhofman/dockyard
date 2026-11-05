@@ -114,9 +114,9 @@
 
 | | |
 |---|---|
-| **Claim** | Also documented: CRIU checkpoint and restore (added v2.2.0), an optional containerd image store, emulation of 32-bit Arm and Intel images, SSH agent forwarding, engine exposure over TCP, remote Debug Shell, custom icon labels, one-click Supabase stacks and `orb top`. |
+| **Claim** | Also documented: CRIU checkpoint and restore (added v2.2.0), an optional containerd image store, emulation of 32-bit Arm and Intel images, SSH agent forwarding, engine exposure over TCP, remote Debug Shell, custom icon labels, one-click Supabase stacks, `orb top`, and organisations with SAML SSO. SSH agent forwarding uses `/run/host-services/ssh-auth.sock`, which the docs say also suits 1Password, where mounting `$SSH_AUTH_SOCK` does not work. Checkpoints rely on Docker's experimental mode. |
 | **Bar / Grade** | `market` · **documented** |
-| **Sources** | [Docker containers](https://docs.orbstack.dev/docker/), [Settings](https://docs.orbstack.dev/settings), [Labels](https://docs.orbstack.dev/docker/labels), [Release notes](https://docs.orbstack.dev/release-notes), [Command line & CI](https://docs.orbstack.dev/headless) — read: `full` |
+| **Sources** | [Docker containers](https://docs.orbstack.dev/docker/), [Settings](https://docs.orbstack.dev/settings), [Labels](https://docs.orbstack.dev/docker/labels), [Release notes](https://docs.orbstack.dev/release-notes), [Command line & CI](https://docs.orbstack.dev/headless), [Licensing](https://docs.orbstack.dev/licensing) — read: `full` |
 | **Population / Scope** | Docs read 2026-11-05; none observed. |
 | **Licenses** | A statement that they exist. |
 | **Does NOT support** | Any claim about use or demand. The docs themselves call unauthenticated TCP exposure "extremely dangerous". |

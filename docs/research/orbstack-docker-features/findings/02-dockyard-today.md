@@ -10,7 +10,7 @@
 
 | | |
 |---|---|
-| **Claim** | Dockyard has an engine with Compose and buildx CLIs, a docker context, bind mounts at the same paths, published ports forwarded from the VM, amd64 through Rosetta, a dashboard for containers, Compose, images, volumes, networks and disk, live logs and stats, exec in a terminal, and in-app updates. |
+| **Claim** | Dockyard has an engine with Compose and buildx CLIs, a docker context, bind mounts at the same paths, published ports forwarded from the VM, amd64 through Rosetta, a dashboard for containers, Compose, images, volumes, networks and disk, live logs and stats, `docker exec` with a shell in a terminal, and in-app updates. |
 | **Bar / Grade** | `technical` · **source** |
 | **Sources** | `README.md`, `src/Dockyard.Dashboard/Features/`, `src/Dockyard.Agent/Agent.cs`, `macos/DockyardVM/Sources/dockyard-vm/main.swift` at `b227337` — read: `full` for the README and agent, excerpts for the rest |
 | **Population / Scope** | All three desktop platforms per the README; Windows also has a Windows-container engine, which OrbStack does not offer. |
@@ -104,7 +104,7 @@
 | **Claim** | No code or doc implements container domains, a reverse proxy or local CA, host-to-container-IP access, or import from Docker Desktop; proxy variables are not handled; and the Mac test script has no VPN or DNS step. The only migration is from Dockyard's own legacy engine. |
 | **Bar / Grade** | `technical` · **source** |
 | **Sources** | Searches over `src`, `image`, `macos`, `README.md`, `scripts`: `HTTP_PROXY`, `SOCKS`, `vpn`, `ipv6`, `SSH_AUTH`, `ssh-agent`, `checkpoint`: no relevant hits. Search of `src/Dockyard` and the installers for `Docker Desktop` and `com.docker.docker`: only an unrelated UI subtitle. `UserSetup.cs` lines 95-109; `scripts/mac-e2e.sh` — read: `full` for the script's step list |
-| **Population / Scope** | `b227337`. A domain search matched only files unrelated to container routing. |
+| **Population / Scope** | `b227337`. A search for `domain`, `reverse proxy`, `mkcert` and `.local` matched only Unix domain socket and `AppDomain` code. The README's Gotchas section documents Intune-managed Windows devices, so managed machines are a known audience. |
 | **Licenses** | Treating these as absent, and VPN and DNS behaviour as unverified rather than broken. |
 | **Does NOT support** | That VPNs fail on Dockyard. VM traffic goes through macOS NAT, and it may simply work. |
 | **Requirements** | `DOK-13`, `DOK-14`, `DOK-15`, `DOK-16` |
