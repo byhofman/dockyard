@@ -222,6 +222,7 @@ jobs:
       - name: Everything the one-liners and the wizard download is there
         run: |
           version=0.0.0; [ "$GITHUB_REF_TYPE" = tag ] && version="${GITHUB_REF_NAME#v}"
+          rm -f dist/*.png
           (cd dist && sha256sum * > SHA256SUMS)
           sh scripts/check-release-assets.sh "$version" "$(ls dist)"
 
@@ -242,6 +243,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # The wizard's screenshots are for looking at in the run, not for the release.
+          rm -f dist/*.png
           (cd dist && sha256sum * > SHA256SUMS)
           gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "$GITHUB_REF_NAME" --generate-notes
           gh release upload "$GITHUB_REF_NAME" dist/*
