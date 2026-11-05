@@ -14,7 +14,7 @@ public partial class MainWindow : Window
 
     void OnPreviewKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.K && e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        if (e.Key == Key.K && e.KeyModifiers.HasFlag(ShellViewModel.ShortcutModifier))
         {
             SearchBox.Focus();
             SearchBox.SelectAll();

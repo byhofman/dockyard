@@ -4,6 +4,17 @@ namespace Dockyard.Dashboard.Features.Containers;
 
 sealed record ProcessCommand(string File, IReadOnlyList<string> Args);
 
+static class DockerCli
+{
+    // An app started from the menu bar or at login does not get the PATH of a shell, so on macOS "docker" alone is not found.
+    public static string Path(string? home = null)
+    {
+        home ??= Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var own = System.IO.Path.Combine(home, ".dockyard", "bin", "docker");
+        return !OperatingSystem.IsWindows() && File.Exists(own) ? own : "docker";
+    }
+}
+
 enum TerminalKind { WindowsTerminal, WindowsConsole, Linux, MacTerminal }
 
 sealed record TerminalApp(TerminalKind Kind, string Path)
@@ -18,9 +29,9 @@ static class ExecCommand
     const string WindowsShell = "where powershell >nul 2>&1 && powershell || cmd";
     static readonly string[] LinuxTerminals = ["x-terminal-emulator", "gnome-terminal", "konsole", "kitty", "alacritty", "xfce4-terminal", "xterm"];
 
-    public static ProcessCommand Build(string context, string id, string title, bool windowsContainer, TerminalApp terminal)
+    public static ProcessCommand Build(string context, string id, string title, bool windowsContainer, TerminalApp terminal, string dockerCli = "docker")
     {
-        List<string> docker = ["docker", "--context", context, "exec", "-it", id];
+        List<string> docker = [dockerCli, "--context", context, "exec", "-it", id];
         docker.AddRange(windowsContainer ? ["cmd", "/c", WindowsShell] : ["sh", "-c", LinuxShell]);
 
         return terminal.Kind switch

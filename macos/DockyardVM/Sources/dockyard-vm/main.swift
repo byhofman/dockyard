@@ -242,6 +242,8 @@ case "run", nil:
     let machine: Machine
     do { machine = try Machine(settings: settings) } catch { fail("invalid VM configuration: \(error)") }
 
+    // Writing to a client that already hung up must fail with EPIPE, not kill the VM with every container in it.
+    signal(SIGPIPE, SIG_IGN)
     signal(SIGTERM, SIG_IGN)
     signal(SIGINT, SIG_IGN)
     var signalSources: [DispatchSourceSignal] = []

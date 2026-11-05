@@ -49,7 +49,7 @@
           </StackPanel>
 
           <TextBox x:Name="SearchBox" Grid.Column="1" Margin="40,0,16,0" MaxWidth="380" HorizontalAlignment="Stretch"
-                   PlaceholderText="Search  (Ctrl+K)" Text="{Binding Search}" VerticalAlignment="Center" >
+                   PlaceholderText="{Binding SearchHint}" Text="{Binding Search}" VerticalAlignment="Center" >
             <TextBox.InnerLeftContent>
               <PathIcon Data="{StaticResource IconSearch}" Margin="10,0,0,0" Foreground="{DynamicResource Muted}" />
             </TextBox.InnerLeftContent>

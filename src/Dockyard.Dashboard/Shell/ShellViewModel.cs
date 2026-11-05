@@ -49,6 +49,9 @@ sealed class ShellViewModel : Observable
         };
     }
 
+    public static Avalonia.Input.KeyModifiers ShortcutModifier => OperatingSystem.IsMacOS() ? Avalonia.Input.KeyModifiers.Meta : Avalonia.Input.KeyModifiers.Control;
+    public string SearchHint => OperatingSystem.IsMacOS() ? "Search  (\u2318K)" : "Search  (Ctrl+K)";
+
     public EngineSession Session { get; } = new();
     public ContainersViewModel Containers { get; }
     public IReadOnlyList<Section> Sections { get; }

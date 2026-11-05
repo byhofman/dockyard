@@ -19,6 +19,8 @@ elapsed=$(( $(date +%s) - start ))
 [ $elapsed -le 3 ] && pass "engine ready in ${elapsed}s (budget 3 s)" || echo "  slow engine ready in ${elapsed}s (budget 3 s)"
 
 echo "== containers"
+$docker run --rm --privileged --pid=host alpine:3.24 nsenter -t 1 -m -- grep -q '^/dev/vdb /var/lib/docker ' /proc/mounts \
+  && pass "docker data on the data disk" || fail "/var/lib/docker is not on the data disk"
 [ "$($docker run --rm alpine:3.24 echo hi)" = hi ] && pass "docker run" || fail "docker run"
 [ "$($docker run --rm --platform linux/amd64 alpine:3.24 uname -m)" = x86_64 ] && pass "amd64 image via Rosetta" || fail "amd64 image"
 
@@ -29,6 +31,11 @@ $docker run --rm -v "$tmp:/w" alpine:3.24 sh -c 'cat /w/in.txt > /w/out.txt && e
 [ "$(cat "$tmp/out.txt")" = "from-mac
 from-vm" ] && pass "read and write through $tmp" || fail "bind mount"
 rm -rf "$tmp"
+for short in "$(mktemp -d /tmp/dockyard-e2e.XXXX)" "$(mktemp -d)"; do
+  echo from-mac > "$short/in.txt"
+  [ "$($docker run --rm -v "$short:/w" alpine:3.24 cat /w/in.txt)" = from-mac ] && pass "read through $short" || fail "bind mount of $short"
+  rm -rf "$short"
+done
 
 echo "== ports"
 $docker run -d --name dockyard-e2e -p 8089:80 nginx:alpine >/dev/null

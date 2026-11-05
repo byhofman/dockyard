@@ -77,7 +77,9 @@ sealed class MainViewModel : Observable
 
     public string SetupDescription => OperatingSystem.IsWindows()
         ? "Installs the Windows Docker engine (dockerd service), the docker CLI with compose and buildx, a dedicated 'dockyard' WSL distro for Linux containers, and Dockyard itself, which runs in the tray."
-        : "Installs Docker CE with compose and buildx from Docker's repository, starts it on demand, and Dockyard itself, which runs in the tray.";
+        : OperatingSystem.IsMacOS()
+            ? "Installs the docker CLI with compose and buildx, a small Linux VM for containers that starts when you need it, and Dockyard itself, which runs in the menu bar."
+            : "Installs Docker CE with compose and buildx from Docker's repository, starts it on demand, and Dockyard itself, which runs in the tray.";
 
     public bool IsSetupMode
     {
@@ -227,11 +229,12 @@ sealed class MainViewModel : Observable
         var reboot = await host.Install(Log, EngineOnly);
         IsInstalled = true;
         if (OperatingSystem.IsWindows() && !Paths.IsInstalledCopy) Shell.StartUnelevated(Paths.AppExe);
+        if (OperatingSystem.IsMacOS() && IsSetupMode) Shell.Spawn(Paths.Self, "--tray").Dispose();
         Log(reboot
             ? "Done. Reboot to finish enabling Windows containers."
             : OperatingSystem.IsWindows()
                 ? "Done. Dockyard runs in the tray. Sign out and back in once so docker-users applies to the Windows engine."
-                : "Done. Dockyard runs in the tray. Sign out and back in once so the docker group applies.");
+                : OperatingSystem.IsMacOS() ? "Done. Dockyard runs in the menu bar." : "Done. Dockyard runs in the tray. Sign out and back in once so the docker group applies.");
         Status = "Installed";
     });
 

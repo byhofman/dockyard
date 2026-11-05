@@ -97,14 +97,14 @@ static partial class Updates
         throw new InvalidOperationException($"No suitable {repo} release found");
     }
 
-    public static async Task<Release?> LatestApp()
+    public static async Task<Release?> LatestApp(string assetPattern = @"^Dockyard\.exe$")
     {
         using var response = await Http.GetAsync($"https://api.github.com/repos/{Paths.Repo}/releases/latest");
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
         response.EnsureSuccessStatusCode();
         var release = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
         var tag = release["tag_name"]!.GetValue<string>();
-        var asset = release["assets"]!.AsArray().FirstOrDefault(a => a!["name"]!.GetValue<string>() == "Dockyard.exe");
+        var asset = release["assets"]!.AsArray().FirstOrDefault(a => Regex.IsMatch(a!["name"]!.GetValue<string>(), assetPattern));
         return ParseVersion(tag) is { } v && asset is not null
             ? new Release(v, tag, asset["browser_download_url"]!.GetValue<string>())
             : null;
@@ -124,13 +124,15 @@ static partial class Updates
 
     public static Task<string> DownloadImage(string targetDir) => DownloadReleaseAsset(ImageAsset, targetDir, isPattern: true);
 
-    // From the same release as this build, or from the latest release for development builds.
-    public static async Task<string> DownloadReleaseAsset(string name, string targetDir, bool isPattern = false)
+    // From the given release; without one, the release of this build, or the latest for development builds.
+    internal static string ReleaseApiUrl(string appVersion, string? tag) =>
+        tag is not null ? $"https://api.github.com/repos/{Paths.Repo}/releases/tags/{tag}"
+        : appVersion == "0.0.0" ? $"https://api.github.com/repos/{Paths.Repo}/releases/latest"
+        : $"https://api.github.com/repos/{Paths.Repo}/releases/tags/v{appVersion}";
+
+    public static async Task<string> DownloadReleaseAsset(string name, string targetDir, bool isPattern = false, string? tag = null)
     {
-        var url = Paths.AppVersion == "0.0.0"
-            ? $"https://api.github.com/repos/{Paths.Repo}/releases/latest"
-            : $"https://api.github.com/repos/{Paths.Repo}/releases/tags/v{Paths.AppVersion}";
-        var release = JsonNode.Parse(await Http.GetStringAsync(url))!;
+        var release = JsonNode.Parse(await Http.GetStringAsync(ReleaseApiUrl(Paths.AppVersion, tag)))!;
         var asset = release["assets"]!.AsArray().FirstOrDefault(a =>
                 isPattern ? Regex.IsMatch(a!["name"]!.GetValue<string>(), name) : a!["name"]!.GetValue<string>() == name)
             ?? throw new InvalidOperationException($"Release {release["tag_name"]} has no {name}");
@@ -144,8 +146,24 @@ static partial class Updates
     {
         using var response = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
         response.EnsureSuccessStatusCode();
-        await using var file = File.Create(target);
-        await response.Content.CopyToAsync(file);
+        await using var content = await response.Content.ReadAsStreamAsync();
+        await WriteReplacing(content, target);
+    }
+
+    // Renamed into place: writing to the target directly would follow a symlink and overwrite what it points at,
+    // such as the plugin inside another Docker app's bundle.
+    internal static async Task WriteReplacing(Stream content, string target)
+    {
+        var partial = target + ".download";
+        try
+        {
+            await using (var file = File.Create(partial)) await content.CopyToAsync(file);
+            File.Move(partial, target, overwrite: true);
+        }
+        finally
+        {
+            File.Delete(partial);
+        }
     }
 
     public static Version? ParseVersion(string? text)

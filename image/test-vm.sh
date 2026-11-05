@@ -37,6 +37,8 @@ export DOCKER_HOST=tcp://127.0.0.1:12375
 boot
 grep -m1 "dockyard-vm-init: ready" console.log || true
 docker version --format 'engine {{.Server.Version}} ({{.Server.Os}}/{{.Server.Arch}})'
+docker run --rm --privileged --pid=host alpine:3.24 nsenter -t 1 -m -- grep -q '^/dev/vdb /var/lib/docker ' /proc/mounts \
+  && echo "docker stores its data on the data disk" || { echo "FAIL: /var/lib/docker is not on the data disk"; exit 1; }
 [ "$(docker run --rm alpine:3.24 echo ok)" = ok ] && echo "container runs"
 
 docker run -d --name web -p 8080:80 nginx:alpine >/dev/null
