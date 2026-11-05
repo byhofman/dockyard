@@ -19,6 +19,7 @@ static class MachineSetup
     // Returns true when a reboot is needed.
     public static async Task<bool> Install(Action<string> log, string userSid, string userName, int keepPid, bool engineOnly = false)
     {
+        InUseFiles.CleanUp(Paths.DockerDir);
         var reboot = await EnableContainersFeature(log);
         reboot |= await InstallWsl(log);
         await AddDefenderExclusions(log);
@@ -133,7 +134,8 @@ static class MachineSetup
             {
                 var target = Path.Combine(root, entry.FullName.Replace('/', '\\'));
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                entry.ExtractToFile(target, overwrite: true);
+                InUseFiles.MoveAside(target);
+                entry.ExtractToFile(target);
             }
         }
         File.Delete(zip);
@@ -151,7 +153,11 @@ static class MachineSetup
         var plugin = Plugins.Single(p => p.Component == component);
         var release = await Updates.LatestGitHub(plugin.Repo, plugin.Pattern);
         Directory.CreateDirectory(Paths.PluginDir);
-        await Updates.DownloadFile(release.DownloadUrl!, Path.Combine(Paths.PluginDir, plugin.File));
+        var target = Path.Combine(Paths.PluginDir, plugin.File);
+        var incoming = target + ".new";
+        await Updates.DownloadFile(release.DownloadUrl!, incoming);
+        InUseFiles.MoveAside(target);
+        File.Move(incoming, target);
         log($"{plugin.File} {release.Tag}");
     }
 

@@ -59,6 +59,47 @@ public sealed class DashboardFilesTests : IDisposable
     }
 }
 
+public sealed class InUseFilesTests
+{
+    [Fact]
+    public void A_free_file_goes_and_nothing_stays_behind()
+    {
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        var file = Path.Combine(dir, "docker.exe");
+        File.WriteAllText(file, "old");
+        InUseFiles.MoveAside(file);
+        Assert.Empty(Directory.GetFiles(dir));
+    }
+
+    [Fact]
+    public void A_file_in_use_moves_aside_so_the_new_one_can_take_its_place()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows locks open files");
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        var file = Path.Combine(dir, "docker.exe");
+        File.WriteAllText(file, "old");
+        using (new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete))
+        {
+            InUseFiles.MoveAside(file);
+            File.WriteAllText(file, "new");
+        }
+        Assert.Equal("new", File.ReadAllText(file));
+        InUseFiles.CleanUp(dir);
+        Assert.Equal([file], Directory.GetFiles(dir));
+    }
+
+    [Fact]
+    public void Clean_up_only_takes_what_was_moved_aside()
+    {
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        Directory.CreateDirectory(Path.Combine(dir, "cli-plugins"));
+        File.WriteAllText(Path.Combine(dir, "docker.exe"), "");
+        File.WriteAllText(Path.Combine(dir, "cli-plugins", "docker-compose.exe.abc.old"), "");
+        InUseFiles.CleanUp(dir);
+        Assert.Equal(["docker.exe"], Directory.GetFiles(dir, "*", SearchOption.AllDirectories).Select(Path.GetFileName));
+    }
+}
+
 public sealed class ChecksumsTests
 {
     [Fact]

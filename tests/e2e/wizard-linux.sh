@@ -87,7 +87,8 @@ if [ "$container" -eq 1 ] && [ "$ID" != arch ]; then
   echo "== removed again, silent without root has no way up"
   run --silent --uninstall
   useradd -m dockyard-e2e 2>/dev/null || true
-  out="$(su dockyard-e2e -c "$WIZARD --silent --no-start" 2>&1)" && fail "exited 0 without root"
+  if [ -n "${ONELINER:-}" ]; then as_user="curl -fsSL $ONELINER | sh -s -- --silent --no-start"; else as_user="$WIZARD --silent --no-start"; fi
+  out="$(su dockyard-e2e -c "$as_user" 2>&1)" && fail "exited 0 without root"
   echo "$out" | grep -q "needs root" && ok "non-zero with a clear message" || fail "message was: $out"
 fi
 echo "All good."

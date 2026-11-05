@@ -84,12 +84,17 @@ foreach ($i in 1..30) { & $docker --context win version *> $null; if ($LASTEXITC
 Check 'the win context answers' ($LASTEXITCODE -eq 0)
 Stop-Service docker
 
+Section 'a docker command running in some terminal does not stop an update'
+$running = Start-Process $docker -ArgumentList '--context linux events' -PassThru -WindowStyle Hidden
+Check 'the docker command is running' (-not $running.HasExited)
+
 Section 'rerun keeps the choice and the data'
 Check 'exit 0' ((Run --silent --no-start) -eq 0)
 Check 'still no dashboard' (-not (Test-Path $dashboard))
 Linux-Engine
 & $docker --context linux volume inspect dockyard-e2e | Out-Null
 Check 'marker volume kept' ($LASTEXITCODE -eq 0)
+if (-not $running.HasExited) { $running.Kill() }
 
 Section 'the wizard window adds the skipped dashboard and removes it again'
 Window
