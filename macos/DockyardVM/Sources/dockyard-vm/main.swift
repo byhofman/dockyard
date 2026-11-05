@@ -8,7 +8,8 @@ import Virtualization
 // dockyard-vm prepare --assets <dir> [--config <path>]   settings, root image clone, data disk
 // dockyard-vm run [--config <path>]                       boots the VM in the foreground until SIGTERM or "stop"
 
-let home = FileManager.default.homeDirectoryForCurrentUser.path
+// $HOME first, like the .NET app that starts this helper: the two must agree on where ~/.dockyard is.
+let home = ProcessInfo.processInfo.environment["HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? FileManager.default.homeDirectoryForCurrentUser.path
 let arguments = CommandLine.arguments
 func option(_ name: String) -> String? {
     guard let index = arguments.firstIndex(of: name), index + 1 < arguments.count else { return nil }
