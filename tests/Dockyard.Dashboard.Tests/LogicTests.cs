@@ -121,4 +121,26 @@ public sealed class LogicTests
         Assert.Equal(new TrayCommand(TrayCommandKind.Start, "win"), TrayCommand.FromArgs(["--start", "win"]));
         Assert.Equal(new TrayCommand(TrayCommandKind.Show), TrayCommand.FromArgs(["--start", "bogus"]));
     }
+
+    [Fact]
+    public void Docker_cli_is_found_without_a_shell_path_after_a_mac_install()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Windows has the CLI on the machine PATH");
+        var home = Directory.CreateTempSubdirectory("dockyard-cli").FullName;
+        try
+        {
+            Assert.Equal("docker", DockerCli.Path(home));
+            var cli = Path.Combine(home, ".dockyard", "bin", "docker");
+            Directory.CreateDirectory(Path.GetDirectoryName(cli)!);
+            File.WriteAllText(cli, "");
+            Assert.Equal(cli, DockerCli.Path(home));
+
+            var cmd = ExecCommand.Build("dockyard", "abc", "web", windowsContainer: false, TerminalApp.MacTerminal, cli);
+            Assert.Contains(cli, cmd.Args[1]);
+        }
+        finally
+        {
+            Directory.Delete(home, recursive: true);
+        }
+    }
 }

@@ -29,11 +29,17 @@ for m in virtio_net virtio_blk virtio_balloon virtio_console virtiofs vmw_vsock_
   modprobe -q "$m" 2>/dev/null || true
 done
 
-if ! blkid /dev/vdb >/dev/null 2>&1; then
+# Only a disk that reads as zeros is new. Formatting on anything less certain could destroy the user's images,
+# and busybox blkid exits 0 even when it finds nothing.
+if [ -z "$(od -A n -v -t x1 -N 65536 /dev/vdb | tr -d ' 0\n')" ]; then
   mkfs.ext4 -q -L dockyard-data /dev/vdb
 fi
 mkdir -p /var/lib/docker
-mount -t ext4 /dev/vdb /var/lib/docker
+if ! mount -t ext4 /dev/vdb /var/lib/docker; then
+  # Docker would otherwise fill the small root image, which is replaced on every update.
+  echo "dockyard-vm-init: cannot mount the data disk" > /dev/console
+  poweroff -f
+fi
 
 mkdir -p /mnt/host
 if mount -t virtiofs dockyard /mnt/host 2>/dev/null; then
@@ -43,6 +49,12 @@ if mount -t virtiofs dockyard /mnt/host 2>/dev/null; then
     mkdir -p "$dst"
     mount --bind "$src" "$dst"
   done
+  # On the Mac /tmp and /var/folders are symlinks into /private, and shells and mktemp hand out those short paths.
+  [ -d /private/tmp ] && mount --bind /private/tmp /tmp
+  if [ -d /private/var/folders ]; then
+    mkdir -p /var/folders
+    mount --bind /private/var/folders /var/folders
+  fi
 fi
 
 mkdir -p /mnt/rosetta

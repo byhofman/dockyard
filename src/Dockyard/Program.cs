@@ -26,7 +26,10 @@ static class Program
         if (!(installed || args.Contains("--tray")) || args.Contains("--setup"))
             return Build(AppMode.Setup).StartWithClassicDesktopLifetime(args, ShutdownMode.OnMainWindowClose);
 
-        using var mutex = new Mutex(true, @"Local\Dockyard", out var first);
+        // On Unix "Local" means this login session, and launchd gives every app its own, so it would never see the running tray.
+        using var mutex = OperatingSystem.IsWindows()
+            ? new Mutex(true, @"Local\Dockyard", out var first)
+            : new Mutex(true, "Dockyard", new NamedWaitHandleOptions { CurrentUserOnly = true, CurrentSessionOnly = false }, out first);
         if (!first)
         {
             LocalPipe.TrySend(LocalPipe.TrayName, TrayCommand.FromArgs(args).ToString(), timeoutMs: 3000);
@@ -42,7 +45,7 @@ static class Program
         {
             if (uninstall) host.Uninstall(Console.WriteLine).GetAwaiter().GetResult();
             else host.Install(Console.WriteLine, engineOnly).GetAwaiter().GetResult();
-            Console.WriteLine(uninstall ? "Dockyard was removed." : "Done. Sign out and back in once so the docker group applies.");
+            Console.WriteLine(uninstall ? "Dockyard was removed." : OperatingSystem.IsLinux() ? "Done. Sign out and back in once so the docker group applies." : "Done.");
             return 0;
         }
         catch (Exception ex)
@@ -54,6 +57,8 @@ static class Program
 
     static AppBuilder Build(AppMode mode, string[]? args = null) => AppBuilder.Configure(() => new App(mode, args ?? []))
         .UsePlatformDetect()
+        // The default dock policy overrides LSUIElement and gives the tray a Dock icon and the app switcher entry of a foreground app.
+        .With(new MacOSPlatformOptions { ShowInDock = mode == AppMode.Setup })
         .With(new Win32PlatformOptions { RenderingMode = [Win32RenderingMode.Software] })
         .With(new SkiaOptions { MaxGpuResourceSizeBytes = 8 * 1024 * 1024 });
 

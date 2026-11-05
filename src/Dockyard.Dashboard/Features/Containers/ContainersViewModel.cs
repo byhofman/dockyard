@@ -206,7 +206,7 @@ sealed class ContainersViewModel : Observable, ISearchable
             shell.ShowError("No terminal found. Set the TERMINAL environment variable to your terminal emulator.");
             return Task.CompletedTask;
         }
-        var command = Features.Containers.ExecCommand.Build(Session.ContextName, item.Id, item.Name, Session.IsWindowsEngine, terminal);
+        var command = Features.Containers.ExecCommand.Build(Session.ContextName, item.Id, item.Name, Session.IsWindowsEngine, terminal, DockerCli.Path());
         try
         {
             var psi = new ProcessStartInfo(command.File) { UseShellExecute = false, CreateNoWindow = false };

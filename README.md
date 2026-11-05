@@ -84,7 +84,7 @@ The dashboard follows the active docker context (the same one the CLI uses) and 
 - **Networks**: subnet, connected containers, connect/disconnect, create, remove, prune.
 - **Disk**: `docker system df` per category with what can be reclaimed; prune per category or **Clean everything unused**.
 
-Keys: `Ctrl+K` search, `S` start/stop, `R` restart, `E` terminal, `L` logs, `Del` remove (with confirmation), `Left`/`Right` collapse/expand a compose project. Panel sizes and recent compose files live in `%APPDATA%\Dockyard\dashboard.json`.
+Keys: `Ctrl+K` (`⌘K` on macOS) search, `S` start/stop, `R` restart, `E` terminal, `L` logs, `Del` (delete on a Mac keyboard) remove (with confirmation), `Left`/`Right` collapse/expand a compose project. Panel sizes and recent compose files live in `%APPDATA%\Dockyard\dashboard.json`.
 
 ## Linux
 
@@ -113,12 +113,12 @@ curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install-mac.
 
 It downloads the release with `curl`, checks it against `SHA256SUMS`, installs `~/Applications/Dockyard.app` and runs its setup. The release also has `Dockyard-<version>-macos.dmg` for a manual install. The app is ad-hoc signed (no Developer ID yet), so a browser download is quarantined and needs **System Settings → Privacy & Security → Open Anyway** once; the script avoids that. Dockyard updates itself from the Updates screen. The setup:
 
-- installs Docker's static `docker` CLI to `~/.dockyard/bin` (added to the PATH through `/etc/paths.d/dockyard`, one administrator prompt) and the compose and buildx plugins to `~/.docker/cli-plugins`
+- installs Docker's static `docker` CLI to `~/.dockyard/bin` (added to the PATH through `/etc/paths.d/dockyard`, one administrator prompt) and the compose and buildx plugins to `~/.docker/cli-plugins`; a plugin that is a symlink into another Docker app is kept aside and put back on uninstall
 - prepares the VM in `~/.dockyard`: settings (`vm.json`: all cores, half the RAM up to 8 GiB), the root disk (a copy-on-write clone of the image in the app) and a sparse 64 GB data disk for `/var/lib/docker`
-- creates and selects the docker context `dockyard` (`unix://~/.dockyard/docker.sock`)
+- creates and selects the docker context `dockyard` (`unix://~/.dockyard/docker.sock`); uninstalling selects the previous context again
 - starts Dockyard at login (`~/Library/LaunchAgents/com.byhofman.dockyard.plist`)
 
-Inside the VM: Alpine with Docker's static binaries, `/Users`, `/Volumes`, `/private/tmp` and `/private/var/folders` shared at the same paths (so `-v $PWD:/app` works), Rosetta for `linux/amd64` images when Rosetta is installed (`softwareupdate --install-rosetta`), published ports forwarded to `127.0.0.1` (or all interfaces for `0.0.0.0`), memory the guest does not use handed back to macOS, and the guest clock reset after the Mac wakes. Logs: `~/.dockyard/logs/vm-console.log`. For tools that insist on `/var/run/docker.sock`: `sudo ln -sf ~/.dockyard/docker.sock /var/run/docker.sock`.
+Inside the VM: Alpine with Docker's static binaries, `/Users`, `/Volumes`, `/private/tmp` and `/private/var/folders` shared at the same paths, also as `/tmp` and `/var/folders` (so `-v $PWD:/app` and `-v $(mktemp -d):/w` work), Rosetta for `linux/amd64` images when Rosetta is installed (`softwareupdate --install-rosetta`), published ports forwarded to `127.0.0.1` (or all interfaces for `0.0.0.0`), memory the guest does not use handed back to macOS, and the guest clock reset after the Mac wakes. Logs: `~/.dockyard/logs/vm-console.log`. For tools that insist on `/var/run/docker.sock`: `sudo ln -sf ~/.dockyard/docker.sock /var/run/docker.sock`.
 
 `scripts/mac-e2e.sh <Dockyard folder>` checks start time, containers, Rosetta, bind mounts, ports, compose, buildx, memory, clock and stop on a Mac.
 
@@ -134,6 +134,8 @@ $env:DOCKER_CONTEXT = "win" # this shell only
 Start an engine first: `Start-Service docker` or `wsl -d dockyard -u root -- /usr/local/sbin/dockyard-init` (keep that window open). Don't set `DOCKER_HOST`: it overrides the contexts.
 
 ## Build
+
+The .NET SDK has to be 10.0.403 or newer: restore fails on older ones because the NativeAOT compiler they select has a known vulnerability (NU1903).
 
 ```pwsh
 dotnet test --solution Dockyard.slnx

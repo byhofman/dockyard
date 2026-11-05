@@ -6,6 +6,7 @@ set -eu
 version="$1"; dist="$2"; out="$3"
 here="$(cd "$(dirname "$0")" && pwd)"; root="$here/../.."
 work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
 
 bundle() {
   app="$1/Dockyard.app"; with_dashboard="$2"

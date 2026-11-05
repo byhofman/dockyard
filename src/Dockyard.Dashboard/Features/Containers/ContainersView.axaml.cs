@@ -91,7 +91,7 @@ public partial class ContainersView : UserControl
                     break;
                 case Key.S: vm.ProjectStartStopCommand.Execute(project); break;
                 case Key.R: vm.ProjectRestartCommand.Execute(project); break;
-                case Key.Delete: vm.ProjectDownCommand.Execute(project); break;
+                case Key.Delete or Key.Back: vm.ProjectDownCommand.Execute(project); break;
                 default: return;
             }
             e.Handled = true;
@@ -105,7 +105,7 @@ public partial class ContainersView : UserControl
             case Key.R: vm.RestartCommand.Execute(item); break;
             case Key.E: vm.ExecCommand.Execute(item); break;
             case Key.L or Key.Enter when vm.Detail is ContainerDetailViewModel d: d.SelectedTab = 0; break;
-            case Key.Delete: vm.AskRemoveCommand.Execute(item); break;
+            case Key.Delete or Key.Back: vm.AskRemoveCommand.Execute(item); break;
             default: return;
         }
         e.Handled = true;
