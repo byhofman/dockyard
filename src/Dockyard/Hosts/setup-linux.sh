@@ -137,9 +137,18 @@ case "$action" in
       systemctl daemon-reload
       systemctl enable docker.service containerd.service >/dev/null 2>&1 || true
     fi
+    # apt fails on a package it no longer knows, as a removed dashboard is once the local .deb is gone.
     case "$family" in
-      apt) DEBIAN_FRONTEND=noninteractive apt-get remove -y -qq dockyard-dashboard dockyard >/dev/null 2>&1 || true ;;
-      dnf) dnf -y -q remove dockyard-dashboard dockyard >/dev/null 2>&1 || true ;;
+      apt)
+        for package in dockyard-dashboard dockyard; do
+          if dpkg -s "$package" >/dev/null 2>&1; then DEBIAN_FRONTEND=noninteractive apt-get remove -y -qq "$package" >/dev/null; fi
+        done
+        ;;
+      dnf)
+        for package in dockyard-dashboard dockyard; do
+          if rpm -q "$package" >/dev/null 2>&1; then dnf -y -q remove "$package"; fi
+        done
+        ;;
     esac
     echo "Removed Dockyard; Docker packages, images and containers were kept"
     ;;

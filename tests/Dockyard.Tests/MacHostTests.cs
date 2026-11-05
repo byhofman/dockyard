@@ -163,8 +163,11 @@ public sealed class MacInstallTests : IDisposable
     [InlineData("/Volumes/Dockyard 1/Dockyard.app/Contents/MacOS/", "/Users/a/Applications/Dockyard.app")]
     [InlineData("/private/var/folders/x/AppTranslocation/ABC/d/Dockyard.app/Contents/MacOS/", "/Users/a/Applications/Dockyard.app")]
     [InlineData("/Users/a/Library/Caches/Dockyard/installer/Dockyard.app/Contents/MacOS/", "/Users/a/Applications/Dockyard.app")]
-    public void Install_location_keeps_an_applications_folder_and_moves_everything_else(string baseDirectory, string expected) =>
-        Assert.Equal(expected, MacLayout.InstallLocation(baseDirectory, "/Users/a/Applications").Replace('\\', '/'));
+    public void Install_location_keeps_an_applications_folder_and_moves_everything_else(string baseDirectory, string expected)
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix paths");
+        Assert.Equal(expected, MacLayout.InstallLocation(baseDirectory, "/Users/a/Applications"));
+    }
 
     [Fact]
     public void Bundle_version_comes_from_the_installed_info_plist()
