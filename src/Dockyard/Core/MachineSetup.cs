@@ -53,6 +53,7 @@ static class MachineSetup
             log("Removing docker service");
             await StopService();
             await Shell.Check("sc.exe", "delete", Paths.ServiceName);
+            RemoveEventSource();
         }
         await Shell.Run("powershell.exe", "-NoProfile", "-Command",
             $"Remove-MpPreference -ControlledFolderAccessAllowedApplications '{Paths.DockerdExe}'");
@@ -178,6 +179,7 @@ static class MachineSetup
         if (!ServiceExists())
         {
             log("Registering docker service");
+            RemoveEventSource();
             await Shell.Check(Paths.DockerdExe, "--register-service");
         }
         await Shell.Check("sc.exe", "config", Paths.ServiceName, "start=", "demand");
@@ -316,6 +318,11 @@ static class MachineSetup
             catch { }
         }
     }
+
+    // dockerd refuses to register when its event source is left over, and "sc delete" leaves it. Without this,
+    // installing again after an uninstall fails.
+    static void RemoveEventSource() =>
+        Microsoft.Win32.Registry.LocalMachine.DeleteSubKeyTree(@"SYSTEM\CurrentControlSet\Services\EventLog\Application\" + Paths.ServiceName, throwOnMissingSubKey: false);
 
     static bool ServiceExists() => ServiceController.GetServices().Any(s => s.ServiceName == Paths.ServiceName);
 

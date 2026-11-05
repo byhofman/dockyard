@@ -73,7 +73,8 @@ run --silent --uninstall
 check "app removed" missing "$app_dir/Dockyard"
 check "setup undone" missing "$marker"
 if [ "$container" -eq 0 ]; then
-  sudo systemctl start docker.socket
+  sudo systemctl reset-failed docker.socket docker.service || true
+  sudo systemctl restart docker.socket docker.service || sudo systemctl status --no-pager docker.socket docker.service || true
   docker volume inspect dockyard-e2e >/dev/null && ok "marker volume kept" || fail "marker volume gone"
   docker volume rm dockyard-e2e >/dev/null
 fi
