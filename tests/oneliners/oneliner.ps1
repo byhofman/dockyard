@@ -13,12 +13,16 @@ $env:DOCKYARD_VERSION = '9.9.9'
 # A small real exe that records its arguments, compiled here so the script's Start-Process is the real one.
 $fake = Join-Path $work 'fake.exe'
 $record = Join-Path $work 'args.txt'
-Add-Type -OutputAssembly $fake -OutputType ConsoleApplication -TypeDefinition @"
+$source = Join-Path $work 'fake.cs'
+@"
 public static class P { public static int Main(string[] a) {
   System.IO.File.WriteAllText(@"$record", string.Join(" ", a));
   return a.Length > 0 && a[0] == "--fail" ? 7 : a.Length > 0 && a[0] == "--reboot" ? 3010 : 0;
 } }
-"@
+"@ | Set-Content $source
+# PowerShell 7 cannot compile an exe; Windows PowerShell, on every Windows, can.
+powershell.exe -NoProfile -Command "Add-Type -OutputAssembly '$fake' -OutputType ConsoleApplication -TypeDefinition (Get-Content '$source' -Raw)"
+if ($LASTEXITCODE -ne 0) { Fail 'could not compile the fake installer' }
 $hash = (Get-FileHash $fake -Algorithm SHA256).Hash
 
 $global:sums = "$hash  Dockyard.exe`n"
