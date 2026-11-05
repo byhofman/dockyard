@@ -78,7 +78,7 @@
 | **Claim** | The repo never installs or configures a Docker credential helper. |
 | **Bar / Grade** | `technical` · **source** |
 | **Sources** | Search for `docker-credential`, `credsStore`, `wincred` in `src`, `image`, `macos`, `install*.sh`: no hits. `osxkeychain` in `src`, `image`, `macos`, `scripts`, `README.md`: no hits |
-| **Population / Scope** | `b227337`. Whether Docker's static CLI archives bundle a helper was not checked. `install.ps1` was not in the helper search. |
+| **Population / Scope** | `b227337`. Whether Docker's static CLI archives bundle a helper was not checked. `install.ps1` was searched too: no hits. |
 | **Licenses** | Treating secure credential storage as unaddressed by Dockyard. |
 | **Does NOT support** | That credentials are stored unencrypted on every machine; a user can configure a helper themselves. |
 | **Requirements** | `DOK-10` |
