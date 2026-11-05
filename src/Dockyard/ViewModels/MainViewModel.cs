@@ -86,7 +86,9 @@ sealed class MainViewModel : Observable
     public bool HasDashboard => host.HasDashboard;
     public bool NeedsReboot { get => needsReboot; private set => Set(ref needsReboot, value); }
     public string InstalledVersion { get => installedVersion; private set { if (Set(ref installedVersion, value)) Raise(nameof(ManageText)); } }
-    public string ManageText => $"Dockyard {InstalledVersion} is installed. Update brings it to v{Paths.AppVersion} and keeps your images, containers and settings.";
+    public string ManageText => InstalledVersion == Paths.AppVersion
+        ? $"Dockyard {InstalledVersion} is installed. Running the setup again keeps your images, containers and settings."
+        : $"Dockyard {InstalledVersion} is installed. Update brings it to {Paths.AppVersion} and keeps your images, containers and settings.";
 
     public string Version => "v" + Paths.AppVersion;
     public string Active => active;
