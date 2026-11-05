@@ -390,7 +390,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null) : IEngineHo
         var script = string.Join(" ; ", steps);
         log("Administrator step: " + (rosetta ? "adding ~/.dockyard/bin to the PATH" : "installing Rosetta for amd64 images and adding ~/.dockyard/bin to the PATH"));
         var r = silent
-            ? await runner.Run("/usr/bin/sudo", "-n", "/bin/sh", "-c", script)
+            ? await runner.Run("sudo", "-n", "/bin/sh", "-c", script)
             : await runner.Run("/usr/bin/osascript", MacLayout.AdminShell(script));
         if (r.ExitCode != 0)
             log($"Skipped ({(silent ? "no passwordless sudo" : "approval declined")}). {MacLayout.BinDir} is not on the PATH until the wizard runs with an administrator's approval" + (rosetta ? "." : ", and amd64 images need Rosetta."));

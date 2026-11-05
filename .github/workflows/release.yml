@@ -121,7 +121,7 @@ jobs:
 
   macos:
     needs: [vm-image]
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

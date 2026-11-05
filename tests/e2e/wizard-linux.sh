@@ -22,18 +22,18 @@ else
   app_dir=/usr/lib/dockyard
 fi
 dashboard="$app_dir/Dockyard.Dashboard"
-polkit=/etc/polkit-1/rules.d/50-dockyard.rules
+marker=/etc/dockyard/installed
 
 echo "== wrong arguments are refused"
 rc=0; run --silent --typo >/dev/null 2>&1 || rc=$?
 [ "$rc" -eq 2 ] && ok "exit 2" || fail "--typo exits $rc"
-check "and nothing was installed" missing "$polkit"
+check "and nothing was installed" missing "$marker"
 
 echo "== first install, no dashboard"
 run --silent --no-dashboard --no-start
 check "app in place" test -x "$app_dir/Dockyard"
 check "no dashboard" missing "$dashboard"
-check "setup ran" test -f "$polkit"
+check "setup ran" test -f "$marker"
 check "docker installed" command -v dockerd
 if [ "$container" -eq 0 ]; then
   check "tray autostarts" test -f "$HOME/.config/autostart/dockyard.desktop"
@@ -71,7 +71,7 @@ check "app stays" test -x "$app_dir/Dockyard"
 echo "== uninstall keeps docker's data"
 run --silent --uninstall
 check "app removed" missing "$app_dir/Dockyard"
-check "setup undone" missing "$polkit"
+check "setup undone" missing "$marker"
 if [ "$container" -eq 0 ]; then
   sudo systemctl start docker.socket
   docker volume inspect dockyard-e2e >/dev/null && ok "marker volume kept" || fail "marker volume gone"

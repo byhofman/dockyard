@@ -123,6 +123,8 @@ polkit.addRule(function(action, subject) {
 });
 EOF
   echo "Installed $rule"
+  mkdir -p /etc/dockyard
+  : > /etc/dockyard/installed
 }
 
 case "$action" in
@@ -130,7 +132,7 @@ case "$action" in
   install) install_packages; configure; grant_socket_access; install_tray_host ;;
   uninstall)
     rm -f "$rule"
-    rm -rf "$socket_dropin_dir"
+    rm -rf "$socket_dropin_dir" /etc/dockyard
     if has_systemd; then
       systemctl daemon-reload
       systemctl enable docker.service containerd.service >/dev/null 2>&1 || true

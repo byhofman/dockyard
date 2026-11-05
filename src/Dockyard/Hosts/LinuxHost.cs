@@ -86,7 +86,8 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
         new("App", "Dockyard"),
     ];
 
-    public bool IsInstalled => File.Exists(PolkitRule);
+    // The polkit rules folder is closed to normal users, so setup leaves a marker they can see.
+    public bool IsInstalled => File.Exists("/etc/dockyard/installed") || File.Exists(PolkitRule);
 
     public static string AutostartFile => Path.Combine(
         Environment.GetEnvironmentVariable("XDG_CONFIG_HOME") is { Length: > 0 } config ? config : Path.Combine(Paths.UserProfile, ".config"),
