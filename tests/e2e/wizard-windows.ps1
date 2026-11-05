@@ -4,7 +4,7 @@
     wizard-windows.ps1 -OneLiner <url of install.ps1>
   Starts from an install of v0.1.0, the state of the owner's PC.
 #>
-param([string]$Wizard, [string]$OneLiner)
+param([string]$Wizard, [string]$OneLiner, [string]$Screenshots = (Join-Path $PSScriptRoot '../../screenshots'))
 
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
@@ -26,6 +26,13 @@ function Run {
     $p = Start-Process (Resolve-Path $Wizard) -ArgumentList $args -Wait -PassThru -NoNewWindow -RedirectStandardOutput $out -RedirectStandardError $err
     Get-Content $out, $err | Write-Host
     return $p.ExitCode
+}
+
+function Window {
+    param([string]$LookOnly)
+    $exe = if ($OneLiner) { Join-Path $env:USERPROFILE 'Downloads\Dockyard.exe' } else { (Resolve-Path $Wizard).Path }
+    powershell.exe -NoProfile -File (Join-Path $PSScriptRoot 'wizard-window.ps1') -Exe $exe -Screenshots $Screenshots -Dashboard $dashboard $(if ($LookOnly) { '-LookOnly', $LookOnly })
+    if ($LASTEXITCODE -ne 0) { throw 'FAIL the wizard window' }
 }
 
 function Linux-Engine {
@@ -53,6 +60,7 @@ Invoke-WebRequest https://github.com/byhofman/dockyard/releases/download/v0.1.0/
 Check 'really v0.1.0 to start from' ((Get-Item $appExe).VersionInfo.ProductVersion -like '0.1.0*')
 New-Item -ItemType Directory -Force "$env:APPDATA\Dockyard" | Out-Null
 '{"StopOtherOnSwitch":false,"StartActiveAtLogon":false}' | Set-Content "$env:APPDATA\Dockyard\settings.json"
+if (-not $OneLiner) { Window -LookOnly 'manage-over-v0.1.0' }
 $code = Run --silent --no-start
 Check "exit 0 (was $code)" ($code -eq 0)
 Check 'no longer v0.1.0' ((Get-Item $appExe).VersionInfo.ProductVersion -notlike '0.1.0*')
@@ -82,6 +90,9 @@ Check 'still no dashboard' (-not (Test-Path $dashboard))
 Linux-Engine
 & $docker --context linux volume inspect dockyard-e2e | Out-Null
 Check 'marker volume kept' ($LASTEXITCODE -eq 0)
+
+Section 'the wizard window adds the skipped dashboard and removes it again'
+Window
 
 Section 'add the dashboard'
 Check 'exit 0' ((Run --silent --dashboard --no-start) -eq 0)

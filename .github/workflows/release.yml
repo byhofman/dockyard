@@ -176,6 +176,12 @@ jobs:
           DOCKYARD_GITHUB_TOKEN: ${{ github.token }}
         run: ./tests/e2e/wizard-windows.ps1 -Wizard wizard/Dockyard.exe
 
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wizard-screenshots
+          path: screenshots
+
   wizard-linux:
     needs: [linux]
     runs-on: ubuntu-latest
