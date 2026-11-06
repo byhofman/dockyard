@@ -255,7 +255,7 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
             var agent = await GuestBundle.ExtractAgent(dir) ?? "";
             var existing = File.Exists(DaemonJson) ? await File.ReadAllTextAsync(DaemonJson) : null;
             var config = Path.Combine(dir, "daemon.json");
-            await File.WriteAllTextAsync(config, agent.Length == 0 ? existing ?? "{}" : EngineConfig.WithDockyard(existing));
+            await File.WriteAllTextAsync(config, agent.Length == 0 ? existing ?? "{}" : EngineConfig.WithDockyard(existing, HostProxySettings.FromEnvironment(Environment.GetEnvironmentVariable)));
             if (agent.Length > 0 && EngineConfig.DnsIsSomeoneElses(existing))
                 log($"{DaemonJson} sets its own dns, so containers do without host.docker.internal; remove that setting to get it");
             // Root reads these through a path a normal user's temp folder may keep from it otherwise.
