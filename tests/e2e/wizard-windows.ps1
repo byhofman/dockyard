@@ -128,6 +128,10 @@ if ($Wizard) {
 if ($Wizard) {
     Section 'localhost reaches a published port, not only 127.0.0.1'
     & $docker --context linux run -d --name e2e-localhost -p 18090:80 nginx:alpine | Out-Null
+    function Can-Listen-On-80 {
+        try { $web = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Any, 80); $web.Start(); $web.Stop(); return $true } catch { Write-Host "  port 80: $($_.Exception.InnerException.Message)"; return $false }
+    }
+    $free80 = Can-Listen-On-80
     $tray = Start-Process $appExe -ArgumentList '--tray' -PassThru
     Start-Sleep 8
     $v6 = (curl.exe -s -g -o NUL -w '%{http_code}' --max-time 10 'http://[::1]:18090/' | Out-String).Trim()
@@ -135,9 +139,8 @@ if ($Wizard) {
     $named = (curl.exe -s -o NUL -w '%{http_code}' --max-time 10 'http://localhost:18090/' | Out-String).Trim()
     Check "localhost answers (got $named)" ($named -eq '200')
     # The relay holds 80 and 443 on 127.77.0.1, which must not keep a web server from taking those ports on every address.
-    $web = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Any, 80)
-    $web.Start(); $web.Stop()
-    Ok 'a web server can still listen on port 80 next to the tray'
+    if ($free80) { Check 'a web server can still listen on port 80 next to the tray' (Can-Listen-On-80) }
+    else { Write-Host '  something on this runner already holds port 80, so this says nothing here'; netstat -ano | Select-String ':80\s' | Write-Host }
     Get-Process Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
     & $docker --context linux rm -f e2e-localhost | Out-Null
 

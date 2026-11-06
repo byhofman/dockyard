@@ -354,16 +354,17 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
     {
         if (!File.Exists(certificateFile)) return;
         var thumbprint = LocalCa.Thumbprint(await File.ReadAllTextAsync(certificateFile));
-        // Asking to remove what is not there can still raise an approval dialog, so it is looked up first.
+        // Asking to remove what is not there can still raise an approval dialog, so it is looked up first. Only the certificate
+        // goes: remove-trusted-cert waits for an approval dialog, even as root and without a screen, so it hung every headless
+        // uninstall. The trust setting left behind is for this certificate's hash alone, and it and its key are gone.
         if ((await runner.Run("/usr/bin/security", "find-certificate", "-a", "-Z", "-c", LocalCa.SubjectName, MacLayout.LoginKeychain)).Output.Contains(thumbprint, StringComparison.OrdinalIgnoreCase))
         {
-            await runner.Run("/usr/bin/security", "remove-trusted-cert", certificateFile);
             await runner.Run("/usr/bin/security", "delete-certificate", "-Z", thumbprint, MacLayout.LoginKeychain);
         }
         // In the system keychain only after a silent setup; a prompt for what is not there would make no sense.
         if ((await runner.Run("/usr/bin/security", "find-certificate", "-a", "-Z", "-c", LocalCa.SubjectName, "/Library/Keychains/System.keychain")).Output.Contains(thumbprint, StringComparison.OrdinalIgnoreCase))
         {
-            var script = $"security remove-trusted-cert -d '{certificateFile}' ; security delete-certificate -Z {thumbprint} /Library/Keychains/System.keychain";
+            var script = $"security delete-certificate -Z {thumbprint} /Library/Keychains/System.keychain";
             if ((await runner.Run("sudo", "-n", "/bin/sh", "-c", script)).ExitCode != 0)
                 await runner.Run("/usr/bin/osascript", MacLayout.AdminShell(script));
         }

@@ -104,7 +104,8 @@ if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
   echo "== trusted HTTPS"
   [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 https://e2e-web.dockyard.test/ || true)" = 000 ] && ok "without trusting, no HTTPS" || fail "HTTPS before it was turned on"
   run --silent --no-start --trust-https
-  sleep 2
+  # Setup restarted the agent and the resolver, and the agent looks containers up again when it starts.
+  i=0; while [ $i -lt 20 ] && [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 https://e2e-web.dockyard.test/ || true)" != 200 ]; do i=$((i+1)); sleep 1; done
   [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://e2e-web.dockyard.test/)" = 200 ] && ok "https is trusted by the system" || fail "https: $(curl -v --max-time 15 https://e2e-web.dockyard.test/ 2>&1 | tail -5)"
   key="$HOME/.config/Dockyard/ca/ca.key"
   [ "$(stat -c %a "$key")" = 600 ] && ok "the key is the owner's only" || fail "key mode $(stat -c %a "$key")"

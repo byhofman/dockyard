@@ -138,9 +138,23 @@ static class Https
     {
         if (AgentClient.For(DockerEndpoint.Parse(host.Engines[0].Endpoint)) is not { } agent) return;
         var leaf = LocalCa.Leaf(ca, DateTimeOffset.UtcNow);
-        try { await agent.SetCertificateAsync(leaf.Certificate, leaf.Key); }
-        // The engine is stopped. The tray hands the certificate over once it is back.
-        catch (Exception e) when (e is IOException or System.Net.Sockets.SocketException) { log?.Invoke("HTTPS starts once the engine runs and the tray is there"); }
+        // Setup has just restarted the agent when the engine runs, and it sets up its rules before it answers.
+        var attempts = await host.IsRunning(host.Engines[0].Id) ? 15 : 1;
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await agent.SetCertificateAsync(leaf.Certificate, leaf.Key);
+                return;
+            }
+            catch (Exception e) when (e is IOException or System.Net.Sockets.SocketException)
+            {
+                if (attempt < attempts) { await Task.Delay(TimeSpan.FromSeconds(1)); continue; }
+                // The tray hands the certificate over once the engine is back.
+                log?.Invoke("HTTPS starts once the engine runs and the tray is there");
+                return;
+            }
+        }
     }
 
     // The agent keeps its certificate in memory only, so it has none after each engine start, and one lasts 90 days.
