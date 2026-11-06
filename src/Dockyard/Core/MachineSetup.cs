@@ -36,6 +36,7 @@ static class MachineSetup
             if (without.Contains(plugin.Component.ToString())) RemovePlugin(log, plugin.Component);
             else await UpdatePlugin(log, plugin.Component);
         }
+        await InstallCredentialHelper(log);
         if (withWindows) await ConfigureWindowsEngine(log, userSid, userName);
         await InstallApp(log, Paths.Self, keepPid, engineOnly);
         RemoveLegacy(log, keepPid);
@@ -88,6 +89,22 @@ static class MachineSetup
             }
         }
         log($"Windows images and containers under {Path.GetDirectoryName(Paths.DaemonConfigDir)} were left in place");
+    }
+
+    // Not worth failing an install over: without it docker login just keeps working the way it did.
+    static async Task InstallCredentialHelper(Action<string> log)
+    {
+        if (File.Exists(Paths.CredentialHelper)) return;
+        try
+        {
+            var release = await Updates.LatestGitHub(Paths.CredentialHelpersRepo, @"^docker-credential-wincred-v[\d.]+\.windows-amd64\.exe$");
+            await Updates.DownloadFile(release.DownloadUrl!, Paths.CredentialHelper);
+            log($"Credential helper {release.Tag}");
+        }
+        catch (Exception e) when (e is HttpRequestException or InvalidOperationException or IOException)
+        {
+            log($"The credential helper was not installed ({e.Message}); running the wizard again retries it");
+        }
     }
 
     // Returns true when a reboot has to finish the WSL install.

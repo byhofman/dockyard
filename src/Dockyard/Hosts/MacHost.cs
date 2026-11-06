@@ -26,7 +26,16 @@ static class MacLayout
     public static string VmConfig => Path.Combine(DataDir, "vm.json");
     public static string PluginLinksDir => Path.Combine(DataDir, "plugin-links");
     public static string PreviousContextFile => Path.Combine(DataDir, "previous-context");
+    public static string CredentialStoreMarker => Path.Combine(DataDir, "credential-store");
     public static string RootRelease => Path.Combine(DataDir, "root-release");
+    public static string CredentialHelper => Path.Combine(BinDir, "docker-credential-osxkeychain");
+    public const string CredentialHelperAsset = @"^docker-credential-osxkeychain-v[\d.]+\.darwin-arm64$";
+    public const string SystemSocket = "/var/run/docker.sock";
+    public const string SocketDaemonLabel = "com.byhofman.dockyard.socket";
+    public const string SocketDaemon = "/Library/LaunchDaemons/" + SocketDaemonLabel + ".plist";
+    public static string UserSocketLink => Path.Combine(Home, ".docker", "run", "docker.sock");
+    public static string TestcontainersFile => Path.Combine(Home, ".testcontainers.properties");
+    public static string TestcontainersLine => $"docker.host=unix://{DockerSocket}";
     public static string UserApplications => Path.Combine(Home, "Applications");
 
     // Where the app belongs: where it already is when that is an Applications folder, otherwise ~/Applications.
@@ -69,6 +78,47 @@ static class MacLayout
         </plist>
 
         """.ReplaceLineEndings("\n");
+
+    public enum SocketUse { Free, Ours, SomeoneElse }
+
+    // Nothing here takes the path from another Docker app: its link stays, even one that points at nothing while that app is stopped.
+    public static SocketUse SystemSocketUse(string? linkTarget, bool exists, string ourSocket) =>
+        linkTarget == ourSocket ? SocketUse.Ours
+        : linkTarget is null && !exists ? SocketUse.Free
+        : SocketUse.SomeoneElse;
+
+    // macOS clears /var/run at every boot, so one link made at install would be gone after the first restart.
+    public static string SocketDaemonPlist(string ourSocket)
+    {
+        var link = $"[ -e {SystemSocket} ] || [ -L {SystemSocket} ] || ln -s '{ourSocket}' {SystemSocket}";
+        return $"""
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0">
+            <dict>
+                <key>Label</key>
+                <string>{SocketDaemonLabel}</string>
+                <key>ProgramArguments</key>
+                <array>
+                    <string>/bin/sh</string>
+                    <string>-c</string>
+                    <string>{Escape(link)}</string>
+                </array>
+                <key>RunAtLoad</key>
+                <true/>
+            </dict>
+            </plist>
+
+            """.ReplaceLineEndings("\n");
+    }
+
+    public static string InstallSocketDaemon(string plistFile) =>
+        $"cp '{plistFile}' {SocketDaemon} && chown root:wheel {SocketDaemon} && chmod 644 {SocketDaemon} && "
+        + $"(launchctl bootout system/{SocketDaemonLabel} 2>/dev/null; launchctl bootstrap system {SocketDaemon})";
+
+    public static string RemoveSocketDaemon(string ourSocket) =>
+        $"launchctl bootout system/{SocketDaemonLabel} 2>/dev/null; rm -f {SocketDaemon}; "
+        + $"if [ \"$(readlink {SystemSocket})\" = '{ourSocket}' ]; then rm -f {SystemSocket}; fi";
 
     // One administrator prompt: AppleScript runs the shell command with administrator privileges.
     public static string[] AdminShell(string command) =>
@@ -403,6 +453,8 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         }
 
         await AdministratorSteps(log, request.Silent);
+        await InstallCredentialHelper(log);
+        LinkUserSocket(log);
 
         await PrepareForInstall(log);
 
@@ -454,23 +506,99 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         if (!dashboard) await RemoveDashboard(log);
     }
 
-    // Rosetta and the PATH entry need an administrator. A silent setup shows no dialog: then it needs passwordless sudo,
-    // and without that the rest of Dockyard still works and the log says what is left.
+    static MacLayout.SocketUse SystemSocketUse()
+    {
+        var info = new FileInfo(MacLayout.SystemSocket);
+        return MacLayout.SystemSocketUse(info.LinkTarget, info.Exists, MacLayout.DockerSocket);
+    }
+
+    // Rosetta, the PATH entry and /var/run/docker.sock need an administrator. A silent setup shows no dialog: then it needs
+    // passwordless sudo, and without that the rest of Dockyard still works and the log says what is left.
     async Task AdministratorSteps(Action<string> log, bool silent)
     {
         List<string> steps = [];
+        List<string> what = [];
         var rosetta = (await runner.Run("/usr/bin/arch", "-x86_64", "/usr/bin/true")).ExitCode == 0;
-        if (!rosetta) steps.Add("/usr/sbin/softwareupdate --install-rosetta --agree-to-license");
-        if (!File.Exists("/etc/paths.d/dockyard")) steps.Add(MacLayout.PathsEntry(MacLayout.BinDir));
+        if (!rosetta)
+        {
+            steps.Add("/usr/sbin/softwareupdate --install-rosetta --agree-to-license");
+            what.Add("installing Rosetta for amd64 images");
+        }
+        if (!File.Exists("/etc/paths.d/dockyard"))
+        {
+            steps.Add(MacLayout.PathsEntry(MacLayout.BinDir));
+            what.Add("adding ~/.dockyard/bin to the PATH");
+        }
+
+        var socketUse = SystemSocketUse();
+        var plist = MacLayout.SocketDaemonPlist(MacLayout.DockerSocket);
+        var plistFile = Path.Combine(MacLayout.DataDir, "socket-daemon.plist");
+        if (socketUse == MacLayout.SocketUse.SomeoneElse)
+            log($"{MacLayout.SystemSocket} belongs to another Docker app and stays as it is: tools that ignore docker contexts keep using that app");
+        else if (!File.Exists(MacLayout.SocketDaemon) || await File.ReadAllTextAsync(MacLayout.SocketDaemon) != plist)
+        {
+            Directory.CreateDirectory(MacLayout.DataDir);
+            await File.WriteAllTextAsync(plistFile, plist);
+            steps.Add(MacLayout.InstallSocketDaemon(plistFile));
+            what.Add($"making {MacLayout.SystemSocket} point at Dockyard");
+        }
         if (steps.Count == 0) return;
 
         var script = string.Join(" ; ", steps);
-        log("Administrator step: " + (rosetta ? "adding ~/.dockyard/bin to the PATH" : "installing Rosetta for amd64 images and adding ~/.dockyard/bin to the PATH"));
+        log("Administrator step: " + string.Join(", ", what));
         var r = silent
             ? await runner.Run("sudo", "-n", "/bin/sh", "-c", script)
             : await runner.Run("/usr/bin/osascript", MacLayout.AdminShell(script));
+        File.Delete(plistFile);
         if (r.ExitCode != 0)
-            log($"Skipped ({(silent ? "no passwordless sudo" : "approval declined")}). {MacLayout.BinDir} is not on the PATH until the wizard runs with an administrator's approval" + (rosetta ? "." : ", and amd64 images need Rosetta."));
+            log($"Skipped ({(silent ? "no passwordless sudo" : "approval declined")}): {string.Join(", ", what)}. Running the wizard with an administrator's approval adds them; everything else works without them.");
+    }
+
+    static async Task InstallCredentialHelper(Action<string> log)
+    {
+        try
+        {
+            if (!File.Exists(MacLayout.CredentialHelper))
+            {
+                var release = await Updates.LatestGitHub(Paths.CredentialHelpersRepo, MacLayout.CredentialHelperAsset);
+                Directory.CreateDirectory(MacLayout.BinDir);
+                await Updates.DownloadFile(release.DownloadUrl!, MacLayout.CredentialHelper);
+                File.SetUnixFileMode(MacLayout.CredentialHelper, (UnixFileMode)0b111_101_101);
+            }
+            // docker finds the helper through the PATH: a store it cannot find would break every docker login, also from other Docker apps.
+            if (File.Exists("/etc/paths.d/dockyard"))
+                await CredentialStore.Adopt(log, "osxkeychain", MacLayout.CredentialHelper, MacLayout.CredentialStoreMarker);
+            else
+                log("docker login does not use the Keychain until ~/.dockyard/bin is on the PATH; running the wizard with an administrator's approval adds it");
+        }
+        catch (Exception e) when (e is HttpRequestException or InvalidOperationException or IOException)
+        {
+            log($"The credential store was not set up ({e.Message}); running the wizard again retries it");
+        }
+    }
+
+    // Tools look here when /var/run/docker.sock is not theirs to use; Docker Desktop's own socket lives here too and stays.
+    static void LinkUserSocket(Action<string> log)
+    {
+        var link = new FileInfo(MacLayout.UserSocketLink);
+        if (!link.Exists && link.LinkTarget is null)
+        {
+            Directory.CreateDirectory(link.DirectoryName!);
+            File.CreateSymbolicLink(MacLayout.UserSocketLink, MacLayout.DockerSocket);
+        }
+        // Testcontainers would otherwise stop using the other app that owns /var/run/docker.sock.
+        if (SystemSocketUse() != MacLayout.SocketUse.SomeoneElse && !File.Exists(MacLayout.TestcontainersFile))
+        {
+            File.WriteAllText(MacLayout.TestcontainersFile, MacLayout.TestcontainersLine + "\n");
+            log("Testcontainers uses Dockyard");
+        }
+    }
+
+    static void UnlinkUserSocket()
+    {
+        if (new FileInfo(MacLayout.UserSocketLink).LinkTarget == MacLayout.DockerSocket) File.Delete(MacLayout.UserSocketLink);
+        if (File.Exists(MacLayout.TestcontainersFile) && File.ReadAllText(MacLayout.TestcontainersFile).Trim() == MacLayout.TestcontainersLine)
+            File.Delete(MacLayout.TestcontainersFile);
     }
 
     // A VM running on the previous image has to stop for the new one; with the same image it can keep running.
@@ -498,8 +626,17 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
             await runner.Run(MacLayout.DockerCli, "context", "use", MacLayout.ContextToRestore(previous));
             await runner.Run(MacLayout.DockerCli, "context", "rm", "-f", MacLayout.Context);
         }
-        if (await IsOurPathEntry())
-            await runner.Run("/usr/bin/osascript", MacLayout.AdminShell("rm -f /etc/paths.d/dockyard"));
+        await CredentialStore.Forget(MacLayout.CredentialStoreMarker);
+        UnlinkUserSocket();
+        List<string> steps = [];
+        if (await IsOurPathEntry()) steps.Add("rm -f /etc/paths.d/dockyard");
+        if (File.Exists(MacLayout.SocketDaemon) || SystemSocketUse() == MacLayout.SocketUse.Ours) steps.Add(MacLayout.RemoveSocketDaemon(MacLayout.DockerSocket));
+        if (steps.Count > 0)
+        {
+            var script = string.Join(" ; ", steps);
+            if ((await runner.Run("sudo", "-n", "/bin/sh", "-c", script)).ExitCode != 0)
+                await runner.Run("/usr/bin/osascript", MacLayout.AdminShell(script));
+        }
         if (Directory.Exists(MacLayout.BinDir)) Directory.Delete(MacLayout.BinDir, recursive: true);
         foreach (var plugin in new[] { "docker-compose", "docker-buildx" })
             MacLayout.RemovePlugin(Path.Combine(MacLayout.PluginDir, plugin), MacLayout.PluginLinksDir);

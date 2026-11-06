@@ -272,6 +272,26 @@ public sealed class MacInstallTests : IDisposable
         Assert.DoesNotContain(runner.Commands, c => c.Contains(" run "));
     }
 
+    [Theory]
+    [InlineData(null, false, "Free")]
+    [InlineData("/Users/a/.dockyard/docker.sock", true, "Ours")]
+    [InlineData("/Users/a/.dockyard/docker.sock", false, "Ours")]
+    [InlineData("/Users/a/.orbstack/run/docker.sock", true, "SomeoneElse")]
+    [InlineData("/Users/a/.orbstack/run/docker.sock", false, "SomeoneElse")]
+    [InlineData(null, true, "SomeoneElse")]
+    public void Another_apps_socket_is_never_ours_to_take_even_while_that_app_is_stopped(string? link, bool exists, string expected) =>
+        Assert.Equal(Enum.Parse<MacLayout.SocketUse>(expected), MacLayout.SystemSocketUse(link, exists, "/Users/a/.dockyard/docker.sock"));
+
+    [Fact]
+    public void The_socket_daemon_only_creates_a_link_where_nothing_is()
+    {
+        var plist = MacLayout.SocketDaemonPlist("/Users/a b/.dockyard/docker.sock");
+        Assert.Contains("[ -e /var/run/docker.sock ] || [ -L /var/run/docker.sock ] || ln -s '/Users/a b/.dockyard/docker.sock' /var/run/docker.sock", plist);
+        Assert.Contains("<key>RunAtLoad</key>", plist);
+        Assert.Contains("rm -f /Library/LaunchDaemons/com.byhofman.dockyard.socket.plist", MacLayout.RemoveSocketDaemon("/x"));
+        Assert.Contains("\"$(readlink /var/run/docker.sock)\" = '/x'", MacLayout.RemoveSocketDaemon("/x"));
+    }
+
     [Fact]
     public void The_display_check_reaches_the_system_libraries()
     {

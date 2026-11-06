@@ -199,6 +199,23 @@ jobs:
           name: wizard-screenshots
           path: screenshots
 
+  wizard-mac:
+    needs: [macos]
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos
+          path: wizard
+
+      # Apple-silicon runners have no nested virtualization, so the VM itself is booted on a real Mac; see tests/e2e/wizard-mac.sh.
+      - name: Install, update and remove with a real administrator
+        env:
+          DOCKYARD_GITHUB_TOKEN: ${{ github.token }}
+        run: ADMIN=1 WIZARD_ZIP="$(ls wizard/Dockyard-*-macos.zip)" sh tests/e2e/wizard-mac.sh
+
   wizard-linux:
     needs: [linux]
     runs-on: ubuntu-latest
@@ -247,7 +264,7 @@ jobs:
   # release, with all its assets, until this one has all of its own. No moment exists with a partial latest release.
   release:
     if: github.ref_type == 'tag'
-    needs: [windows, linux, image, vm-test, macos, wizard-windows, wizard-linux, release-assets]
+    needs: [windows, linux, image, vm-test, macos, wizard-windows, wizard-linux, wizard-mac, release-assets]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
