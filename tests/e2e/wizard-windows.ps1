@@ -42,7 +42,20 @@ function Linux-Engine {
         if ($LASTEXITCODE -eq 0) { return }
         Start-Sleep 2
     }
+    Write-Host '--- what WSL says'
+    wsl.exe --version | Write-Host
+    wsl.exe -d dockyard -u root -- sh -c 'ls /sys/class/net; ip -4 addr; pidof dockerd dockyard-agent; netstat -ltn 2>/dev/null | head -20; wget -qO- -T 3 http://127.0.0.1:2375/_ping; echo; cat /etc/docker/daemon.json' | Write-Host
+    Test-NetConnection 127.0.0.1 -Port 2375 | Out-String | Write-Host
     throw 'FAIL the Linux engine did not start'
+}
+
+# What a container printed, from its logs and not through an attached docker run.
+function In-Container($command) {
+    $id = (& $docker --context linux run -d alpine:3.24 sh -c $command | Out-String).Trim()
+    & $docker --context linux wait $id | Out-Null
+    $output = (& $docker --context linux logs $id 2>&1 | Out-String).Trim()
+    & $docker --context linux rm -f $id | Out-Null
+    return $output
 }
 
 Section 'wrong arguments are refused'
@@ -69,12 +82,47 @@ Check 'settings kept' ((Get-Content "$env:APPDATA\Dockyard\settings.json" -Raw) 
 $distros = (wsl.exe -l -q | Out-String) -replace "`0", ''
 Check 'the dockyard distro is there' ($distros -match 'dockyard')
 Check 'docker contexts' ((& $docker context ls -q) -contains 'linux')
-Check 'mirrored networking set' ((Get-Content "$env:USERPROFILE\.wslconfig" -Raw) -match 'networkingMode=mirrored')
+if ($Wizard) { Check 'no mirrored networking on Windows Server, where it cuts the engine off' (-not ((Test-Path "$env:USERPROFILE\.wslconfig") -and ((Get-Content "$env:USERPROFILE\.wslconfig" -Raw) -match 'networkingMode=mirrored'))) }
 
 Section 'the Linux engine works and holds data'
 Linux-Engine
 & $docker --context linux volume create dockyard-e2e | Out-Null
 Check 'marker volume created' ($LASTEXITCODE -eq 0)
+
+if ($Wizard) {
+    Section 'host.docker.internal reaches a service on Windows'
+    Write-Host "WSL interfaces: $((wsl.exe -d dockyard -u root -- ls /sys/class/net | Out-String) -replace "`\s+", ' ')"
+    Check 'the agent runs next to the engine' ((wsl.exe -d dockyard -u root -- pidof dockyard-agent | Out-String).Trim().Length -gt 0)
+    # This runner is Windows Server, so WSL has NAT: there only the gateway reaches Windows, past its firewall. On Windows 11
+    # with mirrored networking a service on 127.0.0.1 is reached too, which only a real machine can show.
+    Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
+    $service = Start-Job {
+        $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Any, 18080)
+        $listener.Start()
+        while ($true) {
+            $client = $listener.AcceptTcpClient()
+            $bytes = [Text.Encoding]::ASCII.GetBytes("HTTP/1.0 200 OK`r`n`r`nfrom-windows")
+            $client.GetStream().Write($bytes, 0, $bytes.Length)
+            $client.Close()
+        }
+    }
+    Start-Sleep 3
+    $attached = (& $docker --context linux run --rm alpine:3.24 echo attached 2>&1 | Out-String).Trim()
+    Write-Host "docker run prints: '$attached'"
+    $reply = In-Container 'wget -qO- -T 20 http://host.docker.internal:18080/ 2>&1'
+    if ($reply -ne 'from-windows') {
+        Write-Host '--- why not'
+        Write-Host (In-Container 'cat /etc/resolv.conf; nslookup host.docker.internal 2>&1; nc -w 5 198.19.250.254 18080 </dev/null; echo nc=$?')
+        wsl.exe -d dockyard -u root -- sh -c 'gw=$(ip route | awk "/^default/{print \$3}"); echo gw=$gw; wget -qO- -T 5 http://$gw:18080/; echo; ps | grep dockyard-agent | head -3' | Write-Host
+    }
+    Check "the service answers (got '$reply')" ($reply -eq 'from-windows')
+    Stop-Job $service; Remove-Job $service -Force
+    Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True
+    $engine = In-Container 'wget -qO- -T 5 http://host.docker.internal:2375/version 2>/dev/null || echo refused'
+    Check "the engine's own port stays out of reach (got '$engine')" ($engine -eq 'refused')
+    $name = In-Container 'nslookup dl-cdn.alpinelinux.org 2>&1'
+    Check 'other names still resolve' ($name -match 'Address')
+}
 
 Section 'the Windows engine: no sign-out needed'
 $config = Get-Content 'C:\ProgramData\docker\config\daemon.json' -Raw
@@ -128,7 +176,7 @@ Check 'exit 0' ((Run --silent --uninstall) -eq 0)
 Check 'app removed' (-not (Test-Path $appExe))
 $distros = (wsl.exe -l -q | Out-String) -replace "`0", ''
 Check 'the dockyard distro is kept' ($distros -match 'dockyard')
-Check 'our .wslconfig line is gone' ((Get-Content "$env:USERPROFILE\.wslconfig" -Raw) -notmatch 'networkingMode=mirrored')
+Check 'our .wslconfig line is gone' (-not ((Test-Path "$env:USERPROFILE\.wslconfig") -and ((Get-Content "$env:USERPROFILE\.wslconfig" -Raw) -match 'networkingMode=mirrored')))
 
 Section 'a fresh install gets the dashboard'
 Check 'exit 0' ((Run --silent --no-start) -eq 0)

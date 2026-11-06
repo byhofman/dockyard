@@ -99,6 +99,28 @@ sealed class TcpHostDialer(IPAddress host, IReadOnlySet<int>? refused = null) : 
     }
 }
 
+static class WslHost
+{
+    // The engine's own unauthenticated port: a container must not get root on the engine through host.docker.internal.
+    public static readonly IReadOnlySet<int> Refused = new HashSet<int> { 2375, GuestAddresses.HostProxyPort };
+
+    // Mirrored networking gives WSL an interface named loopback0, and 127.0.0.1 then reaches Windows. With NAT only the
+    // gateway reaches Windows, and only services that listen on more than loopback and that its firewall lets through.
+    public static IPAddress Address(bool mirrored, string procNetRoute) =>
+        mirrored ? IPAddress.Loopback : DefaultGateway(procNetRoute) ?? IPAddress.Loopback;
+
+    public static IPAddress? DefaultGateway(string procNetRoute)
+    {
+        foreach (var line in procNetRoute.Split('\n').Skip(1))
+        {
+            var fields = line.Split((char[])['\t', ' '], StringSplitOptions.RemoveEmptyEntries);
+            if (fields.Length > 2 && fields[1] == "00000000" && uint.TryParse(fields[2], System.Globalization.NumberStyles.HexNumber, null, out var gateway))
+                return new IPAddress(gateway);
+        }
+        return null;
+    }
+}
+
 sealed class HostProxy(IHostDialer dialer, Func<Socket, IPEndPoint?> originalDestination, Action<string> log, int port = GuestAddresses.HostProxyPort)
 {
     public int Port { get; private set; } = port;

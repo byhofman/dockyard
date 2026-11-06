@@ -18,6 +18,7 @@ static partial class UserSetup
     {
         MigrateLegacySettings(log);
         await SetupDistro(log, image);
+        await ApplyGuest(new WslDistro(ProcessRunner.Instance), log);
         await MigrateLegacyEngine(log);
         await CreateContexts(log);
         SetMirroredNetworking(log);
@@ -28,6 +29,12 @@ static partial class UserSetup
         using (var key = Registry.CurrentUser.CreateSubKey(RunKey))
             key.SetValue(Paths.AppName, $"\"{Paths.AppExe}\"");
         log($"{Paths.AppName} autostarts at logon");
+    }
+
+    public static async Task ApplyGuest(WslDistro distro, Action<string> log)
+    {
+        await using var bundle = typeof(UserSetup).Assembly.GetManifestResourceStream("guest.tar.gz");
+        if (bundle is not null) await distro.ApplyGuest(bundle, log);
     }
 
     // Silent setups log to a file: after a restart there is no console to report to.
@@ -41,6 +48,10 @@ static partial class UserSetup
     static void SetMirroredNetworking(Action<string> log)
     {
         if (Environment.OSVersion.Version.Build < MirroredNetworkingBuild) return;
+        // Seen on Windows Server 2025: in mirrored mode WSL comes up with no network interfaces, and 127.0.0.1:2375 no longer
+        // reaches the engine from Windows.
+        using (var version = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion"))
+            if (version?.GetValue("InstallationType") as string != "Client") return;
         var existing = File.Exists(Paths.WslConfigFile) ? File.ReadAllText(Paths.WslConfigFile) : null;
         if (WslConfig.WithMirroredNetworking(existing) is not { } updated) return;
         File.WriteAllText(Paths.WslConfigFile, updated);

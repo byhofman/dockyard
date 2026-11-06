@@ -60,6 +60,29 @@ public sealed class NetworkTests
     }
 
     [Fact]
+    public void Wsl_reaches_windows_through_loopback_when_mirrored_and_the_gateway_otherwise()
+    {
+        const string route = "Iface\tDestination\tGateway\tFlags\neth0\t00000000\t0101A8C0\t0003\neth0\t0001A8C0\t00000000\t0001\n";
+        Assert.Equal(IPAddress.Loopback, WslHost.Address(true, route));
+        Assert.Equal(IPAddress.Parse("192.168.1.1"), WslHost.Address(false, route));
+        Assert.Equal(IPAddress.Loopback, WslHost.Address(false, "Iface\tDestination\n"));
+    }
+
+    [Fact]
+    public async Task A_container_cannot_reach_the_engines_port_through_the_host_address()
+    {
+        var dialer = new TcpHostDialer(IPAddress.Loopback, WslHost.Refused);
+        await Assert.ThrowsAsync<SocketException>(() => dialer.Dial(2375, TestContext.Current.CancellationToken));
+    }
+
+    [Theory]
+    [InlineData("--mode=wsl", "", "Wsl")]
+    [InlineData("", "root=/dev/vda dockyard.agent=tcp quiet", "TcpTest")]
+    [InlineData("", "root=/dev/vda quiet", "Vm")]
+    public void The_mode_comes_from_the_arguments_or_the_kernel(string arg, string cmdline, string mode) =>
+        Assert.Equal(Enum.Parse<AgentMode>(mode), AgentOptions.From(arg.Length > 0 ? [arg] : [], cmdline).Mode);
+
+    [Fact]
     public void Only_the_documented_names_mean_the_host()
     {
         Assert.Equal(GuestAddresses.Host, GuestAddresses.Resolve("host.docker.internal"));
