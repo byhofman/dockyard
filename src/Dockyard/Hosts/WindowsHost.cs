@@ -5,6 +5,8 @@ using System.Runtime.Versioning;
 using System.ServiceProcess;
 using System.Text.Json.Nodes;
 using Dockyard.Core;
+using Dockyard.Engine;
+using Dockyard.Engine.Transport;
 
 namespace Dockyard.Hosts;
 
@@ -16,6 +18,7 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
 
     readonly WslDistro distro = new(runner);
     Process? keepAlive;
+    CancellationTokenSource? trayServices;
 
     public IReadOnlyList<EngineInfo> Engines { get; } =
     [
@@ -203,6 +206,37 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
         {
             log($"The Linux engine was left as it is ({ex.Message}); Updates in the tray window can try again");
+        }
+    }
+
+    public void StartTrayServices()
+    {
+        if (trayServices is not null) return;
+        trayServices = new CancellationTokenSource();
+        _ = FollowPublishedPorts(trayServices.Token);
+    }
+
+    // The tray does not have to be what started the engine, and the engine comes and goes without telling it.
+    async Task FollowPublishedPorts(CancellationToken ct)
+    {
+        using var forwarder = new LoopbackForwarder(_ => { });
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                using var docker = new DockerClient(DockerEndpoint.Parse(Paths.LinuxHost));
+                var since = DateTimeOffset.UtcNow.AddSeconds(-1);
+                async Task Refresh() => forwarder.Apply(PublishedPorts.From(await docker.ListContainersAsync(all: false, ct))
+                    .Where(p => p.Protocol == "tcp").Select(p => p.Port));
+                await Refresh();
+                await foreach (var e in docker.EventsAsync(["container"], since, ct))
+                    if (e.Action is "start" or "die" or "destroy") await Refresh();
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                forwarder.Apply([]);
+            }
+            await Task.Delay(TimeSpan.FromSeconds(3), ct);
         }
     }
 

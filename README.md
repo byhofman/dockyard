@@ -111,7 +111,6 @@ Keys: `Ctrl+K` (`⌘K` on macOS) search, `S` start/stop, `R` restart, `E` termin
 
 ## Known limits
 
-- On Windows, reach published Linux container ports through `127.0.0.1`, not `localhost` (`DOK-8`).
 - On macOS, `/var/run/docker.sock` stays with another Docker app when one already has it, such as OrbStack or Docker Desktop. Tools that ignore docker contexts keep using that app until it gives up the path.
 - On Linux without a desktop session there is no OS credential store, so `docker login` keeps Docker's default there.
 - On a device whose Defender settings are managed by an organisation (Intune), local exclusions may not count. If Defender blocks Dockyard (event 1121) or `dockerd.exe` (event 1127), your administrator has to allow `C:\Program Files\Dockyard\` and `C:\Program Files\Docker\dockerd.exe`.
