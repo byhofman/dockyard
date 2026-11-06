@@ -79,6 +79,16 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
         return false;
     }
 
+    public bool HasEngineConfiguration => true;
+
+    public async Task ApplyEngineConfiguration(Action<string> log)
+    {
+        var running = IsLinuxRunning();
+        if (running) await StopLinux();
+        await UserSetup.WriteEngineConfig(distro, log);
+        if (running) await StartLinux();
+    }
+
     public bool RunsFromInstallLocation => Paths.IsInstalledCopy;
 
     public bool HasDashboard => File.Exists(Paths.DashboardExe);

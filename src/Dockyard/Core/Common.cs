@@ -52,6 +52,9 @@ sealed class Settings
     public string? Distro { get; set; }
     public bool StopOtherOnSwitch { get; set; } = true;
     public bool StartActiveAtLogon { get; set; } = true;
+    public string? RegistryMirrors { get; set; }
+    public string? InsecureRegistries { get; set; }
+    public string? AddressPools { get; set; }
 
     public static Settings Load()
     {

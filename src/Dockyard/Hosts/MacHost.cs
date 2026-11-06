@@ -314,6 +314,14 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         _ => null,
     };
 
+    public bool HasEngineConfiguration => true;
+
+    public async Task ApplyEngineConfiguration(Action<string> log)
+    {
+        await WriteEngineConfig(log);
+        if (ping()) { await Stop(Engine); await Start(Engine); }
+    }
+
     public async Task<bool> Update(Action<string> log, IReadOnlyList<(string Component, Release? Release)> components)
     {
         foreach (var (component, release) in components)
@@ -645,7 +653,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
     {
         var proxy = await HostProxy();
         Directory.CreateDirectory(Path.GetDirectoryName(MacLayout.EngineConfigFile)!);
-        await File.WriteAllTextAsync(MacLayout.EngineConfigFile, EngineConfig.Render(proxy));
+        await File.WriteAllTextAsync(MacLayout.EngineConfigFile, EngineConfig.Render(proxy, Settings.Load()));
         await EngineConfig.ApplyClientProxy("unix://" + MacLayout.DockerSocket, proxy);
         if (proxy is { IsEmpty: false }) log?.Invoke("The engine and containers use this Mac's proxy");
     }
