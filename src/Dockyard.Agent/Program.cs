@@ -22,17 +22,19 @@ List<Task> services = [dns.Run(cts.Token), hostProxy.Run(cts.Token)];
 if (options.Mode == AgentMode.Wsl) services.Add(ExitWithEngine());
 else services.Add(new Agent(options.Mode == AgentMode.Vm ? new VsockTransport() : new TcpTransport(), log).Run(cts.Token));
 
+// One service failing must end the process, so that init or the loop around it brings all of them back and the reason
+// shows. Waiting for all of them would leave a half-working agent running with its failure unobserved.
 try
 {
-    await Task.WhenAll(services);
-}
-catch (System.Net.Sockets.SocketException e)
-{
-    log(e.Message);
-    return 1;
+    await await Task.WhenAny(services);
 }
 catch (OperationCanceledException)
 {
+}
+catch (Exception e)
+{
+    log($"{e.GetType().Name}: {e.Message}");
+    return 1;
 }
 return 0;
 

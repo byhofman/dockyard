@@ -58,6 +58,11 @@ docker network rm dockyard-e2e >/dev/null
 kill $listener 2>/dev/null || true
 docker run --rm alpine:3.24 nslookup dl-cdn.alpinelinux.org >/dev/null && echo "other names resolve through the host's DNS" || { echo "FAIL: DNS"; exit 1; }
 
+# What only the VM on a Mac otherwise uses goes through libc in a static binary; vsock itself cannot be tried here, and this can.
+printf '{"type":"clock","unixNs":%s000000000}\n' "$(date +%s)" | nc -w 3 127.0.0.1 12377 >/dev/null || true
+sleep 1
+grep -aq 'clock set from host' console.log && echo "the agent reaches libc" || { echo "FAIL: the agent cannot call libc"; grep -a dockyard-agent console.log | tail -20; exit 1; }
+
 control="$( (sleep 6) | nc -w 7 127.0.0.1 12377 | head -3)"
 echo "$control" | grep -q '"type":"ports".*"port":8080' && echo "control reports port 8080" || { echo "FAIL: control: $control"; exit 1; }
 echo "$control" | grep -q '"type":"memory"' && echo "control reports memory" || { echo "FAIL: no memory report"; exit 1; }
