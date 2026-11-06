@@ -2,6 +2,29 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-06: The CA's key stays off what containers can read, with the name constraint still as the limit
+
+A privileged container on the engine's Linux can read `/Users` on a Mac and `/mnt/c` on Windows, so a restricted file there is readable. The owner has not decided otherwise, so the name constraint stays what limits the damage, and the key moved where no manual step is needed:
+
+| Host | Where | What a container sees |
+|---|---|---|
+| macOS | Login keychain, written over stdin to `security`. Nothing outside `/Users` is writable without root | The keychain file, encrypted with the login password |
+| Windows | `ca.key.dpapi`, DPAPI for the current user | Ciphertext, of no use without the user's logon |
+| Linux host | Still a file, mode 0600 | A privileged container is root on the machine; no store holds against that |
+
+- **It does not help against code running as this user:** that can ask the keychain or DPAPI just as Dockyard does.
+- **A store that cannot answer is not "no key".** A locked keychain must not make a new CA and ask for trust again, so reading throws, and turning HTTPS on then reports it with plain HTTP still working. The tray only reads the key when a certificate is due.
+- **No fallback to a file:** that would quietly undo this.
+- **No migration:** no release ever wrote the old file.
+
+## 2026-11-06: Findings from the DOK stack review
+
+- **Firewalls:** a redirected packet arrives addressed to the bridge, so ufw's default deny dropped `host.docker.internal` and domains. The agent accepts those three ports on container interfaces only, ahead of ufw. They refuse whatever was not redirected to them.
+- **A proxy only on Windows' loopback with NAT networking** was written into the engine's config, and no pull worked. That was a regression on such a PC, so it is now probed from WSL before every engine start. If out of reach the engine goes direct and the wizard says so.
+- **The NRPT rule follows the Linux engine component.** Removing that row now asks for administrator approval, before anything changes.
+- **Approval from another administrator's account:** the elevated step gets the certificate itself, since it cannot read this user's owner-only folder. It only adds a root carrying exactly the name constraint, since the value comes from a less trusted process.
+- **Logins stay in the OS store on uninstall, and the wizard names them.** They are not erased: other Docker apps read the same entries, and a password cannot be got back.
+
 ## 2026-11-06: Any component can be removed, except what the rest stands on
 
 The owner asked for every component to be a row with Add and Remove, in the wizard and with `--with` and `--without`.
@@ -42,7 +65,7 @@ What Task Manager's Details tab, Activity Monitor and `ps` show comes from the f
 - **Off by default.** It is a button with the explanation next to it, and declining leaves plain HTTP working. Silent setups only do it with `--trust-https`, and then only with what needs no prompt.
 - **Which store:** Windows uses the machine's, through the wizard's UAC prompt, because the current user's store raises its own dialog. macOS uses the login keychain from a window, and the system keychain from a silent setup with sudo. Linux uses the system's plus the user's NSS database where one exists; a snap or flatpak browser keeps its own and will warn.
 - **Removal:** turning it off and uninstalling both remove the trust and delete the key. Windows removes by subject name, so nothing stays even if the key folder is already gone.
-- **The key is a file**, mode 0600 or owner-only by ACL. On macOS and Windows anything run as this user can read it, and containers can if `/Users` or `C:\\` is mounted; the constraint is what limits that risk. The keychain or DPAPI would not change it for code running as the same user. This also means a privileged container on the Linux engine can read the file through the `/Users` share or `/mnt/c`; moving the key out of those shares is the improvement to make if that ever matters more than the constraint.
+- **Where the key is:** see the entry on keeping it off the shares.
 
 ## 2026-11-06: Domains resolve per place, and no port 80 is taken on the host
 

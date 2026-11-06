@@ -114,7 +114,7 @@ static class Elevation
             }
             if (Opt("--machine-trust-ca") is { } certificate)
             {
-                MachineSetup.TrustCa(Log, certificate);
+                MachineSetup.TrustCa(Log, MachineSetup.DecodeCertificate(certificate));
                 return 0;
             }
             if (args.Contains("--machine-untrust-ca"))

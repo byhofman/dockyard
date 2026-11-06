@@ -338,6 +338,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
     };
 
     public string CaDirectory => Path.Combine(MacLayout.DataDir, "ca");
+    public ICaKeyStore CaKeys => new KeychainCaKey(MacLayout.LoginKeychain);
 
     // A window: the login keychain, for which macOS asks the user's own approval. Silent: only what sudo allows unasked.
     public async Task<bool> TrustCa(Action<string> log, string certificateFile, bool silent)
@@ -689,7 +690,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
             await runner.Run(MacLayout.DockerCli, "context", "rm", "-f", MacLayout.Context);
         }
         await Https.Disable(this, log);
-        await CredentialStore.Forget(MacLayout.CredentialStoreMarker);
+        await CredentialStore.Forget(MacLayout.CredentialStoreMarker, MacLayout.CredentialHelper, log);
         await EngineConfig.ApplyClientProxy("unix://" + MacLayout.DockerSocket, null);
         UnlinkUserSocket();
         List<string> steps = [];

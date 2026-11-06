@@ -104,11 +104,23 @@ static class CredentialStore
         log($"docker login keeps credentials in the {store} credential store");
     }
 
+    // Not erased: other Docker apps read the same entries, and a password can't be got back. Output is the helper's "list".
+    public static string? LeftBehind(string store, string listOutput)
+    {
+        List<string> servers;
+        try { servers = (JsonNode.Parse(listOutput) as JsonObject ?? []).Select(p => p.Key).ToList(); }
+        catch (JsonException) { return null; }
+        if (servers.Count == 0) return null;
+        var place = store switch { "wincred" => "Windows Credential Manager", "osxkeychain" => "the Keychain", "secretservice" => "the system keyring", _ => store };
+        return $"Your docker logins for {string.Join(", ", servers)} stay in {place}, and docker no longer looks there. Remove them there if they should go; docker login signs in again.";
+    }
+
     // Without the helper a store in the config breaks every docker login and pull, so uninstall takes back what it set.
-    public static async Task Forget(string marker)
+    public static async Task Forget(string marker, string helper, Action<string> log)
     {
         if (!File.Exists(marker)) return;
         var store = (await File.ReadAllTextAsync(marker)).Trim();
+        if (File.Exists(helper) && LeftBehind(store, (await Shell.RunWithInput(helper, "", "list")).Output) is { } notice) log(notice);
         try
         {
             if (File.Exists(ConfigFile) && WithoutStore(await File.ReadAllTextAsync(ConfigFile), store) is { } updated)
