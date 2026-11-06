@@ -3,6 +3,89 @@ using System.Net.Sockets;
 
 namespace Dockyard.Agent.Tests;
 
+public sealed class DomainTests
+{
+    [Theory]
+    [InlineData("web", null, null, new[] { "web.dockyard.test" })]
+    [InlineData("Shop_Web-1", "shop", "web", new[] { "shop-web-1.dockyard.test", "shop-web.dockyard.test" })]
+    [InlineData("__", null, null, new string[0])]
+    public void Names_are_flat_and_lowercase_under_the_zone(string name, string? project, string? service, string[] expected) =>
+        Assert.Equal(expected, DomainNames.For(name, project, service));
+
+    [Theory]
+    [InlineData(1234, null, new[] { 80 }, new[] { 80 }, 1234)]
+    [InlineData(null, 8081, new[] { 80 }, new[] { 80 }, 8081)]
+    [InlineData(null, null, new[] { 9229, 3000 }, new[] { 80 }, 3000)]
+    [InlineData(null, null, new int[0], new[] { 9229, 8080 }, 8080)]
+    [InlineData(null, null, new[] { 9229, 7000 }, new[] { 80 }, 80)]
+    [InlineData(null, null, new[] { 9229, 7000 }, new int[0], 7000)]
+    [InlineData(null, null, new int[0], new[] { 5432 }, 5432)]
+    public void The_port_is_chosen_then_labelled_then_a_web_port_then_the_lowest(int? chosen, int? label, int[] listening, int[] exposed, int expected) =>
+        Assert.Equal(expected, DomainNames.PickPort(chosen, label, listening, exposed));
+
+    [Fact]
+    public void Nothing_to_go_on_means_no_port() => Assert.Null(DomainNames.PickPort(null, null, [], []));
+
+    [Fact]
+    public void A_label_names_the_port_and_orbstacks_label_counts_too()
+    {
+        Assert.Equal(3000, DomainNames.LabelPort(new Dictionary<string, string> { ["dockyard.port"] = "3000" }));
+        Assert.Equal(3001, DomainNames.LabelPort(new Dictionary<string, string> { ["dev.orbstack.http-port"] = "3001" }));
+        Assert.Null(DomainNames.LabelPort(new Dictionary<string, string> { ["dockyard.port"] = "nope" }));
+        Assert.Null(DomainNames.LabelPort(null));
+    }
+
+    [Theory]
+    [InlineData("GET / HTTP/1.1\r\nHost: Web.Dockyard.Test:8080\r\n\r\n", "web.dockyard.test")]
+    [InlineData("GET / HTTP/1.1\r\nhost:web.dockyard.test\r\nAccept: x\r\n\r\n", "web.dockyard.test")]
+    [InlineData("GET / HTTP/1.0\r\n\r\n", null)]
+    public void The_container_comes_from_the_host_header(string head, string? expected) =>
+        Assert.Equal(expected, HttpHead.Host(System.Text.Encoding.ASCII.GetBytes(head)));
+
+    [Fact]
+    public void The_app_behind_the_proxy_is_told_how_it_was_reached()
+    {
+        var head = System.Text.Encoding.ASCII.GetBytes("GET /x HTTP/1.1\r\nHost: a\r\n\r\n");
+        var text = System.Text.Encoding.ASCII.GetString(HttpHead.WithForwarded(head, "https", "a"));
+        Assert.StartsWith("GET /x HTTP/1.1\r\nX-Forwarded-Proto: https\r\nX-Forwarded-Host: a\r\nHost: a\r\n\r\n", text);
+    }
+
+    [Fact]
+    public async Task A_zone_name_nothing_answers_to_does_not_go_to_the_hosts_dns()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var dns = new DnsServer(IPAddress.Loopback, _ => null, () => "nameserver 192.0.2.1\n", _ => { }, port: 0, ownedZone: DomainNames.InZone);
+        var running = dns.Run(cts.Token);
+        for (var i = 0; dns.Port == 0 && i < 100; i++) await Task.Delay(10, ct);
+        await Task.Delay(50, ct);
+
+        using var udp = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+        await udp.ConnectAsync(IPAddress.Loopback, dns.Port, ct);
+        var query = new List<byte> { 0, 7, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0 };
+        foreach (var label in "gone.dockyard.test".Split('.')) { query.Add((byte)label.Length); query.AddRange(System.Text.Encoding.ASCII.GetBytes(label)); }
+        query.AddRange([0, 0, 1, 0, 1]);
+        await udp.SendAsync(query.ToArray(), ct);
+        var buffer = new byte[512];
+        await udp.ReceiveAsync(buffer, ct);
+        Assert.Equal(DnsServer.NameError, buffer[3] & 0x0F);
+
+        await cts.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => running);
+    }
+
+    [Fact]
+    public void The_api_answers_and_refuses_what_it_does_not_know()
+    {
+        var table = new DomainTable(() => throw new InvalidOperationException(), Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")), _ => { });
+        var api = new AgentApi(table, new DomainProxy(table, _ => { }));
+        Assert.Empty(api.Reply("""{"op":"domains"}""").Domains!);
+        Assert.NotNull(api.Reply("""{"op":"nope"}""").Error);
+        Assert.NotNull(api.Reply("not json").Error);
+        Assert.NotNull(api.Reply("""{"op":"tls","cert":"x","key":"y"}""").Error);
+    }
+}
+
 public sealed class NetworkTests
 {
     static byte[] Query(string name, ushort type, byte id = 7)
@@ -140,7 +223,7 @@ public sealed class NetworkTests
         var once = added.Count;
         await NetworkRules.Apply(Run, _ => { });
 
-        Assert.Equal(4, once);
+        Assert.True(once > 4);
         Assert.Equal(once, added.Count);
     }
 

@@ -3,7 +3,7 @@
 # and checks the docker proxy, port forwarding, the control channel, clean poweroff and data persistence.
 # Run in a container with /dev/kvm: test-vm.sh <dockyard-vm-*-x86_64.tar.gz>
 set -eu
-apk add -q qemu-system-x86_64 qemu-img docker-cli curl >/dev/null
+apk add -q qemu-system-x86_64 qemu-img docker-cli curl openssl >/dev/null
 
 work=/tmp/vm; mkdir -p $work; cd $work
 tar -xzf "$1"
@@ -14,7 +14,7 @@ boot() {
     -kernel kernel -initrd initramfs \
     -append "console=ttyS0 root=/dev/vda rootfstype=ext4 modules=ext4,virtio_blk rw quiet dockyard.agent=tcp" \
     -drive file=root.img,if=virtio,format=raw -drive file=data.img,if=virtio,format=raw \
-    -netdev user,id=n0,hostfwd=tcp:127.0.0.1:12375-:2375,hostfwd=tcp:127.0.0.1:12376-:2376,hostfwd=tcp:127.0.0.1:12377-:2377 \
+    -netdev user,id=n0,hostfwd=tcp:127.0.0.1:12375-:2375,hostfwd=tcp:127.0.0.1:12376-:2376,hostfwd=tcp:127.0.0.1:12377-:2377,hostfwd=tcp:127.0.0.1:12379-:2379,hostfwd=tcp:127.0.0.1:12380-:80,hostfwd=tcp:127.0.0.1:12443-:443 \
     -device virtio-net-pci,netdev=n0 -device virtio-balloon-pci \
     -serial file:$work/console.log -monitor none > /dev/null 2>&1 &
   qemu=$!
@@ -65,6 +65,23 @@ reply="$(printf 'tcp 8091\nGET / HTTP/1.0\r\n\r\n' | nc -w 5 127.0.0.1 12376 | t
 ports="$( (sleep 4) | nc -w 5 127.0.0.1 12377 | head -1)"
 echo "$ports" | grep -q '"port":8091' && echo "control reports the --network host port" || { echo "FAIL: control: $ports"; exit 1; }
 docker rm -f hostnet >/dev/null
+
+# A domain by Host header through the agent's proxy, as the Mac reaches it on the VM's own address; web publishes 8080,
+# and the proxy does not go through that.
+sleep 2
+reply="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H 'Host: web.dockyard.test' http://127.0.0.1:12380/)"
+[ "$reply" = 200 ] && echo "a container answers by domain" || { echo "FAIL: domain over HTTP: '$reply'"; exit 1; }
+reply="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H 'Host: gone.dockyard.test' http://127.0.0.1:12380/)"
+[ "$reply" = 404 ] && echo "an unknown domain gets 404" || { echo "FAIL: unknown domain: '$reply'"; exit 1; }
+[ "$(docker run --rm alpine:3.24 wget -qO- -T 10 http://web.dockyard.test/ | grep -ci nginx)" -gt 0 ] && echo "the domain works inside containers" || { echo "FAIL: domain inside a container"; exit 1; }
+reply="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 5 --resolve web.dockyard.test:12443:127.0.0.1 https://web.dockyard.test:12443/ || true)"
+[ "$reply" = 000 ] && echo "no HTTPS before a certificate arrives" || { echo "FAIL: HTTPS without a certificate: '$reply'"; exit 1; }
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -keyout /tmp/k -out /tmp/c -days 2 -subj /CN=web.dockyard.test -addext subjectAltName=DNS:web.dockyard.test 2>/dev/null
+tls="$(awk 'NF {printf "%s\\n", $0}' /tmp/c)"; key="$(awk 'NF {printf "%s\\n", $0}' /tmp/k)"
+printf '{"op":"tls","cert":"%s","key":"%s"}\n' "$tls" "$key" | nc -w 3 127.0.0.1 12379 | grep -qv error && echo "the agent takes a certificate" || { echo "FAIL: certificate"; exit 1; }
+reply="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 --cacert /tmp/c --resolve web.dockyard.test:12443:127.0.0.1 https://web.dockyard.test:12443/)"
+[ "$reply" = 200 ] && echo "a container answers over HTTPS, with that certificate" || { echo "FAIL: HTTPS: '$reply'"; exit 1; }
+printf '{"op":"domains"}\n' | nc -w 3 127.0.0.1 12379 | grep -q '"https":true' && echo "the agent says HTTPS is on" || { echo "FAIL: https flag"; exit 1; }
 
 control="$( (sleep 6) | nc -w 7 127.0.0.1 12377 | head -3)"
 echo "$control" | grep -q '"type":"ports".*"port":8080' && echo "control reports port 8080" || { echo "FAIL: control: $control"; exit 1; }
