@@ -68,12 +68,26 @@ sealed class MainViewModel : Observable
             await host.Start(host.Engines[0].Id);
             await DockerDesktop.Import(null, host.ImportTarget, host.OwnSocket, Log);
         }));
+        EnableHttpsCommand = Cmd(() => Run("Turning on HTTPS for container domains", async () =>
+        {
+            await Https.Enable(host, Log, silent: false);
+            settings.HttpsEnabled = true;
+            Raise(nameof(HttpsEnabled), nameof(HttpsDisabled));
+        }));
+        DisableHttpsCommand = Cmd(() => Run("Turning off HTTPS for container domains", async () =>
+        {
+            await Https.Disable(host, Log);
+            settings.HttpsEnabled = false;
+            Raise(nameof(HttpsEnabled), nameof(HttpsDisabled));
+        }));
         registryMirrors = settings.RegistryMirrors ?? "";
         insecureRegistries = settings.InsecureRegistries ?? "";
         addressPools = settings.AddressPools ?? "";
 
         timer.Tick += async (_, _) => await RefreshState();
     }
+
+    readonly CancellationTokenSource trayLifetime = new();
 
     public void StartPolling() => timer.Start();
 
@@ -90,6 +104,10 @@ sealed class MainViewModel : Observable
     public Command RebootCommand { get; }
     public Command ApplyEngineConfigurationCommand { get; }
     public Command ImportCommand { get; }
+    public Command EnableHttpsCommand { get; }
+    public Command DisableHttpsCommand { get; }
+    public bool HttpsEnabled => settings.HttpsEnabled;
+    public bool HttpsDisabled => !settings.HttpsEnabled;
     public bool ShowImport => ShowManage && DockerDesktop.IsInstalled;
     public ComponentViewModel Dashboard { get; }
 
@@ -173,6 +191,7 @@ sealed class MainViewModel : Observable
     public async Task StartTray()
     {
         host.StartTrayServices();
+        _ = Https.KeepCertificateCurrent(host, trayLifetime.Token);
         await RefreshState();
         if (settings.StartActiveAtLogon)
             await Run($"Starting {ActiveEngine.Name} engine", () => host.Start(active));
@@ -217,6 +236,7 @@ sealed class MainViewModel : Observable
     public void Shutdown()
     {
         timer.Stop();
+        trayLifetime.Cancel();
         host.ReleaseResources();
     }
 

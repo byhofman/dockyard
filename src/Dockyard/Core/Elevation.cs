@@ -10,7 +10,7 @@ namespace Dockyard.Core;
 static class Elevation
 {
     public const int RebootExitCode = 3010;
-    public static readonly string[] Modes = ["--machine-install", "--machine-update", "--machine-uninstall", "--machine-dashboard"];
+    public static readonly string[] Modes = ["--machine-install", "--machine-update", "--machine-uninstall", "--machine-dashboard", "--machine-trust-ca", "--machine-untrust-ca"];
 
     public static bool IsWorker(string[] args) => args.Any(a => Modes.Contains(a));
 
@@ -99,6 +99,16 @@ static class Elevation
             {
                 foreach (var name in Arg("--machine-update").Split(','))
                     MachineSetup.Update(Log, Enum.Parse<Component>(name), Opt("--source"), keepPid).GetAwaiter().GetResult();
+                return 0;
+            }
+            if (Opt("--machine-trust-ca") is { } certificate)
+            {
+                MachineSetup.TrustCa(Log, certificate);
+                return 0;
+            }
+            if (args.Contains("--machine-untrust-ca"))
+            {
+                MachineSetup.UntrustCa(Log);
                 return 0;
             }
             if (Opt("--machine-dashboard") is { } dashboard)

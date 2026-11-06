@@ -141,9 +141,36 @@ EOF
 route_domains() {
   [ -d /run/systemd/resolve ] || { echo "No systemd-resolved: container domains do not resolve by name here"; return 0; }
   mkdir -p /etc/systemd/resolved.conf.d
-  printf '[Resolve]\nDNS=127.77.0.1\nDomains=~dockyard.test\n' > /etc/systemd/resolved.conf.d/dockyard.conf
+  printf '[Resolve]\nDNS=127.0.0.1:2353\nDomains=~dockyard.test\n' > /etc/systemd/resolved.conf.d/dockyard.conf
   systemctl restart systemd-resolved
   echo "This machine asks Dockyard about names under dockyard.test"
+}
+
+trust_ca() {
+  if [ -d /usr/local/share/ca-certificates ] && command -v update-ca-certificates >/dev/null 2>&1; then
+    install -m 0644 "$agent" /usr/local/share/ca-certificates/dockyard-local-ca.crt
+    update-ca-certificates >/dev/null
+  elif command -v update-ca-trust >/dev/null 2>&1; then
+    install -m 0644 "$agent" /etc/pki/ca-trust/source/anchors/dockyard-local-ca.crt
+    update-ca-trust
+  elif command -v trust >/dev/null 2>&1; then
+    trust anchor --store "$agent"
+  else
+    echo "This distribution has no trust store Dockyard knows how to change" >&2
+    exit 5
+  fi
+  echo "This machine trusts Dockyard's certificate, for names under dockyard.test only"
+}
+
+untrust_ca() {
+  if [ -f /usr/local/share/ca-certificates/dockyard-local-ca.crt ]; then
+    rm -f /usr/local/share/ca-certificates/dockyard-local-ca.crt
+    update-ca-certificates --fresh >/dev/null
+  fi
+  if [ -f /etc/pki/ca-trust/source/anchors/dockyard-local-ca.crt ]; then
+    rm -f /etc/pki/ca-trust/source/anchors/dockyard-local-ca.crt
+    update-ca-trust
+  fi
 }
 
 # A running engine only reads this when it starts, and restarting it would stop the user's containers without a change to apply.
@@ -188,8 +215,11 @@ EOF
 
 case "$action" in
   packages) install_packages ;;
+  trust-ca) trust_ca ;;
+  untrust-ca) untrust_ca ;;
   install) install_packages; configure; grant_socket_access; install_tray_host; install_libsecret; install_agent; route_domains; apply_daemon_json ;;
   uninstall)
+    untrust_ca
     if has_systemd; then systemctl disable --now dockyard-agent.service >/dev/null 2>&1 || true; fi
     rm -f /etc/systemd/system/dockyard-agent.service
     if [ -f /etc/systemd/resolved.conf.d/dockyard.conf ]; then

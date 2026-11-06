@@ -157,6 +157,26 @@ if ($Wizard) {
     & $docker --context linux network rm e2e-pool | Out-Null
     $saved | Set-Content "$env:APPDATA\Dockyard\settings.json"
 
+    Section 'container domains and trusted HTTPS, without publishing a port'
+    Check 'windows sends the name space to Dockyard' ((Get-DnsClientNrptRule | Where-Object { $_.Namespace -contains '.dockyard.test' }) -ne $null)
+    & $docker --context linux run -d --name e2e-web nginx:alpine | Out-Null
+    $tray = Start-Process $appExe -ArgumentList '--tray' -PassThru
+    Start-Sleep 8
+    Check 'the name resolves' ((Resolve-DnsName e2e-web.dockyard.test -Type A -ErrorAction SilentlyContinue).IPAddress -contains '127.77.0.1')
+    $code = (curl.exe -s -o NUL -w '%{http_code}' --max-time 15 http://e2e-web.dockyard.test/ | Out-String).Trim()
+    Check "http reaches it by name (got $code)" ($code -eq '200')
+    Get-Process Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
+    Check 'exit 0 with --trust-https' ((Run --silent --no-start --trust-https) -eq 0)
+    $root = Get-ChildItem Cert:\LocalMachine\Root | Where-Object Subject -like '*Dockyard Local CA*'
+    Check 'the CA is in the trust store' ($root -ne $null)
+    Check 'name constrained' (($root.Extensions | Where-Object { $_.Oid.Value -eq '2.5.29.30' }).Critical)
+    $tray = Start-Process $appExe -ArgumentList '--tray' -PassThru
+    Start-Sleep 15
+    $code = (curl.exe -s -o NUL -w '%{http_code}' --max-time 15 https://e2e-web.dockyard.test/ | Out-String).Trim()
+    Check "https is trusted by Windows (got $code)" ($code -eq '200')
+    Get-Process Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
+    & $docker --context linux rm -f e2e-web | Out-Null
+
     Section 'docker login keeps credentials in the Windows credential store'
     Check 'the helper is there' (Test-Path (Join-Path $env:ProgramFiles 'Docker\docker-credential-wincred.exe'))
     Check 'the store is set' ((Get-Content "$env:USERPROFILE\.docker\config.json" -Raw) -match '"credsStore":\s*"wincred"')
@@ -219,6 +239,10 @@ Check 'exit 0' ((Run --silent --uninstall) -eq 0)
 Check 'app removed' (-not (Test-Path $appExe))
 $distros = (wsl.exe -l -q | Out-String) -replace "`0", ''
 Check 'the dockyard distro is kept' ($distros -match 'dockyard')
+if ($Wizard) {
+    Check 'the CA is out of the trust store' ((Get-ChildItem Cert:\LocalMachine\Root | Where-Object Subject -like '*Dockyard Local CA*') -eq $null)
+    Check 'and names no longer go to Dockyard' ((Get-DnsClientNrptRule | Where-Object { $_.Namespace -contains '.dockyard.test' }) -eq $null)
+}
 Check 'no credential store left in the config' (-not ((Test-Path "$env:USERPROFILE\.docker\config.json") -and ((Get-Content "$env:USERPROFILE\.docker\config.json" -Raw) -match 'credsStore')))
 Check 'our .wslconfig line is gone' ((Get-Content "$env:USERPROFILE\.wslconfig" -Raw) -notmatch 'networkingMode=mirrored')
 

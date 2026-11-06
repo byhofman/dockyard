@@ -37,7 +37,7 @@ static class Installer
             }
 
             var dashboard = DashboardChoice.Resolve(options.Dashboard, host.IsInstalled, host.HasDashboard, host.RunsFromInstallLocation);
-            var reboot = await host.Install(log, new InstallRequest(dashboard, options.Image, Silent: true));
+            var reboot = await host.Install(log, new InstallRequest(dashboard, options.Image, Silent: true, TrustHttps: options.TrustHttps));
             // Installing never fails halfway unnoticed: a step that quietly did nothing would otherwise report success.
             if (!reboot && !host.IsInstalled) throw new InvalidOperationException("Setup finished, but Dockyard is not installed");
             if (host.HasDashboard != dashboard)

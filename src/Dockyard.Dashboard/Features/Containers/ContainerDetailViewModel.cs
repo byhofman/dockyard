@@ -14,6 +14,7 @@ sealed class ContainerDetailViewModel : Observable, IDisposable
     InspectViewModel? inspect;
     Features.Files.FileBrowserViewModel? files;
     string? domain;
+    bool https;
     string domainPort = "";
     string domainPortNote = "";
     bool confirmRemove;
@@ -56,7 +57,7 @@ sealed class ContainerDetailViewModel : Observable, IDisposable
 
     public string? Domain { get => domain; private set { if (Set(ref domain, value)) Raise(nameof(HasDomain), nameof(DomainUrl)); } }
     public bool HasDomain => domain is not null;
-    public string DomainUrl => $"http://{domain}";
+    public string DomainUrl => $"{(https ? "https" : "http")}://{domain}";
     public string DomainPort { get => domainPort; set => Set(ref domainPort, value); }
     public string DomainPortNote { get => domainPortNote; private set => Set(ref domainPortNote, value); }
     public Command ApplyDomainPortCommand { get; }
@@ -69,10 +70,12 @@ sealed class ContainerDetailViewModel : Observable, IDisposable
         catch (Exception e) when (e is IOException or System.Net.Sockets.SocketException or InvalidOperationException) { }
     }
 
-    void Show(List<DomainInfo> domains)
+    void Show(DomainList list)
     {
         if (disposed) return;
-        var mine = domains.Where(d => d.ContainerId == Item.Id).ToList();
+        https = list.Https;
+        Raise(nameof(DomainUrl));
+        var mine = list.Domains.Where(d => d.ContainerId == Item.Id).ToList();
         var first = mine.OrderBy(d => d.Domain.Length).FirstOrDefault();
         Domain = first?.Domain;
         DomainPort = first?.Port?.ToString() ?? "";

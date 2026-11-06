@@ -334,6 +334,7 @@ sealed class AgentReply
 {
     public string? Error { get; set; }
     public List<DomainInfo>? Domains { get; set; }
+    public bool Https { get; set; }
 }
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
@@ -359,10 +360,10 @@ sealed class AgentApi(DomainTable table, DomainProxy proxy)
             var request = JsonSerializer.Deserialize(line, AgentApiJson.Default.AgentRequest);
             switch (request?.Op)
             {
-                case "domains": return new AgentReply { Domains = table.List() };
+                case "domains": return new AgentReply { Domains = table.List(), Https = proxy.HasCertificate };
                 case "choose-port" when request is { Container: { } container }:
                     table.Choose(container, request.Port);
-                    return new AgentReply { Domains = table.List() };
+                    return new AgentReply { Domains = table.List(), Https = proxy.HasCertificate };
                 case "tls" when request is { Cert: { } cert, Key: { } key }:
                     proxy.SetCertificate(cert, key);
                     return new AgentReply();

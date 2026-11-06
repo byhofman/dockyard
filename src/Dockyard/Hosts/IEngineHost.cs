@@ -8,7 +8,7 @@ sealed record ComponentInfo(string Id, string Title, string? CheckNeedsEngine = 
 sealed record Release(Version Version, string Tag, string? DownloadUrl);
 
 // Silent: nothing may pop up, so a step that would need a prompt uses what works without one, or says what was skipped.
-sealed record InstallRequest(bool Dashboard, string? Image = null, bool Silent = false);
+sealed record InstallRequest(bool Dashboard, string? Image = null, bool Silent = false, bool TrustHttps = false);
 
 interface IEngineHost
 {
@@ -43,6 +43,11 @@ interface IEngineHost
     // Where Linux containers imported from another engine go, started if need be; and the socket Dockyard itself links, if any.
     string ImportTarget => Engines[0].Endpoint;
     string? OwnSocket => null;
+
+    string CaDirectory => Path.Combine(Core.Paths.SettingsDir, "ca");
+    // Returns false when the user or the system declined. Silent: nothing may pop up, so only what works without a prompt.
+    Task<bool> TrustCa(Action<string> log, string certificateFile, bool silent) => Task.FromResult(false);
+    Task UntrustCa(Action<string> log, string certificateFile) => Task.CompletedTask;
 
     // What only the tray keeps running, for as long as it runs.
     void StartTrayServices() { }
