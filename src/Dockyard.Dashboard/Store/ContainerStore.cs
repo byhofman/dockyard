@@ -145,8 +145,12 @@ sealed class ContainerStore
 
     public ContainerItem? Get(string id) => items.GetValueOrDefault(id);
 
-    public void Reset(IEnumerable<ContainerSummary> containers)
+    // Containers Dockyard creates for itself to hold a volume are never started and are not the user's.
+    static bool IsHelper(ContainerSummary s) => s.Labels?.ContainsKey("dockyard.helper") == true;
+
+    public void Reset(IEnumerable<ContainerSummary> all)
     {
+        var containers = all.Where(c => !IsHelper(c)).ToList();
         var seen = new HashSet<string>();
         foreach (var s in containers)
         {
@@ -160,6 +164,7 @@ sealed class ContainerStore
 
     public void Upsert(ContainerSummary s)
     {
+        if (IsHelper(s)) return;
         var isNew = !items.TryGetValue(s.Id, out var item);
         if (isNew) items[s.Id] = item = new ContainerItem(s.Id);
         var (name, project, running) = (item!.Name, item.Project, item.IsRunning);

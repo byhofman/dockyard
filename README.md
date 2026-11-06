@@ -102,9 +102,9 @@ Its process is called `Dockyard Dashboard` in Task Manager and Activity Monitor.
 
 It follows the active docker context and updates live from the engine's events. It polls nothing and exits when you close it.
 
-- **Containers**: running and stopped, with ports (click to open `http://127.0.0.1:<port>`) and live CPU and memory. Compose projects are expandable rows. Per container: logs, inspect, graphs, and **Terminal**. A compose project has up, stop, restart, pull, down and merged logs; **Open compose file…** starts a project from a file.
+- **Containers**: running and stopped, with ports (click to open `http://127.0.0.1:<port>`) and live CPU and memory. Compose projects are expandable rows. Per container: logs, **Files** (read, edit, download and upload, also in stopped containers and images without a shell), inspect, graphs, and **Terminal**. A compose project has up, stop, restart, pull, down and merged logs; **Open compose file…** starts a project from a file.
 - **Images**: pull with progress, tags, size, which containers use them, remove, prune.
-- **Volumes**: size, which containers use them, remove, prune.
+- **Volumes**: size, which containers use them, remove, prune. **Files** shows what is in a volume, to read, edit, download or upload; on Windows **Open in Explorer** opens its folder.
 - **Networks**: subnet, connected containers, connect, disconnect, create, remove, prune.
 - **Disk**: `docker system df` per category; prune per category or **Clean everything unused**.
 
