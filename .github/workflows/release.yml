@@ -70,6 +70,8 @@ jobs:
           path: guest
 
       - name: Test
+        env:
+          DOCKYARD_TEST_ENDPOINT: unix:///var/run/docker.sock
         run: dotnet test --solution Dockyard.slnx
 
       - name: Publish and package

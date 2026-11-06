@@ -2,6 +2,16 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-06: Files in containers and volumes go through the archive API, in the dashboard
+
+`DOK-5` and `DOK-17` share one file browser built on `GET`/`PUT .../archive`. This needs no shell or `ls` in the image, works on stopped containers, and needs nothing new in the VM, so it costs no memory while unused.
+
+- **Listing reads the whole subtree**, since a tar cannot skip a folder. Only headers are kept, but a huge folder takes as long as reading it. Nothing lists until the Files tab is opened.
+- **No delete.** The archive API has none, and deleting through `exec` would not work in a stopped container or an image without a shell. Edit, upload and download cover what the backlog asks for.
+- **OrbStack mounts these at `~/OrbStack`; this does not.** On macOS that takes a privileged file server, and it competes on memory. Windows gets **Open in Explorer** through `\\wsl.localhost`, which costs nothing. So on macOS and Linux "reachable from the host" means through the dashboard.
+- **A volume is held by a container that never starts**, on an empty image created on the spot, labelled `dockyard.helper` and hidden from the list.
+- **Screens were not prototyped first:** this app is Avalonia with no `yarn design` prototype mode, so the build skill's prototype step has nothing to run on. The Files tab follows the existing panels.
+
 ## 2026-11-06: Import copies through both engines' APIs
 
 Docker Desktop's disk image format is its own and changes, so the import never reads it: both engines stay up and data goes over their APIs, unbuffered. This covers anything an engine holds and needs no extra space beyond the target.

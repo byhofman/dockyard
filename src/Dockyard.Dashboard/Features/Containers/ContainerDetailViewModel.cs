@@ -12,6 +12,7 @@ sealed class ContainerDetailViewModel : Observable, IDisposable
     readonly EngineSession session;
     readonly Action<string> showError;
     InspectViewModel? inspect;
+    Features.Files.FileBrowserViewModel? files;
     bool confirmRemove;
     bool logsExpanded;
     int selectedTab;
@@ -37,6 +38,11 @@ sealed class ContainerDetailViewModel : Observable, IDisposable
     public Command AskRemoveCommand { get; }
     public Command CancelRemoveCommand { get; }
     public Command CloseCommand { get; }
+
+    // Made when the tab is opened: Avalonia only sets a tab's content then, and that is what starts the first listing.
+    public Features.Files.FileBrowserViewModel? Files => files ??= session.Client is { } client
+        ? new Features.Files.FileBrowserViewModel(client, Item.Id, "/", showError)
+        : null;
 
     public InspectViewModel? Inspect { get => inspect; private set => Set(ref inspect, value); }
     public bool ConfirmRemove { get => confirmRemove; set => Set(ref confirmRemove, value); }
@@ -85,6 +91,7 @@ sealed class ContainerDetailViewModel : Observable, IDisposable
         disposed = true;
         Item.PropertyChanged -= OnItemChanged;
         Logs.Dispose();
+        files?.Dispose();
     }
 }
 
