@@ -58,6 +58,16 @@ func prepare(assets: String) throws {
     }
 }
 
+final class HostDialListener: NSObject, VZVirtioSocketListenerDelegate {
+    func listener(_ listener: VZVirtioSocketListener, shouldAcceptNewConnection connection: VZVirtioSocketConnection,
+                  from socketDevice: VZVirtioSocketDevice) -> Bool {
+        let fd = dup(connection.fileDescriptor)
+        connection.close()
+        if fd >= 0 { HostDial.serve(fd) }
+        return fd >= 0
+    }
+}
+
 final class Machine: NSObject, VZVirtualMachineDelegate {
     let settings: VMSettings
     let queue = DispatchQueue(label: "dockyard.vm")
@@ -69,6 +79,8 @@ final class Machine: NSObject, VZVirtualMachineDelegate {
     var forwarder: PortForwarder!
     var control: ControlClient!
     var stopping = false
+    let hostDial = HostDialListener()
+    let hostDialListener = VZVirtioSocketListener()
 
     init(settings: VMSettings) throws {
         self.settings = settings
@@ -151,6 +163,8 @@ final class Machine: NSObject, VZVirtualMachineDelegate {
             self.vm.start { result in
                 if case .failure(let error) = result { fail("start failed: \(error.localizedDescription)") }
                 log("VM started (\(self.settings.cpus) CPUs, \(self.settings.memoryMiB) MiB)")
+                self.hostDialListener.delegate = self.hostDial
+                (self.vm.socketDevices.first as? VZVirtioSocketDevice)?.setSocketListener(self.hostDialListener, forPort: VsockPort.hostDial)
                 DispatchQueue.main.async { self.attach() }
             }
         }

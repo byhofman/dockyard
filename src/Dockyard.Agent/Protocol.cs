@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Net;
 using System.Text.Json.Serialization;
 using Dockyard.Engine;
 
@@ -17,6 +18,9 @@ sealed record AgentOptions(bool Tcp)
     // dockyard.agent=tcp on the kernel command line serves the same ports over TCP (used by the QEMU boot test).
     public static AgentOptions FromCmdline(string cmdline) =>
         new(cmdline.Split((char[])[' ', '\n', '\t'], StringSplitOptions.RemoveEmptyEntries).Contains("dockyard.agent=tcp"));
+
+    // QEMU's user networking puts the machine that started the VM at this address.
+    public IPAddress TestHost => IPAddress.Parse("10.0.2.2");
 }
 
 enum ForwardProtocol { Tcp, Udp }

@@ -250,10 +250,15 @@ sealed partial class Agent(ITransport transport, Action<string> log)
         await Run("poweroff");
     }
 
-    static async Task Run(string file, params string[] args)
+    static async Task Run(string file, params string[] args) => await Exit(file, args);
+
+    public static async Task<int> Exit(string file, string[] args)
     {
-        using var p = Process.Start(new ProcessStartInfo(file, args) { UseShellExecute = false })!;
+        using var p = Process.Start(new ProcessStartInfo(file, args) { UseShellExecute = false, RedirectStandardError = true })!;
+        // A rule that is already there or a command that fails is reported by the exit code, not on the console.
+        await p.StandardError.ReadToEndAsync();
         await p.WaitForExitAsync();
+        return p.ExitCode;
     }
 
     [StructLayout(LayoutKind.Sequential)]

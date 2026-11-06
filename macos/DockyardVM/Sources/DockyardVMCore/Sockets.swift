@@ -96,6 +96,40 @@ public enum Sockets {
         return fd
     }
 
+    public static func connectLoopback(port: Int) -> Int32? {
+        connectV4Loopback(port: port) ?? connectV6Loopback(port: port)
+    }
+
+    static func connectV4Loopback(port: Int) -> Int32? {
+        let fd = socket(AF_INET, streamType, 0)
+        guard fd >= 0 else { return nil }
+        var address = sockaddr_in()
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_port = UInt16(port).bigEndian
+        inet_pton(AF_INET, "127.0.0.1", &address.sin_addr)
+        let result = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+        }
+        if result == 0 { return fd }
+        close(fd)
+        return nil
+    }
+
+    static func connectV6Loopback(port: Int) -> Int32? {
+        let fd = socket(AF_INET6, streamType, 0)
+        guard fd >= 0 else { return nil }
+        var address = sockaddr_in6()
+        address.sin6_family = sa_family_t(AF_INET6)
+        address.sin6_port = UInt16(port).bigEndian
+        inet_pton(AF_INET6, "::1", &address.sin6_addr)
+        let result = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in6>.size)) }
+        }
+        if result == 0 { return fd }
+        close(fd)
+        return nil
+    }
+
     /// Accepts on a background thread until the listener is shut down.
     public static func acceptLoop(_ listener: Int32, _ handle: @escaping (Int32) -> Void) {
         Thread.detachNewThread {
@@ -157,6 +191,36 @@ public enum Sockets {
             }
         }
         shutdown(to, Int32(SHUT_WR))
+    }
+}
+
+/// A connection the guest opened to reach a service on the Mac: host.docker.internal.
+public enum HostDial {
+    /// Reads "tcp <port>\n" from the guest and connects it to that port on this Mac's loopback, over IPv4 or IPv6
+    /// because dev servers often bind only one of them. Nothing but loopback is reachable this way.
+    public static func serve(_ guest: Int32, connect: @escaping (Int) -> Int32? = Sockets.connectLoopback) {
+        Thread.detachNewThread {
+            guard let port = readPort(guest), let host = connect(port) else {
+                close(guest)
+                return
+            }
+            Sockets.pump(guest, host)
+        }
+    }
+
+    static func readPort(_ fd: Int32) -> Int? {
+        var line = [UInt8]()
+        var byte: UInt8 = 0
+        while line.count < 16 {
+            guard Glue.read(fd, &byte, 1) == 1 else { return nil }
+            if byte == 0x0A {
+                let parts = String(decoding: line, as: UTF8.self).split(separator: " ")
+                guard parts.count == 2, parts[0] == "tcp", let port = Int(parts[1]), (1...65535).contains(port) else { return nil }
+                return port
+            }
+            line.append(byte)
+        }
+        return nil
     }
 }
 

@@ -4,6 +4,7 @@ public enum VsockPort {
     public static let docker: UInt32 = 2375
     public static let forward: UInt32 = 2376
     public static let control: UInt32 = 2377
+    public static let hostDial: UInt32 = 2378
 }
 
 /// Everything the helper needs to boot the VM; stored as ~/.dockyard/vm.json.
