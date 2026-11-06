@@ -62,6 +62,13 @@ docker run --rm alpine:3.24 nslookup dl-cdn.alpinelinux.org >/dev/null && echo "
 printf '{"type":"clock","unixNs":%s000000000}\n' "$(date +%s)" | nc -w 3 127.0.0.1 12377 >/dev/null || true
 sleep 1
 grep -aq 'clock set from host' console.log && echo "the agent reaches libc" || { echo "FAIL: the agent cannot call libc"; grep -a dockyard-agent console.log | tail -20; exit 1; }
+docker run -d --name hostnet --network host alpine:3.24 sh -c 'while :; do printf "HTTP/1.0 200 OK\r\n\r\nfrom-host-network" | nc -l -p 8091 >/dev/null; done' >/dev/null
+sleep 4
+reply="$(printf 'tcp 8091\nGET / HTTP/1.0\r\n\r\n' | nc -w 5 127.0.0.1 12376 | tail -1)"
+[ "$reply" = from-host-network ] && echo "a server in a --network host container is reachable through the agent" || { echo "FAIL: --network host: '$reply'"; exit 1; }
+ports="$( (sleep 4) | nc -w 5 127.0.0.1 12377 | head -1)"
+echo "$ports" | grep -q '"port":8091' && echo "control reports the --network host port" || { echo "FAIL: control: $ports"; exit 1; }
+docker rm -f hostnet >/dev/null
 
 control="$( (sleep 6) | nc -w 7 127.0.0.1 12377 | head -3)"
 echo "$control" | grep -q '"type":"ports".*"port":8080' && echo "control reports port 8080" || { echo "FAIL: control: $control"; exit 1; }
