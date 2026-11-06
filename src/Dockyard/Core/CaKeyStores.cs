@@ -33,7 +33,7 @@ sealed class FileCaKey(string directory) : ICaKeyStore
 
     public Task Delete()
     {
-        File.Delete(KeyFile);
+        if (File.Exists(KeyFile)) File.Delete(KeyFile);
         return Task.CompletedTask;
     }
 }
@@ -60,7 +60,7 @@ sealed class DpapiCaKey(string directory) : ICaKeyStore
 
     public Task Delete()
     {
-        File.Delete(KeyFile);
+        if (File.Exists(KeyFile)) File.Delete(KeyFile);
         return Task.CompletedTask;
     }
 }
