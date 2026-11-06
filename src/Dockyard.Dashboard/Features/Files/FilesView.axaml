@@ -1,0 +1,37 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:files="using:Dockyard.Dashboard.Features.Files"
+             x:Class="Dockyard.Dashboard.Features.Files.FilesView"
+             x:DataType="files:FileBrowserViewModel">
+  <Grid RowDefinitions="Auto,*,Auto,2*">
+    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="10,8,14,6">
+      <Button Command="{Binding UpCommand}" Content="Up" ToolTip.Tip="The folder above" />
+      <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Directory}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="8,0" />
+      <ProgressBar Grid.Column="2" IsIndeterminate="True" IsVisible="{Binding Busy}" Width="50" MinWidth="50" VerticalAlignment="Center" Margin="0,0,8,0" />
+      <Button Grid.Column="3" Content="Upload…" Click="UploadClicked" Margin="0,0,6,0" ToolTip.Tip="Copy a file from this computer into this folder" />
+      <Button Grid.Column="4" Content="Download…" Click="DownloadClicked" IsEnabled="{Binding CanDownload}" ToolTip.Tip="Copy the selected file to this computer" />
+    </Grid>
+    <ListBox Grid.Row="1" Classes="rows" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" MinHeight="90">
+      <ListBox.ItemTemplate>
+        <DataTemplate DataType="files:FileRow">
+          <Grid ColumnDefinitions="*,70,Auto">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Classes="mono muted" Text="/" IsVisible="{Binding IsDirectory}" VerticalAlignment="Center" />
+              <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+            </StackPanel>
+            <TextBlock Grid.Column="1" Classes="muted small" Text="{Binding SizeText}" TextAlignment="Right" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="2" Classes="muted small" Text="{Binding Detail}" Margin="10,0,0,0" VerticalAlignment="Center" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+    <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="10,6,14,4" IsVisible="{Binding HasOpenFile}">
+      <TextBlock Classes="mono" Text="{Binding OpenName}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+      <Button Grid.Column="1" Classes="primary" Content="Save" Command="{Binding SaveCommand}" IsVisible="{Binding HasText}" />
+    </Grid>
+    <Panel Grid.Row="3" Margin="10,0,14,10" IsVisible="{Binding HasOpenFile}">
+      <TextBox Classes="mono" AcceptsReturn="True" TextWrapping="NoWrap" Text="{Binding Text}" IsVisible="{Binding HasText}" />
+      <TextBlock Classes="muted" Text="{Binding Note}" IsVisible="{Binding HasNote}" TextWrapping="Wrap" />
+    </Panel>
+  </Grid>
+</UserControl>
