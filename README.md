@@ -62,6 +62,7 @@ curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install.sh |
 | `--without <names>` | Leave them out, or remove them. Asking for a required one or for the last engine exits 2 and changes nothing. With `--remove-data`, an engine's images go too. |
 | `--dashboard`, `--no-dashboard` | The same as `--with dashboard`, `--without dashboard`. |
 | `--no-start` | Do not start Dockyard afterwards. |
+| `--trust-https` | Add Dockyard's own certificate to the trust store, for HTTPS on container domains. |
 | `--silent --import` | Copy images, volumes and containers from Docker Desktop, which keeps them. **Import** in the tray window does the same. |
 | `--silent --uninstall` | Remove Dockyard. Images and containers stay. |
 | `--silent --uninstall --remove-data` | Remove Dockyard with its images and containers. |
@@ -114,12 +115,15 @@ Keys: `Ctrl+K` (`⌘K` on macOS) search, `S` start/stop, `R` restart, `E` termin
 
 Every running container answers at `http://<container name>.dockyard.test`, and a Compose service also at `http://<project>-<service>.dockyard.test`, without publishing a port and without clashing with anything else on your machine. Dockyard picks the port by looking at what the container listens on, the usual web ports first. If that is the wrong one, set it next to the name in the dashboard, or with a `dockyard.port` label.
 
+**HTTPS:** turn it on under **Container domains** in the wizard or the tray window, or add `--trust-https` to a silent setup. Dockyard makes a certificate authority of its own on this device, valid only for names under `dockyard.test`, and your system asks for approval to trust it. Say no and everything keeps working over plain HTTP. Its key stays on this device, readable only by you; turning HTTPS off or uninstalling removes it from the trust store.
+
 ## Your network
 
 Containers reach your machine as `host.docker.internal`, including services that only listen on its loopback. The engine and its containers use the proxy your system is set to, also one on your machine's own loopback, read each time the engine starts. Name lookups go through your system's DNS at that moment, and traffic leaves through your machine's routes, so VPNs apply to containers as they do to your other apps.
 
 ## Known limits
 
+- Firefox keeps its own trust store on macOS and Windows, so it warns about HTTPS on container domains unless its enterprise roots setting is on.
 - Container domains need systemd-resolved on Linux; other setups have no place to route one name space, and the wizard says so. Reaching them on macOS may ask once for Local Network access for your browser, since the name points at the VM.
 - A proxy auto-config (PAC) file is not followed: it can choose a different proxy per address, and the engine takes one fixed proxy. Set a fixed proxy in your system's settings if pulls fail behind one.
 - On macOS, `/var/run/docker.sock` stays with another Docker app when one already has it, such as OrbStack or Docker Desktop. Tools that ignore docker contexts keep using that app until it gives up the path.

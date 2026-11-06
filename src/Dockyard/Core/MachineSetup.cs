@@ -65,6 +65,7 @@ static class MachineSetup
     {
         StopApps(keepPid);
         await UnrouteDomains();
+        UntrustCa(log);
         if (ServiceExists())
         {
             log("Removing docker service");
@@ -91,6 +92,28 @@ static class MachineSetup
             }
         }
         log($"Windows images and containers under {Path.GetDirectoryName(Paths.DaemonConfigDir)} were left in place");
+    }
+
+    public static void TrustCa(Action<string> log, string certificateFile)
+    {
+        using var certificate = System.Security.Cryptography.X509Certificates.X509Certificate2.CreateFromPem(File.ReadAllText(certificateFile));
+        using var store = new System.Security.Cryptography.X509Certificates.X509Store(System.Security.Cryptography.X509Certificates.StoreName.Root, System.Security.Cryptography.X509Certificates.StoreLocation.LocalMachine);
+        store.Open(System.Security.Cryptography.X509Certificates.OpenFlags.ReadWrite);
+        store.Add(certificate);
+        log("Windows trusts Dockyard's certificate, for names under dockyard.test only");
+    }
+
+    public static void UntrustCa(Action<string> log)
+    {
+        using var store = new System.Security.Cryptography.X509Certificates.X509Store(System.Security.Cryptography.X509Certificates.StoreName.Root, System.Security.Cryptography.X509Certificates.StoreLocation.LocalMachine);
+        store.Open(System.Security.Cryptography.X509Certificates.OpenFlags.ReadWrite);
+        var removed = 0;
+        foreach (var certificate in store.Certificates.Find(System.Security.Cryptography.X509Certificates.X509FindType.FindBySubjectName, LocalCa.SubjectName, validOnly: false))
+        {
+            store.Remove(certificate);
+            removed++;
+        }
+        if (removed > 0) log("Dockyard's certificate is out of Windows' trust store");
     }
 
     const string DomainNamespace = ".dockyard.test";

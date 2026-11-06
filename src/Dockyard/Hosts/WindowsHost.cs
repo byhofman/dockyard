@@ -134,6 +134,28 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
         return false;
     }
 
+    // The machine's store: the current user's would show its own dialog from an elevated process nobody is watching, and
+    // the wizard's administrator approval is the prompt that explains itself.
+    public async Task<bool> TrustCa(Action<string> log, string certificateFile, bool silent)
+    {
+        try
+        {
+            if (Elevation.IsElevated) MachineSetup.TrustCa(log, certificateFile);
+            else await Elevation.Run(log, "--machine-trust-ca", certificateFile);
+            return true;
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or System.Security.Cryptography.CryptographicException)
+        {
+            return false;
+        }
+    }
+
+    public async Task UntrustCa(Action<string> log, string certificateFile)
+    {
+        if (Elevation.IsElevated) MachineSetup.UntrustCa(log);
+        else if (File.Exists(certificateFile)) await Elevation.Run(log, "--machine-untrust-ca", "all");
+    }
+
     static bool LinuxEngineWanted => !Settings.Load().RemovedComponents.Contains(nameof(Component.LinuxEngine));
     public bool HasEngineConfiguration => LinuxEngineWanted;
 
@@ -175,6 +197,7 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
             return true;
         }
         if (hadDistro) await UpdateLinuxEngineIfNewer(log);
+        if (request.TrustHttps) await Https.Enable(this, log, request.Silent);
         return reboot;
     }
 
@@ -195,6 +218,8 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
     public async Task Uninstall(Action<string> log, bool removeData)
     {
         ReleaseResources();
+        // Before the user's folder with the certificate goes; the machine step also removes it by name, to leave none behind.
+        LocalCa.Remove(((IEngineHost)this).CaDirectory);
         await UserSetup.Uninstall(log, removeData);
         if (Elevation.IsElevated) await MachineSetup.Uninstall(log, Environment.ProcessId);
         else await Elevation.Run(log, "--machine-uninstall");

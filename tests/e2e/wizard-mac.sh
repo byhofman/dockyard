@@ -119,6 +119,17 @@ if [ -n "${ADMIN:-}" ]; then
 fi
 check "tools that look in ~/.docker/run find it" test -L "$home/.docker/run/docker.sock"
 
+if [ -n "${ADMIN:-}" ]; then
+  echo "== container domains and trusted HTTPS"
+  if grep -q 'port 15353' /etc/resolver/dockyard.test; then ok "this Mac asks Dockyard about the name space"; else fail "resolver: $(cat /etc/resolver/dockyard.test 2>&1)"; fi
+  run --silent --no-start --no-dashboard --trust-https
+  ca="$home/.dockyard/ca/ca.pem"
+  check "the CA was made" test -f "$ca"
+  if [ "$(stat -f %Lp "$home/.dockyard/ca/ca.key")" = 600 ]; then ok "the key is the owner's only"; else fail "key mode"; fi
+  if security find-certificate -c "Dockyard Local CA" /Library/Keychains/System.keychain >/dev/null; then ok "the CA is in the trust store"; else fail "not in the trust store"; fi
+  if openssl x509 -in "$ca" -noout -text | grep -A2 'Name Constraints: critical' | grep -q 'DNS:dockyard.test'; then ok "the CA is name constrained"; else fail "name constraint"; fi
+fi
+
 date > "$home/.dockyard/marker"
 data_before="$(ls -i "$home/.dockyard/data.img")"
 
@@ -163,10 +174,13 @@ check "app removed" missing "$app"
 check "login item removed" missing "$home/Library/LaunchAgents/com.byhofman.dockyard.plist"
 check "data kept" test -f "$home/.dockyard/data.img"
 check "the user socket link is gone" missing "$home/.docker/run/docker.sock"
+check "the CA's key is gone, also when the data stays" missing "$home/.dockyard/ca/ca.key"
 if [ -f "$home/.docker/config.json" ] && grep -q credsStore "$home/.docker/config.json"; then fail "credsStore left behind"; else ok "no credential store left in the config"; fi
 if [ -n "${ADMIN:-}" ]; then
   check "/var/run/docker.sock is gone" missing /var/run/docker.sock
   check "the daemon is gone" missing /Library/LaunchDaemons/com.byhofman.dockyard.socket.plist
+  check "the resolver entry is gone" missing /etc/resolver/dockyard.test
+  if security find-certificate -c "Dockyard Local CA" /Library/Keychains/System.keychain >/dev/null 2>&1; then fail "the CA stayed in the trust store"; else ok "the CA is out of the trust store"; fi
 fi
 
 echo "== and --remove-data takes it"

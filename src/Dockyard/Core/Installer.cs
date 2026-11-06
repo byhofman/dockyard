@@ -51,7 +51,7 @@ static class Installer
             }
 
             var dashboard = DashboardChoice.Resolve(options.Dashboard, host.IsInstalled, host.HasDashboard, host.RunsFromInstallLocation);
-            var reboot = await host.Install(log, new InstallRequest(dashboard, options.Image, Silent: true) { Without = removed });
+            var reboot = await host.Install(log, new InstallRequest(dashboard, options.Image, Silent: true, TrustHttps: options.TrustHttps) { Without = removed });
             foreach (var flag in options.With)
                 // Removed earlier counts too: something else on the machine may answer for it meanwhile, such as a plugin of another package.
                 if (ComponentRules.ByFlag(host.Components, flag) is { } added && (removedBefore.Contains(added.Id) || await host.Installed(added.Id) is null))

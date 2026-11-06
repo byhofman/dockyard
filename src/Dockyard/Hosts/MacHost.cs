@@ -32,6 +32,7 @@ static class MacLayout
     public static string CredentialHelper => Path.Combine(BinDir, "docker-credential-osxkeychain");
     public const string CredentialHelperAsset = @"^docker-credential-osxkeychain-v[\d.]+\.darwin-arm64$";
     public const string SystemSocket = "/var/run/docker.sock";
+    public static string LoginKeychain => Path.Combine(Home, "Library", "Keychains", "login.keychain-db");
     public const string DomainResolver = "/etc/resolver/dockyard.test";
     public const int DomainDnsPort = 15353;
     public const string SocketDaemonLabel = "com.byhofman.dockyard.socket";
@@ -336,6 +337,43 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         _ => null,
     };
 
+    public string CaDirectory => Path.Combine(MacLayout.DataDir, "ca");
+
+    // A window: the login keychain, for which macOS asks the user's own approval. Silent: only what sudo allows unasked.
+    public async Task<bool> TrustCa(Action<string> log, string certificateFile, bool silent)
+    {
+        var r = silent
+            ? await runner.Run("sudo", "-n", "/usr/bin/security", "add-trusted-cert", "-d", "-r", "trustRoot", "-k", "/Library/Keychains/System.keychain", certificateFile)
+            : await runner.Run("/usr/bin/security", "add-trusted-cert", "-r", "trustRoot", "-k", MacLayout.LoginKeychain, certificateFile);
+        if (r.ExitCode != 0) return false;
+        log("This Mac trusts Dockyard's certificate, for names under dockyard.test only");
+        return true;
+    }
+
+    public async Task UntrustCa(Action<string> log, string certificateFile)
+    {
+        if (!File.Exists(certificateFile)) return;
+        var thumbprint = LocalCa.Thumbprint(await File.ReadAllTextAsync(certificateFile));
+        // Asking to remove what is not there can still raise an approval dialog, so it is looked up first. Only the certificate
+        // goes: remove-trusted-cert waits for an approval dialog, even as root and without a screen, so it hung every headless
+        // uninstall. The trust setting left behind is for this certificate's hash alone, and it and its key are gone.
+        if ((await runner.Run("/usr/bin/security", "find-certificate", "-a", "-Z", "-c", LocalCa.SubjectName, MacLayout.LoginKeychain)).Output.Contains(thumbprint, StringComparison.OrdinalIgnoreCase))
+        {
+            await runner.Run("/usr/bin/security", "delete-certificate", "-Z", thumbprint, MacLayout.LoginKeychain);
+        }
+        // In the system keychain only after a silent setup; a prompt for what is not there would make no sense.
+        if ((await runner.Run("/usr/bin/security", "find-certificate", "-a", "-Z", "-c", LocalCa.SubjectName, "/Library/Keychains/System.keychain")).Output.Contains(thumbprint, StringComparison.OrdinalIgnoreCase))
+        {
+            var script = $"security delete-certificate -Z {thumbprint} /Library/Keychains/System.keychain";
+            if ((await runner.Run("sudo", "-n", "/bin/sh", "-c", script)).ExitCode != 0)
+                await runner.Run("/usr/bin/osascript", MacLayout.AdminShell(script));
+        }
+        foreach (var keychain in new[] { MacLayout.LoginKeychain, "/Library/Keychains/System.keychain" })
+            if ((await runner.Run("/usr/bin/security", "find-certificate", "-a", "-Z", "-c", LocalCa.SubjectName, keychain)).Output.Contains(thumbprint, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Dockyard's certificate is still in {keychain}. Nothing was removed, so this can be tried again.");
+        log("Dockyard's certificate is out of this Mac's trust store");
+    }
+
     public bool HasEngineConfiguration => true;
     public string? OwnSocket => MacLayout.DockerSocket;
 
@@ -482,6 +520,8 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         if (current.Length > 0 && current != MacLayout.Context) await File.WriteAllTextAsync(MacLayout.PreviousContextFile, current);
         await runner.Check(MacLayout.DockerCli, "context", "use", MacLayout.Context);
         log($"Docker context '{MacLayout.Context}' → {host}");
+
+        if (request.TrustHttps) await Https.Enable(this, log, request.Silent);
 
         Directory.CreateDirectory(Path.GetDirectoryName(MacLayout.LaunchAgent)!);
         await File.WriteAllTextAsync(MacLayout.LaunchAgent, MacLayout.LaunchAgentPlist(MacLayout.InstalledExe));
@@ -648,6 +688,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
             await runner.Run(MacLayout.DockerCli, "context", "use", MacLayout.ContextToRestore(previous));
             await runner.Run(MacLayout.DockerCli, "context", "rm", "-f", MacLayout.Context);
         }
+        await Https.Disable(this, log);
         await CredentialStore.Forget(MacLayout.CredentialStoreMarker);
         await EngineConfig.ApplyClientProxy("unix://" + MacLayout.DockerSocket, null);
         UnlinkUserSocket();

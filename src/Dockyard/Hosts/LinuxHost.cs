@@ -267,6 +267,7 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
             log($"{Paths.AppName} autostarts at login ({AutostartFile})");
         }
         await SetUpCredentialStore(log);
+        if (request.TrustHttps) await Https.Enable(this, log, request.Silent);
         await TryRun("gnome-extensions", "enable", "appindicatorsupport@rgcjonas.gmail.com");
         if ((await TryRun("docker", "context", "show"))?.Output.Trim() is { Length: > 0 } current && current != "default")
         {
@@ -288,6 +289,7 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
     {
         if (File.Exists(AutostartFile)) File.Delete(AutostartFile);
         await CredentialStore.Forget(Paths.CredentialStoreMarker);
+        await Https.Disable(this, log);
         await UninstallWithConfig(log);
         if (Directory.Exists(LinuxLayout.HomeDir)) Directory.Delete(LinuxLayout.HomeDir, recursive: true);
         if (new FileInfo(LinuxLayout.HomeLink).LinkTarget is not null) File.Delete(LinuxLayout.HomeLink);
@@ -298,6 +300,32 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
     public void ReleaseResources() { }
 
     static string SetupUser => Environment.UserName == "root" ? Environment.GetEnvironmentVariable("SUDO_USER") ?? "" : Environment.UserName;
+
+    public async Task<bool> TrustCa(Action<string> log, string certificateFile, bool silent)
+    {
+        try
+        {
+            // A browser run by this user reads its own store on Linux, where it exists; the system's covers curl and the rest.
+            await RunSetup(log, "trust-ca", "", certificateFile);
+            var nss = Path.Combine(Paths.UserProfile, ".pki", "nssdb");
+            if (Environment.UserName != "root" && Directory.Exists(nss))
+                await TryRun("certutil", "-d", "sql:" + nss, "-A", "-t", "C,,", "-n", LocalCa.SubjectName, "-i", certificateFile);
+            return true;
+        }
+        catch (InvalidOperationException e)
+        {
+            log(e.Message);
+            return false;
+        }
+    }
+
+    public async Task UntrustCa(Action<string> log, string certificateFile)
+    {
+        if (!File.Exists(certificateFile)) return;
+        var nss = Path.Combine(Paths.UserProfile, ".pki", "nssdb");
+        if (Directory.Exists(nss)) await TryRun("certutil", "-d", "sql:" + nss, "-D", "-n", LocalCa.SubjectName);
+        await RunSetup(log, "untrust-ca");
+    }
 
     const string DaemonJson = "/etc/docker/daemon.json";
 

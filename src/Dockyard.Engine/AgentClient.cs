@@ -22,7 +22,10 @@ sealed class AgentMessage
     public string? Key { get; set; }
     public string? Error { get; set; }
     public List<DomainInfo>? Domains { get; set; }
+    public bool Https { get; set; }
 }
+
+public sealed record DomainList(IReadOnlyList<DomainInfo> Domains, bool Https);
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(AgentMessage))]
@@ -57,11 +60,13 @@ public sealed class AgentClient(DockerEndpoint endpoint)
         return reply.Error is { } error ? throw new InvalidOperationException(error) : reply;
     }
 
-    public async Task<List<DomainInfo>> DomainsAsync(CancellationToken ct = default) =>
-        (await Ask(new AgentMessage { Op = "domains" }, ct)).Domains ?? [];
+    static DomainList List(AgentMessage reply) => new(reply.Domains ?? [], reply.Https);
 
-    public async Task<List<DomainInfo>> ChoosePortAsync(string container, int? port, CancellationToken ct = default) =>
-        (await Ask(new AgentMessage { Op = "choose-port", Container = container, Port = port }, ct)).Domains ?? [];
+    public async Task<DomainList> DomainsAsync(CancellationToken ct = default) =>
+        List(await Ask(new AgentMessage { Op = "domains" }, ct));
+
+    public async Task<DomainList> ChoosePortAsync(string container, int? port, CancellationToken ct = default) =>
+        List(await Ask(new AgentMessage { Op = "choose-port", Container = container, Port = port }, ct));
 
     public Task SetCertificateAsync(string certPem, string keyPem, CancellationToken ct = default) =>
         Ask(new AgentMessage { Op = "tls", Cert = certPem, Key = keyPem }, ct);

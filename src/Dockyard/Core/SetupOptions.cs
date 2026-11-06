@@ -7,7 +7,7 @@ enum SetupAction { Install, Uninstall, Import }
 sealed record SetupOptions
 {
     public const string Usage = """
-        Usage: Dockyard [--silent] [--with <names>] [--without <names>] [--no-start] [--image <file>]
+        Usage: Dockyard [--silent] [--with <names>] [--without <names>] [--no-start] [--image <file>] [--trust-https]
                Dockyard --silent --uninstall [--remove-data]
                Dockyard --silent --import [--import-from <endpoint>]
                Dockyard --version
@@ -20,6 +20,7 @@ sealed record SetupOptions
           --dashboard        The same as --with dashboard.
           --no-dashboard     The same as --without dashboard.
           --no-start      Do not start Dockyard afterwards.
+          --trust-https   Add Dockyard's own certificate to this computer's trust store, for HTTPS on container domains.
           --image <file>  Windows: the Linux engine image to import instead of downloading it.
           --import        Copy images, volumes and containers from Docker Desktop, which keeps them.
           --import-from   The engine to copy from instead, as unix://, npipe:// or tcp://.
@@ -43,6 +44,7 @@ sealed record SetupOptions
     public bool ShowHelp { get; init; }
     public IReadOnlyList<string> With { get; init; } = [];
     public IReadOnlyList<string> Without { get; init; } = [];
+    public bool TrustHttps { get; init; }
     public string? ImportFrom { get; init; }
 
     public static SetupOptions Parse(IReadOnlyList<string> args)
@@ -63,6 +65,7 @@ sealed record SetupOptions
                 "--no-dashboard" or "--engine-only" => options with { Dashboard = Choose(options.Dashboard, false) },
                 "--with" => Names(options, ++i < args.Count ? args[i] : throw new SetupUsageException("--with needs names"), wanted: true),
                 "--without" => Names(options, ++i < args.Count ? args[i] : throw new SetupUsageException("--without needs names"), wanted: false),
+                "--trust-https" => options with { TrustHttps = true },
                 "--no-start" => options with { Start = false },
                 "--remove-data" => options with { RemoveData = true },
                 "--resume" => options with { Resume = true },
