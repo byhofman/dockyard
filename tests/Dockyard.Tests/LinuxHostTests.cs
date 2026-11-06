@@ -42,6 +42,6 @@ public sealed class LinuxHostTests
         var script = new StreamReader(stream).ReadToEnd();
         Assert.Contains("org.freedesktop.systemd1.manage-units", script);
         Assert.Contains("subject.isInGroup(\"docker\")", script);
-        Assert.Contains("systemctl enable docker.socket", script);
+        Assert.Contains("systemctl enable --now docker.socket", script);
     }
 }

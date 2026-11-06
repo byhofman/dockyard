@@ -34,6 +34,12 @@ sealed class FakeRunner : ICommandRunner
 [System.Runtime.Versioning.SupportedOSPlatform("windows")]
 public sealed class WindowsHostTests
 {
+    [Theory]
+    [InlineData("default via 172.20.0.1 dev eth0 proto kernel", "172.20.0.1")]
+    [InlineData("", null)]
+    public void The_way_to_windows_with_nat_is_the_gateway(string route, string? expected) =>
+        Assert.Equal(expected, WslDistro.DefaultGateway(route));
+
     [Fact]
     public void Keepalive_runs_dockyard_init_as_root()
     {
