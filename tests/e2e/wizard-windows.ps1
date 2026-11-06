@@ -99,6 +99,14 @@ if ($Wizard) {
     }
     Start-Sleep 3
     $reply = (& $docker --context linux run --rm alpine:3.24 wget -qO- -T 20 http://host.docker.internal:18080/ | Out-String).Trim()
+    if ($reply -ne 'from-windows') {
+        Write-Host '--- why not'
+        Get-Job | Format-List State, @{n='Error';e={$_.ChildJobs[0].JobStateInfo.Reason}} | Out-String | Write-Host
+        (Test-NetConnection 127.0.0.1 -Port 18080).TcpTestSucceeded | Write-Host
+        wsl.exe -d dockyard -u root -- sh -c 'cat /proc/net/route; gw=$(ip route | sed -n "s/^default via \([^ ]*\).*/\1/p"); echo gw=$gw; wget -qO- -T 5 http://$gw:18080/; echo; iptables -t nat -S | grep -E "REDIRECT|DOCKER$" | head; iptables -S INPUT | head -5; netstat -ltn | grep 2378' | Write-Host
+        & $docker --context linux run --rm alpine:3.24 sh -c 'cat /etc/resolv.conf; nslookup host.docker.internal; wget -S -O- -T 10 http://host.docker.internal:18080/ 2>&1; nc -w 5 198.19.250.254 18080 </dev/null; echo nc=$?' | Write-Host
+        wsl.exe -d dockyard -u root -- sh -c 'dmesg | tail -5' | Write-Host
+    }
     Check "the service answers (got '$reply')" ($reply -eq 'from-windows')
     Stop-Job $service; Remove-Job $service -Force
     Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True
