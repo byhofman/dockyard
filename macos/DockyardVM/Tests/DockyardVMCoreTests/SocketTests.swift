@@ -124,3 +124,45 @@ final class Headers {
     var values: [String] = []
     func append(_ value: String) { lock.lock(); values.append(value); lock.unlock() }
 }
+
+final class HostDialTests: XCTestCase {
+    func testHostDialConnectsThePortTheGuestAsksFor() throws {
+        var guest: [Int32] = [0, 0]
+        var service: [Int32] = [0, 0]
+        XCTAssertEqual(socketpair(AF_UNIX, streamType, 0, &guest), 0)
+        XCTAssertEqual(socketpair(AF_UNIX, streamType, 0, &service), 0)
+        let asked = expectation(description: "dialed")
+        HostDial.serve(guest[1]) { port in
+            XCTAssertEqual(port, 5173)
+            asked.fulfill()
+            return service[1]
+        }
+        XCTAssertTrue(Sockets.writeAll(guest[0], Data("tcp 5173\nhello".utf8)))
+        wait(for: [asked], timeout: 5)
+        var bytes = [UInt8](repeating: 0, count: 5)
+        var total = 0
+        while total < 5 {
+            let n = bytes.withUnsafeMutableBytes { read(service[0], $0.baseAddress! + total, 5 - total) }
+            if n <= 0 { break }
+            total += n
+        }
+        XCTAssertEqual(String(decoding: bytes, as: UTF8.self), "hello")
+        close(guest[0])
+        close(service[0])
+    }
+
+    func testHostDialClosesOnANonsenseHeaderWithoutDialing() throws {
+        for header in ["udp 53\n", "tcp 0\n", "tcp 99999\n", "tcp 80 extra\n", "/etc/passwd\n"] {
+            var guest: [Int32] = [0, 0]
+            XCTAssertEqual(socketpair(AF_UNIX, streamType, 0, &guest), 0)
+            HostDial.serve(guest[1]) { _ in
+                XCTFail("dialed for \(header)")
+                return nil
+            }
+            XCTAssertTrue(Sockets.writeAll(guest[0], Data(header.utf8)))
+            var byte: UInt8 = 0
+            XCTAssertEqual(read(guest[0], &byte, 1), 0)
+            close(guest[0])
+        }
+    }
+}

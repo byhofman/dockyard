@@ -62,6 +62,7 @@ sealed partial class VsockTransport : ITransport
     const int ShutRdWr = 2;
     public const uint AnyCid = 0xFFFFFFFF;
 
+
     public IListener Listen(int port)
     {
         var fd = socket(AfVsock, SockStream, 0);
@@ -74,6 +75,22 @@ sealed partial class VsockTransport : ITransport
             throw new SocketException(error);
         }
         return new Listener(fd);
+    }
+
+    public static async Task<IConnection> Connect(uint cid, uint port, CancellationToken ct)
+    {
+        var fd = socket(AfVsock, SockStream, 0);
+        if (fd < 0) throw new SocketException(Marshal.GetLastPInvokeError());
+        var address = Address(cid, port);
+        using var registration = ct.Register(() => shutdown(fd, ShutRdWr));
+        var result = await Task.Run(() => connect(fd, address, address.Length), CancellationToken.None);
+        if (result != 0)
+        {
+            var error = Marshal.GetLastPInvokeError();
+            close(fd);
+            throw new SocketException(error);
+        }
+        return new FdConnection(fd);
     }
 
     // struct sockaddr_vm (Linux): family(2) reserved(2) port(4) cid(4) flags(1) zero(3)
@@ -116,6 +133,9 @@ sealed partial class VsockTransport : ITransport
 
     [LibraryImport("libc", SetLastError = true)]
     private static partial int bind(int fd, byte[] address, int length);
+
+    [LibraryImport("libc", SetLastError = true)]
+    private static partial int connect(int fd, byte[] address, int length);
 
     [LibraryImport("libc", SetLastError = true)]
     private static partial int listen(int fd, int backlog);

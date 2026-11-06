@@ -46,6 +46,18 @@ sleep 2
 reply="$(printf 'tcp 8080\nGET / HTTP/1.0\r\nHost: x\r\n\r\n' | nc -w 5 127.0.0.1 12376 | head -1)"
 case "$reply" in HTTP/1.1\ 200*) echo "port 8080 forwarded through the agent: $reply" ;; *) echo "FAIL: forward reply '$reply'"; exit 1 ;; esac
 
+# A service on the machine that started the VM, on its loopback, as host.docker.internal should reach it.
+(while :; do printf 'HTTP/1.0 200 OK\r\n\r\nfrom-the-host' | nc -l -s 127.0.0.1 -p 18080 >/dev/null; done) &
+listener=$!
+for args in "" "--network dockyard-e2e" "--network host"; do
+  [ "$args" = "--network dockyard-e2e" ] && docker network create dockyard-e2e >/dev/null
+  reply="$(docker run --rm $args alpine:3.24 wget -qO- -T 10 http://host.docker.internal:18080/ || true)"
+  [ "$reply" = from-the-host ] && echo "host.docker.internal reaches the host (${args:-default network})" || { echo "FAIL: host.docker.internal with '$args': '$reply'"; exit 1; }
+done
+docker network rm dockyard-e2e >/dev/null
+kill $listener 2>/dev/null || true
+docker run --rm alpine:3.24 nslookup dl-cdn.alpinelinux.org >/dev/null && echo "other names resolve through the host's DNS" || { echo "FAIL: DNS"; exit 1; }
+
 control="$( (sleep 6) | nc -w 7 127.0.0.1 12377 | head -3)"
 echo "$control" | grep -q '"type":"ports".*"port":8080' && echo "control reports port 8080" || { echo "FAIL: control: $control"; exit 1; }
 echo "$control" | grep -q '"type":"memory"' && echo "control reports memory" || { echo "FAIL: no memory report"; exit 1; }
