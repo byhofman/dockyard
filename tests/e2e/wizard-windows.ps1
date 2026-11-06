@@ -167,6 +167,25 @@ if ($Wizard) {
     Check 'gone once Windows stops using it' ((wsl.exe -d dockyard -u root -- cat /etc/docker/daemon.json | Out-String) -notmatch '18888')
     Linux-Engine
 
+    Section 'engine configuration from the settings reaches the engine'
+    $saved = Get-Content "$env:APPDATA\Dockyard\settings.json" -Raw
+    $settings = $saved | ConvertFrom-Json
+    $settings | Add-Member -Force RegistryMirrors 'https://mirror.dockyard.test'
+    $settings | Add-Member -Force InsecureRegistries 'registry.dockyard.test:5000'
+    $settings | Add-Member -Force AddressPools '10.123.0.0/16 24'
+    $settings | ConvertTo-Json | Set-Content "$env:APPDATA\Dockyard\settings.json"
+    Check 'exit 0' ((Run --silent --no-start) -eq 0)
+    wsl.exe -d dockyard -u root -- sh -c 'kill -TERM $(pidof dockerd); while pidof dockerd >/dev/null; do sleep 0.2; done'
+    Linux-Engine
+    $info = & $docker --context linux info --format '{{json .RegistryConfig}}' | Out-String
+    Check 'the mirror applies' ($info -match 'mirror\.dockyard\.test')
+    Check 'the insecure registry applies' ($info -match 'registry\.dockyard\.test:5000')
+    & $docker --context linux network create e2e-pool | Out-Null
+    $subnet = & $docker --context linux network inspect e2e-pool --format '{{(index .IPAM.Config 0).Subnet}}' | Out-String
+    Check "a new network comes from the pool (got $subnet)" ($subnet -match '^10\.123\.')
+    & $docker --context linux network rm e2e-pool | Out-Null
+    $saved | Set-Content "$env:APPDATA\Dockyard\settings.json"
+
     Section 'docker login keeps credentials in the Windows credential store'
     Check 'the helper is there' (Test-Path (Join-Path $env:ProgramFiles 'Docker\docker-credential-wincred.exe'))
     Check 'the store is set' ((Get-Content "$env:USERPROFILE\.docker\config.json" -Raw) -match '"credsStore":\s*"wincred"')

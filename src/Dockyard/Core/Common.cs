@@ -58,6 +58,9 @@ sealed class Settings
     public bool StartActiveAtLogon { get; set; } = true;
     // Components removed on purpose, so that rerunning the wizard or updating does not bring them back.
     public List<string> RemovedComponents { get; set; } = [];
+    public string? RegistryMirrors { get; set; }
+    public string? InsecureRegistries { get; set; }
+    public string? AddressPools { get; set; }
 
     public static Settings Load()
     {
