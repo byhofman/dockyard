@@ -250,10 +250,17 @@ if ($Wizard) {
     Copy-Item (Resolve-Path $Wizard) $shared
     $me = [Security.Principal.WindowsIdentity]::GetCurrent()
     $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Content "$caDir\ca.pem" -Raw)))
-    $other = [pscredential]::new("$env:COMPUTERNAME\e2e-admin", $secret)
-    $p = Start-Process "$shared\Dockyard.exe" -Credential $other -LoadUserProfile -WorkingDirectory $shared -Wait -PassThru -ArgumentList "--machine-trust-ca $encoded --user-sid $($me.User.Value) --user-name `"$($me.Name)`" --log `"$shared\trust.log`" --keep-pid 0"
+    # A scheduled task: it runs as that account with its full administrator token, as a UAC approval does.
+    $line = "`"$shared\Dockyard.exe`" --machine-trust-ca $encoded --user-sid $($me.User.Value) --user-name `"$($me.Name)`" --log `"$shared\trust.log`" --keep-pid 0"
+    Set-Content "$shared\trust.cmd" "$line`r`nexit /b %ERRORLEVEL%" -Encoding Ascii
+    $action = New-ScheduledTaskAction -Execute cmd.exe -Argument "/c `"$shared\trust.cmd`""
+    Register-ScheduledTask e2e-trust -Action $action -User "$env:COMPUTERNAME\e2e-admin" -Password $otherPassword -RunLevel Highest | Out-Null
+    Start-ScheduledTask e2e-trust
+    foreach ($i in 1..60) { Start-Sleep 1; if ((Get-ScheduledTask e2e-trust).State -eq 'Ready') { break } }
+    $exit = (Get-ScheduledTaskInfo e2e-trust).LastTaskResult
+    Unregister-ScheduledTask e2e-trust -Confirm:$false
     if (Test-Path "$shared\trust.log") { Get-Content "$shared\trust.log" | Write-Host }
-    Check "exit 0 (was $($p.ExitCode))" ($p.ExitCode -eq 0)
+    Check "exit 0 (was $exit)" ($exit -eq 0)
     Check 'the CA is back in the trust store' ((Get-ChildItem Cert:\LocalMachine\Root | Where-Object Subject -like '*Dockyard Local CA*') -ne $null)
     Remove-Item $shared -Recurse -Force
     Remove-LocalUser e2e-admin
