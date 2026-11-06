@@ -11,7 +11,7 @@ $PSNativeCommandUseErrorActionPreference = $false
 $appDir = Join-Path $env:ProgramFiles 'Dockyard'
 $appExe = Join-Path $appDir 'Dockyard.exe'
 # Either name: the one-liner test runs the release that is out, and the rename reaches it with the next release.
-$dashboard = Join-Path $appDir 'Dockyard?Dashboard.exe'
+$dashboard = Join-Path $appDir 'Dockyard*Dashboard.exe'
 $docker = Join-Path $env:ProgramFiles 'Docker\docker.exe'
 
 function Ok($text) { Write-Host "  ok   $text" }
