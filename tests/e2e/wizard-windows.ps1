@@ -242,20 +242,21 @@ if ($Wizard) {
     Section "approving with another administrator's account, which cannot read this user's CA folder"
     Get-ChildItem Cert:\LocalMachine\Root | Where-Object Subject -like '*Dockyard Local CA*' | Remove-Item
     $otherPassword = "E2e-$([guid]::NewGuid())"
-    net user e2e-admin $otherPassword /add | Out-Null
-    net localgroup Administrators e2e-admin /add | Out-Null
+    $secret = ConvertTo-SecureString $otherPassword -AsPlainText -Force
+    New-LocalUser e2e-admin -Password $secret -PasswordNeverExpires | Out-Null
+    Add-LocalGroupMember Administrators e2e-admin
     $shared = New-Item -ItemType Directory (Join-Path $env:ProgramData 'dockyard-e2e')
     icacls $shared /grant 'Everyone:(OI)(CI)F' | Out-Null
     Copy-Item (Resolve-Path $Wizard) $shared
     $me = [Security.Principal.WindowsIdentity]::GetCurrent()
     $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Content "$caDir\ca.pem" -Raw)))
-    $other = [pscredential]::new('e2e-admin', (ConvertTo-SecureString $otherPassword -AsPlainText -Force))
+    $other = [pscredential]::new("$env:COMPUTERNAME\e2e-admin", $secret)
     $p = Start-Process "$shared\Dockyard.exe" -Credential $other -LoadUserProfile -WorkingDirectory $shared -Wait -PassThru -ArgumentList "--machine-trust-ca $encoded --user-sid $($me.User.Value) --user-name `"$($me.Name)`" --log `"$shared\trust.log`" --keep-pid 0"
     if (Test-Path "$shared\trust.log") { Get-Content "$shared\trust.log" | Write-Host }
     Check "exit 0 (was $($p.ExitCode))" ($p.ExitCode -eq 0)
     Check 'the CA is back in the trust store' ((Get-ChildItem Cert:\LocalMachine\Root | Where-Object Subject -like '*Dockyard Local CA*') -ne $null)
     Remove-Item $shared -Recurse -Force
-    net user e2e-admin /delete | Out-Null
+    Remove-LocalUser e2e-admin
     & $docker --context linux rm -f e2e-web | Out-Null
 
     Section 'memory of the WSL engine, for the record'
