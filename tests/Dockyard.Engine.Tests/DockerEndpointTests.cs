@@ -55,4 +55,39 @@ public sealed class DockerEndpointTests
         var inspect = System.Text.Json.Nodes.JsonNode.Parse("""{ "Id": "abc", "Config": { "Hostname": "db.local" }, "HostConfig": {} }""")!;
         Assert.Equal("db.local", EngineImporter.CreateRequest(inspect, "i")["Hostname"]!.GetValue<string>());
     }
+
+    static MemoryStream Tar(params (string Name, bool Directory)[] entries)
+    {
+        var stream = new MemoryStream();
+        using (var writer = new System.Formats.Tar.TarWriter(stream, System.Formats.Tar.TarEntryFormat.Pax, leaveOpen: true))
+            foreach (var (name, directory) in entries)
+                writer.WriteEntry(new System.Formats.Tar.PaxTarEntry(directory ? System.Formats.Tar.TarEntryType.Directory : System.Formats.Tar.TarEntryType.RegularFile, name));
+        stream.Position = 0;
+        return stream;
+    }
+
+    [Fact]
+    public async Task A_folder_lists_only_what_is_directly_in_it_folders_first()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var entries = await ContainerFiles.ListTar(Tar(("etc/", true), ("etc/hosts", false), ("etc/apk/", true), ("etc/apk/repositories", false)), "/etc", ct);
+        Assert.Equal(["apk", "hosts"], entries.Select(e => e.Name));
+        Assert.True(entries[0].IsDirectory);
+    }
+
+    [Fact]
+    public async Task The_root_lists_its_contents_directly()
+    {
+        var entries = await ContainerFiles.ListTar(Tar(("bin/", true), ("bin/sh", false), ("etc/", true), ("etc/hosts", false)), "/", TestContext.Current.CancellationToken);
+        Assert.Equal(["bin", "etc"], entries.Select(e => e.Name));
+    }
+
+    [Theory]
+    [InlineData("/etc/apk", "/", "/etc")]
+    [InlineData("/etc", "/", "/")]
+    [InlineData("/", "/", "/")]
+    [InlineData("/volume/sub", "/volume", "/volume")]
+    [InlineData("/volume", "/volume", "/volume")]
+    public void Up_stops_at_the_root_it_was_given(string path, string root, string expected) =>
+        Assert.Equal(expected, ContainerFiles.Parent(path, root));
 }

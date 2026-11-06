@@ -33,6 +33,53 @@ public sealed class EngineIntegrationTests
         }
     }
 
+    // A throwaway engine named by the environment: CI's on Linux, or a VM started for this on a Mac. Never whatever happens to be the default.
+    [Fact]
+    public async Task Files_in_a_container_and_in_a_volume_can_be_listed_read_and_written()
+    {
+        if (Environment.GetEnvironmentVariable("DOCKYARD_TEST_ENDPOINT") is not { Length: > 0 } endpoint) { Assert.Skip("No test engine named"); return; }
+        var ct = TestContext.Current.CancellationToken;
+        using var client = new DockerClient(DockerEndpoint.Parse(endpoint));
+        await client.PullImageAsync("alpine:3.24", ct: ct);
+
+        var container = await client.CreateContainerAsync(new CreateContainerRequest { Image = "alpine:3.24", Cmd = ["true"] }, ct: ct);
+        var volume = "dockyard-test-" + Guid.NewGuid().ToString("N")[..8];
+        await client.PostNodeAsync("volumes/create", new System.Text.Json.Nodes.JsonObject { ["Name"] = volume }, ct);
+        string? holder = null;
+        var image = await client.EnsureEmptyImageAsync(ct);
+        try
+        {
+            var etc = await ContainerFiles.ListAsync(client, container, "/etc", ct);
+            Assert.Contains(etc, e => e is { Name: "passwd", IsDirectory: false });
+            Assert.Contains(etc, e => e is { Name: "apk", IsDirectory: true });
+            Assert.DoesNotContain(etc, e => e.Name.Contains('/'));
+            Assert.Contains(await ContainerFiles.ListAsync(client, container, "/", ct), e => e is { Name: "etc", IsDirectory: true });
+
+            var passwd = await ContainerFiles.ReadAsync(client, container, "/etc/passwd", 1 << 20, ct);
+            Assert.Contains("root:", System.Text.Encoding.UTF8.GetString(passwd.Data));
+
+            using (var edited = new MemoryStream("changed\n"u8.ToArray()))
+                await ContainerFiles.WriteAsync(client, container, "/etc", "motd", edited, passwd.Entry, ct);
+            Assert.Equal("changed\n", System.Text.Encoding.UTF8.GetString((await ContainerFiles.ReadAsync(client, container, "/etc/motd", 1024, ct)).Data));
+
+            holder = await client.CreateVolumeHolderAsync(image, volume, "/volume", ct);
+            Assert.Empty(await ContainerFiles.ListAsync(client, holder, "/volume", ct));
+            using (var content = new MemoryStream("in the volume"u8.ToArray()))
+                await ContainerFiles.WriteAsync(client, holder, "/volume", "note.txt", content, ct: ct);
+            Assert.Equal(["note.txt"], (await ContainerFiles.ListAsync(client, holder, "/volume", ct)).Select(e => e.Name));
+            using var saved = new MemoryStream();
+            await ContainerFiles.SaveToAsync(client, holder, "/volume/note.txt", saved, ct);
+            Assert.Equal("in the volume", System.Text.Encoding.UTF8.GetString(saved.ToArray()));
+        }
+        finally
+        {
+            await client.RemoveContainerAsync(container, force: true, ct: CancellationToken.None);
+            if (holder is not null) await client.RemoveContainerAsync(holder, force: true, ct: CancellationToken.None);
+            await client.RemoveVolumeAsync(volume, ct: CancellationToken.None);
+            await client.RemoveImageAsync(image, ct: CancellationToken.None);
+        }
+    }
+
     static async Task<DockerClient?> TryConnect(string uri)
     {
         var client = new DockerClient(DockerEndpoint.Parse(uri));

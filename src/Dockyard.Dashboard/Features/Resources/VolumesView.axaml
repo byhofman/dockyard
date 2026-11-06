@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:res="using:Dockyard.Dashboard.Features.Resources"
+             xmlns:files="using:Dockyard.Dashboard.Features.Files"
              x:Class="Dockyard.Dashboard.Features.Resources.VolumesView"
              x:DataType="res:VolumesViewModel">
   <Grid x:Name="Layout" ColumnDefinitions="*,5,380">
@@ -34,7 +35,17 @@
 
     <Border x:Name="Panel" Grid.Column="2" Background="{DynamicResource Surface}"
             BorderBrush="{DynamicResource Line}" BorderThickness="1,0,0,0">
-      <ScrollViewer>
+      <Panel>
+      <DockPanel IsVisible="{Binding HasFiles}">
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="18,14,14,0">
+          <TextBlock Classes="title" Text="{Binding Selected.DisplayName}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+          <Button Grid.Column="1" Classes="iconbtn" Command="{Binding CloseFilesCommand}" ToolTip.Tip="Close the files">
+            <PathIcon Data="{StaticResource IconClose}" />
+          </Button>
+        </Grid>
+        <files:FilesView DataContext="{Binding Files}" />
+      </DockPanel>
+      <ScrollViewer IsVisible="{Binding !HasFiles}">
         <StackPanel Margin="18,14" Spacing="10" DataContext="{Binding Selected}" x:DataType="res:VolumeRow">
           <SelectableTextBlock Classes="title" Text="{Binding Name}" TextWrapping="Wrap" />
           <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,Auto,Auto">
@@ -47,13 +58,21 @@
           </Grid>
           <TextBlock Classes="section" Text="USED BY" Margin="0,6,0,0" />
           <TextBlock Text="{Binding UsageText}" TextWrapping="Wrap" />
-          <Button Classes="danger" HorizontalAlignment="Left" Margin="0,8,0,0"
+          <WrapPanel ItemSpacing="6" LineSpacing="6" Margin="0,8,0,0">
+          <Button Command="{Binding $parent[UserControl].((res:VolumesViewModel)DataContext).OpenFilesCommand}"
+                  ToolTip.Tip="View and edit what is in this volume" Content="Files" />
+          <Button IsVisible="{Binding $parent[UserControl].((res:VolumesViewModel)DataContext).CanOpenInExplorer}"
+                  Command="{Binding $parent[UserControl].((res:VolumesViewModel)DataContext).OpenInExplorerCommand}"
+                  ToolTip.Tip="This volume's folder in File Explorer, through WSL" Content="Open in Explorer" />
+          <Button Classes="danger" HorizontalAlignment="Left"
                   Command="{Binding $parent[UserControl].((res:VolumesViewModel)DataContext).RemoveCommand}"
                   ToolTip.Tip="Volumes in use by a container cannot be removed">
             <StackPanel Classes="label"><PathIcon Data="{StaticResource IconDelete}" /><TextBlock Text="Remove" /></StackPanel>
           </Button>
+          </WrapPanel>
         </StackPanel>
       </ScrollViewer>
+      </Panel>
     </Border>
   </Grid>
 </UserControl>
