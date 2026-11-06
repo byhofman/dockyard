@@ -33,6 +33,15 @@ What Task Manager's Details tab, Activity Monitor and `ps` show comes from the f
 - **The old name is still found and stopped:** wizard, update, uninstall and Remove look for both, and installing removes the old file and whatever the old manifest listed.
 - **A v0.2.1 tray updating itself** runs the old installer code, which unpacks the new name next to the old file. The tray finds either, and the next wizard run removes the old file, because the tray cannot write to Program Files by itself.
 - **Defender exclusions go by path,** so an app update now also adds the new path.
+## 2026-11-06: Import copies through both engines' APIs
+
+Docker Desktop's disk image format is its own and changes, so the import never reads it: both engines stay up and data goes over their APIs, unbuffered. This covers anything an engine holds and needs no extra space beyond the target.
+
+- **Containers are committed first** and arrive stopped. Pulling their image again would lose what changed inside them, and starting them could clash on ports with what still runs in Docker Desktop.
+- **Volumes go through a holder container that is never started**, on an empty image made on the spot, so nothing is pulled and no container runs in the source.
+- **A name already in the target is skipped and reported, never overwritten.** Networks get a fresh subnet, since containers find each other by name and the source's range may clash.
+- **Tested against a second engine in CI, not against Docker Desktop itself**, which no runner has. Starting Docker Desktop and its socket paths are unverified until a real machine runs it.
+
 ## 2026-11-06: The proxy is read at each engine start, and daemon.json is rendered by the app
 
 On macOS and in WSL the app renders the engine's `daemon.json` at every start (macOS through a read-only virtiofs share, WSL by copying it in), so nothing the user would have to edit lives in the engine. On a Linux host the file belongs to the system's Docker, so it is merged, and a `proxies` block somebody else wrote stays.

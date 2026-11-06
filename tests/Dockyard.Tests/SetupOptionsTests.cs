@@ -109,4 +109,15 @@ public sealed class SetupOptionsTests
         Assert.True(SetupOptions.Parse(["--without", "linux-engine", "--remove-data"]).RemoveData);
         Assert.Throws<SetupUsageException>(() => SetupOptions.Parse(["--remove-data"]));
     }
+
+    [Fact]
+    public void Import_needs_no_window_and_can_name_its_source()
+    {
+        var plain = SetupOptions.Parse(["--import"]);
+        Assert.True(plain.Silent);
+        Assert.Equal(SetupAction.Import, plain.Action);
+        Assert.Null(plain.ImportFrom);
+        Assert.Equal("unix:///tmp/x.sock", SetupOptions.Parse(["--import-from", "unix:///tmp/x.sock"]).ImportFrom);
+        Assert.Throws<SetupUsageException>(() => SetupOptions.Parse(["--import-from"]));
+    }
 }

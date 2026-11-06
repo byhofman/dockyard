@@ -332,6 +332,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
     };
 
     public bool HasEngineConfiguration => true;
+    public string? OwnSocket => MacLayout.DockerSocket;
 
     public async Task ApplyEngineConfiguration(Action<string> log)
     {
