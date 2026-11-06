@@ -2,15 +2,15 @@
   Measures the dashboard against the performance budgets in the dashboard spec.
   Run with the engine of the active docker context running:
 
-    pwsh scripts/measure.ps1 [-Dashboard "C:\Program Files\Dockyard\Dockyard.Dashboard.exe"]
+    pwsh scripts/measure.ps1 [-Dashboard "C:\Program Files\Dockyard\Dockyard Dashboard.exe"]
 #>
 param(
-    [string]$Dashboard = (Join-Path $env:ProgramFiles 'Dockyard\Dockyard.Dashboard.exe'),
+    [string]$Dashboard = (Join-Path $env:ProgramFiles 'Dockyard\Dockyard Dashboard.exe'),
     [int]$IdleSeconds = 10
 )
 
 $ErrorActionPreference = 'Stop'
-Get-Process Dockyard.Dashboard -ErrorAction SilentlyContinue | Stop-Process
+Get-Process "Dockyard Dashboard", Dockyard.Dashboard -ErrorAction SilentlyContinue | Stop-Process
 Start-Sleep -Milliseconds 500
 
 # The dashboard reports when its window opened, measured from its own process start (DOCKYARD_TRACE_STARTUP);

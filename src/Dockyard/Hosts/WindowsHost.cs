@@ -78,7 +78,7 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
 
     public bool RunsFromInstallLocation => Paths.IsInstalledCopy;
 
-    public bool HasDashboard => File.Exists(Paths.DashboardExe);
+    public bool HasDashboard => File.Exists(Paths.DashboardExe) || File.Exists(Paths.LegacyDashboardExe);
 
     public async Task<bool> SetDashboard(Action<string> log, bool installed)
     {

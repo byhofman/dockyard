@@ -1,5 +1,5 @@
 #!/bin/sh
-# build-app.sh <version> <dist> <out>: Dockyard.app from the published files in <dist> (Dockyard, Dockyard.Dashboard
+# build-app.sh <version> <dist> <out>: Dockyard.app from the published files in <dist> (Dockyard, Dockyard Dashboard
 # and its dylibs, dockyard-vm, vm/), ad-hoc signed (no certificate needed), as Dockyard-<version>-macos.zip,
 # -macos-engine-only.zip and Dockyard-<version>-macos.dmg.
 set -eu
@@ -14,7 +14,7 @@ bundle() {
   sed "s/VERSION/$version/g" "$here/Info.plist" > "$app/Contents/Info.plist"
   cp "$dist/Dockyard" "$dist/dockyard-vm" "$app/Contents/MacOS/"
   if [ "$with_dashboard" = 1 ]; then
-    cp "$dist/Dockyard.Dashboard" "$dist"/*.dylib "$app/Contents/MacOS/"
+    cp "$dist/Dockyard Dashboard" "$dist"/*.dylib "$app/Contents/MacOS/"
   fi
   cp -R "$dist/vm" "$app/Contents/Resources/vm"
   cp "$work/Dockyard.icns" "$app/Contents/Resources/Dockyard.icns"

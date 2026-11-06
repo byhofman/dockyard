@@ -139,7 +139,7 @@ static partial class Updates
         var dir = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
         Directory.CreateDirectory(dir);
         var exe = await DownloadReleaseAsset(Path.GetFileName(new Uri(release.DownloadUrl!).LocalPath), dir, tag: release.Tag);
-        if (File.Exists(Paths.DashboardExe)) await DownloadReleaseAsset(Paths.DashboardZipName, dir, tag: release.Tag);
+        if (File.Exists(Paths.DashboardExe) || File.Exists(Paths.LegacyDashboardExe)) await DownloadReleaseAsset(Paths.DashboardZipName, dir, tag: release.Tag);
         return exe;
     }
 

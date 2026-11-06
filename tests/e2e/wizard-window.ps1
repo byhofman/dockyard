@@ -1,7 +1,7 @@
 <#
   Drives the wizard's real window through UI Automation, as the owner would: opens it on an install without the
   dashboard, sees the versions, adds the dashboard and removes it again. Windows PowerShell 5.1 has UI Automation.
-    wizard-window.ps1 -Exe <Dockyard.exe> -Screenshots <dir> -Dashboard <path of Dockyard.Dashboard.exe> [-LookOnly <name>]
+    wizard-window.ps1 -Exe <Dockyard.exe> -Screenshots <dir> -Dashboard <path of the dashboard, wildcards allowed> [-LookOnly <name>]
 #>
 param([Parameter(Mandatory)][string]$Exe, [Parameter(Mandatory)][string]$Screenshots, [Parameter(Mandatory)][string]$Dashboard, [string]$LookOnly)
 

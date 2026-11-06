@@ -21,7 +21,8 @@ if [ "$container" -eq 1 ]; then
 else
   app_dir=/usr/lib/dockyard
 fi
-dashboard="$app_dir/Dockyard.Dashboard"
+# Either name: the one-liner test runs the release that is out, and the rename reaches it with the next release.
+dash() { for f in "$app_dir/Dockyard Dashboard" "$app_dir/Dockyard.Dashboard"; do [ -e "$f" ] && { echo "$f"; return; }; done; echo "$app_dir/Dockyard Dashboard"; }
 marker=/etc/dockyard/installed
 
 echo "== wrong arguments are refused"
@@ -32,7 +33,7 @@ check "and nothing was installed" missing "$marker"
 echo "== first install, no dashboard"
 run --silent --no-dashboard --no-start
 check "app in place" test -x "$app_dir/Dockyard"
-check "no dashboard" missing "$dashboard"
+check "no dashboard" missing "$(dash)"
 check "setup ran" test -f "$marker"
 check "docker installed" command -v dockerd
 if [ "$container" -eq 0 ]; then
@@ -49,23 +50,30 @@ fi
 
 echo "== rerun keeps the choice and the data"
 run --silent --no-start
-check "still no dashboard" missing "$dashboard"
+check "still no dashboard" missing "$(dash)"
 if [ "$container" -eq 0 ]; then
   docker volume inspect dockyard-e2e >/dev/null && ok "marker volume kept" || fail "marker volume gone"
 fi
 
 echo "== add the dashboard"
 run --silent --dashboard --no-start
-check "dashboard added" test -x "$dashboard"
+check "dashboard added" test -x "$(dash)"
 check "with its libraries" test -f "$app_dir/libSkiaSharp.so"
+
+if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
+  echo "== the process name"
+  check "the new file name" test -x "$app_dir/Dockyard Dashboard"
+  check "no old file" missing "$app_dir/Dockyard.Dashboard"
+  echo "  for the record, /proc comm of that file name is 15 characters: $(printf 'Dockyard Dashboard' | cut -c1-15)"
+fi
 
 echo "== rerun keeps it"
 run --silent --no-start
-check "dashboard kept" test -x "$dashboard"
+check "dashboard kept" test -x "$(dash)"
 
 echo "== remove the dashboard"
 run --silent --no-dashboard --no-start
-check "dashboard removed" missing "$dashboard"
+check "dashboard removed" missing "$(dash)"
 check "app stays" test -x "$app_dir/Dockyard"
 
 echo "== uninstall keeps docker's data"
@@ -81,7 +89,7 @@ fi
 
 echo "== a fresh install gets the dashboard"
 run --silent --no-start
-check "dashboard there" test -x "$dashboard"
+check "dashboard there" test -x "$(dash)"
 
 if [ "$container" -eq 1 ] && [ "$ID" != arch ]; then
   echo "== removed again, silent without root has no way up"
