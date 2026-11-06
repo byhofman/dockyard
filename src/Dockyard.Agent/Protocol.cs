@@ -13,14 +13,16 @@ static class Ports
     public const int Control = 2377;
 }
 
-sealed record AgentOptions(bool Tcp)
+enum AgentMode { Vm, TcpTest, Wsl }
+
+sealed record AgentOptions(AgentMode Mode)
 {
     // dockyard.agent=tcp on the kernel command line serves the same ports over TCP (used by the QEMU boot test).
-    public static AgentOptions FromCmdline(string cmdline) =>
-        new(cmdline.Split((char[])[' ', '\n', '\t'], StringSplitOptions.RemoveEmptyEntries).Contains("dockyard.agent=tcp"));
-
-    // QEMU's user networking puts the machine that started the VM at this address.
-    public IPAddress TestHost => IPAddress.Parse("10.0.2.2");
+    public static AgentOptions From(IReadOnlyList<string> args, string cmdline)
+    {
+        if (args.Contains("--mode=wsl")) return new(AgentMode.Wsl);
+        return new(cmdline.Split((char[])[' ', '\n', '\t'], StringSplitOptions.RemoveEmptyEntries).Contains("dockyard.agent=tcp") ? AgentMode.TcpTest : AgentMode.Vm);
+    }
 }
 
 enum ForwardProtocol { Tcp, Udp }

@@ -17,10 +17,13 @@ static partial class UserSetup
     public static async Task Install(Action<string> log, string? image = null)
     {
         MigrateLegacySettings(log);
+        // Before anything starts WSL: it only reads this when it starts, and mirrored networking is what lets a container reach
+        // Windows' loopback. Nothing here shuts WSL down for it, because that would stop the user's other distros.
+        SetMirroredNetworking(log);
         await SetupDistro(log, image);
+        await ApplyGuest(new WslDistro(ProcessRunner.Instance), log);
         await MigrateLegacyEngine(log);
         await CreateContexts(log);
-        SetMirroredNetworking(log);
 
         File.WriteAllText(Path.Combine(Paths.UserProfile, ".testcontainers.properties"), $"docker.host={Paths.LinuxHost}\n");
         log("Testcontainers pinned to the Linux engine");
@@ -28,6 +31,12 @@ static partial class UserSetup
         using (var key = Registry.CurrentUser.CreateSubKey(RunKey))
             key.SetValue(Paths.AppName, $"\"{Paths.AppExe}\"");
         log($"{Paths.AppName} autostarts at logon");
+    }
+
+    public static async Task ApplyGuest(WslDistro distro, Action<string> log)
+    {
+        await using var bundle = typeof(UserSetup).Assembly.GetManifestResourceStream("guest.tar.gz");
+        if (bundle is not null) await distro.ApplyGuest(bundle, log);
     }
 
     // Silent setups log to a file: after a restart there is no console to report to.

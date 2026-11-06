@@ -10,6 +10,8 @@ sealed class WslDistro(ICommandRunner runner, string name = WslDistro.DefaultNam
     public const string DefaultName = "dockyard";
     public const string InitPath = "/usr/local/sbin/dockyard-init";
     public const string UpdatePath = "/usr/local/sbin/dockyard-update";
+    public const string AgentPath = "/usr/local/sbin/dockyard-agent";
+    public const string GuestMarker = "/etc/dockyard-guest";
 
     public string Name { get; } = name;
     public static string InstallDir => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Dockyard", "wsl");
@@ -44,6 +46,28 @@ sealed class WslDistro(ICommandRunner runner, string name = WslDistro.DefaultNam
         if (r.ExitCode != 0) return null;
         var line = r.Output.Split('\n').FirstOrDefault(l => l.StartsWith("DOCKER_VERSION=", StringComparison.Ordinal));
         return line is null ? null : Version.TryParse(line["DOCKER_VERSION=".Length..].Trim(), out var v) ? v : null;
+    }
+
+    // The image is only imported once, so everything newer than the first install's image reaches the distro from here.
+    // A bundle that is already there is left alone, by its hash because development builds all have the same version.
+    public async Task ApplyGuest(Stream bundle, Action<string> log)
+    {
+        var temp = Path.Combine(Path.GetTempPath(), $"dockyard-guest-{Guid.NewGuid():N}.tar.gz");
+        await using (var file = File.Create(temp)) await bundle.CopyToAsync(file);
+        try
+        {
+            var hash = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(temp)));
+            var current = await runner.Run("wsl.exe", "-d", Name, "-u", "root", "--", "cat", GuestMarker);
+            if (current.ExitCode == 0 && current.Output.Trim() == hash) return;
+            var path = await ToLinuxPath(temp);
+            await runner.Check("wsl.exe", "-d", Name, "-u", "root", "--", "sh", "-c",
+                $"mkdir -p /etc/docker && tar -xzf '{path}' -C / && chmod 0755 {InitPath} {UpdatePath} {AgentPath} && echo {hash} > {GuestMarker}");
+            log("Linux engine: Dockyard's part is up to date");
+        }
+        finally
+        {
+            File.Delete(temp);
+        }
     }
 
     public async Task<string> ToLinuxPath(string windowsPath) =>

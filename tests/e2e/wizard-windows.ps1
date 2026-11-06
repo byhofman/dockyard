@@ -76,6 +76,30 @@ Linux-Engine
 & $docker --context linux volume create dockyard-e2e | Out-Null
 Check 'marker volume created' ($LASTEXITCODE -eq 0)
 
+if ($Wizard) {
+    Section 'host.docker.internal reaches a service on the Windows loopback'
+    Write-Host "WSL interfaces: $((wsl.exe -d dockyard -u root -- ls /sys/class/net | Out-String) -replace "`\s+", ' ')"
+    Check 'the agent runs next to the engine' ((wsl.exe -d dockyard -u root -- pidof dockyard-agent | Out-String).Trim().Length -gt 0)
+    $service = Start-Job {
+        $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 18080)
+        $listener.Start()
+        while ($true) {
+            $client = $listener.AcceptTcpClient()
+            $bytes = [Text.Encoding]::ASCII.GetBytes("HTTP/1.0 200 OK`r`n`r`nfrom-windows")
+            $client.GetStream().Write($bytes, 0, $bytes.Length)
+            $client.Close()
+        }
+    }
+    Start-Sleep 3
+    $reply = (& $docker --context linux run --rm alpine:3.24 wget -qO- -T 20 http://host.docker.internal:18080/ | Out-String).Trim()
+    Check "the service answers (got '$reply')" ($reply -eq 'from-windows')
+    Stop-Job $service; Remove-Job $service -Force
+    $engine = (& $docker --context linux run --rm alpine:3.24 sh -c 'wget -qO- -T 5 http://host.docker.internal:2375/version || echo refused' | Out-String).Trim()
+    Check "the engine's own port stays out of reach (got '$engine')" ($engine -eq 'refused')
+    $name = (& $docker --context linux run --rm alpine:3.24 nslookup dl-cdn.alpinelinux.org | Out-String)
+    Check 'other names still resolve' ($name -match 'Address')
+}
+
 Section 'the Windows engine: no sign-out needed'
 $config = Get-Content 'C:\ProgramData\docker\config\daemon.json' -Raw
 Check 'the user is named on the pipe' ($config.Contains(([Security.Principal.WindowsIdentity]::GetCurrent().Name -replace '\\', '\\')))

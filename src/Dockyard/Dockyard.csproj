@@ -30,6 +30,7 @@
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
     <EmbeddedResource Include="Hosts\setup-linux.sh" LogicalName="setup-linux.sh" />
+    <EmbeddedResource Condition="'$(GuestBundle)' != ''" Include="$(GuestBundle)" LogicalName="guest.tar.gz" />
     <Compile Include="..\Shared\LocalPipe.cs" Link="Shared\LocalPipe.cs" />
     <Compile Include="..\Shared\DisplayGate.cs" Link="Shared\DisplayGate.cs" />
     <InternalsVisibleTo Include="Dockyard.Tests" />
