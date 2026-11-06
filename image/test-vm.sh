@@ -58,6 +58,14 @@ docker network rm dockyard-e2e >/dev/null
 kill $listener 2>/dev/null || true
 docker run --rm alpine:3.24 nslookup dl-cdn.alpinelinux.org >/dev/null && echo "other names resolve through the host's DNS" || { echo "FAIL: DNS"; exit 1; }
 
+docker run -d --name hostnet --network host alpine:3.24 sh -c 'while :; do printf "HTTP/1.0 200 OK\r\n\r\nfrom-host-network" | nc -l -p 8091 >/dev/null; done' >/dev/null
+sleep 4
+reply="$(printf 'tcp 8091\nGET / HTTP/1.0\r\n\r\n' | nc -w 5 127.0.0.1 12376 | tail -1)"
+[ "$reply" = from-host-network ] && echo "a server in a --network host container is reachable through the agent" || { echo "FAIL: --network host: '$reply'"; exit 1; }
+ports="$( (sleep 4) | nc -w 5 127.0.0.1 12377 | head -1)"
+echo "$ports" | grep -q '"port":8091' && echo "control reports the --network host port" || { echo "FAIL: control: $ports"; exit 1; }
+docker rm -f hostnet >/dev/null
+
 control="$( (sleep 6) | nc -w 7 127.0.0.1 12377 | head -3)"
 echo "$control" | grep -q '"type":"ports".*"port":8080' && echo "control reports port 8080" || { echo "FAIL: control: $control"; exit 1; }
 echo "$control" | grep -q '"type":"memory"' && echo "control reports memory" || { echo "FAIL: no memory report"; exit 1; }
