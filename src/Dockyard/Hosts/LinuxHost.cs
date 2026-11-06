@@ -311,7 +311,7 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
             var agent = await GuestBundle.ExtractAgent(dir) ?? "";
             var existing = File.Exists(DaemonJson) ? await File.ReadAllTextAsync(DaemonJson) : null;
             var config = Path.Combine(dir, "daemon.json");
-            await File.WriteAllTextAsync(config, agent.Length == 0 ? existing ?? "{}" : EngineConfig.WithDockyard(existing));
+            await File.WriteAllTextAsync(config, agent.Length == 0 ? existing ?? "{}" : EngineConfig.WithDockyard(existing, HostProxySettings.FromEnvironment(Environment.GetEnvironmentVariable)));
             // Without systemd nothing runs the agent, and a dns entry naming it would leave containers without any DNS.
             if (!Directory.Exists("/run/systemd/system")) await File.WriteAllTextAsync(config, existing ?? "{}");
             else if (agent.Length > 0 && EngineConfig.DnsIsSomeoneElses(existing))

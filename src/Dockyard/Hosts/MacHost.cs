@@ -27,6 +27,7 @@ static class MacLayout
     public static string PluginLinksDir => Path.Combine(DataDir, "plugin-links");
     public static string PreviousContextFile => Path.Combine(DataDir, "previous-context");
     public static string CredentialStoreMarker => Path.Combine(DataDir, "credential-store");
+    public static string EngineConfigFile => Path.Combine(DataDir, "engine", "daemon.json");
     public static string RootRelease => Path.Combine(DataDir, "root-release");
     public static string CredentialHelper => Path.Combine(BinDir, "docker-credential-osxkeychain");
     public const string CredentialHelperAsset = @"^docker-credential-osxkeychain-v[\d.]+\.darwin-arm64$";
@@ -254,6 +255,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
                 if (!File.Exists(MacLayout.VmConfig)) throw new InvalidOperationException("Dockyard is not set up yet; run the installer first");
                 // Keeps vm.json on this app's kernel after the app moved, and the root image's modules matching that kernel after an update.
                 await Prepare(_ => { });
+                await WriteEngineConfig();
                 vm = runner.Spawn(MacLayout.Helper, "run", "--config", MacLayout.VmConfig);
             }
             var process = vm;
@@ -457,6 +459,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         LinkUserSocket(log);
 
         await PrepareForInstall(log);
+        await WriteEngineConfig(log);
 
         var host = "unix://" + MacLayout.DockerSocket;
         var exists = (await runner.Run(MacLayout.DockerCli, "context", "inspect", MacLayout.Context)).ExitCode == 0;
@@ -627,6 +630,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
             await runner.Run(MacLayout.DockerCli, "context", "rm", "-f", MacLayout.Context);
         }
         await CredentialStore.Forget(MacLayout.CredentialStoreMarker);
+        await EngineConfig.ApplyClientProxy("unix://" + MacLayout.DockerSocket, null);
         UnlinkUserSocket();
         List<string> steps = [];
         if (await IsOurPathEntry()) steps.Add("rm -f /etc/paths.d/dockyard");
@@ -665,6 +669,23 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         }
         vm?.Dispose();
         vm = null;
+    }
+
+    async Task<ProxySettings?> HostProxy()
+    {
+        if (HostProxySettings.FromEnvironment(Environment.GetEnvironmentVariable) is { } fromEnvironment) return fromEnvironment;
+        var r = await runner.Run("/usr/sbin/scutil", "--proxy");
+        return r.ExitCode == 0 ? HostProxySettings.FromScutil(r.Output) : null;
+    }
+
+    // Before every boot, because what the host uses changes with the network it is on.
+    async Task WriteEngineConfig(Action<string>? log = null)
+    {
+        var proxy = await HostProxy();
+        Directory.CreateDirectory(Path.GetDirectoryName(MacLayout.EngineConfigFile)!);
+        await File.WriteAllTextAsync(MacLayout.EngineConfigFile, EngineConfig.Render(proxy));
+        await EngineConfig.ApplyClientProxy("unix://" + MacLayout.DockerSocket, proxy);
+        if (proxy is { IsEmpty: false }) log?.Invoke("The engine and containers use this Mac's proxy");
     }
 
     async Task Prepare(Action<string> log)
