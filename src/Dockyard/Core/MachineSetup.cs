@@ -39,7 +39,9 @@ static class MachineSetup
             case Component.Engine: await UpdateEngine(log, onlyIfNewer: false); break;
             case Component.Compose or Component.Buildx: await UpdatePlugin(log, component); break;
             case Component.App:
-                await InstallApp(log, source ?? throw new ArgumentException("--source is required for the app update"), keepPid, engineOnly: !File.Exists(Paths.DashboardExe));
+                // Defender's rule goes by path, and an update can bring the first dashboard with the new name.
+                await AddDefenderExclusions(log);
+                await InstallApp(log, source ?? throw new ArgumentException("--source is required for the app update"), keepPid, engineOnly: !File.Exists(Paths.DashboardExe) && !File.Exists(Paths.LegacyDashboardExe));
                 Shell.StartUnelevated(Paths.AppExe);
                 break;
             default: throw new ArgumentException($"{component} is not a machine component");
@@ -59,7 +61,7 @@ static class MachineSetup
         await Shell.Run("powershell.exe", "-NoProfile", "-Command",
             $"Remove-MpPreference -ControlledFolderAccessAllowedApplications '{Paths.DockerdExe}'");
         await Shell.Run("powershell.exe", "-NoProfile", "-Command",
-            $"Remove-MpPreference -AttackSurfaceReductionOnlyExclusions {string.Join(',', ExcludedFromAsr.Select(p => $"'{p}'"))}");
+            $"Remove-MpPreference -AttackSurfaceReductionOnlyExclusions {string.Join(',', EverExcludedFromAsr.Select(p => $"'{p}'"))}");
         await Shell.Run("net.exe", "localgroup", "docker-users", "/delete");
         RemoveFromMachinePath(Paths.DockerDir);
         RemoveLegacy(log, keepPid);
@@ -93,6 +95,7 @@ static class MachineSetup
     }
 
     static IEnumerable<string> ExcludedFromAsr => new[] { Paths.AppExe, Paths.DashboardExe };
+    static IEnumerable<string> EverExcludedFromAsr => ExcludedFromAsr.Append(Paths.LegacyDashboardExe);
 
     // Defender's prevalence/age rule (event 1121) blocks every new build, and an exclusion goes by path because a hash changes with each build.
     static async Task AddDefenderExclusions(Action<string> log)
@@ -232,7 +235,7 @@ static class MachineSetup
             log($"Installed {Paths.AppExe}");
         }
         if (!engineOnly) await InstallDashboard(log, Path.GetDirectoryName(Path.GetFullPath(source))!);
-        else if (File.Exists(Paths.DashboardExe)) RemoveDashboard(log);
+        else if (File.Exists(Paths.DashboardExe) || File.Exists(Paths.LegacyDashboardExe)) RemoveDashboard(log);
         else log("The dashboard is not installed");
     }
 
@@ -273,7 +276,7 @@ static class MachineSetup
         }
         try
         {
-            DashboardFiles.Extract(zip, Paths.AppDir);
+            DashboardFiles.Extract(zip, Paths.AppDir, Path.GetFileName(Paths.LegacyDashboardExe));
             log($"Installed {Paths.DashboardExe}");
         }
         finally
@@ -284,7 +287,7 @@ static class MachineSetup
 
     static void RemoveDashboard(Action<string> log)
     {
-        DashboardFiles.Remove(Paths.AppDir, Path.GetFileName(Paths.DashboardExe), log);
+        DashboardFiles.Remove(Paths.AppDir, [Path.GetFileName(Paths.DashboardExe), Path.GetFileName(Paths.LegacyDashboardExe)], log);
         log("Removed the dashboard");
     }
 
@@ -298,14 +301,14 @@ static class MachineSetup
 
     static void StopApps(int keepPid, bool dashboardOnly = false)
     {
-        var processes = Process.GetProcessesByName(Paths.DashboardName).AsEnumerable();
+        var processes = Process.GetProcessesByName(Paths.DashboardProcess).Concat(Process.GetProcessesByName(Paths.LegacyDashboardProcess));
         if (!dashboardOnly) processes = processes.Concat(Process.GetProcessesByName(Paths.AppName));
         foreach (var p in processes)
         {
             try
             {
                 var file = p.MainModule?.FileName;
-                if (string.Equals(file, Paths.AppExe, StringComparison.OrdinalIgnoreCase) || string.Equals(file, Paths.DashboardExe, StringComparison.OrdinalIgnoreCase)) Kill(p, keepPid);
+                if (new[] { Paths.AppExe, Paths.DashboardExe, Paths.LegacyDashboardExe }.Contains(file, StringComparer.OrdinalIgnoreCase)) Kill(p, keepPid);
             }
             catch { }
         }

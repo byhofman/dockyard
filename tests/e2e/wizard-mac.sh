@@ -70,7 +70,7 @@ echo "== first install, no dashboard"
 run --silent --no-dashboard --no-start
 check "app in place" test -x "$macos/Dockyard"
 check "the VM helper too" test -x "$macos/dockyard-vm"
-check "no dashboard" missing "$macos/Dockyard.Dashboard"
+check "no dashboard" missing "$macos/Dockyard Dashboard"
 check "no dashboard libraries" sh -c "! ls '$macos'/*.dylib >/dev/null 2>&1"
 check "docker CLI" test -x "$docker"
 check "VM prepared" test -f "$home/.dockyard/vm.json"
@@ -94,19 +94,19 @@ data_before="$(ls -i "$home/.dockyard/data.img")"
 
 echo "== rerun keeps the choice and the data"
 run --silent --no-start
-check "still no dashboard" missing "$macos/Dockyard.Dashboard"
+check "still no dashboard" missing "$macos/Dockyard Dashboard"
 check "marker kept" test -f "$home/.dockyard/marker"
 if [ "$(ls -i "$home/.dockyard/data.img")" = "$data_before" ]; then ok "the data disk is the same file"; else fail "the data disk was replaced"; fi
 
 echo "== add the dashboard"
 run --silent --dashboard --no-start
-check "dashboard added" test -x "$macos/Dockyard.Dashboard"
+check "dashboard added" test -x "$macos/Dockyard Dashboard"
 check "with its libraries" sh -c "ls '$macos'/*.dylib >/dev/null 2>&1"
-check "signature of the dashboard is valid" codesign --verify "$macos/Dockyard.Dashboard"
+check "signature of the dashboard is valid" codesign --verify "$macos/Dockyard Dashboard"
 
 echo "== remove the dashboard"
 run --silent --no-dashboard --no-start
-check "dashboard removed" missing "$macos/Dockyard.Dashboard"
+check "dashboard removed" missing "$macos/Dockyard Dashboard"
 check "app stays" test -x "$macos/Dockyard"
 
 if [ -n "${BOOT:-}" ]; then
@@ -124,7 +124,7 @@ check "data kept" test -f "$home/.dockyard/data.img"
 
 echo "== and --remove-data takes it"
 run --silent --no-start
-check "a fresh install gets the dashboard" test -x "$macos/Dockyard.Dashboard"
+check "a fresh install gets the dashboard" test -x "$macos/Dockyard Dashboard"
 run --silent --uninstall --remove-data
 check "data removed" missing "$home/.dockyard"
 

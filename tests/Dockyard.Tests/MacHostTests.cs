@@ -181,8 +181,8 @@ public sealed class MacInstallTests : IDisposable
     public void Dashboard_files_are_the_dashboard_and_its_libraries_only()
     {
         var dir = Directory.CreateTempSubdirectory().FullName;
-        foreach (var name in new[] { "Dockyard", "dockyard-vm", "Dockyard.Dashboard", "libSkiaSharp.dylib" }) File.WriteAllText(Path.Combine(dir, name), "");
-        Assert.Equal(["Dockyard.Dashboard", "libSkiaSharp.dylib"], MacLayout.DashboardFiles(dir).Select(Path.GetFileName).Order());
+        foreach (var name in new[] { "Dockyard", "dockyard-vm", "Dockyard Dashboard", "Dockyard.Dashboard", "libSkiaSharp.dylib" }) File.WriteAllText(Path.Combine(dir, name), "");
+        Assert.Equal(["Dockyard Dashboard", "Dockyard.Dashboard", "libSkiaSharp.dylib"], MacLayout.DashboardFiles(dir).Select(Path.GetFileName).Order());
         Directory.Delete(dir, recursive: true);
         Assert.Empty(MacLayout.DashboardFiles(dir));
     }

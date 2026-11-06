@@ -53,7 +53,8 @@ static class LinuxLayout
     public static string HomeLink => Path.Combine(Paths.UserProfile, ".local", "bin", "dockyard");
     public static string InstallDir => File.Exists(Path.Combine(PackageDir, "Dockyard")) ? PackageDir : HomeDir;
     public static string InstalledExe => Path.Combine(InstallDir, "Dockyard");
-    public static string Dashboard => Path.Combine(InstallDir, "Dockyard.Dashboard");
+    public static string Dashboard => Path.Combine(InstallDir, "Dockyard Dashboard");
+    public static string LegacyDashboard => Path.Combine(InstallDir, "Dockyard.Dashboard");
     public static string VersionFile => Path.Combine(HomeDir, "version");
 
     public static string DashboardPackage(string? packageManager) =>
@@ -63,7 +64,7 @@ static class LinuxLayout
     public const string Tarball = @"^Dockyard-[\d.]+-linux-x64\.tar\.gz$";
     public const string AppAsset = @"^Dockyard-linux-x64$";
 
-    public static readonly string[] DashboardFiles = ["Dockyard.Dashboard", "libSkiaSharp.so", "libHarfBuzzSharp.so"];
+    public static readonly string[] DashboardFiles = ["Dockyard Dashboard", "Dockyard.Dashboard", "libSkiaSharp.so", "libHarfBuzzSharp.so"];
 
     public static bool HasDisplay(string? display, string? waylandDisplay) =>
         !string.IsNullOrEmpty(display) || !string.IsNullOrEmpty(waylandDisplay);
@@ -173,7 +174,7 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
     public bool RunsFromInstallLocation => string.Equals(
         Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory), LinuxLayout.InstallDir, StringComparison.Ordinal);
 
-    public bool HasDashboard => File.Exists(LinuxLayout.Dashboard);
+    public bool HasDashboard => File.Exists(LinuxLayout.Dashboard) || File.Exists(LinuxLayout.LegacyDashboard);
 
     public async Task<bool> SetDashboard(Action<string> log, bool installed)
     {
@@ -308,6 +309,7 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
                 var name = Path.GetFileName(file);
                 if (dashboard || !LinuxLayout.DashboardFiles.Contains(name)) File.Move(file, Path.Combine(LinuxLayout.HomeDir, name), overwrite: true);
             }
+            File.Delete(Path.Combine(LinuxLayout.HomeDir, "Dockyard.Dashboard"));
             if (!dashboard)
                 foreach (var name in LinuxLayout.DashboardFiles) File.Delete(Path.Combine(LinuxLayout.HomeDir, name));
             await File.WriteAllTextAsync(LinuxLayout.VersionFile, Updates.ParseVersion(Path.GetFileName(tarball))?.ToString() ?? "");

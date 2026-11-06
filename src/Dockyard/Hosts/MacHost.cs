@@ -80,7 +80,11 @@ static class MacLayout
 
     // Everything of the dashboard in the bundle: the tray links none of the dylibs, the engine-only edition leaves them out too.
     public static IEnumerable<string> DashboardFiles(string macosDir) =>
-        !Directory.Exists(macosDir) ? [] : Directory.GetFiles(macosDir).Where(f => Path.GetFileName(f) == "Dockyard.Dashboard" || f.EndsWith(".dylib", StringComparison.Ordinal));
+        !Directory.Exists(macosDir) ? [] : Directory.GetFiles(macosDir).Where(f => DashboardNames.Contains(Path.GetFileName(f)) || f.EndsWith(".dylib", StringComparison.Ordinal));
+
+    // The first is what ships now; an install from up to v0.2.1 has the second until its bundle is replaced.
+    public static readonly string[] DashboardNames = ["Dockyard Dashboard", "Dockyard.Dashboard"];
+    public static bool HasDashboardIn(string macosDir) => DashboardNames.Any(n => File.Exists(Path.Combine(macosDir, n)));
 
     public static Version? BundleVersion(string infoPlist)
     {
@@ -287,7 +291,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
 
     public bool RunsFromInstallLocation => Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory) == Path.TrimEndingDirectorySeparator(MacLayout.AppBase);
 
-    public bool HasDashboard => File.Exists(Path.Combine(MacLayout.AppBase, "Dockyard.Dashboard"));
+    public bool HasDashboard => MacLayout.HasDashboardIn(MacLayout.AppBase);
 
     public async Task<bool> SetDashboard(Action<string> log, bool installed)
     {
@@ -303,7 +307,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         try
         {
             var source = AppContext.BaseDirectory;
-            if (!File.Exists(Path.Combine(source, "Dockyard.Dashboard")))
+            if (!MacLayout.HasDashboardIn(source))
             {
                 log("Downloading the dashboard");
                 downloaded = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
@@ -311,6 +315,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
                 await runner.Check("/usr/bin/ditto", "-x", "-k", zip, downloaded);
                 source = Path.Combine(downloaded, "Dockyard.app", "Contents", "MacOS");
             }
+            foreach (var old in MacLayout.DashboardFiles(MacLayout.AppBase)) File.Delete(old);
             foreach (var file in MacLayout.DashboardFiles(source))
             {
                 var target = Path.Combine(MacLayout.AppBase, Path.GetFileName(file));

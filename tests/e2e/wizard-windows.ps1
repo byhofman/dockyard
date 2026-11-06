@@ -10,7 +10,8 @@ $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 $appDir = Join-Path $env:ProgramFiles 'Dockyard'
 $appExe = Join-Path $appDir 'Dockyard.exe'
-$dashboard = Join-Path $appDir 'Dockyard.Dashboard.exe'
+# Either name: the one-liner test runs the release that is out, and the rename reaches it with the next release.
+$dashboard = Join-Path $appDir 'Dockyard*Dashboard.exe'
 $docker = Join-Path $env:ProgramFiles 'Docker\docker.exe'
 
 function Ok($text) { Write-Host "  ok   $text" }
@@ -146,6 +147,29 @@ if (-not $running.HasExited) { $running.Kill() }
 
 Section 'the wizard window adds the skipped dashboard and removes it again'
 Window
+
+if ($Wizard) {
+    Section 'a dashboard from v0.2.1, also running, is stopped and replaced by the new name'
+    $previous = Join-Path (New-Item -ItemType Directory (Join-Path $env:TEMP ([guid]::NewGuid()))) 'Dockyard.exe'
+    Invoke-WebRequest https://github.com/byhofman/dockyard/releases/download/v0.2.1/Dockyard.exe -OutFile $previous
+    $p = Start-Process $previous -ArgumentList '--silent --dashboard --no-start' -Wait -PassThru
+    Check "v0.2.1 installs (exit $($p.ExitCode))" ($p.ExitCode -eq 0)
+    $oldExe = Join-Path $appDir 'Dockyard.Dashboard.exe'
+    Check 'the old name is there to start from' (Test-Path $oldExe)
+    $old = Start-Process $oldExe -PassThru
+    Start-Sleep 5
+    Check 'exit 0' ((Run --silent --no-start) -eq 0)
+    Check 'the old process was stopped' ($old.HasExited)
+    Check 'the old file is gone' (-not (Test-Path $oldExe))
+    $newExe = Join-Path $appDir 'Dockyard Dashboard.exe'
+    Check 'the new file is there' (Test-Path $newExe)
+    Check 'the description Task Manager shows' ((Get-Item $newExe).VersionInfo.FileDescription -eq 'Dockyard Dashboard')
+    $new = Start-Process $newExe -PassThru
+    Start-Sleep 5
+    Check 'the process is called Dockyard Dashboard' ((Get-Process -Id $new.Id).ProcessName -eq 'Dockyard Dashboard')
+    Check 'exit 0 with it running' ((Run --silent --no-dashboard --no-start) -eq 0)
+    Check 'removing it stops it' ($new.HasExited)
+}
 
 Section 'add the dashboard'
 Check 'exit 0' ((Run --silent --dashboard --no-start) -eq 0)
