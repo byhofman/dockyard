@@ -77,3 +77,5 @@ Ok 'not started'
 
 $env:USERPROFILE = $env:USERPROFILE_REAL
 Write-Host 'All good.' -ForegroundColor Green
+# The fake installer's last exit code would otherwise become this script's.
+exit 0
