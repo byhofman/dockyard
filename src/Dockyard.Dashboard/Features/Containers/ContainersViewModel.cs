@@ -1,3 +1,4 @@
+using PublishedPort = Dockyard.Dashboard.Store.PublishedPort;
 using System.ComponentModel;
 using System.Diagnostics;
 using Dockyard.Dashboard.Features.Resources;

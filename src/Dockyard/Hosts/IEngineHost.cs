@@ -44,6 +44,9 @@ interface IEngineHost
     // Finishes an install that had to wait for a reboot.
     Task Resume(Action<string> log) => Task.CompletedTask;
 
+    // What only the tray keeps running, for as long as it runs.
+    void StartTrayServices() { }
+
     void StartApp();
     string DoneMessage(bool reboot);
     void Reboot() { }
