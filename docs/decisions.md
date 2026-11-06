@@ -33,6 +33,10 @@ What Task Manager's Details tab, Activity Monitor and `ps` show comes from the f
 - **The old name is still found and stopped:** wizard, update, uninstall and Remove look for both, and installing removes the old file and whatever the old manifest listed.
 - **A v0.2.1 tray updating itself** runs the old installer code, which unpacks the new name next to the old file. The tray finds either, and the next wizard run removes the old file, because the tray cannot write to Program Files by itself.
 - **Defender exclusions go by path,** so an app update now also adds the new path.
+## 2026-11-06: Tray actions are a native menu, not a popover window
+
+`DOK-2` says popover. A window in the tray process would load the UI stack it otherwise never touches until the settings window opens, and this app competes on memory. The native menu gives the same actions: start, stop, restart, open the first published port. It lists at most 20 containers, refreshes on the tray's existing 10 second tick while the engine runs, and is only rebuilt when the list changed. A menu replaced while open would close on the user.
+
 ## 2026-11-06: Files in containers and volumes go through the archive API, in the dashboard
 
 `DOK-5` and `DOK-17` share one file browser built on `GET`/`PUT .../archive`. This needs no shell or `ls` in the image, works on stopped containers, and needs nothing new in the VM, so it costs no memory while unused.
