@@ -12,6 +12,7 @@ static class Program
     {
         Shell.StartupTrace.Mark("main");
         if (LocalPipe.TrySend(LocalPipe.DashboardName, "show")) return 0;
+        if (!DisplayGate.WaitUntilUsable(TimeSpan.FromMinutes(10))) return 0;
         return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args, ShutdownMode.OnMainWindowClose);
     }
 

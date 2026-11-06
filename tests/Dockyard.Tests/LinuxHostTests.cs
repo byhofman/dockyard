@@ -19,6 +19,13 @@ public sealed class LinuxHostTests
         Assert.Equal(codename, os.Codename);
     }
 
+    [Theory]
+    [InlineData("Dockyard-linux-x64", true)]
+    [InlineData("Dockyard.exe", false)]
+    [InlineData("Dockyard-0.3.0-linux-x64.tar.gz", false)]
+    public void Update_check_looks_for_the_linux_binary(string asset, bool matches) =>
+        Assert.Equal(matches, System.Text.RegularExpressions.Regex.IsMatch(asset, LinuxLayout.AppAsset));
+
     [Fact]
     public void Autostart_entry_runs_the_tray()
     {

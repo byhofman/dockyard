@@ -20,6 +20,7 @@ static partial class Updates
     public const string LinuxStaticIndex = "https://download.docker.com/linux/static/stable/x86_64/";
     public const string LinuxComposeAsset = @"^docker-compose-linux-x86_64$";
     public const string LinuxBuildxAsset = @"^buildx-v[\d.]+\.linux-amd64$";
+    public const string WindowsAppAsset = @"^Dockyard\.exe$";
     public const string ImageAsset = @"^dockyard-linux-[\d.]+-x86_64\.tar\.gz$";
 
     // Defender ASR's prevalence/age rule blocks freshly published binaries.
@@ -62,7 +63,7 @@ static partial class Updates
         Component.Compose => await LatestGitHub("docker/compose", @"^docker-compose-windows-x86_64\.exe$"),
         Component.Buildx => await LatestGitHub("docker/buildx", @"^buildx-v[\d.]+\.windows-amd64\.exe$"),
         Component.LinuxEngine => await LatestStatic(LinuxStaticIndex, "tgz"),
-        Component.App => await LatestApp(),
+        Component.App => await LatestApp(WindowsAppAsset),
         _ => null,
     };
 
@@ -120,7 +121,7 @@ static partial class Updates
         throw new InvalidOperationException($"No suitable {repo} release found");
     }
 
-    public static async Task<Release?> LatestApp(string assetPattern = @"^Dockyard\.exe$")
+    public static async Task<Release?> LatestApp(string assetPattern)
     {
         using var response = await Http.SendAsync(GitHubApi($"https://api.github.com/repos/{Paths.Repo}/releases/latest"));
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return null;

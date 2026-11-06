@@ -207,6 +207,64 @@ public sealed class MacInstallTests : IDisposable
         Assert.Empty(runner.Commands);
     }
 
+    [Fact]
+    public void Uninstall_finds_the_app_wherever_it_was_installed()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix paths");
+        string Bundle(string path, string id = MacLayout.BundleId)
+        {
+            Directory.CreateDirectory(Path.Combine(path, "Contents"));
+            File.WriteAllText(Path.Combine(path, "Contents", "Info.plist"), $"<key>CFBundleIdentifier</key><string>{id}</string>");
+            return path;
+        }
+        var user = Path.Combine(dir, "user");
+        var system = Path.Combine(dir, "system");
+        var elsewhere = Path.Combine(dir, "elsewhere");
+        var expected = new[] { Bundle(Path.Combine(user, "Dockyard.app")), Bundle(Path.Combine(user, "Dockyard.app.old")), Bundle(Path.Combine(system, "Dockyard.app")), Bundle(Path.Combine(elsewhere, "Dockyard.app")) };
+        Bundle(Path.Combine(dir, "unrelated", "Dockyard.app"));
+        Bundle(Path.Combine(system, "Dockyard.app.new"), "com.example.not-ours");
+
+        var found = MacLayout.InstalledBundles(MacLayout.LaunchAgentPlist(Path.Combine(elsewhere, "Dockyard.app", "Contents", "MacOS", "Dockyard")), user, system);
+
+        Assert.Equal(expected.Order(), found.Order());
+    }
+
+    [Fact]
+    [SupportedOSPlatform("macos")]
+    public async Task Starting_while_another_start_finishes_waits_for_it_and_starts_no_helper()
+    {
+        Assert.SkipUnless(OperatingSystem.IsMacOS(), "macOS host");
+        var runner = new FakeRunner();
+        var polls = 0;
+
+        await new MacHost(runner, ping: () => ++polls > 3, helperAnswers: () => true).Start(MacHost.Engine);
+
+        Assert.Empty(runner.Commands);
+    }
+
+    [Fact]
+    [SupportedOSPlatform("macos")]
+    public async Task Starting_while_a_helper_is_stopping_touches_nothing_until_it_has_gone()
+    {
+        Assert.SkipUnless(OperatingSystem.IsMacOS(), "macOS host");
+        var runner = new FakeRunner();
+        var answers = 3;
+        
+
+        // Past the wait, the host goes on to prepare and spawn; the home here has no install, which ends the attempt.
+        await Assert.ThrowsAnyAsync<Exception>(() => new MacHost(runner, ping: () => false, helperAnswers: () => answers-- > 0).Start(MacHost.Engine));
+
+        Assert.True(answers <= 0, "the helper was still answering when the start moved on");
+        Assert.DoesNotContain(runner.Commands, c => c.Contains(" run "));
+    }
+
+    [Fact]
+    public void The_display_check_reaches_the_system_libraries()
+    {
+        Assert.SkipUnless(OperatingSystem.IsMacOS(), "macOS");
+        _ = Dockyard.Shared.DisplayGate.IsUsable();
+    }
+
     sealed class FailingStream : MemoryStream
     {
         public override Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken) =>
