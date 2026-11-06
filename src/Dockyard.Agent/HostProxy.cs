@@ -59,6 +59,12 @@ static class NetworkRules
         foreach (var (from, to) in new[] { (80, GuestAddresses.DomainHttpPort), (443, GuestAddresses.DomainHttpsPort) })
             yield return ["iptables", "-t", "nat", "-I", "OUTPUT", "-d", loopback, "-p", "tcp", "--dport", from.ToString(), "-j", "REDIRECT", "--to-ports", to.ToString()];
 
+        // A redirected packet arrives addressed to the bridge, not to the subnet DOCKYARD-INPUT guards, so ufw's and
+        // other default-deny INPUT rules would drop it. These ports refuse whatever was not redirected to them.
+        var redirected = string.Join(',', GuestAddresses.HostProxyPort, GuestAddresses.DomainHttpPort, GuestAddresses.DomainHttpsPort);
+        foreach (var iface in new[] { "docker+", "br-+" })
+            yield return ["iptables", "-I", "INPUT", "-i", iface, "-p", "tcp", "-m", "multiport", "--dports", redirected, "-j", "ACCEPT"];
+
         var dns = GuestAddresses.Dns.ToString();
         var target = $"{dns}:{GuestAddresses.ContainerDnsPort}";
         foreach (var protocol in new[] { "udp", "tcp" })

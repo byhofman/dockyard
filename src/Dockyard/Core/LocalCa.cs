@@ -65,28 +65,36 @@ static class LocalCa
     }
 
     public static string CertificateFile(string directory) => Path.Combine(directory, "ca.pem");
-    public static string KeyFile(string directory) => Path.Combine(directory, "ca.key");
 
-    public static PemPair? Load(string directory) =>
-        File.Exists(CertificateFile(directory)) && File.Exists(KeyFile(directory))
-            ? new PemPair(File.ReadAllText(CertificateFile(directory)), File.ReadAllText(KeyFile(directory)))
+    public static async Task<PemPair?> Load(string directory, ICaKeyStore keys) =>
+        File.Exists(CertificateFile(directory)) && await keys.Read() is { } key
+            ? new PemPair(await File.ReadAllTextAsync(CertificateFile(directory)), key)
             : null;
 
-    public static PemPair LoadOrCreate(string directory)
+    public static async Task<PemPair> LoadOrCreate(string directory, ICaKeyStore keys)
     {
-        if (Load(directory) is { } existing) return existing;
+        if (await Load(directory, keys) is { } existing) return existing;
         var ca = Create(DateTimeOffset.UtcNow);
         Directory.CreateDirectory(directory);
         if (OperatingSystem.IsWindows()) OwnerOnly(directory);
         else File.SetUnixFileMode(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        // Created empty with its mode first, so the key is at no moment readable by anyone else.
-        var options = new FileStreamOptions { Mode = FileMode.Create, Access = FileAccess.Write };
-        if (!OperatingSystem.IsWindows()) options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
-        using (var file = new FileStream(KeyFile(directory), options))
-        using (var writer = new StreamWriter(file))
-            writer.Write(ca.Key);
-        File.WriteAllText(CertificateFile(directory), ca.Certificate);
+        await keys.Write(ca.Key);
+        await File.WriteAllTextAsync(CertificateFile(directory), ca.Certificate);
         return ca;
+    }
+
+    // What an elevated step adds to the machine's trust store comes in from a less trusted process, so it must be what
+    // this code would have made: a root that can only vouch for the one name space.
+    public static bool IsConstrainedRoot(string certificatePem)
+    {
+        try
+        {
+            using var certificate = X509Certificate2.CreateFromPem(certificatePem);
+            return certificate.GetNameInfo(X509NameType.SimpleName, forIssuer: false) == SubjectName
+                && certificate.Extensions[NameConstraintsOid] is { Critical: true } constraint
+                && constraint.RawData.AsSpan().SequenceEqual(PermittedDnsName(Zone));
+        }
+        catch (CryptographicException) { return false; }
     }
 
     [SupportedOSPlatform("windows")]
@@ -99,8 +107,9 @@ static class LocalCa
         new DirectoryInfo(directory).SetAccessControl(security);
     }
 
-    public static void Remove(string directory)
+    public static async Task Remove(string directory, ICaKeyStore keys)
     {
+        await keys.Delete();
         if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
     }
 
@@ -116,7 +125,13 @@ static class Https
 {
     public static async Task Enable(IEngineHost host, Action<string> log, bool silent)
     {
-        var ca = LocalCa.LoadOrCreate(host.CaDirectory);
+        PemPair ca;
+        try { ca = await LocalCa.LoadOrCreate(host.CaDirectory, host.CaKeys); }
+        catch (InvalidOperationException e)
+        {
+            log($"HTTPS was not turned on: {e.Message} Plain HTTP works as before.");
+            return;
+        }
         if (!await host.TrustCa(log, LocalCa.CertificateFile(host.CaDirectory), silent))
             log("The certificate was not added to this computer's trust store, so browsers warn about HTTPS until it is. Plain HTTP works as before.");
         var settings = Settings.Load();
@@ -128,7 +143,7 @@ static class Https
     public static async Task Disable(IEngineHost host, Action<string> log)
     {
         await host.UntrustCa(log, LocalCa.CertificateFile(host.CaDirectory));
-        LocalCa.Remove(host.CaDirectory);
+        await LocalCa.Remove(host.CaDirectory, host.CaKeys);
         var settings = Settings.Load();
         settings.HttpsEnabled = false;
         settings.Save();
@@ -166,11 +181,12 @@ static class Https
         while (!ct.IsCancellationRequested)
         {
             await Task.Delay(TimeSpan.FromSeconds(10), ct);
-            if (!Settings.Load().HttpsEnabled || LocalCa.Load(host.CaDirectory) is not { } ca) continue;
+            if (!Settings.Load().HttpsEnabled) continue;
             try
             {
                 await agent.DomainsAsync(ct);
-                if (!reachable || DateTime.UtcNow - given > TimeSpan.FromDays(1))
+                // Only when a certificate is due: the key can be in the OS's store, which is not for asking every 10 seconds.
+                if ((!reachable || DateTime.UtcNow - given > TimeSpan.FromDays(1)) && await LocalCa.Load(host.CaDirectory, host.CaKeys) is { } ca)
                 {
                     var leaf = LocalCa.Leaf(ca, DateTimeOffset.UtcNow);
                     await agent.SetCertificateAsync(leaf.Certificate, leaf.Key, ct);

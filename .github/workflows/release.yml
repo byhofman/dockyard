@@ -248,6 +248,11 @@ jobs:
           WIZARD="$PWD/wizard/Dockyard-linux-x64" sh tests/e2e/import-linux.sh
           "$PWD/wizard/Dockyard-linux-x64" --silent --uninstall
 
+      - name: Behind ufw and firewalld
+        env:
+          DOCKYARD_GITHUB_TOKEN: ${{ github.token }}
+        run: WIZARD="$PWD/wizard/Dockyard-linux-x64" sh tests/e2e/firewall-linux.sh
+
       - name: In containers, as root and refused without root
         env:
           DOCKYARD_GITHUB_TOKEN: ${{ github.token }}

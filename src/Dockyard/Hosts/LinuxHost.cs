@@ -288,7 +288,7 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
     public async Task Uninstall(Action<string> log, bool removeData)
     {
         if (File.Exists(AutostartFile)) File.Delete(AutostartFile);
-        await CredentialStore.Forget(Paths.CredentialStoreMarker);
+        await CredentialStore.Forget(Paths.CredentialStoreMarker, LinuxLayout.CredentialHelper, log);
         await Https.Disable(this, log);
         await UninstallWithConfig(log);
         if (Directory.Exists(LinuxLayout.HomeDir)) Directory.Delete(LinuxLayout.HomeDir, recursive: true);

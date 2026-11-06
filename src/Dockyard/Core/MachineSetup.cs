@@ -37,7 +37,8 @@ static class MachineSetup
             else await UpdatePlugin(log, plugin.Component);
         }
         await InstallCredentialHelper(log);
-        await RouteDomains(log);
+        if (without.Contains(nameof(Component.LinuxEngine))) await UnrouteDomains();
+        else await RouteDomains(log);
         if (withWindows) await ConfigureWindowsEngine(log, userSid, userName);
         await InstallApp(log, Paths.Self, keepPid, engineOnly);
         RemoveLegacy(log, keepPid);
@@ -94,9 +95,13 @@ static class MachineSetup
         log($"Windows images and containers under {Path.GetDirectoryName(Paths.DaemonConfigDir)} were left in place");
     }
 
-    public static void TrustCa(Action<string> log, string certificateFile)
+    public static string EncodeCertificate(string pem) => Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(pem));
+    public static string DecodeCertificate(string encoded) => System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(encoded));
+
+    public static void TrustCa(Action<string> log, string certificatePem)
     {
-        using var certificate = System.Security.Cryptography.X509Certificates.X509Certificate2.CreateFromPem(File.ReadAllText(certificateFile));
+        if (!LocalCa.IsConstrainedRoot(certificatePem)) throw new InvalidOperationException("That is not Dockyard's certificate, so it was not trusted");
+        using var certificate = System.Security.Cryptography.X509Certificates.X509Certificate2.CreateFromPem(certificatePem);
         using var store = new System.Security.Cryptography.X509Certificates.X509Store(System.Security.Cryptography.X509Certificates.StoreName.Root, System.Security.Cryptography.X509Certificates.StoreLocation.LocalMachine);
         store.Open(System.Security.Cryptography.X509Certificates.OpenFlags.ReadWrite);
         store.Add(certificate);
@@ -286,6 +291,11 @@ static class MachineSetup
             case Component.Compose or Component.Buildx:
                 if (installed) await UpdatePlugin(log, component);
                 else RemovePlugin(log, component);
+                break;
+            // The distro and its images are the user's half, in UserSetup. Only the engine answers those names.
+            case Component.LinuxEngine:
+                if (installed) await RouteDomains(log);
+                else await UnrouteDomains();
                 break;
             case Component.Engine:
                 if (!installed) { await RemoveWindowsEngine(log); break; }
