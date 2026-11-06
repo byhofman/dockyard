@@ -42,7 +42,7 @@
               </ItemsControl.ItemsPanel>
               <ItemsControl.ItemTemplate>
                 <DataTemplate DataType="vm:EngineViewModel">
-                  <Button Classes="segment" Classes.selected="{Binding IsActive}" Content="{Binding Name}" Command="{Binding UseCommand}" ToolTip.Tip="Switch the docker context to this engine" />
+                  <Button Classes="segment" Classes.selected="{Binding IsActive}" IsVisible="{Binding IsAvailable}" Content="{Binding Name}" Command="{Binding UseCommand}" ToolTip.Tip="Switch the docker context to this engine" />
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
@@ -68,11 +68,15 @@
           <Border Classes="card">
             <StackPanel Spacing="14">
               <TextBlock TextWrapping="Wrap" Text="{Binding SetupDescription}" />
-              <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto">
-                <CheckBox IsChecked="{Binding IncludeDashboard}" Content="Include the dashboard" VerticalAlignment="Center"
-                          ToolTip.Tip="A window for your containers, images, volumes, networks and disk use. You can add or remove it later here or in the tray window." />
-                <Button Grid.Column="1" Classes="primary" Content="Install" Command="{Binding InstallCommand}" />
-              </Grid>
+              <ItemsControl ItemsSource="{Binding OptionalChoices}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ComponentViewModel">
+                    <CheckBox IsChecked="{Binding Include}" Content="{Binding IncludeText}" ToolTip.Tip="You can add or remove this later, here or in the tray window." />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="{Binding RequiredSummary}" />
+              <Button Classes="primary" Content="Install" Command="{Binding InstallCommand}" HorizontalAlignment="Right" />
             </StackPanel>
           </Border>
         </StackPanel>
@@ -107,7 +111,7 @@
             </ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:EngineViewModel">
-                <Border Classes="card" Classes.active="{Binding IsActive}" Margin="0,0,10,0">
+                <Border Classes="card" Classes.active="{Binding IsActive}" Margin="0,0,10,0" IsVisible="{Binding IsAvailable}">
                   <Grid RowDefinitions="Auto,Auto,Auto,Auto" ColumnDefinitions="*,Auto">
                     <TextBlock Classes="title" Text="{Binding Title}" />
                     <Border Grid.Column="1" Classes="pill accent" IsVisible="{Binding IsActive}">
@@ -143,7 +147,7 @@
           </Grid>
           <Border Classes="card" Padding="0">
             <StackPanel>
-              <Grid ColumnDefinitions="*,110,110,140,96" Margin="18,12">
+              <Grid ColumnDefinitions="*,90,90,130,160" Margin="18,12">
                 <TextBlock Classes="muted" FontSize="12" Text="Component" />
                 <TextBlock Grid.Column="1" Classes="muted" FontSize="12" Text="Installed" />
                 <TextBlock Grid.Column="2" Classes="muted" FontSize="12" Text="Latest" />
@@ -153,16 +157,21 @@
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:ComponentViewModel">
                     <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="18,10">
-                      <Grid ColumnDefinitions="*,110,110,140,96">
-                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                      <Grid ColumnDefinitions="*,90,90,130,160">
+                        <StackPanel VerticalAlignment="Center">
+                          <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                          <TextBlock Classes="muted" FontSize="11" TextWrapping="Wrap" Text="{Binding Note}" IsVisible="{Binding HasNote}" Margin="0,0,10,0" />
+                        </StackPanel>
                         <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Installed}" VerticalAlignment="Center" />
                         <TextBlock Grid.Column="2" Classes="mono" Text="{Binding Latest}" VerticalAlignment="Center" />
                         <Border Grid.Column="3" Classes="pill" Classes.ok="{Binding IsUpToDate}" Classes.warn="{Binding IsAvailable}" Classes.bad="{Binding IsProblem}" ToolTip.Tip="{Binding Error}">
                           <TextBlock Text="{Binding StatusText}" />
                         </Border>
-                        <Button Grid.Column="4" Classes="primary" Content="Update" Command="{Binding UpdateCommand}" IsVisible="{Binding IsAvailable}" HorizontalAlignment="Right" />
-                        <Button Grid.Column="4" Classes="primary" Content="Add" Command="{Binding AddCommand}" IsVisible="{Binding CanAdd}" HorizontalAlignment="Right" />
-                        <Button Grid.Column="4" Classes="danger" Content="Remove" Command="{Binding RemoveCommand}" IsVisible="{Binding CanRemove}" HorizontalAlignment="Right" />
+                        <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right" VerticalAlignment="Center">
+                          <Button Classes="primary" Content="Update" AutomationProperties.AutomationId="{Binding UpdateId}" Command="{Binding UpdateCommand}" IsVisible="{Binding IsAvailable}" />
+                          <Button Classes="primary" Content="Add" AutomationProperties.AutomationId="{Binding AddId}" Command="{Binding AddCommand}" IsVisible="{Binding CanAdd}" />
+                          <Button Classes="danger" Content="Remove" AutomationProperties.AutomationId="{Binding RemoveId}" Command="{Binding RemoveCommand}" IsVisible="{Binding CanRemove}" />
+                        </StackPanel>
                       </Grid>
                     </Border>
                   </DataTemplate>

@@ -36,8 +36,29 @@ static class Installer
                 return Ok;
             }
 
+            var settings = Settings.Load();
+            if (ComponentRules.Problems(host.Components, options.With, options.Without, settings.RemovedComponents) is { Count: > 0 } problems)
+            {
+                foreach (var problem in problems) error(problem);
+                return WrongArguments;
+            }
+            var removedBefore = settings.RemovedComponents.ToList();
+            var removed = ComponentRules.Removed(host.Components, removedBefore, options.With, options.Without);
+            if (!removed.SequenceEqual(settings.RemovedComponents))
+            {
+                settings.RemovedComponents = removed;
+                settings.Save();
+            }
+
             var dashboard = DashboardChoice.Resolve(options.Dashboard, host.IsInstalled, host.HasDashboard, host.RunsFromInstallLocation);
-            var reboot = await host.Install(log, new InstallRequest(dashboard, options.Image, Silent: true, TrustHttps: options.TrustHttps));
+            var reboot = await host.Install(log, new InstallRequest(dashboard, options.Image, Silent: true, TrustHttps: options.TrustHttps) { Without = removed });
+            foreach (var flag in options.With)
+                // Removed earlier counts too: something else on the machine may answer for it meanwhile, such as a plugin of another package.
+                if (ComponentRules.ByFlag(host.Components, flag) is { } added && (removedBefore.Contains(added.Id) || await host.Installed(added.Id) is null))
+                    await host.SetComponent(log, added.Id, installed: true);
+            foreach (var flag in options.Without)
+                if (ComponentRules.ByFlag(host.Components, flag) is { } gone && await host.Installed(gone.Id) is not null)
+                    await host.SetComponent(log, gone.Id, installed: false, options.RemoveData);
             // Installing never fails halfway unnoticed: a step that quietly did nothing would otherwise report success.
             if (!reboot && !host.IsInstalled) throw new InvalidOperationException("Setup finished, but Dockyard is not installed");
             if (host.HasDashboard != dashboard)

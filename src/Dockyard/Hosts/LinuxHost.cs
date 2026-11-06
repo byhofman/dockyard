@@ -53,7 +53,8 @@ static class LinuxLayout
     public static string HomeLink => Path.Combine(Paths.UserProfile, ".local", "bin", "dockyard");
     public static string InstallDir => File.Exists(Path.Combine(PackageDir, "Dockyard")) ? PackageDir : HomeDir;
     public static string InstalledExe => Path.Combine(InstallDir, "Dockyard");
-    public static string Dashboard => Path.Combine(InstallDir, "Dockyard.Dashboard");
+    public static string Dashboard => Path.Combine(InstallDir, "Dockyard Dashboard");
+    public static string LegacyDashboard => Path.Combine(InstallDir, "Dockyard.Dashboard");
     public static string VersionFile => Path.Combine(HomeDir, "version");
 
     public static string DashboardPackage(string? packageManager) =>
@@ -64,7 +65,7 @@ static class LinuxLayout
     public const string CredentialHelper = "/usr/local/bin/docker-credential-secretservice";
     public const string AppAsset = @"^Dockyard-linux-x64$";
 
-    public static readonly string[] DashboardFiles = ["Dockyard.Dashboard", "libSkiaSharp.so", "libHarfBuzzSharp.so"];
+    public static readonly string[] DashboardFiles = ["Dockyard Dashboard", "Dockyard.Dashboard", "libSkiaSharp.so", "libHarfBuzzSharp.so"];
 
     public static bool HasDisplay(string? display, string? waylandDisplay) =>
         !string.IsNullOrEmpty(display) || !string.IsNullOrEmpty(waylandDisplay);
@@ -82,10 +83,11 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
 
     public IReadOnlyList<ComponentInfo> Components { get; } =
     [
-        new("Engine", "Docker Engine & CLI"),
-        new("Compose", "Docker Compose"),
-        new("Buildx", "Docker Buildx"),
-        new("App", "Dockyard"),
+        new("Engine", "Docker Engine & CLI", RequiredBecause: "it is what Dockyard starts and stops. It stays yours to remove with your package manager, also after uninstalling Dockyard.", RequiredFlag: "linux-engine"),
+        new("Compose", "Docker Compose", Flag: "compose", Note: "Needs Docker. The dashboard's Compose actions use it."),
+        new("Buildx", "Docker Buildx", Flag: "buildx", Note: "Needs Docker. docker build uses it."),
+        new("App", "Dockyard", RequiredBecause: "it is what runs everything here. Uninstall removes it."),
+        new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard", Note: "Optional. Its package is versioned with Dockyard, so updating it updates both."),
     ];
 
     // The polkit rules folder is closed to normal users, so setup leaves a marker they can see.
@@ -117,8 +119,59 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
         "Compose" => Updates.ParseVersion((await runner.Run("docker", "compose", "version", "--short")).Output),
         "Buildx" => Updates.ParseVersion((await runner.Run("docker", "buildx", "version")).Output),
         "App" => await InstalledAppVersion(),
+        ComponentRules.DashboardId => await InstalledDashboardVersion(),
         _ => null,
     };
+
+    // Asking the old binary would open its window, since it has no --version: it came with the app's version.
+    async Task<Version?> InstalledDashboardVersion()
+    {
+        if (File.Exists(LinuxLayout.Dashboard)) return Updates.ParseVersion((await runner.Run(LinuxLayout.Dashboard, "--version")).Output);
+        return HasDashboard ? await InstalledAppVersion() : null;
+    }
+
+    static string PluginPackage(string? packageManager, string component) => (packageManager, component) switch
+    {
+        ("apt" or "dnf", "Compose") => "docker-compose-plugin",
+        ("apt" or "dnf", "Buildx") => "docker-buildx-plugin",
+        (_, "Compose") => "docker-compose",
+        _ => "docker-buildx",
+    };
+
+    async Task ChangePlugin(Action<string> log, string component, bool installed)
+    {
+        var os = OsRelease.Parse(await File.ReadAllTextAsync("/etc/os-release"));
+        var family = os.PackageManager ?? new[] { os.Id }.Concat(os.IdLike).Select(id => id switch { "arch" => "pacman", "opensuse" or "suse" or "sles" => "zypper", _ => null }).FirstOrDefault(f => f is not null);
+        if (family is null && os.Id.StartsWith("opensuse", StringComparison.Ordinal)) family = "zypper";
+        var package = PluginPackage(family, component);
+        if (installed)
+        {
+            await RunSetup(log, "add-plugin", package);
+            return;
+        }
+        string[] command = family switch
+        {
+            "apt" => ["env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "remove", "-y", "-qq", package],
+            "dnf" => ["dnf", "-y", "-q", "remove", package],
+            "pacman" => ["pacman", "-R", "--noconfirm", package],
+            "zypper" => ["zypper", "--non-interactive", "remove", package],
+            _ => throw new InvalidOperationException($"Remove {package} with your distribution's package manager"),
+        };
+        var r = await RunElevated(command);
+        foreach (var line in Lines(r.Output + r.Error).TakeLast(4)) log("  " + line);
+        if (r.ExitCode != 0) throw new InvalidOperationException($"Removing {package} failed ({r.ExitCode}): {Lines(r.Error).LastOrDefault()}");
+        log($"Removed {package}");
+    }
+
+    public async Task<bool> SetComponent(Action<string> log, string component, bool installed, bool removeData = false)
+    {
+        if (component == ComponentRules.DashboardId) return await SetDashboard(log, installed);
+        if (component is not ("Compose" or "Buildx")) throw new InvalidOperationException($"{component} cannot be changed here");
+        await ChangePlugin(log, component, installed);
+        return false;
+    }
+
+    async Task StopDashboard() => await TryRun("pkill", "-f", "/Dockyard[. ]Dashboard$");
 
     // The wizard runs from a download and can be newer than what is installed.
     async Task<Version?> InstalledAppVersion()
@@ -141,7 +194,7 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
         "Engine" => await Updates.LatestStatic(Updates.LinuxStaticIndex, "tgz"),
         "Compose" => await Updates.LatestGitHub("docker/compose", Updates.LinuxComposeAsset),
         "Buildx" => await Updates.LatestGitHub("docker/buildx", Updates.LinuxBuildxAsset),
-        "App" => await Updates.LatestApp(LinuxLayout.AppAsset),
+        "App" or ComponentRules.DashboardId => await Updates.LatestApp(LinuxLayout.AppAsset),
         _ => null,
     };
 
@@ -161,8 +214,9 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
             foreach (var line in Lines(r.Output + r.Error).TakeLast(6)) log("  " + line);
             if (r.ExitCode != 0) throw new InvalidOperationException($"{command[0]} failed ({r.ExitCode})");
         }
-        if (components.FirstOrDefault(c => c.Component == "App") is { Release: { } app })
+        if (components.FirstOrDefault(c => c.Component is "App" or ComponentRules.DashboardId) is { Release: { } app })
         {
+            await StopDashboard();
             await InstallApp(log, HasDashboard, app.Tag);
             // The tray still holds the single-instance lock, so the new one starts just after this process exits.
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("/bin/sh", ["-c", $"sleep 2; exec \"{LinuxLayout.InstalledExe}\" --tray"]) { UseShellExecute = false })?.Dispose();
@@ -174,10 +228,11 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
     public bool RunsFromInstallLocation => string.Equals(
         Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory), LinuxLayout.InstallDir, StringComparison.Ordinal);
 
-    public bool HasDashboard => File.Exists(LinuxLayout.Dashboard);
+    public bool HasDashboard => File.Exists(LinuxLayout.Dashboard) || File.Exists(LinuxLayout.LegacyDashboard);
 
     public async Task<bool> SetDashboard(Action<string> log, bool installed)
     {
+        await StopDashboard();
         var os = OsRelease.Parse(await File.ReadAllTextAsync("/etc/os-release"));
         if (LinuxLayout.InstallDir == LinuxLayout.HomeDir)
         {
@@ -201,6 +256,7 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
 
     public async Task<bool> Install(Action<string> log, InstallRequest request)
     {
+        if (HasDashboard && !request.Dashboard) await StopDashboard();
         await InstallApp(log, request.Dashboard, tag: null);
         await InstallWithAgent(log);
         if (Environment.UserName == "root")
@@ -415,6 +471,7 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
                 var name = Path.GetFileName(file);
                 if (dashboard || !LinuxLayout.DashboardFiles.Contains(name)) File.Move(file, Path.Combine(LinuxLayout.HomeDir, name), overwrite: true);
             }
+            File.Delete(Path.Combine(LinuxLayout.HomeDir, "Dockyard.Dashboard"));
             if (!dashboard)
                 foreach (var name in LinuxLayout.DashboardFiles) File.Delete(Path.Combine(LinuxLayout.HomeDir, name));
             await File.WriteAllTextAsync(LinuxLayout.VersionFile, Updates.ParseVersion(Path.GetFileName(tarball))?.ToString() ?? "");

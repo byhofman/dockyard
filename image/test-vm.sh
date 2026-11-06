@@ -58,6 +58,10 @@ docker network rm dockyard-e2e >/dev/null
 kill $listener 2>/dev/null || true
 docker run --rm alpine:3.24 nslookup dl-cdn.alpinelinux.org >/dev/null && echo "other names resolve through the host's DNS" || { echo "FAIL: DNS"; exit 1; }
 
+# What only the VM on a Mac otherwise uses goes through libc in a static binary; vsock itself cannot be tried here, and this can.
+printf '{"type":"clock","unixNs":%s000000000}\n' "$(date +%s)" | nc -w 3 127.0.0.1 12377 >/dev/null || true
+sleep 1
+grep -aq 'clock set from host' console.log && echo "the agent reaches libc" || { echo "FAIL: the agent cannot call libc"; grep -a dockyard-agent console.log | tail -20; exit 1; }
 docker run -d --name hostnet --network host alpine:3.24 sh -c 'while :; do printf "HTTP/1.0 200 OK\r\n\r\nfrom-host-network" | nc -l -p 8091 >/dev/null; done' >/dev/null
 sleep 4
 reply="$(printf 'tcp 8091\nGET / HTTP/1.0\r\n\r\n' | nc -w 5 127.0.0.1 12376 | tail -1)"

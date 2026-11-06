@@ -15,8 +15,12 @@ static class Paths
     public static readonly string PluginDir = Path.Combine(DockerDir, "cli-plugins");
     public static readonly string AppDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Dockyard");
     public static readonly string AppExe = Path.Combine(AppDir, "Dockyard.exe");
-    public static readonly string DashboardExe = Path.Combine(AppDir, "Dockyard.Dashboard.exe");
-    public const string DashboardName = "Dockyard.Dashboard";
+    public static readonly string DashboardExe = Path.Combine(AppDir, DashboardProcess + ".exe");
+    public static readonly string LegacyDashboardExe = Path.Combine(AppDir, LegacyDashboardProcess + ".exe");
+    public const string DashboardProcess = "Dockyard Dashboard";
+    // What installs up to v0.2.1 have, running or not.
+    public const string LegacyDashboardProcess = "Dockyard.Dashboard";
+    // The asset keeps its name: scripts and trays already out there ask for it.
     public const string DashboardZipName = "Dockyard.Dashboard.zip";
     public static readonly string DaemonConfigDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "docker", "config");
     public static readonly string UserProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -52,6 +56,8 @@ sealed class Settings
     public string? Distro { get; set; }
     public bool StopOtherOnSwitch { get; set; } = true;
     public bool StartActiveAtLogon { get; set; } = true;
+    // Components removed on purpose, so that rerunning the wizard or updating does not bring them back.
+    public List<string> RemovedComponents { get; set; } = [];
     public string? RegistryMirrors { get; set; }
     public string? InsecureRegistries { get; set; }
     public string? AddressPools { get; set; }

@@ -133,6 +133,20 @@ public sealed class MacInstallTests : IDisposable
     }
 
     [Fact]
+    public void Removing_a_plugin_twice_leaves_another_apps_link_where_it_is()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Symlinks need a privilege on Windows");
+        var link = OtherAppPlugin();
+        MacLayout.SetAsideLinkedPlugin(link, Links);
+        File.WriteAllText(link, "dockyard");
+
+        MacLayout.RemovePlugin(link, Links);
+        MacLayout.RemovePlugin(link, Links);
+
+        Assert.NotNull(new FileInfo(link).LinkTarget);
+    }
+
+    [Fact]
     public void Dockyards_own_plugin_is_just_removed()
     {
         var plugin = Path.Combine(Plugins, "docker-buildx");
@@ -181,8 +195,8 @@ public sealed class MacInstallTests : IDisposable
     public void Dashboard_files_are_the_dashboard_and_its_libraries_only()
     {
         var dir = Directory.CreateTempSubdirectory().FullName;
-        foreach (var name in new[] { "Dockyard", "dockyard-vm", "Dockyard.Dashboard", "libSkiaSharp.dylib" }) File.WriteAllText(Path.Combine(dir, name), "");
-        Assert.Equal(["Dockyard.Dashboard", "libSkiaSharp.dylib"], MacLayout.DashboardFiles(dir).Select(Path.GetFileName).Order());
+        foreach (var name in new[] { "Dockyard", "dockyard-vm", "Dockyard Dashboard", "Dockyard.Dashboard", "libSkiaSharp.dylib" }) File.WriteAllText(Path.Combine(dir, name), "");
+        Assert.Equal(["Dockyard Dashboard", "Dockyard.Dashboard", "libSkiaSharp.dylib"], MacLayout.DashboardFiles(dir).Select(Path.GetFileName).Order());
         Directory.Delete(dir, recursive: true);
         Assert.Empty(MacLayout.DashboardFiles(dir));
     }

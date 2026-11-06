@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Net;
-using System.Net.Sockets;
 using Dockyard.Agent;
 using Dockyard.Engine;
 using Dockyard.Engine.Transport;
@@ -61,17 +60,19 @@ switch (options.Mode)
 }
 services.Add(new HostProxy(dialer, HostProxy.OriginalDestination, log).Run(cts.Token));
 
+// One service failing must end the process, so that init or the loop around it brings all of them back and the reason
+// shows. Waiting for all of them would leave a half-working agent running with its failure unobserved.
 try
 {
-    await Task.WhenAll(services);
-}
-catch (SocketException e)
-{
-    log(e.Message);
-    return 1;
+    await await Task.WhenAny(services);
 }
 catch (OperationCanceledException)
 {
+}
+catch (Exception e)
+{
+    log($"{e.GetType().Name}: {e.Message}");
+    return 1;
 }
 return 0;
 

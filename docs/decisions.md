@@ -2,6 +2,37 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-06: Any component can be removed, except what the rest stands on
+
+The owner asked for every component to be a row with Add and Remove, in the wizard and with `--with` and `--without`.
+
+| Required | Why |
+|---|---|
+| Dockyard | It runs everything; Uninstall is how it goes |
+| Docker CLI (Windows, macOS) | Both engines, Compose and Buildx are used through it. It used to be one row with the Windows engine, so it now has its own row and can be installed from the same zip without the engine |
+| The engine on macOS | It is the only one there |
+| Docker on Linux | Dockyard manages it but does not own it: the packages stay the user's, also after uninstalling Dockyard |
+
+- **The last engine cannot go**, on Windows, where there are two. Dockyard does nothing without one, and Uninstall exists.
+- **Removing an engine keeps its images.** The WSL distro and `ProgramData\\docker` stay, the context goes, and the docker command moves to the engine that is left. Deleting them takes `--remove-data`, for the Linux engine. Silently destroying images because a row was clicked is not worth one button less.
+- **What was removed stays removed** across reruns and updates, in `RemovedComponents`, as the dashboard already did by its files.
+- **A refused silent request exits 2 before anything changes.**
+- **Compose and Buildx being gone is not a broken install:** the dashboard's Compose actions then report the failure, and the row says it uses them.
+
+## 2026-11-06: The dashboard's version is shown and updated on its own, and the release stays one
+
+The dashboard has its own row with versions and **Update**, and one can be newer than the app. It is still built from the same tag: separate release trains would mean a second tag series and asset set for something the same commit always builds. On Linux its package depends on the exact version of the app's, so updating it updates both, and the row says so.
+
+The installed version comes from the file on Windows, and from `--version` on macOS and Linux. A dashboard from before this has no `--version` and would open its window, so it is never asked: it came with the app's version.
+
+## 2026-11-06: The process is called Dockyard Dashboard, and only the published file changed name
+
+What Task Manager's Details tab, Activity Monitor and `ps` show comes from the file name, and Task Manager's Processes tab from the file description, so both changed. The assembly stays `Dockyard.Dashboard`, since `avares://` addresses go by assembly name and a space would have to survive all of them. The release asset also stays `Dockyard.Dashboard.zip`: scripts and trays already out there ask for it by name.
+
+- **Linux truncates:** `/proc/<pid>/comm`, `ps`, `top` show `Dockyard Dashbo`, 15 characters. The kernel does that, and no name of this length avoids it.
+- **The old name is still found and stopped:** wizard, update, uninstall and Remove look for both, and installing removes the old file and whatever the old manifest listed.
+- **A v0.2.1 tray updating itself** runs the old installer code, which unpacks the new name next to the old file. The tray finds either, and the next wizard run removes the old file, because the tray cannot write to Program Files by itself.
+- **Defender exclusions go by path,** so an app update now also adds the new path.
 ## 2026-11-06: The local CA's key stays on the host, and only for dockyard.test
 
 `DOK-16`. A CA in the trust store is a risk to everything the browser trusts, so it is built to be worth little if taken:
@@ -79,6 +110,7 @@ On macOS and in WSL the app renders the engine's `daemon.json` at every start (m
 - **The host is reached through its loopback, not through the VM's NAT gateway.** Most dev servers bind `127.0.0.1` or `::1`, which the gateway cannot reach, and macOS's firewall can block the gateway. iptables redirects to the agent, which reads `SO_ORIGINAL_DST`, opens a vsock connection, and the helper dials loopback on the Mac, IPv4 then IPv6. As on Docker Desktop and OrbStack, this gives containers the host's loopback services; UDP is not carried.
 - **A connection not redirected from the host address is dropped**, and `DOCKYARD-INPUT` drops anything for these addresses that did not come from `lo`, `docker+` or `br-+`, because on a Linux host or mirrored WSL the LAN is one interface away. A container on a bridge renamed by `com.docker.network.bridge.name` does not get these services.
 - **On WSL the app carries the agent, since the image is only imported once.** `Dockyard.exe` embeds a tarball of the agent and scripts and lays it over the distro before each start when its hash changed; `dockyard-update` still only replaces Docker. The agent is a static musl binary so it also runs on a glibc host. It exits with dockerd so it does not keep WSL running. `2375` is refused from containers: through `host.docker.internal` it would be the unauthenticated engine.
+- **With NAT only the gateway reaches Windows**, for services listening beyond loopback and past its firewall. Mirrored networking is what reaches `127.0.0.1` there. It is written after the distro is imported, as in v0.2.1, so it applies from the next WSL start. It is left out on Windows Server: on Server 2025 mirrored mode gave WSL no network interfaces at all and cut Windows off from `127.0.0.1:2375`.
 - **All other names go to whatever `/etc/resolv.conf` says at that moment**, read per query, so a VPN that changes DNS after the engine started takes effect without a restart.
 
 ## 2026-11-06: A window waits for the display instead of catching the crash

@@ -24,11 +24,7 @@ done
 
 has_systemd() { [ -d /run/systemd/system ]; }
 
-install_packages() {
-  if command -v dockerd >/dev/null 2>&1; then
-    echo "Docker is already installed: $(dockerd --version)"
-    return 0
-  fi
+add_docker_repo() {
   case "$family" in
     apt)
       repo=debian
@@ -43,7 +39,6 @@ install_packages() {
       echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/$repo $codename stable" \
         > /etc/apt/sources.list.d/docker.list
       apt-get update -qq
-      apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >/dev/null
       ;;
     dnf)
       repo=rhel
@@ -51,6 +46,22 @@ install_packages() {
       url="https://download.docker.com/linux/$repo/docker-ce.repo"
       dnf -y -q install dnf-plugins-core
       dnf config-manager addrepo --from-repofile="$url" 2>/dev/null || dnf config-manager --add-repo "$url"
+      ;;
+  esac
+}
+
+install_packages() {
+  if command -v dockerd >/dev/null 2>&1; then
+    echo "Docker is already installed: $(dockerd --version)"
+    return 0
+  fi
+  case "$family" in
+    apt)
+      add_docker_repo
+      apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >/dev/null
+      ;;
+    dnf)
+      add_docker_repo
       dnf -y -q install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
       ;;
     pacman) pacman -Sy --noconfirm --needed docker docker-buildx docker-compose ;;
@@ -61,6 +72,25 @@ install_packages() {
       ;;
   esac
   echo "Installed $(dockerd --version)"
+}
+
+# Docker may have come from elsewhere than Docker's repository, which is where these plugins live.
+add_plugin() {
+  case "$family" in
+    apt)
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update -qq || true
+      if ! apt-get install -y -qq "$user" >/dev/null 2>&1; then
+        add_docker_repo
+        apt-get install -y -qq "$user" >/dev/null
+      fi
+      ;;
+    dnf) dnf -y -q install "$user" || { add_docker_repo; dnf -y -q install "$user"; } ;;
+    pacman) pacman -S --noconfirm --needed "$user" ;;
+    zypper) zypper --non-interactive install "$user" ;;
+    *) echo "Add $user with your distribution's package manager" >&2; exit 4 ;;
+  esac
+  echo "Added $user"
 }
 
 # The tray icon needs a StatusNotifierItem host; Ubuntu ships one, other GNOME desktops have it as a package.
@@ -215,6 +245,8 @@ EOF
 
 case "$action" in
   packages) install_packages ;;
+  # $2 is the package here.
+  add-plugin) add_plugin ;;
   trust-ca) trust_ca ;;
   untrust-ca) untrust_ca ;;
   install) install_packages; configure; grant_socket_access; install_tray_host; install_libsecret; install_agent; route_domains; apply_daemon_json ;;

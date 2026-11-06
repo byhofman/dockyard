@@ -37,7 +37,9 @@ public partial class App : Application
         this.args = args;
     }
 
-    static string DashboardExe => Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "Dockyard.Dashboard.exe" : "Dockyard.Dashboard");
+    // The old name counts until the next wizard run replaces it: a tray that updated itself from before the rename can find it there.
+    static readonly string[] DashboardFiles = OperatingSystem.IsWindows() ? ["Dockyard Dashboard.exe", "Dockyard.Dashboard.exe"] : ["Dockyard Dashboard", "Dockyard.Dashboard"];
+    static string DashboardExe => DashboardFiles.Select(f => Path.Combine(AppContext.BaseDirectory, f)).FirstOrDefault(File.Exists) ?? Path.Combine(AppContext.BaseDirectory, DashboardFiles[0]);
     static bool HasDashboard => File.Exists(DashboardExe);
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
@@ -161,7 +163,7 @@ public partial class App : Application
         foreach (var (engine, item) in engineItems)
         {
             var card = vm.EngineCards.First(e => e.Id == engine);
-            if (multiple) item.IsChecked = card.IsActive;
+            if (multiple) { item.IsChecked = card.IsActive; item.IsVisible = card.IsAvailable; }
             else item.Header = card.ToggleText + " engine";
             item.IsEnabled = !vm.IsBusy;
         }

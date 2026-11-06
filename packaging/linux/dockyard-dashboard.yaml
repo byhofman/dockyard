@@ -16,8 +16,8 @@ overrides:
     depends:
       - dockyard = ${VERSION}
 contents:
-  - src: dist/linux/dashboard/Dockyard.Dashboard
-    dst: /usr/lib/dockyard/Dockyard.Dashboard
+  - src: dist/linux/dashboard/Dockyard Dashboard
+    dst: /usr/lib/dockyard/Dockyard Dashboard
     file_info: { mode: 0755 }
   - src: dist/linux/dashboard/libSkiaSharp.so
     dst: /usr/lib/dockyard/libSkiaSharp.so

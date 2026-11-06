@@ -15,11 +15,17 @@
     <DebugType>none</DebugType>
     <StaticExecutable Condition="$(RuntimeIdentifier.StartsWith('linux-musl'))">true</StaticExecutable>
     <StaticOpenSslLinking Condition="$(RuntimeIdentifier.StartsWith('linux-musl'))">true</StaticOpenSslLinking>
+    <!-- Static OpenSSL compiles .NET's own native shim during publish, and MSBuild would fail on clang's warnings about it.
+         TreatWarningsAsErrors above keeps C# warnings fatal. -->
+    <MSBuildTreatWarningsAsErrors>false</MSBuildTreatWarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="Dockyard.Agent.Tests" />
     <ProjectReference Include="..\Dockyard.Engine\Dockyard.Engine.csproj" />
+    <!-- A static executable cannot dlopen, so what it calls in libc has to be linked in: without this vsock and the clock
+         fail at their first call, on the one engine that needs them. -->
+    <DirectPInvoke Include="libc" />
   </ItemGroup>
 
 </Project>

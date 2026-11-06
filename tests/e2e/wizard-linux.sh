@@ -21,7 +21,8 @@ if [ "$container" -eq 1 ]; then
 else
   app_dir=/usr/lib/dockyard
 fi
-dashboard="$app_dir/Dockyard.Dashboard"
+# Either name: the one-liner test runs the release that is out, and the rename reaches it with the next release.
+dash() { for f in "$app_dir/Dockyard Dashboard" "$app_dir/Dockyard.Dashboard"; do [ -e "$f" ] && { echo "$f"; return; }; done; echo "$app_dir/Dockyard Dashboard"; }
 marker=/etc/dockyard/installed
 
 echo "== wrong arguments are refused"
@@ -32,7 +33,7 @@ check "and nothing was installed" missing "$marker"
 echo "== first install, no dashboard"
 run --silent --no-dashboard --no-start
 check "app in place" test -x "$app_dir/Dockyard"
-check "no dashboard" missing "$dashboard"
+check "no dashboard" missing "$(dash)"
 check "setup ran" test -f "$marker"
 check "docker installed" command -v dockerd
 if [ "$container" -eq 0 ]; then
@@ -97,6 +98,8 @@ if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
   [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 http://e2e-web.dockyard.test/)" = 200 ] && ok "and domains keep working next to it" || fail "domain next to a published port 80"
   docker rm -f e2e-published >/dev/null
 
+  echo "  agent RSS $(awk '/VmRSS/{print $2}' /proc/$(pidof dockyard-agent)/status) kB, for the record"
+
   echo "== trusted HTTPS"
   [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 https://e2e-web.dockyard.test/ || true)" = 000 ] && ok "without trusting, no HTTPS" || fail "HTTPS before it was turned on"
   run --silent --no-start --trust-https
@@ -116,23 +119,43 @@ fi
 
 echo "== rerun keeps the choice and the data"
 run --silent --no-start
-check "still no dashboard" missing "$dashboard"
+check "still no dashboard" missing "$(dash)"
 if [ "$container" -eq 0 ]; then
   docker volume inspect dockyard-e2e >/dev/null && ok "marker volume kept" || fail "marker volume gone"
 fi
 
 echo "== add the dashboard"
 run --silent --dashboard --no-start
-check "dashboard added" test -x "$dashboard"
+check "dashboard added" test -x "$(dash)"
 check "with its libraries" test -f "$app_dir/libSkiaSharp.so"
+
+if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
+  echo "== the process name"
+  check "the new file name" test -x "$app_dir/Dockyard Dashboard"
+  check "no old file" missing "$app_dir/Dockyard.Dashboard"
+  echo "  for the record, /proc comm of that file name is 15 characters: $(printf 'Dockyard Dashboard' | cut -c1-15)"
+fi
+
+if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
+  echo "== any component can go and come back, and required ones refuse"
+  run --silent --no-start --without compose
+  # By the package: this runner also has a compose of its own outside any package.
+  if dpkg -s docker-compose-plugin 2>/dev/null | grep -q 'Status: install ok'; then fail "compose is still there"; else ok "compose is gone"; fi
+  run --silent --no-start
+  if dpkg -s docker-compose-plugin 2>/dev/null | grep -q 'Status: install ok'; then fail "a rerun brought compose back"; else ok "it stays gone on a rerun"; fi
+  run --silent --no-start --with compose
+  dpkg -s docker-compose-plugin 2>/dev/null | grep -q 'Status: install ok' && ok "it is back" || fail "compose did not come back"
+  rc=0; run --silent --no-start --without linux-engine >/dev/null 2>&1 || rc=$?
+  [ "$rc" -eq 2 ] && ok "the engine is required here" || fail "--without linux-engine exits $rc"
+fi
 
 echo "== rerun keeps it"
 run --silent --no-start
-check "dashboard kept" test -x "$dashboard"
+check "dashboard kept" test -x "$(dash)"
 
 echo "== remove the dashboard"
 run --silent --no-dashboard --no-start
-check "dashboard removed" missing "$dashboard"
+check "dashboard removed" missing "$(dash)"
 check "app stays" test -x "$app_dir/Dockyard"
 
 echo "== uninstall keeps docker's data"
@@ -156,7 +179,7 @@ fi
 
 echo "== a fresh install gets the dashboard"
 run --silent --no-start
-check "dashboard there" test -x "$dashboard"
+check "dashboard there" test -x "$(dash)"
 
 if [ "$container" -eq 1 ] && [ "$ID" != arch ]; then
   echo "== removed again, silent without root has no way up"

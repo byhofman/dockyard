@@ -10,7 +10,8 @@ $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 $appDir = Join-Path $env:ProgramFiles 'Dockyard'
 $appExe = Join-Path $appDir 'Dockyard.exe'
-$dashboard = Join-Path $appDir 'Dockyard.Dashboard.exe'
+# Either name: the one-liner test runs the release that is out, and the rename reaches it with the next release.
+$dashboard = Join-Path $appDir 'Dockyard*Dashboard.exe'
 $docker = Join-Path $env:ProgramFiles 'Docker\docker.exe'
 
 function Ok($text) { Write-Host "  ok   $text" }
@@ -42,7 +43,20 @@ function Linux-Engine {
         if ($LASTEXITCODE -eq 0) { return }
         Start-Sleep 2
     }
+    Write-Host '--- what WSL says'
+    wsl.exe --version | Write-Host
+    wsl.exe -d dockyard -u root -- sh -c 'ls /sys/class/net; ip -4 addr; pidof dockerd dockyard-agent; netstat -ltn 2>/dev/null | head -20; wget -qO- -T 3 http://127.0.0.1:2375/_ping; echo; cat /etc/docker/daemon.json' | Write-Host
+    Test-NetConnection 127.0.0.1 -Port 2375 | Out-String | Write-Host
     throw 'FAIL the Linux engine did not start'
+}
+
+# What a container printed, from its logs and not through an attached docker run.
+function In-Container($command) {
+    $id = (& $docker --context linux run -d alpine:3.24 sh -c $command | Out-String).Trim()
+    & $docker --context linux wait $id | Out-Null
+    $output = (& $docker --context linux logs $id 2>&1 | Out-String).Trim()
+    & $docker --context linux rm -f $id | Out-Null
+    return $output
 }
 
 Section 'wrong arguments are refused'
@@ -69,7 +83,7 @@ Check 'settings kept' ((Get-Content "$env:APPDATA\Dockyard\settings.json" -Raw) 
 $distros = (wsl.exe -l -q | Out-String) -replace "`0", ''
 Check 'the dockyard distro is there' ($distros -match 'dockyard')
 Check 'docker contexts' ((& $docker context ls -q) -contains 'linux')
-Check 'mirrored networking set' ((Get-Content "$env:USERPROFILE\.wslconfig" -Raw) -match 'networkingMode=mirrored')
+if ($Wizard) { Check 'no mirrored networking on Windows Server, where it cuts the engine off' (-not ((Test-Path "$env:USERPROFILE\.wslconfig") -and ((Get-Content "$env:USERPROFILE\.wslconfig" -Raw) -match 'networkingMode=mirrored'))) }
 
 Section 'the Linux engine works and holds data'
 Linux-Engine
@@ -77,11 +91,14 @@ Linux-Engine
 Check 'marker volume created' ($LASTEXITCODE -eq 0)
 
 if ($Wizard) {
-    Section 'host.docker.internal reaches a service on the Windows loopback'
+    Section 'host.docker.internal reaches a service on Windows'
     Write-Host "WSL interfaces: $((wsl.exe -d dockyard -u root -- ls /sys/class/net | Out-String) -replace "`\s+", ' ')"
     Check 'the agent runs next to the engine' ((wsl.exe -d dockyard -u root -- pidof dockyard-agent | Out-String).Trim().Length -gt 0)
+    # This runner is Windows Server, so WSL has NAT: there only the gateway reaches Windows, past its firewall. On Windows 11
+    # with mirrored networking a service on 127.0.0.1 is reached too, which only a real machine can show.
+    Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
     $service = Start-Job {
-        $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 18080)
+        $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Any, 18080)
         $listener.Start()
         while ($true) {
             $client = $listener.AcceptTcpClient()
@@ -91,12 +108,20 @@ if ($Wizard) {
         }
     }
     Start-Sleep 3
-    $reply = (& $docker --context linux run --rm alpine:3.24 wget -qO- -T 20 http://host.docker.internal:18080/ | Out-String).Trim()
+    $attached = (& $docker --context linux run --rm alpine:3.24 echo attached 2>&1 | Out-String).Trim()
+    Write-Host "docker run prints: '$attached'"
+    $reply = In-Container 'wget -qO- -T 20 http://host.docker.internal:18080/ 2>&1'
+    if ($reply -ne 'from-windows') {
+        Write-Host '--- why not'
+        Write-Host (In-Container 'cat /etc/resolv.conf; nslookup host.docker.internal 2>&1; nc -w 5 198.19.250.254 18080 </dev/null; echo nc=$?')
+        wsl.exe -d dockyard -u root -- sh -c 'gw=$(ip route | awk "/^default/{print \$3}"); echo gw=$gw; wget -qO- -T 5 http://$gw:18080/; echo; ps | grep dockyard-agent | head -3' | Write-Host
+    }
     Check "the service answers (got '$reply')" ($reply -eq 'from-windows')
     Stop-Job $service; Remove-Job $service -Force
-    $engine = (& $docker --context linux run --rm alpine:3.24 sh -c 'wget -qO- -T 5 http://host.docker.internal:2375/version || echo refused' | Out-String).Trim()
+    Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True
+    $engine = In-Container 'wget -qO- -T 5 http://host.docker.internal:2375/version 2>/dev/null || echo refused'
     Check "the engine's own port stays out of reach (got '$engine')" ($engine -eq 'refused')
-    $name = (& $docker --context linux run --rm alpine:3.24 nslookup dl-cdn.alpinelinux.org | Out-String)
+    $name = In-Container 'nslookup dl-cdn.alpinelinux.org 2>&1'
     Check 'other names still resolve' ($name -match 'Address')
 }
 
@@ -177,6 +202,9 @@ if ($Wizard) {
     Get-Process Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
     & $docker --context linux rm -f e2e-web | Out-Null
 
+    Section 'memory of the WSL engine, for the record'
+    wsl.exe -d dockyard -u root -- sh -c 'for n in dockerd containerd dockyard-agent; do for p in $(pidof $n); do echo "$n RSS $(awk "/VmRSS/{print \$2}" /proc/$p/status) kB"; done; done; grep -E "MemTotal|MemAvailable" /proc/meminfo' | Write-Host
+
     Section 'docker login keeps credentials in the Windows credential store'
     Check 'the helper is there' (Test-Path (Join-Path $env:ProgramFiles 'Docker\docker-credential-wincred.exe'))
     Check 'the store is set' ((Get-Content "$env:USERPROFILE\.docker\config.json" -Raw) -match '"credsStore":\s*"wincred"')
@@ -210,10 +238,55 @@ if (-not $running.HasExited) { $running.Kill() }
 Section 'the wizard window adds the skipped dashboard and removes it again'
 Window
 
+if ($Wizard) {
+    Section 'a dashboard from v0.2.1, also running, is stopped and replaced by the new name'
+    $previous = Join-Path (New-Item -ItemType Directory (Join-Path $env:TEMP ([guid]::NewGuid()))) 'Dockyard.exe'
+    Invoke-WebRequest https://github.com/byhofman/dockyard/releases/download/v0.2.1/Dockyard.exe -OutFile $previous
+    $p = Start-Process $previous -ArgumentList '--silent --dashboard --no-start' -Wait -PassThru
+    Check "v0.2.1 installs (exit $($p.ExitCode))" ($p.ExitCode -eq 0)
+    $oldExe = Join-Path $appDir 'Dockyard.Dashboard.exe'
+    Check 'the old name is there to start from' (Test-Path $oldExe)
+    $old = Start-Process $oldExe -PassThru
+    Start-Sleep 5
+    Check 'exit 0' ((Run --silent --no-start) -eq 0)
+    Check 'the old process was stopped' ($old.HasExited)
+    Check 'the old file is gone' (-not (Test-Path $oldExe))
+    $newExe = Join-Path $appDir 'Dockyard Dashboard.exe'
+    Check 'the new file is there' (Test-Path $newExe)
+    Check 'the description Task Manager shows' ((Get-Item $newExe).VersionInfo.FileDescription -eq 'Dockyard Dashboard')
+    $new = Start-Process $newExe -PassThru
+    Start-Sleep 5
+    Check 'the process is called Dockyard Dashboard' ((Get-Process -Id $new.Id).ProcessName -eq 'Dockyard Dashboard')
+    Check 'exit 0 with it running' ((Run --silent --no-dashboard --no-start) -eq 0)
+    Check 'removing it stops it' ($new.HasExited)
+}
+
 Section 'add the dashboard'
 Check 'exit 0' ((Run --silent --dashboard --no-start) -eq 0)
 Check 'dashboard added' (Test-Path $dashboard)
 Check 'with its libraries' (Test-Path (Join-Path $appDir 'dashboard.files'))
+
+if ($Wizard) {
+    Section 'any component can go and come back, and required ones refuse'
+    $compose = Join-Path $env:ProgramFiles 'Docker\cli-plugins\docker-compose.exe'
+    Check 'exit 0 without compose' ((Run --silent --no-start --without compose) -eq 0)
+    Check 'compose is gone' (-not (Test-Path $compose))
+    Check 'exit 0 on a rerun' ((Run --silent --no-start) -eq 0)
+    Check 'it stays gone' (-not (Test-Path $compose))
+    Check 'exit 0 with compose' ((Run --silent --no-start --with compose) -eq 0)
+    Check 'it is back' (Test-Path $compose)
+    Check 'the last engine cannot go' ((Run --silent --no-start --without 'windows-engine,linux-engine') -eq 2)
+    Check 'exit 0 without the Windows engine' ((Run --silent --no-start --without windows-engine) -eq 0)
+    Check 'dockerd is gone' (-not (Test-Path (Join-Path $env:ProgramFiles 'Docker\dockerd.exe')))
+    Check 'the docker command stays' (Test-Path $docker)
+    Check 'the service is gone' (-not (Get-Service docker -ErrorAction SilentlyContinue))
+    Check 'the win context is gone' ((& $docker context ls -q) -notcontains 'win')
+    & $docker --context linux volume inspect dockyard-e2e | Out-Null
+    Check 'the Linux engine still works' ($LASTEXITCODE -eq 0)
+    Check 'exit 0 with the Windows engine' ((Run --silent --no-start --with windows-engine) -eq 0)
+    Check 'dockerd is back' (Test-Path (Join-Path $env:ProgramFiles 'Docker\dockerd.exe'))
+    Check 'the win context is back' ((& $docker context ls -q) -contains 'win')
+}
 
 Section 'rerun keeps it'
 Check 'exit 0' ((Run --silent --no-start) -eq 0)
@@ -244,7 +317,7 @@ if ($Wizard) {
     Check 'and names no longer go to Dockyard' ((Get-DnsClientNrptRule | Where-Object { $_.Namespace -contains '.dockyard.test' }) -eq $null)
 }
 Check 'no credential store left in the config' (-not ((Test-Path "$env:USERPROFILE\.docker\config.json") -and ((Get-Content "$env:USERPROFILE\.docker\config.json" -Raw) -match 'credsStore')))
-Check 'our .wslconfig line is gone' ((Get-Content "$env:USERPROFILE\.wslconfig" -Raw) -notmatch 'networkingMode=mirrored')
+Check 'our .wslconfig line is gone' (-not ((Test-Path "$env:USERPROFILE\.wslconfig") -and ((Get-Content "$env:USERPROFILE\.wslconfig" -Raw) -match 'networkingMode=mirrored')))
 
 Section 'a fresh install gets the dashboard'
 Check 'exit 0' ((Run --silent --no-start) -eq 0)
