@@ -149,6 +149,7 @@ sealed class MainViewModel : Observable
 
     public async Task StartTray()
     {
+        host.StartTrayServices();
         await RefreshState();
         if (settings.StartActiveAtLogon)
             await Run($"Starting {ActiveEngine.Name} engine", () => host.Start(active));
