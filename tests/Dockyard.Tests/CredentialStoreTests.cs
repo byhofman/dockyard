@@ -136,3 +136,32 @@ public sealed class LoopbackForwarderTests
         Assert.Empty(forwarder.Ports);
     }
 }
+
+public sealed class EngineConfigTests
+{
+    [Fact]
+    public void Dockyards_dns_goes_in_and_out_without_touching_other_settings()
+    {
+        var merged = EngineConfig.WithDockyard("""{"log-driver":"journald"}""");
+        Assert.Contains("198.19.250.1", merged);
+        Assert.Contains("journald", merged);
+
+        var back = EngineConfig.WithoutDockyard(merged);
+        Assert.DoesNotContain("198.19.250.1", back);
+        Assert.Contains("journald", back);
+    }
+
+    [Fact]
+    public void Dns_someone_configured_stays()
+    {
+        const string theirs = """{"dns":["10.0.0.2"]}""";
+        Assert.True(EngineConfig.DnsIsSomeoneElses(theirs));
+        Assert.Contains("10.0.0.2", EngineConfig.WithDockyard(theirs));
+        Assert.DoesNotContain("198.19.250.1", EngineConfig.WithDockyard(theirs));
+        Assert.Contains("10.0.0.2", EngineConfig.WithoutDockyard(theirs));
+    }
+
+    [Fact]
+    public void A_broken_file_is_not_overwritten() =>
+        Assert.Throws<InvalidOperationException>(() => EngineConfig.WithDockyard("{broken"));
+}

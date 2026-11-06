@@ -254,11 +254,18 @@ sealed partial class Agent(ITransport transport, Action<string> log)
 
     public static async Task<int> Exit(string file, string[] args)
     {
-        using var p = Process.Start(new ProcessStartInfo(file, args) { UseShellExecute = false, RedirectStandardError = true })!;
-        // A rule that is already there or a command that fails is reported by the exit code, not on the console.
-        await p.StandardError.ReadToEndAsync();
-        await p.WaitForExitAsync();
-        return p.ExitCode;
+        try
+        {
+            using var p = Process.Start(new ProcessStartInfo(file, args) { UseShellExecute = false, RedirectStandardError = true })!;
+            // A rule that is already there or a command that fails is reported by the exit code, not on the console.
+            await p.StandardError.ReadToEndAsync();
+            await p.WaitForExitAsync();
+            return p.ExitCode;
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            return 127;
+        }
     }
 
     [StructLayout(LayoutKind.Sequential)]
