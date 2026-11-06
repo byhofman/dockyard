@@ -123,7 +123,9 @@ final class Headers {
     let lock = NSLock()
     var values: [String] = []
     func append(_ value: String) { lock.lock(); values.append(value); lock.unlock() }
+}
 
+final class HostDialTests: XCTestCase {
     func testHostDialConnectsThePortTheGuestAsksFor() throws {
         var guest: [Int32] = [0, 0]
         var service: [Int32] = [0, 0]
