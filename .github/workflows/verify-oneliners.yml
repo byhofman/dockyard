@@ -1,0 +1,60 @@
+name: verify one-liners
+
+# The published scripts against the published release, as a user runs them. Runs when the scripts change and on
+# demand; a release made with the workflow's own token cannot trigger it, so run it after a release:
+#   gh workflow run verify-oneliners.yml
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['install.ps1', 'install.sh', 'install-mac.sh', 'tests/e2e/**', 'tests/oneliners/**']
+  pull_request:
+    paths: ['install.ps1', 'install.sh', 'install-mac.sh', 'tests/e2e/**', 'tests/oneliners/**']
+
+env:
+  # Scripts as published for this commit: raw.githubusercontent.com serves a commit as it serves main.
+  RAW: https://raw.githubusercontent.com/byhofman/dockyard/${{ github.event.pull_request.head.sha || github.sha }}
+  DOCKYARD_GITHUB_TOKEN: ${{ github.token }}
+
+jobs:
+  scripts-only-fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh tests/oneliners/oneliners.sh
+
+  scripts-only-fetch-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - shell: pwsh
+        run: ./tests/oneliners/oneliner.ps1
+      - name: Windows PowerShell 5.1, which is what most people have
+        shell: powershell
+        run: ./tests/oneliners/oneliner.ps1
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: The one-liner, on a Windows runner with WSL 2, starting from v0.1.0
+        shell: pwsh
+        run: ./tests/e2e/wizard-windows.ps1 -OneLiner "$env:RAW/install.ps1"
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: The one-liner, with systemd and sudo
+        run: ONELINER="$RAW/install.sh" sh tests/e2e/wizard-linux.sh
+
+      - name: The one-liner, without a display, on other distributions
+        run: |
+          sudo systemctl start docker.socket
+          for image in fedora:43 archlinux:latest debian:13; do
+            echo "::group::$image"
+            sudo docker run --rm -e DOCKYARD_GITHUB_TOKEN -e ONELINER="$RAW/install.sh" -v "$PWD/tests/e2e:/e2e:ro" "$image" sh -c '
+              command -v curl >/dev/null || { command -v apt-get >/dev/null && apt-get update -qq && apt-get install -y -qq curl ca-certificates >/dev/null; }
+              sh /e2e/wizard-linux.sh --container'
+            echo "::endgroup::"
+          done
