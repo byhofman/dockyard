@@ -65,9 +65,18 @@ public sealed class DomainTests
         var query = new List<byte> { 0, 7, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0 };
         foreach (var label in "gone.dockyard.test".Split('.')) { query.Add((byte)label.Length); query.AddRange(System.Text.Encoding.ASCII.GetBytes(label)); }
         query.AddRange([0, 0, 1, 0, 1]);
-        await udp.SendAsync(query.ToArray(), ct);
         var buffer = new byte[512];
-        await udp.ReceiveAsync(buffer, ct);
+        // Windows reports a datagram that found no socket receiving yet as a reset of this one.
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                await udp.SendAsync(query.ToArray(), ct);
+                await udp.ReceiveAsync(buffer, ct);
+                break;
+            }
+            catch (SocketException e) when (e.SocketErrorCode == SocketError.ConnectionReset && attempt < 20) { await Task.Delay(50, ct); }
+        }
         Assert.Equal(DnsServer.NameError, buffer[3] & 0x0F);
 
         await cts.CancelAsync();

@@ -81,6 +81,10 @@ if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
   run --silent --no-start >/dev/null
   if grep -q 18888 /etc/docker/daemon.json; then fail "the proxy stayed after the machine stopped using it"; else ok "gone once the machine stops using it"; fi
   sudo systemctl stop tinyproxy || true
+  # This section restarts the engine more often in a minute than systemd allows; nobody else does that.
+  sudo systemctl reset-failed docker.service docker.socket || true
+  sudo systemctl start docker.socket
+  docker version >/dev/null || fail "engine: $(systemctl status --no-pager docker.socket docker.service 2>&1 | tail -20)"
   docker image rm busybox:1.37 >/dev/null 2>&1 || true
 fi
 
