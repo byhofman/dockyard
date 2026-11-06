@@ -10,7 +10,7 @@ namespace Dockyard.Core;
 static class Elevation
 {
     public const int RebootExitCode = 3010;
-    public static readonly string[] Modes = ["--machine-install", "--machine-update", "--machine-uninstall", "--machine-dashboard"];
+    public static readonly string[] Modes = ["--machine-install", "--machine-update", "--machine-uninstall", "--machine-dashboard", "--machine-component"];
 
     public static bool IsWorker(string[] args) => args.Any(a => Modes.Contains(a));
 
@@ -101,12 +101,23 @@ static class Elevation
                     MachineSetup.Update(Log, Enum.Parse<Component>(name), Opt("--source"), keepPid).GetAwaiter().GetResult();
                 return 0;
             }
+            if (Opt("--machine-component") is { } component)
+            {
+                var change = args.SkipWhile(a => a != "--machine-component").Skip(2).First();
+                MachineSetup.SetComponent(Log, Enum.Parse<Component>(component), change == "add", Arg("--user-sid"), Arg("--user-name")).GetAwaiter().GetResult();
+                return 0;
+            }
+            if (Opt("--machine-dashboard") == "update")
+            {
+                MachineSetup.UpdateDashboard(Log, Arg("--source-dir"), keepPid).GetAwaiter().GetResult();
+                return 0;
+            }
             if (Opt("--machine-dashboard") is { } dashboard)
             {
                 MachineSetup.SetDashboard(Log, dashboard == "add", keepPid).GetAwaiter().GetResult();
                 return 0;
             }
-            var reboot = MachineSetup.Install(Log, Arg("--user-sid"), Arg("--user-name"), keepPid, args.Contains("--engine-only")).GetAwaiter().GetResult();
+            var reboot = MachineSetup.Install(Log, Arg("--user-sid"), Arg("--user-name"), keepPid, args.Contains("--engine-only"), Opt("--without")?.Split(',') ?? []).GetAwaiter().GetResult();
             return reboot ? RebootExitCode : 0;
         }
         catch (Exception ex)

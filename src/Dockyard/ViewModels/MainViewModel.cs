@@ -20,7 +20,6 @@ sealed class MainViewModel : Observable
     string status = "Ready";
     bool isSetupMode;
     bool isInstalled;
-    bool includeDashboard;
     bool removeData;
     bool needsReboot;
     string installedVersion = "–";
@@ -31,7 +30,6 @@ sealed class MainViewModel : Observable
     {
         this.host = host;
         this.options = options ?? new SetupOptions();
-        includeDashboard = this.options.Dashboard ?? true;
         isSetupMode = setupMode;
         active = host.Engines[0].Id;
 
@@ -41,20 +39,26 @@ sealed class MainViewModel : Observable
             UseCommand = Cmd(() => Switch(e.Id)),
         }).ToList();
 
-        foreach (var c in host.Components)
+        var catalog = host.Components.Any(c => c.Id == ComponentRules.DashboardId)
+            ? host.Components
+            : [.. host.Components, new ComponentInfo(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard")];
+        foreach (var c in catalog)
         {
             ComponentViewModel? item = null;
-            item = new ComponentViewModel(c) { UpdateCommand = Cmd(() => UpdateComponents([item!]), () => item!.IsAvailable) };
+            item = new ComponentViewModel(c)
+            {
+                UpdateCommand = Cmd(() => UpdateComponents([item!]), () => item!.IsAvailable),
+                AddCommand = Cmd(() => SetComponent(item!, true)),
+                RemoveCommand = Cmd(() => SetComponent(item!, false)),
+            };
             Components.Add(item);
         }
-
-        Dashboard = new ComponentViewModel(new ComponentInfo(OptionalComponents.Dashboard, "Dashboard"))
-        {
-            UpdateCommand = Cmd(() => Task.CompletedTask, () => false),
-            AddCommand = Cmd(() => SetDashboard(true)),
-            RemoveCommand = Cmd(() => SetDashboard(false)),
-        };
-        Components.Add(Dashboard);
+        Dashboard = Components.First(c => c.Id == ComponentRules.DashboardId);
+        // What the command line already chose is what the first install's boxes start from.
+        Dashboard.Include = this.options.Dashboard ?? true;
+        foreach (var c in Components.Where(c => c.Info.Flag is { } flag && this.options.Without.Contains(flag))) c.Include = false;
+        // Until a check says otherwise, which automatic checks skip for an engine that is stopped.
+        foreach (var c in Components) c.IsPresent = !settings.RemovedComponents.Contains(c.Id);
         RefreshDashboard();
 
         CheckUpdatesCommand = Cmd(() => Run("Checking for updates", () => CheckUpdates(all: true)));
@@ -81,7 +85,9 @@ sealed class MainViewModel : Observable
     public Command RebootCommand { get; }
     public ComponentViewModel Dashboard { get; }
 
-    public bool IncludeDashboard { get => includeDashboard; set => Set(ref includeDashboard, value); }
+    public bool IncludeDashboard { get => Dashboard.Include; set { Dashboard.Include = value; Raise(nameof(IncludeDashboard)); } }
+    public IEnumerable<ComponentViewModel> OptionalChoices => Components.Where(c => c.IsOptional);
+    public string RequiredSummary => string.Join("\n", Components.Where(c => c.Info.RequiredBecause is not null).Select(c => $"{c.Title}: {c.Info.RequiredBecause}"));
     public bool RemoveData { get => removeData; set => Set(ref removeData, value); }
     public bool HasDashboard => host.HasDashboard;
     public bool NeedsReboot { get => needsReboot; private set => Set(ref needsReboot, value); }
@@ -171,7 +177,13 @@ sealed class MainViewModel : Observable
         if (IsInstalled) await Run("Checking for updates", () => CheckUpdates(all: false));
     }
 
-    void RefreshDashboard() => Dashboard.State = host.HasDashboard ? UpdateState.OptionalInstalled : UpdateState.OptionalAbsent;
+    // Its version comes from the update check; whether it is there at all is known without one, as soon as the window opens.
+    void RefreshDashboard()
+    {
+        Dashboard.IsPresent = host.HasDashboard;
+        if (Dashboard.State is UpdateState.Unknown or UpdateState.OptionalInstalled or UpdateState.OptionalAbsent || !Dashboard.IsPresent)
+            Dashboard.State = host.HasDashboard ? UpdateState.OptionalInstalled : UpdateState.OptionalAbsent;
+    }
 
     public async Task OnWindowShown()
     {
@@ -212,6 +224,7 @@ sealed class MainViewModel : Observable
         active = host.ActiveEngine();
         foreach (var e in EngineCards) e.IsActive = e.Id == active;
         RefreshDashboard();
+        foreach (var e in EngineCards) e.IsAvailable = e.Info.ComponentId is not { } id || !settings.RemovedComponents.Contains(id);
         Raise(nameof(Active), nameof(ActiveEngine));
         StateChanged?.Invoke();
     }
@@ -219,7 +232,6 @@ sealed class MainViewModel : Observable
     async Task CheckUpdates(bool all)
     {
         var targets = Components
-            .Where(c => c != Dashboard)
             .Where(c => all || c.Info.CheckNeedsEngine is not { } needs || EngineCards.Any(e => e.Id == needs && e.IsRunning))
             .ToList();
         foreach (var c in targets) c.State = UpdateState.Checking;
@@ -238,11 +250,13 @@ sealed class MainViewModel : Observable
             var installed = await host.Installed(c.Id);
             c.Installed = installed?.ToString() ?? "–";
             if (c.Id == nameof(Component.App)) InstalledVersion = c.Installed;
+            c.IsPresent = c == Dashboard ? host.HasDashboard : installed is not null;
             var latest = await host.Latest(c.Id);
             c.LatestRelease = latest;
             c.Latest = latest?.Version.ToString() ?? "–";
             c.Error = null;
-            c.State = installed is null ? UpdateState.NotInstalled
+            c.State = !c.IsPresent && c.IsOptional ? UpdateState.OptionalAbsent
+                : installed is null ? c.IsOptional ? UpdateState.OptionalInstalled : UpdateState.NotInstalled
                 : latest is null ? UpdateState.NoRelease
                 : latest.Version > installed ? UpdateState.Available
                 : UpdateState.UpToDate;
@@ -281,26 +295,57 @@ sealed class MainViewModel : Observable
     async Task InstallCore()
     {
         var dashboard = IsInstalled ? DashboardChoice.Resolve(options.Dashboard, true, host.HasDashboard, host.RunsFromInstallLocation) : IncludeDashboard;
-        var reboot = await host.Install(Log, new InstallRequest(dashboard));
+        if (!IsInstalled)
+        {
+            var left = Components.Where(c => c.IsOptional && !c.Include && c != Dashboard).Select(c => c.Id).Order().ToList();
+            if (ComponentRules.Problems(host.Components, [], [], left) is { Count: > 0 } problems) throw new InvalidOperationException(problems[0]);
+            if (!left.SequenceEqual(settings.RemovedComponents))
+            {
+                settings.RemovedComponents = left;
+                settings.Save();
+            }
+        }
+        var reboot = await host.Install(Log, new InstallRequest(dashboard) { Without = settings.RemovedComponents });
         IsInstalled = true;
         NeedsReboot = reboot;
         RefreshDashboard();
         if (!reboot && options.Start) host.StartApp();
         Log(host.DoneMessage(reboot));
         Status = reboot ? "Restart to finish" : "Installed";
-        foreach (var c in Components.Where(c => c != Dashboard)) await Check(c);
+        foreach (var c in Components) await Check(c);
     }
 
-    Task SetDashboard(bool installed) => Run(installed ? "Adding the dashboard" : "Removing the dashboard", async () =>
+    // Rules first: what is required, or the last engine, is refused with the reason and nothing changes.
+    async Task SetComponent(ComponentViewModel item, bool installed)
     {
-        if (await host.SetDashboard(Log, installed))
+        if (!installed)
         {
-            ShutdownRequested?.Invoke();
-            return;
+            var present = Components.Where(c => c.IsPresent).Select(c => c.Id).ToHashSet();
+            if (ComponentRules.WhyNotRemovable(Components.Select(c => c.Info).ToList(), item.Id, present) is { } why)
+            {
+                Log(why);
+                Status = why;
+                return;
+            }
         }
-        RefreshDashboard();
-        Raise(nameof(HasDashboard));
-    });
+        await Run($"{(installed ? "Adding" : "Removing")} {item.Title}", async () =>
+        {
+            if (await host.SetComponent(Log, item.Id, installed))
+            {
+                ShutdownRequested?.Invoke();
+                return;
+            }
+            if (item != Dashboard)
+            {
+                if (installed) settings.RemovedComponents.Remove(item.Id);
+                else if (!settings.RemovedComponents.Contains(item.Id)) settings.RemovedComponents.Add(item.Id);
+                settings.Save();
+            }
+            await Check(item);
+            RefreshDashboard();
+            Raise(nameof(HasDashboard));
+        });
+    }
 
     Task Uninstall() => Run("Uninstalling", async () =>
     {

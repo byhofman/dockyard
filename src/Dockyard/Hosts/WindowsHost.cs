@@ -19,17 +19,19 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
 
     public IReadOnlyList<EngineInfo> Engines { get; } =
     [
-        new(Linux, "Linux", "Linux containers", $"WSL distro '{WslDistro.DefaultName}'", "linux", Paths.LinuxHost),
-        new(Windows, "Windows", "Windows containers", "ltsc2025 · process isolation", "win", Paths.WindowsHost),
+        new(Linux, "Linux", "Linux containers", $"WSL distro '{WslDistro.DefaultName}'", "linux", Paths.LinuxHost, nameof(Component.LinuxEngine)),
+        new(Windows, "Windows", "Windows containers", "ltsc2025 · process isolation", "win", Paths.WindowsHost, nameof(Component.Engine)),
     ];
 
     public IReadOnlyList<ComponentInfo> Components { get; } =
     [
-        new(nameof(Component.Engine), Updates.Title(Component.Engine)),
-        new(nameof(Component.Compose), Updates.Title(Component.Compose)),
-        new(nameof(Component.Buildx), Updates.Title(Component.Buildx)),
-        new(nameof(Component.LinuxEngine), Updates.Title(Component.LinuxEngine), CheckNeedsEngine: Linux),
-        new(nameof(Component.App), Updates.Title(Component.App)),
+        new(nameof(Component.Cli), Updates.Title(Component.Cli), RequiredBecause: "both engines, Compose and Buildx are used through it.", RequiredFlag: "cli"),
+        new(nameof(Component.Engine), Updates.Title(Component.Engine), Flag: "windows-engine", Note: "Windows containers. Its images stay when you remove it. One engine has to stay.", IsEngine: true),
+        new(nameof(Component.LinuxEngine), Updates.Title(Component.LinuxEngine), CheckNeedsEngine: Linux, Flag: "linux-engine", Note: "Linux containers. Its images stay when you remove it. One engine has to stay.", IsEngine: true),
+        new(nameof(Component.Compose), Updates.Title(Component.Compose), Flag: "compose", Note: "Needs the Docker CLI. The dashboard's Compose actions use it."),
+        new(nameof(Component.Buildx), Updates.Title(Component.Buildx), Flag: "buildx", Note: "Needs the Docker CLI. docker build uses it."),
+        new(nameof(Component.App), Updates.Title(Component.App), RequiredBecause: "it is what runs everything here. Uninstall removes it."),
+        new(nameof(Component.Dashboard), Updates.Title(Component.Dashboard), Flag: "dashboard", Note: "Optional. Opens from the tray."),
     ];
 
     public bool IsInstalled => File.Exists(Paths.AppExe);
@@ -58,12 +60,15 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
     {
         var parsed = components.Select(c => (Component: Enum.Parse<Component>(c.Component), c.Release)).ToList();
 
-        var machine = parsed.Where(c => c.Component is Component.Engine or Component.Compose or Component.Buildx).ToList();
+        var machine = parsed.Where(c => c.Component is Component.Engine or Component.Cli or Component.Compose or Component.Buildx).ToList();
         if (machine.Count > 0)
             await Elevation.Run(log, "--machine-update", string.Join(',', machine.Select(m => m.Component)));
 
         if (parsed.FirstOrDefault(c => c.Component == Component.LinuxEngine) is { Release: { } linux })
             await UpdateLinuxEngine(log, linux);
+
+        if (parsed.FirstOrDefault(c => c.Component == Component.Dashboard) is { Release: { } dashboard })
+            await UpdateDashboard(log, dashboard);
 
         if (parsed.FirstOrDefault(c => c.Component == Component.App) is { Release: { } app })
         {
@@ -73,6 +78,52 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
             log("Restarting Dockyard");
             return true;
         }
+        return false;
+    }
+
+    async Task UpdateDashboard(Action<string> log, Release release)
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
+        try
+        {
+            log($"Downloading the dashboard {release.Tag}");
+            await Updates.DownloadReleaseAsset(Paths.DashboardZipName, dir, tag: release.Tag);
+            if (Elevation.IsElevated) await MachineSetup.UpdateDashboard(log, dir, Environment.ProcessId);
+            else await Elevation.Run(log, "--machine-dashboard", "update", "--source-dir", dir);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    public async Task<bool> SetComponent(Action<string> log, string component, bool installed, bool removeData = false)
+    {
+        switch (component)
+        {
+            case nameof(Component.Dashboard):
+                return await SetDashboard(log, installed);
+            case nameof(Component.LinuxEngine):
+                if (installed)
+                {
+                    await UserSetup.EnableLinuxEngine(log);
+                    return false;
+                }
+                await StopLinux();
+                await UserSetup.DisableLinuxEngine(log, removeData);
+                return false;
+            case nameof(Component.Engine) when !installed:
+                await UserSetup.RemoveContext("win", "linux", log);
+                break;
+        }
+        var change = installed ? "add" : "remove";
+        if (Elevation.IsElevated)
+        {
+            var (sid, name) = Elevation.CurrentUser;
+            await MachineSetup.SetComponent(log, Enum.Parse<Component>(component), installed, sid, name);
+        }
+        else await Elevation.Run(log, "--machine-component", component, change);
+        if (component == nameof(Component.Engine) && installed) await UserSetup.AddContext("win", Paths.WindowsHost);
         return false;
     }
 
@@ -90,12 +141,13 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
     public async Task<bool> Install(Action<string> log, InstallRequest request)
     {
         log("Administrator step");
-        var reboot = await MachineInstall(log, request.Dashboard);
+        var reboot = await MachineInstall(log, request.Dashboard, request.Without);
         log("User step");
-        var hadDistro = await distro.Exists();
+        var withLinux = !request.Without.Contains(nameof(Component.LinuxEngine));
+        var hadDistro = withLinux && await distro.Exists();
         try
         {
-            await UserSetup.Install(log, request.Image);
+            await UserSetup.Install(log, request.Image, request.Without);
         }
         catch (Exception ex) when (reboot)
         {
@@ -130,12 +182,15 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
         else await Elevation.Run(log, "--machine-uninstall");
     }
 
-    static async Task<bool> MachineInstall(Action<string> log, bool dashboard)
+    static async Task<bool> MachineInstall(Action<string> log, bool dashboard, IReadOnlyCollection<string> without)
     {
         if (!Elevation.IsElevated)
-            return dashboard ? await Elevation.Run(log, "--machine-install") : await Elevation.Run(log, "--machine-install", "--engine-only");
+        {
+            string[] extra = [.. dashboard ? Array.Empty<string>() : ["--engine-only"], .. without.Count > 0 ? new[] { "--without", string.Join(',', without) } : []];
+            return await Elevation.Run(log, "--machine-install", extra);
+        }
         var (sid, name) = Elevation.CurrentUser;
-        return await MachineSetup.Install(log, sid, name, Environment.ProcessId, engineOnly: !dashboard);
+        return await MachineSetup.Install(log, sid, name, Environment.ProcessId, engineOnly: !dashboard, without);
     }
 
     async Task UpdateLinuxEngineIfNewer(Action<string> log)

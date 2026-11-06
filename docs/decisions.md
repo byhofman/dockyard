@@ -2,6 +2,38 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-06: Any component can be removed, except what the rest stands on
+
+The owner asked for every component to be a row with Add and Remove, in the wizard and with `--with` and `--without`.
+
+| Required | Why |
+|---|---|
+| Dockyard | It runs everything; Uninstall is how it goes |
+| Docker CLI (Windows, macOS) | Both engines, Compose and Buildx are used through it. It used to be one row with the Windows engine, so it now has its own row and can be installed from the same zip without the engine |
+| The engine on macOS | It is the only one there |
+| Docker on Linux | Dockyard manages it but does not own it: the packages stay the user's, also after uninstalling Dockyard |
+
+- **The last engine cannot go**, on Windows, where there are two. Dockyard does nothing without one, and Uninstall exists.
+- **Removing an engine keeps its images.** The WSL distro and `ProgramData\\docker` stay, the context goes, and the docker command moves to the engine that is left. Deleting them takes `--remove-data`, for the Linux engine. Silently destroying images because a row was clicked is not worth one button less.
+- **What was removed stays removed** across reruns and updates, in `RemovedComponents`, as the dashboard already did by its files.
+- **A refused silent request exits 2 before anything changes.**
+- **Compose and Buildx being gone is not a broken install:** the dashboard's Compose actions then report the failure, and the row says it uses them.
+
+## 2026-11-06: The dashboard's version is shown and updated on its own, and the release stays one
+
+The dashboard has its own row with versions and **Update**, and one can be newer than the app. It is still built from the same tag: separate release trains would mean a second tag series and asset set for something the same commit always builds. On Linux its package depends on the exact version of the app's, so updating it updates both, and the row says so.
+
+The installed version comes from the file on Windows, and from `--version` on macOS and Linux. A dashboard from before this has no `--version` and would open its window, so it is never asked: it came with the app's version.
+
+## 2026-11-06: The process is called Dockyard Dashboard, and only the published file changed name
+
+What Task Manager's Details tab, Activity Monitor and `ps` show comes from the file name, and Task Manager's Processes tab from the file description, so both changed. The assembly stays `Dockyard.Dashboard`, since `avares://` addresses go by assembly name and a space would have to survive all of them. The release asset also stays `Dockyard.Dashboard.zip`: scripts and trays already out there ask for it by name.
+
+- **Linux truncates:** `/proc/<pid>/comm`, `ps`, `top` show `Dockyard Dashbo`, 15 characters. The kernel does that, and no name of this length avoids it.
+- **The old name is still found and stopped:** wizard, update, uninstall and Remove look for both, and installing removes the old file and whatever the old manifest listed.
+- **A v0.2.1 tray updating itself** runs the old installer code, which unpacks the new name next to the old file. The tray finds either, and the next wizard run removes the old file, because the tray cannot write to Program Files by itself.
+- **Defender exclusions go by path,** so an app update now also adds the new path.
+
 ## 2026-11-06: Host and name services live in dockyard-agent, on addresses only the engine's Linux has
 
 `host.docker.internal` works without `--add-host` by making the agent the DNS server of every container (daemon.json `dns`), which also gives one place for domains later. The other options were dnsmasq, one more process and config file for no gain, or `--add-host` at each `docker run`, which is not automatic.

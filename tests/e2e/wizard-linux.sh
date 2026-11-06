@@ -67,6 +67,19 @@ if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
   echo "  for the record, /proc comm of that file name is 15 characters: $(printf 'Dockyard Dashboard' | cut -c1-15)"
 fi
 
+if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
+  echo "== any component can go and come back, and required ones refuse"
+  run --silent --no-start --without compose
+  # By the package: this runner also has a compose of its own outside any package.
+  if dpkg -s docker-compose-plugin 2>/dev/null | grep -q 'Status: install ok'; then fail "compose is still there"; else ok "compose is gone"; fi
+  run --silent --no-start
+  if dpkg -s docker-compose-plugin 2>/dev/null | grep -q 'Status: install ok'; then fail "a rerun brought compose back"; else ok "it stays gone on a rerun"; fi
+  run --silent --no-start --with compose
+  dpkg -s docker-compose-plugin 2>/dev/null | grep -q 'Status: install ok' && ok "it is back" || fail "compose did not come back"
+  rc=0; run --silent --no-start --without linux-engine >/dev/null 2>&1 || rc=$?
+  [ "$rc" -eq 2 ] && ok "the engine is required here" || fail "--without linux-engine exits $rc"
+fi
+
 echo "== rerun keeps it"
 run --silent --no-start
 check "dashboard kept" test -x "$(dash)"

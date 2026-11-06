@@ -156,7 +156,7 @@ public partial class App : Application
         foreach (var (engine, item) in engineItems)
         {
             var card = vm.EngineCards.First(e => e.Id == engine);
-            if (multiple) item.IsChecked = card.IsActive;
+            if (multiple) { item.IsChecked = card.IsActive; item.IsVisible = card.IsAvailable; }
             else item.Header = card.ToggleText + " engine";
             item.IsEnabled = !vm.IsBusy;
         }

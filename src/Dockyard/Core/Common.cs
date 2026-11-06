@@ -52,6 +52,8 @@ sealed class Settings
     public string? Distro { get; set; }
     public bool StopOtherOnSwitch { get; set; } = true;
     public bool StartActiveAtLogon { get; set; } = true;
+    // Components removed on purpose, so that rerunning the wizard or updating does not bring them back.
+    public List<string> RemovedComponents { get; set; } = [];
 
     public static Settings Load()
     {

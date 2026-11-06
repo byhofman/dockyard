@@ -133,6 +133,20 @@ public sealed class MacInstallTests : IDisposable
     }
 
     [Fact]
+    public void Removing_a_plugin_twice_leaves_another_apps_link_where_it_is()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Symlinks need a privilege on Windows");
+        var link = OtherAppPlugin();
+        MacLayout.SetAsideLinkedPlugin(link, Links);
+        File.WriteAllText(link, "dockyard");
+
+        MacLayout.RemovePlugin(link, Links);
+        MacLayout.RemovePlugin(link, Links);
+
+        Assert.NotNull(new FileInfo(link).LinkTarget);
+    }
+
+    [Fact]
     public void Dockyards_own_plugin_is_just_removed()
     {
         var plugin = Path.Combine(Plugins, "docker-buildx");
