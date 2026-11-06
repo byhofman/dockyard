@@ -48,6 +48,24 @@ if [ "$container" -eq 0 ]; then
   ok "marker volume created"
 fi
 
+if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
+  echo "== host.docker.internal reaches a service on this machine's loopback"
+  grep -q 198.19.250.1 /etc/docker/daemon.json && ok "daemon.json names the agent" || fail "daemon.json: $(cat /etc/docker/daemon.json)"
+  docker version >/dev/null
+  sleep 2
+  systemctl is-active --quiet dockyard-agent.service && ok "the agent runs with the engine" || fail "agent: $(systemctl status --no-pager dockyard-agent.service 2>&1 | tail -5)"
+  d="$(mktemp -d)"; echo from-the-host > "$d/marker"
+  python3 -m http.server 18081 --bind 127.0.0.1 -d "$d" >/dev/null 2>&1 &
+  service=$!
+  sleep 1
+  for args in "" "--network host"; do
+    reply="$(docker run --rm $args alpine:3.24 wget -qO- -T 15 http://host.docker.internal:18081/marker || true)"
+    [ "$reply" = from-the-host ] && ok "reached (${args:-default network})" || fail "host.docker.internal with '$args': '$reply'"
+  done
+  kill "$service"; rm -rf "$d"
+  docker run --rm alpine:3.24 nslookup dl-cdn.alpinelinux.org >/dev/null && ok "other names still resolve" || fail "DNS"
+fi
+
 echo "== rerun keeps the choice and the data"
 run --silent --no-start
 check "still no dashboard" missing "$(dash)"
@@ -93,6 +111,10 @@ echo "== uninstall keeps docker's data"
 run --silent --uninstall
 check "app removed" missing "$app_dir/Dockyard"
 check "setup undone" missing "$marker"
+if [ "$container" -eq 0 ]; then
+  check "the agent is gone" missing /etc/systemd/system/dockyard-agent.service
+  if [ -f /etc/docker/daemon.json ] && grep -q 198.19.250.1 /etc/docker/daemon.json; then fail "daemon.json still names the agent"; else ok "daemon.json no longer names the agent"; fi
+fi
 if [ "$container" -eq 0 ]; then
   sudo systemctl reset-failed docker.socket docker.service || true
   sudo systemctl restart docker.socket docker.service || sudo systemctl status --no-pager docker.socket docker.service || true

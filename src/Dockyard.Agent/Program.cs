@@ -15,12 +15,13 @@ IHostDialer dialer = options.Mode switch
     AgentMode.Vm => new VsockHostDialer(),
     // QEMU's user networking puts the machine that started the VM at this address.
     AgentMode.TcpTest => new TcpHostDialer(System.Net.IPAddress.Parse("10.0.2.2")),
+    AgentMode.Host => new TcpHostDialer(System.Net.IPAddress.Loopback, new HashSet<int> { GuestAddresses.HostProxyPort }),
     _ => new TcpHostDialer(WslHost.Address(Directory.Exists("/sys/class/net/loopback0"), File.ReadAllText("/proc/net/route")), WslHost.Refused),
 };
 var hostProxy = new HostProxy(dialer, HostProxy.OriginalDestination, log);
 List<Task> services = [dns.Run(cts.Token), hostProxy.Run(cts.Token)];
 if (options.Mode == AgentMode.Wsl) services.Add(ExitWithEngine());
-else services.Add(new Agent(options.Mode == AgentMode.Vm ? new VsockTransport() : new TcpTransport(), log).Run(cts.Token));
+else if (options.Mode != AgentMode.Host) services.Add(new Agent(options.Mode == AgentMode.Vm ? new VsockTransport() : new TcpTransport(), log).Run(cts.Token));
 
 // One service failing must end the process, so that init or the loop around it brings all of them back and the reason
 // shows. Waiting for all of them would leave a half-working agent running with its failure unobserved.
