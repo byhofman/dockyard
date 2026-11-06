@@ -22,6 +22,12 @@
         <TextBlock Classes="muted mono" Text="{Binding Item.ShortId}" VerticalAlignment="Center" />
       </StackPanel>
 
+      <Grid ColumnDefinitions="*,Auto,Auto" IsVisible="{Binding HasDomain}" Margin="0,2,0,0">
+        <Button Classes="link" Content="{Binding DomainUrl}" Command="{Binding OpenDomainCommand}" HorizontalAlignment="Left" ToolTip.Tip="{Binding DomainPortNote}" />
+        <TextBox Grid.Column="1" Classes="mono" Width="74" PlaceholderText="port" Text="{Binding DomainPort}" ToolTip.Tip="{Binding DomainPortNote}" VerticalAlignment="Center" />
+        <Button Grid.Column="2" Content="Set" Margin="6,0,0,0" Command="{Binding ApplyDomainPortCommand}" ToolTip.Tip="The port this name goes to" />
+      </Grid>
+
       <WrapPanel Margin="0,4,0,0" ItemSpacing="6" LineSpacing="6">
         <Button Command="{Binding Actions.ToggleCommand}" CommandParameter="{Binding Item}" ToolTip.Tip="Start or stop (S)">
           <StackPanel Classes="label">

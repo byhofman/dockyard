@@ -11,6 +11,17 @@ static class GuestAddresses
     public static readonly IPAddress Host = IPAddress.Parse("198.19.250.254");
     public const string Subnet = "198.19.250.0/24";
     public const int HostProxyPort = 2378;
+    public const int ApiPort = 2379;
+    public const int DomainHttpPort = 2380;
+    public const int DomainHttpsPort = 2381;
+    public const int RelayHttpPort = 2382;
+    public const int RelayHttpsPort = 2383;
+    public const int RelayDnsPort = 2353;
+    public const int ContainerDnsPort = 2354;
+
+    // Where the host's browser finds domains where it cannot use the engine's own address: all of 127/8 is loopback,
+    // and an address nothing else uses cannot clash with a server on 127.0.0.1:80, such as another Docker app's.
+    public static readonly IPAddress HostLoopback = IPAddress.Parse("127.77.0.1");
 
     static readonly HashSet<string> HostNames = ["host.docker.internal", "gateway.docker.internal"];
 
@@ -29,9 +40,44 @@ static class NetworkRules
         foreach (var iface in new[] { "docker+", "br-+" })
             yield return ["iptables", "-t", "nat", "-I", "PREROUTING", "-i", iface, "-d", host, "-p", "tcp", "-j", "REDIRECT", "--to-ports", port];
         yield return ["iptables", "-t", "nat", "-I", "OUTPUT", "-d", host, "-p", "tcp", "-j", "REDIRECT", "--to-ports", port];
+
+        // Domains seen from inside: containers resolve them to the DNS address, and ports 80 and 443 there mean the proxy.
+        var dns = GuestAddresses.Dns.ToString();
+        foreach (var (from, to) in new[] { (80, GuestAddresses.DomainHttpPort), (443, GuestAddresses.DomainHttpsPort) })
+        {
+            foreach (var iface in new[] { "docker+", "br-+" })
+                yield return ["iptables", "-t", "nat", "-I", "PREROUTING", "-i", iface, "-d", dns, "-p", "tcp", "--dport", from.ToString(), "-j", "REDIRECT", "--to-ports", to.ToString()];
+            yield return ["iptables", "-t", "nat", "-I", "OUTPUT", "-d", dns, "-p", "tcp", "--dport", from.ToString(), "-j", "REDIRECT", "--to-ports", to.ToString()];
+        }
     }
 
-    public static async Task Apply(Func<string, string[], Task<int>> run, Action<string> log)
+    // A Linux host: the machine's own programs reach the proxy by redirect. Binding 127.77.0.1:80 itself would make every
+    // later "-p 80:80" and every web server on *:80 fail, since Linux refuses a wildcard bind next to a specific one.
+    public static IEnumerable<string[]> HostCommands()
+    {
+        var loopback = GuestAddresses.HostLoopback.ToString();
+        foreach (var (from, to) in new[] { (80, GuestAddresses.DomainHttpPort), (443, GuestAddresses.DomainHttpsPort) })
+            yield return ["iptables", "-t", "nat", "-I", "OUTPUT", "-d", loopback, "-p", "tcp", "--dport", from.ToString(), "-j", "REDIRECT", "--to-ports", to.ToString()];
+
+        var dns = GuestAddresses.Dns.ToString();
+        var target = $"{dns}:{GuestAddresses.ContainerDnsPort}";
+        foreach (var protocol in new[] { "udp", "tcp" })
+        {
+            foreach (var iface in new[] { "docker+", "br-+" })
+                yield return ["iptables", "-t", "nat", "-I", "PREROUTING", "-i", iface, "-d", dns, "-p", protocol, "--dport", "53", "-j", "DNAT", "--to-destination", target];
+            yield return ["iptables", "-t", "nat", "-I", "OUTPUT", "-d", dns, "-p", protocol, "--dport", "53", "-j", "DNAT", "--to-destination", target];
+        }
+    }
+
+    // Only the VM: there the Mac reaches the engine's Linux at its own address, and published ports never come in that
+    // way (they go over vsock), so ports 80 and 443 on that interface are free to mean the proxy.
+    public static IEnumerable<string[]> VmCommands()
+    {
+        foreach (var (from, to) in new[] { (80, GuestAddresses.DomainHttpPort), (443, GuestAddresses.DomainHttpsPort) })
+            yield return ["iptables", "-t", "nat", "-I", "PREROUTING", "-i", "eth0", "-p", "tcp", "--dport", from.ToString(), "-j", "REDIRECT", "--to-ports", to.ToString()];
+    }
+
+    public static async Task Apply(Func<string, string[], Task<int>> run, Action<string> log, bool vm = false, bool linuxHost = false)
     {
         foreach (var address in new[] { GuestAddresses.Dns, GuestAddresses.Host })
             await run("ip", ["addr", "replace", $"{address}/32", "dev", "lo"]);
@@ -44,7 +90,7 @@ static class NetworkRules
             await Iptables("-A", "DOCKYARD-INPUT", "-i", iface, "-j", "ACCEPT");
         await Iptables("-A", "DOCKYARD-INPUT", "-j", "DROP");
 
-        foreach (var command in Commands())
+        foreach (var command in Commands().Concat(vm ? VmCommands() : []).Concat(linuxHost ? HostCommands() : []))
         {
             // -C is the same rule as -I at the same place; a restarted agent must not stack copies.
             if (await Iptables([.. command.Skip(1).Select(a => a == "-I" ? "-C" : a)]) == 0) continue;

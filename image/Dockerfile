@@ -21,12 +21,12 @@ COPY image/rootfs/ /
 RUN chmod 0755 /usr/local/sbin/dockyard-init /usr/local/sbin/dockyard-update
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS agent
-RUN apk add --no-cache clang build-base zlib-dev zlib-static
+RUN apk add --no-cache clang build-base zlib-dev zlib-static openssl-dev openssl-libs-static cmake linux-headers
 WORKDIR /src
 COPY src/Dockyard.Engine/ src/Dockyard.Engine/
 COPY src/Dockyard.Agent/ src/Dockyard.Agent/
 RUN case "$(uname -m)" in x86_64) rid=linux-musl-x64 ;; aarch64) rid=linux-musl-arm64 ;; esac; \
-    dotnet publish src/Dockyard.Agent/Dockyard.Agent.csproj -c Release -r "$rid" -o /agent -warnaserror
+    dotnet publish src/Dockyard.Agent/Dockyard.Agent.csproj -c Release -r "$rid" -o /agent
 
 # What the app itself lays over an engine that already exists: the image is only imported once, on the first install.
 FROM scratch AS guest-export

@@ -97,4 +97,14 @@ public sealed class DockerEndpointTests
     [InlineData("/volume", "/volume", "/volume")]
     public void Up_stops_at_the_root_it_was_given(string path, string root, string expected) =>
         Assert.Equal(expected, ContainerFiles.Parent(path, root));
+
+    [Theory]
+    [InlineData("tcp://127.0.0.1:2375", true)]
+    [InlineData("unix:///var/run/docker.sock", true)]
+    [InlineData("unix:///Users/a/.dockyard/docker.sock", true)]
+    [InlineData("unix:///Users/a/.orbstack/run/docker.sock", false)]
+    [InlineData("npipe:////./pipe/docker_windows", false)]
+    [InlineData("tcp://10.0.0.5:2375", false)]
+    public void Only_engines_of_dockyards_own_have_an_agent(string endpoint, bool has) =>
+        Assert.Equal(has, AgentClient.For(DockerEndpoint.Parse(endpoint)) is not null);
 }

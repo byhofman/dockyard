@@ -32,6 +32,8 @@ static class MacLayout
     public static string CredentialHelper => Path.Combine(BinDir, "docker-credential-osxkeychain");
     public const string CredentialHelperAsset = @"^docker-credential-osxkeychain-v[\d.]+\.darwin-arm64$";
     public const string SystemSocket = "/var/run/docker.sock";
+    public const string DomainResolver = "/etc/resolver/dockyard.test";
+    public const int DomainDnsPort = 15353;
     public const string SocketDaemonLabel = "com.byhofman.dockyard.socket";
     public const string SocketDaemon = "/Library/LaunchDaemons/" + SocketDaemonLabel + ".plist";
     public static string UserSocketLink => Path.Combine(Home, ".docker", "run", "docker.sock");
@@ -120,6 +122,9 @@ static class MacLayout
     public static string RemoveSocketDaemon(string ourSocket) =>
         $"launchctl bootout system/{SocketDaemonLabel} 2>/dev/null; rm -f {SocketDaemon}; "
         + $"if [ \"$(readlink {SystemSocket})\" = '{ourSocket}' ]; then rm -f {SystemSocket}; fi";
+
+    public static string InstallDomainResolver =>
+        $"mkdir -p /etc/resolver && printf 'nameserver 127.0.0.1\\nport {DomainDnsPort}\\n' > {DomainResolver}";
 
     // One administrator prompt: AppleScript runs the shell command with administrator privileges.
     public static string[] AdminShell(string command) =>
@@ -554,6 +559,11 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
             steps.Add(MacLayout.InstallSocketDaemon(plistFile));
             what.Add($"making {MacLayout.SystemSocket} point at Dockyard");
         }
+        if (!File.Exists(MacLayout.DomainResolver))
+        {
+            steps.Add(MacLayout.InstallDomainResolver);
+            what.Add("letting this Mac look up container domains");
+        }
         if (steps.Count == 0) return;
 
         var script = string.Join(" ; ", steps);
@@ -643,6 +653,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         UnlinkUserSocket();
         List<string> steps = [];
         if (await IsOurPathEntry()) steps.Add("rm -f /etc/paths.d/dockyard");
+        if (File.Exists(MacLayout.DomainResolver)) steps.Add($"rm -f {MacLayout.DomainResolver}");
         if (File.Exists(MacLayout.SocketDaemon) || SystemSocketUse() == MacLayout.SocketUse.Ours) steps.Add(MacLayout.RemoveSocketDaemon(MacLayout.DockerSocket));
         if (steps.Count > 0)
         {

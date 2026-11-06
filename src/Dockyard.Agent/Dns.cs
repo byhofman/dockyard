@@ -87,9 +87,10 @@ static class ResolvConf
 
 // What containers use as their DNS server: names Dockyard knows, and everything else from whatever the host resolves
 // with, which is how lookups keep following the host's VPN and DNS settings as they change.
-sealed class DnsServer(IPAddress listen, Func<string, IPAddress?> local, Func<string> readResolvConf, Action<string> log, int port = 53)
+sealed class DnsServer(IPAddress listen, Func<string, IPAddress?> local, Func<string> readResolvConf, Action<string> log, int port = 53, Func<string, bool>? ownedZone = null)
 {
     public const byte ServerFailure = 2;
+    public const byte NameError = 3;
     static readonly TimeSpan UpstreamTimeout = TimeSpan.FromSeconds(3);
 
     public int Port { get; private set; } = port;
@@ -131,6 +132,7 @@ sealed class DnsServer(IPAddress listen, Func<string, IPAddress?> local, Func<st
     {
         if (DnsPacket.Question(query) is not { } question) return null;
         if (local(question.Name) is { } address) return DnsPacket.Answer(query, question, address);
+        if (ownedZone?.Invoke(question.Name) == true) return DnsPacket.Failure(query, question, NameError);
         foreach (var upstream in ResolvConf.Upstreams(readResolvConf(), listen))
         {
             try
@@ -172,6 +174,7 @@ sealed class DnsServer(IPAddress listen, Func<string, IPAddress?> local, Func<st
             if (DnsPacket.Question(query) is not { } question) return;
             byte[]? reply = null;
             if (local(question.Name) is { } address) reply = DnsPacket.Answer(query, question, address);
+            else if (ownedZone?.Invoke(question.Name) == true) reply = DnsPacket.Failure(query, question, NameError);
             else
             {
                 foreach (var upstream in ResolvConf.Upstreams(readResolvConf(), listen))

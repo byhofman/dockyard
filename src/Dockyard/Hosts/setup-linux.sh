@@ -155,6 +155,7 @@ After=docker.service
 
 [Service]
 ExecStart=/usr/local/lib/dockyard/dockyard-agent --mode=host
+RuntimeDirectory=dockyard
 Restart=on-failure
 
 [Install]
@@ -163,6 +164,16 @@ EOF
   systemctl daemon-reload
   systemctl enable dockyard-agent.service >/dev/null 2>&1
   if systemctl is-active --quiet docker.service; then systemctl restart dockyard-agent.service; fi
+}
+
+# systemd-resolved sends one name space to one server and leaves the rest alone. Without it there is no such thing to
+# hook into, and rewriting the machine's only resolver for this would be a poor trade: the wizard says what is missing.
+route_domains() {
+  [ -d /run/systemd/resolve ] || { echo "No systemd-resolved: container domains do not resolve by name here"; return 0; }
+  mkdir -p /etc/systemd/resolved.conf.d
+  printf '[Resolve]\nDNS=127.77.0.1\nDomains=~dockyard.test\n' > /etc/systemd/resolved.conf.d/dockyard.conf
+  systemctl restart systemd-resolved
+  echo "This machine asks Dockyard about names under dockyard.test"
 }
 
 # A running engine only reads this when it starts, and restarting it would stop the user's containers without a change to apply.
@@ -212,10 +223,14 @@ case "$action" in
   packages) install_packages ;;
   # $2 is the package here.
   add-plugin) add_plugin ;;
-  install) install_packages; configure; grant_socket_access; install_tray_host; install_libsecret; install_agent; apply_daemon_json ;;
+  install) install_packages; configure; grant_socket_access; install_tray_host; install_libsecret; install_agent; route_domains; apply_daemon_json ;;
   uninstall)
     if has_systemd; then systemctl disable --now dockyard-agent.service >/dev/null 2>&1 || true; fi
     rm -f /etc/systemd/system/dockyard-agent.service
+    if [ -f /etc/systemd/resolved.conf.d/dockyard.conf ]; then
+      rm -f /etc/systemd/resolved.conf.d/dockyard.conf
+      systemctl restart systemd-resolved 2>/dev/null || true
+    fi
     rm -rf /usr/local/lib/dockyard
     apply_daemon_json
     rm -f "$rule"

@@ -5,6 +5,7 @@ public enum VsockPort {
     public static let forward: UInt32 = 2376
     public static let control: UInt32 = 2377
     public static let hostDial: UInt32 = 2378
+    public static let api: UInt32 = 2379
 }
 
 /// Everything the helper needs to boot the VM; stored as ~/.dockyard/vm.json.
@@ -22,6 +23,8 @@ public struct VMSettings: Codable, Equatable {
     public var shares: [String: String]
     public var rosetta: Bool
     public var commandLine: String
+    /// Kept so that vmnet's DHCP keeps giving the guest the same address: container domains resolve to it.
+    public var macAddress: String?
 
     public static let gib: UInt64 = 1024 * 1024 * 1024
     /// ~/.dockyard/engine, read by the guest at boot: the only folder that is shared read-only.
@@ -48,7 +51,15 @@ public struct VMSettings: Codable, Equatable {
                 "private_var_folders": "/private/var/folders",
             ],
             rosetta: true,
-            commandLine: "console=hvc0 root=/dev/vda rootfstype=ext4 modules=ext4,virtio_blk rw quiet")
+            commandLine: "console=hvc0 root=/dev/vda rootfstype=ext4 modules=ext4,virtio_blk rw quiet",
+            macAddress: randomMacAddress())
+    }
+
+    /// Locally administered and unicast, as a generated MAC address has to be.
+    public static func randomMacAddress() -> String {
+        var bytes = (0..<6).map { _ in UInt8.random(in: 0...255) }
+        bytes[0] = (bytes[0] & 0xFE) | 0x02
+        return bytes.map { String(format: "%02x", $0) }.joined(separator: ":")
     }
 
     public static func load(path: String) throws -> VMSettings {
