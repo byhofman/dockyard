@@ -42,6 +42,10 @@ function Linux-Engine {
         if ($LASTEXITCODE -eq 0) { return }
         Start-Sleep 2
     }
+    Write-Host '--- what WSL says'
+    wsl.exe --version | Write-Host
+    wsl.exe -d dockyard -u root -- sh -c 'ls /sys/class/net; ip -4 addr; pidof dockerd dockyard-agent; netstat -ltn 2>/dev/null | head -20; wget -qO- -T 3 http://127.0.0.1:2375/_ping; echo; cat /etc/docker/daemon.json' | Write-Host
+    Test-NetConnection 127.0.0.1 -Port 2375 | Out-String | Write-Host
     throw 'FAIL the Linux engine did not start'
 }
 
