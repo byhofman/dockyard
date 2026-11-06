@@ -274,3 +274,51 @@ public sealed class ProxyTests
         Assert.DoesNotContain("http://p:1", EngineConfig.WithDockyard(ours));
     }
 }
+
+public sealed class EngineOptionsTests
+{
+    [Theory]
+    [InlineData("https://mirror.example.com", true)]
+    [InlineData("http://10.0.0.1:5000/", true)]
+    [InlineData("mirror.example.com", false)]
+    [InlineData("https://mirror.example.com/path", false)]
+    [InlineData("ftp://mirror", false)]
+    public void Mirrors_are_urls_with_only_a_host(string line, bool ok) => Assert.Equal(ok, EngineOptions.MirrorProblem(line) is null);
+
+    [Theory]
+    [InlineData("registry.example.com:5000", true)]
+    [InlineData("10.0.0.0/8", true)]
+    [InlineData("localhost:5000", true)]
+    [InlineData("http://registry", false)]
+    [InlineData("bad host", false)]
+    public void Insecure_registries_are_hosts_or_ranges(string line, bool ok) => Assert.Equal(ok, EngineOptions.InsecureRegistryProblem(line) is null);
+
+    [Theory]
+    [InlineData("10.20.0.0/16 24", true)]
+    [InlineData("  172.30.0.0/16   20", true)]
+    [InlineData("10.20.0.0/16", false)]
+    [InlineData("10.20.0.0 24", false)]
+    [InlineData("10.20.0.0/24 16", false)]
+    [InlineData("10.20.0.0/16 31", false)]
+    [InlineData("fd00::/8 64", false)]
+    public void Pools_are_a_range_and_a_network_size_that_fits(string line, bool ok) => Assert.Equal(ok, EngineOptions.ParsePool(line.Trim()).Problem is null);
+
+    [Fact]
+    public void The_engine_file_carries_what_was_set_and_nothing_empty()
+    {
+        var settings = new Settings { RegistryMirrors = "https://m.example\n\n", InsecureRegistries = "r.example:5000\n", AddressPools = "10.20.0.0/16 24\n" };
+        var config = System.Text.Json.Nodes.JsonNode.Parse(EngineConfig.Render(null, settings))!;
+        Assert.Equal("https://m.example", config["registry-mirrors"]![0]!.GetValue<string>());
+        Assert.Equal("r.example:5000", config["insecure-registries"]![0]!.GetValue<string>());
+        Assert.Equal("10.20.0.0/16", config["default-address-pools"]![0]!["base"]!.GetValue<string>());
+        Assert.Equal(24, config["default-address-pools"]![0]!["size"]!.GetValue<int>());
+
+        var bare = EngineConfig.Render(null, new Settings());
+        Assert.DoesNotContain("registry-mirrors", bare);
+        Assert.DoesNotContain("default-address-pools", bare);
+    }
+
+    [Fact]
+    public void All_problems_are_listed_at_once() =>
+        Assert.Equal(3, EngineOptions.Problems("nope", "http://x", "1.2.3.4").Count);
+}
