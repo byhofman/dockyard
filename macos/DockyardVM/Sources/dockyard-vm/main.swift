@@ -38,6 +38,7 @@ func prepare(assets: String) throws {
     settings.kernel = assets + "/kernel"
     settings.initramfs = assets + "/initramfs"
     settings.shares[VMSettings.configShare] = dir + "/engine"
+    if settings.macAddress == nil { settings.macAddress = VMSettings.randomMacAddress() }
     try fm.createDirectory(atPath: dir + "/engine", withIntermediateDirectories: true)
     try settings.save(path: configPath)
 
@@ -77,6 +78,7 @@ final class Machine: NSObject, VZVirtualMachineDelegate {
     let balloon: BalloonPolicy
     var currentMiB: UInt64
     var dockerServer: DockerSocketServer?
+    var agentServer: DockerSocketServer?
     var controlServer: ControlServer?
     var forwarder: PortForwarder!
     var control: ControlClient!
@@ -110,6 +112,7 @@ final class Machine: NSObject, VZVirtualMachineDelegate {
 
         let network = VZVirtioNetworkDeviceConfiguration()
         network.attachment = VZNATNetworkDeviceAttachment()
+        if let mac = settings.macAddress.flatMap(VZMACAddress.init(string:)) { network.macAddress = mac }
         config.networkDevices = [network]
 
         var directories: [String: VZSharedDirectory] = [:]
@@ -178,6 +181,8 @@ final class Machine: NSObject, VZVirtualMachineDelegate {
         control.start()
         do {
             dockerServer = try DockerSocketServer(path: settings.dockerSocket, connector: connector)
+            agentServer = try DockerSocketServer(path: (settings.controlSocket as NSString).deletingLastPathComponent + "/agent.sock",
+                                                 guestPort: VsockPort.api, connector: connector)
             controlServer = try ControlServer(path: settings.controlSocket, status: { [weak self] in self?.status() ?? "stopped" },
                                               stop: { [weak self] in DispatchQueue.main.async { self?.stop() } })
         } catch {
@@ -186,6 +191,7 @@ final class Machine: NSObject, VZVirtualMachineDelegate {
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
             self?.control.send(.clock(now: Date()))
         }
+        do { try forwarder.serveDns(hostPort: 15353) } catch { log("container domains do not resolve on this Mac: \(error)") }
         log("docker socket at \(settings.dockerSocket)")
     }
 
@@ -232,6 +238,8 @@ final class Machine: NSObject, VZVirtualMachineDelegate {
         forwarder?.stopAll()
         control?.stop()
         dockerServer?.stop()
+        agentServer?.stop()
+        unlink((settings.controlSocket as NSString).deletingLastPathComponent + "/agent.sock")
         controlServer?.stop()
         unlink(settings.dockerSocket)
         unlink(settings.controlSocket)

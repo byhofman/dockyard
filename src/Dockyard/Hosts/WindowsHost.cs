@@ -19,6 +19,7 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
     readonly WslDistro distro = new(runner);
     Process? keepAlive;
     CancellationTokenSource? trayServices;
+    DomainRelay? domainRelay;
 
     public IReadOnlyList<EngineInfo> Engines { get; } =
     [
@@ -110,10 +111,13 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
                 if (installed)
                 {
                     await UserSetup.EnableLinuxEngine(log);
+                    if (trayServices is not null) StartDomainRelay();
                     return false;
                 }
                 await StopLinux();
                 await UserSetup.DisableLinuxEngine(log, removeData);
+                domainRelay?.Dispose();
+                domainRelay = null;
                 return false;
             case nameof(Component.Engine) when !installed:
                 await UserSetup.RemoveContext("win", "linux", log);
@@ -130,7 +134,8 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
         return false;
     }
 
-    public bool HasEngineConfiguration => true;
+    static bool LinuxEngineWanted => !Settings.Load().RemovedComponents.Contains(nameof(Component.LinuxEngine));
+    public bool HasEngineConfiguration => LinuxEngineWanted;
 
     public async Task ApplyEngineConfiguration(Action<string> log)
     {
@@ -219,11 +224,19 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
         }
     }
 
+    void StartDomainRelay()
+    {
+        if (domainRelay is not null) return;
+        domainRelay = new DomainRelay(_ => { });
+        domainRelay.Start();
+    }
+
     public void StartTrayServices()
     {
         if (trayServices is not null) return;
         trayServices = new CancellationTokenSource();
         _ = FollowPublishedPorts(trayServices.Token);
+        if (LinuxEngineWanted) StartDomainRelay();
     }
 
     // The tray does not have to be what started the engine, and the engine comes and goes without telling it.

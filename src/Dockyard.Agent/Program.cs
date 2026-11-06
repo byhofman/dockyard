@@ -26,10 +26,11 @@ Func<string, IPAddress?> HostView(Func<IPAddress?> address) => name => table.Con
 
 List<Task> services =
 [
-    new DnsServer(GuestAddresses.Dns, ContainerView, ReadResolvConf, log, ownedZone: DomainNames.InZone).Run(cts.Token),
+    // On a Linux host port 53 may belong to dnsmasq or the like, so a rule brings containers' queries to a port of its own.
+    new DnsServer(GuestAddresses.Dns, ContainerView, ReadResolvConf, log, options.Mode == AgentMode.Host ? GuestAddresses.ContainerDnsPort : 53, DomainNames.InZone).Run(cts.Token),
     table.Run(cts.Token),
-    proxy.Serve(DomainProxy.Listen(IPAddress.Any, GuestAddresses.DomainHttpPort), tls: false, guarded: true, cts.Token),
-    proxy.Serve(DomainProxy.Listen(IPAddress.Any, GuestAddresses.DomainHttpsPort), tls: true, guarded: true, cts.Token),
+    Optional("HTTP on domains", () => proxy.Serve(DomainProxy.Listen(IPAddress.Any, GuestAddresses.DomainHttpPort), tls: false, guarded: true, cts.Token)),
+    Optional("HTTPS on domains", () => proxy.Serve(DomainProxy.Listen(IPAddress.Any, GuestAddresses.DomainHttpsPort), tls: true, guarded: true, cts.Token)),
 ];
 
 IHostDialer dialer;
@@ -40,22 +41,22 @@ switch (options.Mode)
         // QEMU's user networking puts the machine that started the VM at this address.
         dialer = options.Mode == AgentMode.Vm ? new VsockHostDialer() : new TcpHostDialer(IPAddress.Parse("10.0.2.2"));
         ITransport transport = options.Mode == AgentMode.Vm ? new VsockTransport() : new TcpTransport();
-        services.Add(new DnsServer(IPAddress.Loopback, HostView(() => InterfaceAddress.Of("eth0")), ReadResolvConf, log, ownedZone: DomainNames.InZone).Run(cts.Token));
+        services.Add(Optional("domains on the Mac", () => new DnsServer(IPAddress.Loopback, HostView(() => InterfaceAddress.Of("eth0")), ReadResolvConf, log, ownedZone: DomainNames.InZone).Run(cts.Token)));
         services.Add(new Agent(transport, log, api).Run(cts.Token));
         break;
     case AgentMode.Wsl:
         dialer = new TcpHostDialer(WslHost.Address(Directory.Exists("/sys/class/net/loopback0"), File.ReadAllText("/proc/net/route")), WslHost.Refused);
         // The tray on Windows relays to these: only loopback is shared with it, also in mirrored networking.
-        services.Add(new DnsServer(IPAddress.Loopback, HostView(() => GuestAddresses.HostLoopback), ReadResolvConf, log, GuestAddresses.RelayDnsPort, DomainNames.InZone).Run(cts.Token));
-        services.Add(proxy.Serve(DomainProxy.Listen(IPAddress.Loopback, GuestAddresses.RelayHttpPort), tls: false, guarded: false, cts.Token));
-        services.Add(proxy.Serve(DomainProxy.Listen(IPAddress.Loopback, GuestAddresses.RelayHttpsPort), tls: true, guarded: false, cts.Token));
-        services.Add(AgentApiServer.Tcp(api, GuestAddresses.ApiPort, cts.Token));
+        services.Add(Optional("domains on this machine", () => new DnsServer(IPAddress.Loopback, HostView(() => GuestAddresses.HostLoopback), ReadResolvConf, log, GuestAddresses.RelayDnsPort, DomainNames.InZone).Run(cts.Token)));
+        services.Add(Optional("HTTP on domains from Windows", () => proxy.Serve(DomainProxy.Listen(IPAddress.Loopback, GuestAddresses.RelayHttpPort), tls: false, guarded: false, cts.Token)));
+        services.Add(Optional("HTTPS on domains from Windows", () => proxy.Serve(DomainProxy.Listen(IPAddress.Loopback, GuestAddresses.RelayHttpsPort), tls: true, guarded: false, cts.Token)));
+        services.Add(Optional("the agent API", () => AgentApiServer.Tcp(api, GuestAddresses.ApiPort, cts.Token)));
         services.Add(ExitWithEngine());
         break;
     default:
         dialer = new TcpHostDialer(IPAddress.Loopback, new HashSet<int> { GuestAddresses.HostProxyPort });
         // systemd-resolved takes a port: 53 on any loopback address could clash with a DNS server already on this machine.
-        services.Add(new DnsServer(IPAddress.Loopback, HostView(() => GuestAddresses.HostLoopback), ReadResolvConf, log, GuestAddresses.RelayDnsPort, DomainNames.InZone).Run(cts.Token));
+        services.Add(Optional("domains on this machine", () => new DnsServer(IPAddress.Loopback, HostView(() => GuestAddresses.HostLoopback), ReadResolvConf, log, GuestAddresses.RelayDnsPort, DomainNames.InZone).Run(cts.Token)));
         services.Add(AgentApiServer.Unix(api, "/run/dockyard/agent.sock", cts.Token));
         break;
 }
@@ -76,6 +77,20 @@ catch (Exception e)
     return 1;
 }
 return 0;
+
+// Domains are an extra: a port someone else holds turns that feature off, and containers, DNS and the engine keep working.
+async Task Optional(string what, Func<Task> service)
+{
+    try
+    {
+        await service();
+    }
+    catch (SocketException e)
+    {
+        log($"{what} is off: {e.Message}");
+        await Task.Delay(Timeout.Infinite, cts.Token);
+    }
+}
 
 async Task ExitWithEngine()
 {

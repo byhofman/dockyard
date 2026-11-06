@@ -13,6 +13,9 @@ sealed class ContainerDetailViewModel : Observable, IDisposable
     readonly Action<string> showError;
     InspectViewModel? inspect;
     Features.Files.FileBrowserViewModel? files;
+    string? domain;
+    string domainPort = "";
+    string domainPortNote = "";
     bool confirmRemove;
     bool logsExpanded;
     int selectedTab;
@@ -28,8 +31,15 @@ sealed class ContainerDetailViewModel : Observable, IDisposable
         AskRemoveCommand = new Command(() => { ConfirmRemove = true; return Task.CompletedTask; });
         CancelRemoveCommand = new Command(() => { ConfirmRemove = false; return Task.CompletedTask; });
         CloseCommand = new Command(() => { actions.CloseDetail(); return Task.CompletedTask; });
+        ApplyDomainPortCommand = new Command(ApplyDomainPort);
+        OpenDomainCommand = new Command(() =>
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(DomainUrl) { UseShellExecute = true })?.Dispose();
+            return Task.CompletedTask;
+        });
         item.PropertyChanged += OnItemChanged;
         _ = Load();
+        _ = LoadDomain();
     }
 
     public ContainersViewModel Actions { get; }
@@ -43,6 +53,55 @@ sealed class ContainerDetailViewModel : Observable, IDisposable
     public Features.Files.FileBrowserViewModel? Files => files ??= session.Client is { } client
         ? new Features.Files.FileBrowserViewModel(client, Item.Id, "/", showError)
         : null;
+
+    public string? Domain { get => domain; private set { if (Set(ref domain, value)) Raise(nameof(HasDomain), nameof(DomainUrl)); } }
+    public bool HasDomain => domain is not null;
+    public string DomainUrl => $"http://{domain}";
+    public string DomainPort { get => domainPort; set => Set(ref domainPort, value); }
+    public string DomainPortNote { get => domainPortNote; private set => Set(ref domainPortNote, value); }
+    public Command ApplyDomainPortCommand { get; }
+    public Command OpenDomainCommand { get; }
+
+    async Task LoadDomain()
+    {
+        if (session.Client is not { } client || AgentClient.For(client.Endpoint) is not { } agent) return;
+        try { Show(await agent.DomainsAsync()); }
+        catch (Exception e) when (e is IOException or System.Net.Sockets.SocketException or InvalidOperationException) { }
+    }
+
+    void Show(List<DomainInfo> domains)
+    {
+        if (disposed) return;
+        var mine = domains.Where(d => d.ContainerId == Item.Id).ToList();
+        var first = mine.OrderBy(d => d.Domain.Length).FirstOrDefault();
+        Domain = first?.Domain;
+        DomainPort = first?.Port?.ToString() ?? "";
+        DomainPortNote = first switch
+        {
+            null => "",
+            { PortIsChosen: true } => "Port chosen here. Empty it to detect it again.",
+            { Port: null } => "No port found yet. Enter the one this container serves on.",
+            _ => "Detected. Change it if this is the wrong port.",
+        };
+    }
+
+    // Empty goes back to detecting, which is the way back from a wrong choice.
+    async Task ApplyDomainPort()
+    {
+        if (session.Client is not { } client || AgentClient.For(client.Endpoint) is not { } agent) return;
+        int? port = null;
+        if (DomainPort.Trim().Length > 0)
+        {
+            if (!int.TryParse(DomainPort.Trim(), out var parsed) || parsed is < 1 or > 65535)
+            {
+                showError($"'{DomainPort}' is not a port");
+                return;
+            }
+            port = parsed;
+        }
+        try { Show(await agent.ChoosePortAsync(Item.Id, port)); }
+        catch (Exception e) when (e is IOException or System.Net.Sockets.SocketException or InvalidOperationException) { showError($"{Item.Name}: {e.Message}"); }
+    }
 
     public InspectViewModel? Inspect { get => inspect; private set => Set(ref inspect, value); }
     public bool ConfirmRemove { get => confirmRemove; set => Set(ref confirmRemove, value); }

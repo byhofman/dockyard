@@ -237,6 +237,14 @@ public sealed class NetworkTests
     }
 
     [Fact]
+    public void On_a_linux_host_containers_reach_dns_without_holding_port_53()
+    {
+        var commands = NetworkRules.HostCommands().Select(c => string.Join(' ', c)).ToList();
+        Assert.Contains($"iptables -t nat -I PREROUTING -i docker+ -d 198.19.250.1 -p udp --dport 53 -j DNAT --to-destination 198.19.250.1:{GuestAddresses.ContainerDnsPort}", commands);
+        Assert.Contains($"iptables -t nat -I OUTPUT -d 198.19.250.1 -p tcp --dport 53 -j DNAT --to-destination 198.19.250.1:{GuestAddresses.ContainerDnsPort}", commands);
+    }
+
+    [Fact]
     public async Task The_dns_server_answers_local_names_and_passes_the_rest_on_over_udp_and_tcp()
     {
         Assert.SkipWhen(OperatingSystem.IsWindows(), "The agent only runs on Linux, and on Windows a UDP socket can be reset by an earlier datagram");
