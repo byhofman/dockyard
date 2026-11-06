@@ -3,6 +3,7 @@
 #   WIZARD_ZIP=<Dockyard-*-macos.zip> sh wizard-mac.sh     the wizard from a build
 #   ONELINER=<url of install-mac.sh> sh wizard-mac.sh      the published one-liner
 # A sudo that refuses keeps the silent setup from changing /etc or installing Rosetta, whatever this user may do.
+# ADMIN=1 leaves sudo alone and checks what needs an administrator: only for a throwaway machine such as a CI runner.
 # Add BOOT=1 to also boot the VM and check that a volume survives (1 GiB of memory, about 30 s).
 set -eu
 ok() { echo "  ok   $1"; }
@@ -16,7 +17,7 @@ home="$(mktemp -d /tmp/dy.XXXXXX)"
 export HOME="$home"
 unset DOCKER_CONFIG DOCKER_HOST DOCKER_CONTEXT
 mkdir -p "$home/shim"
-printf '#!/bin/sh\nexit 1\n' > "$home/shim/sudo"; chmod +x "$home/shim/sudo"
+[ -n "${ADMIN:-}" ] || { printf '#!/bin/sh\nexit 1\n' > "$home/shim/sudo"; chmod +x "$home/shim/sudo"; }
 export PATH="$home/shim:$PATH"
 app="$home/Applications/Dockyard.app"
 macos="$app/Contents/MacOS"
@@ -58,6 +59,7 @@ fingerprint() {
   ls -la "$real_home/.dockyard" 2>/dev/null || true
   ls -la "$real_home/Applications" 2>/dev/null | grep -i dockyard || true
   ls /etc/paths.d/
+  ls /Library/LaunchDaemons | grep -i dockyard || true
 }
 before="$(fingerprint)"
 
@@ -88,6 +90,27 @@ if [ -n "${BOOT:-}" ]; then
   ok "marker volume created"
   stop_engine
 fi
+
+if [ -n "${ADMIN:-}" ]; then
+  echo "== what needs an administrator"
+  check "the PATH entry" test -f /etc/paths.d/dockyard
+  if [ "$(readlink /var/run/docker.sock)" = "$home/.dockyard/docker.sock" ]; then ok "/var/run/docker.sock points at Dockyard"; else fail "/var/run/docker.sock: $(ls -la /var/run/docker.sock 2>&1)"; fi
+  check "and comes back after a restart" test -f /Library/LaunchDaemons/com.byhofman.dockyard.socket.plist
+  sudo rm -f /var/run/docker.sock
+  sudo launchctl kickstart -k system/com.byhofman.dockyard.socket
+  sleep 1
+  if [ "$(readlink /var/run/docker.sock)" = "$home/.dockyard/docker.sock" ]; then ok "the daemon recreates the link"; else fail "the daemon did not recreate the link"; fi
+  if grep -q '"credsStore": "osxkeychain"' "$home/.docker/config.json"; then ok "docker login uses the Keychain"; else fail "credsStore: $(cat "$home/.docker/config.json")"; fi
+  helper="$home/.dockyard/bin/docker-credential-osxkeychain"
+  check "the helper is there" test -x "$helper"
+  # CI's login keychain is locked or absent until this; a real login keychain would not need it.
+  security create-keychain -p e2e "$home/e2e.keychain" && security default-keychain -s "$home/e2e.keychain" && security unlock-keychain -p e2e "$home/e2e.keychain"
+  printf '{"ServerURL":"e2e.dockyard.test","Username":"me","Secret":"s3cret"}' | "$helper" store
+  if printf 'e2e.dockyard.test' | "$helper" get | grep -q s3cret; then ok "a login round-trips through the Keychain"; else fail "keychain round trip"; fi
+  if grep -q s3cret "$home/.docker/config.json"; then fail "the secret reached config.json"; else ok "the secret is not in config.json"; fi
+  printf 'e2e.dockyard.test' | "$helper" erase
+fi
+check "tools that look in ~/.docker/run find it" test -L "$home/.docker/run/docker.sock"
 
 date > "$home/.dockyard/marker"
 data_before="$(ls -i "$home/.dockyard/data.img")"
@@ -121,6 +144,12 @@ run --silent --uninstall
 check "app removed" missing "$app"
 check "login item removed" missing "$home/Library/LaunchAgents/com.byhofman.dockyard.plist"
 check "data kept" test -f "$home/.dockyard/data.img"
+check "the user socket link is gone" missing "$home/.docker/run/docker.sock"
+if [ -f "$home/.docker/config.json" ] && grep -q credsStore "$home/.docker/config.json"; then fail "credsStore left behind"; else ok "no credential store left in the config"; fi
+if [ -n "${ADMIN:-}" ]; then
+  check "/var/run/docker.sock is gone" missing /var/run/docker.sock
+  check "the daemon is gone" missing /Library/LaunchDaemons/com.byhofman.dockyard.socket.plist
+fi
 
 echo "== and --remove-data takes it"
 run --silent --no-start
@@ -128,5 +157,6 @@ check "a fresh install gets the dashboard" test -x "$macos/Dockyard.Dashboard"
 run --silent --uninstall --remove-data
 check "data removed" missing "$home/.dockyard"
 
+if [ -n "${ADMIN:-}" ]; then echo "All good."; exit 0; fi
 if [ "$(fingerprint)" = "$before" ]; then ok "nothing outside the throwaway home changed"; else fail "something outside the throwaway home changed"; fi
 echo "All good."

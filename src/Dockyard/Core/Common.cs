@@ -10,6 +10,7 @@ static class Paths
 {
     public static readonly string DockerDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Docker");
     public static readonly string DockerExe = Path.Combine(DockerDir, "docker.exe");
+    public static readonly string CredentialHelper = Path.Combine(DockerDir, "docker-credential-wincred.exe");
     public static readonly string DockerdExe = Path.Combine(DockerDir, "dockerd.exe");
     public static readonly string PluginDir = Path.Combine(DockerDir, "cli-plugins");
     public static readonly string AppDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Dockyard");
@@ -39,6 +40,9 @@ static class Paths
 
     public static string AppVersion =>
         (Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0").Split('+')[0];
+
+    public static readonly string CredentialStoreMarker = Path.Combine(SettingsDir, "credential-store");
+    public const string CredentialHelpersRepo = "docker/docker-credential-helpers";
 
     public static readonly string WslConfigFile = Path.Combine(UserProfile, ".wslconfig");
 }
@@ -113,6 +117,19 @@ static class Shell
         using var p = Process.Start(Info(file, args, redirect: true)) ?? throw new InvalidOperationException($"Could not start {file}");
         var stdout = p.StandardOutput.ReadToEndAsync();
         var stderr = p.StandardError.ReadToEndAsync();
+        await p.WaitForExitAsync();
+        return new ShellResult(p.ExitCode, await stdout, await stderr);
+    }
+
+    public static async Task<ShellResult> RunWithInput(string file, string input, params string[] args)
+    {
+        var info = Info(file, args, redirect: true);
+        info.RedirectStandardInput = true;
+        using var p = Process.Start(info) ?? throw new InvalidOperationException($"Could not start {file}");
+        var stdout = p.StandardOutput.ReadToEndAsync();
+        var stderr = p.StandardError.ReadToEndAsync();
+        await p.StandardInput.WriteAsync(input);
+        p.StandardInput.Close();
         await p.WaitForExitAsync();
         return new ShellResult(p.ExitCode, await stdout, await stderr);
     }

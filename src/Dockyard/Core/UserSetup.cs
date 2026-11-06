@@ -22,6 +22,7 @@ static partial class UserSetup
         await MigrateLegacyEngine(log);
         await CreateContexts(log);
         SetMirroredNetworking(log);
+        if (File.Exists(Paths.CredentialHelper)) await CredentialStore.Adopt(log, "wincred", Paths.CredentialHelper, Paths.CredentialStoreMarker);
 
         File.WriteAllText(Path.Combine(Paths.UserProfile, ".testcontainers.properties"), $"docker.host={Paths.LinuxHost}\n");
         log("Testcontainers pinned to the Linux engine");
@@ -62,6 +63,7 @@ static partial class UserSetup
             key?.DeleteValue(Paths.LegacyName, throwOnMissingValue: false);
         }
 
+        await CredentialStore.Forget(Paths.CredentialStoreMarker);
         if (File.Exists(Paths.DockerExe))
         {
             await Shell.Run(Paths.DockerExe, "context", "use", "default");

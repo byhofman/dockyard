@@ -70,7 +70,7 @@ Each release has `Dockyard.exe` for Windows, `Dockyard-<version>-macos.dmg` for 
 | `linux` (default) | Docker in the `dockyard` WSL distro (Alpine with Docker's static binaries) | `tcp://127.0.0.1:2375` |
 | `win` | `dockerd.exe` Windows service (ltsc2025 images, process isolation) | `npipe:////./pipe/docker_windows` |
 
-**macOS.** Docker's `docker` CLI with compose and buildx, Rosetta for `linux/amd64` images, a small Linux VM on Apple's Virtualization.framework in `~/.dockyard`, the `dockyard` docker context, `~/Applications/Dockyard.app` and a login item. In the VM: `/Users`, `/Volumes` and the temp folders are shared at the same paths, so `-v $PWD:/app` works; published ports reach `127.0.0.1`; memory the guest does not use goes back to macOS.
+**macOS.** Docker's `docker` CLI with compose and buildx, Rosetta for `linux/amd64` images, a small Linux VM on Apple's Virtualization.framework in `~/.dockyard`, the `dockyard` docker context, `~/Applications/Dockyard.app` and a login item. It makes `/var/run/docker.sock` point at the engine unless another Docker app has it, and `docker login` keeps credentials in the Keychain. In the VM: `/Users`, `/Volumes` and the temp folders are shared at the same paths, so `-v $PWD:/app` works; published ports reach `127.0.0.1`; memory the guest does not use goes back to macOS.
 
 **Linux.** Docker CE with buildx and compose from Docker's repository on Debian, Ubuntu, Fedora, RHEL and their derivatives, or from the distribution on Arch and openSUSE; the Dockyard packages, or a copy in `~/.local/lib/dockyard` on distributions without apt or dnf; the engine started on demand; docker access for you right away; the tray with its GNOME extension where needed; autostart at login.
 
@@ -98,7 +98,8 @@ Keys: `Ctrl+K` (`⌘K` on macOS) search, `S` start/stop, `R` restart, `E` termin
 ## Known limits
 
 - On Windows, reach published Linux container ports through `127.0.0.1`, not `localhost` (`DOK-8`).
-- On macOS, tools that ignore docker contexts and insist on `/var/run/docker.sock` do not find the engine yet (`DOK-9`).
+- On macOS, `/var/run/docker.sock` stays with another Docker app when one already has it, such as OrbStack or Docker Desktop. Tools that ignore docker contexts keep using that app until it gives up the path.
+- On Linux without a desktop session there is no OS credential store, so `docker login` keeps Docker's default there.
 - On a device whose Defender settings are managed by an organisation (Intune), local exclusions may not count. If Defender blocks Dockyard (event 1121) or `dockerd.exe` (event 1127), your administrator has to allow `C:\Program Files\Dockyard\` and `C:\Program Files\Docker\dockerd.exe`.
 
 ## Build

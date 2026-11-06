@@ -61,6 +61,7 @@ static class LinuxLayout
     public static string AppPackage(string? packageManager) =>
         packageManager == "dnf" ? @"^dockyard-[\d.]+-1\.x86_64\.rpm$" : @"^dockyard_[\d.]+_amd64\.deb$";
     public const string Tarball = @"^Dockyard-[\d.]+-linux-x64\.tar\.gz$";
+    public const string CredentialHelper = "/usr/local/bin/docker-credential-secretservice";
     public const string AppAsset = @"^Dockyard-linux-x64$";
 
     public static readonly string[] DashboardFiles = ["Dockyard.Dashboard", "libSkiaSharp.so", "libHarfBuzzSharp.so"];
@@ -209,6 +210,7 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
             await WriteAutostart();
             log($"{Paths.AppName} autostarts at login ({AutostartFile})");
         }
+        await SetUpCredentialStore(log);
         await TryRun("gnome-extensions", "enable", "appindicatorsupport@rgcjonas.gmail.com");
         if ((await TryRun("docker", "context", "show"))?.Output.Trim() is { Length: > 0 } current && current != "default")
         {
@@ -229,6 +231,7 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
     public async Task Uninstall(Action<string> log, bool removeData)
     {
         if (File.Exists(AutostartFile)) File.Delete(AutostartFile);
+        await CredentialStore.Forget(Paths.CredentialStoreMarker);
         await RunSetup(log, "uninstall");
         if (Directory.Exists(LinuxLayout.HomeDir)) Directory.Delete(LinuxLayout.HomeDir, recursive: true);
         if (new FileInfo(LinuxLayout.HomeLink).LinkTarget is not null) File.Delete(LinuxLayout.HomeLink);
@@ -239,6 +242,41 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
     public void ReleaseResources() { }
 
     static string SetupUser => Environment.UserName == "root" ? Environment.GetEnvironmentVariable("SUDO_USER") ?? "" : Environment.UserName;
+
+    // A server without a desktop has no secret service to keep logins in. Setting the store anyway would make docker login
+    // fail outright, so the helper has to answer first.
+    async Task SetUpCredentialStore(Action<string> log)
+    {
+        if (Environment.UserName == "root" || string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DBUS_SESSION_BUS_ADDRESS")))
+        {
+            log("No desktop session here, so no OS credential store: docker login keeps Docker's default (base64 in ~/.docker/config.json)");
+            return;
+        }
+        var dir = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
+        try
+        {
+            if (!File.Exists(LinuxLayout.CredentialHelper))
+            {
+                var release = await Updates.LatestGitHub(Paths.CredentialHelpersRepo, @"^docker-credential-secretservice-v[\d.]+\.linux-amd64$");
+                Directory.CreateDirectory(dir);
+                var download = Path.Combine(dir, "helper");
+                await Updates.DownloadFile(release.DownloadUrl!, download);
+                await RunElevated(["install", "-m", "0755", download, LinuxLayout.CredentialHelper]);
+            }
+            if ((await TryRun(LinuxLayout.CredentialHelper, "list")) is { ExitCode: 0 })
+                await CredentialStore.Adopt(log, "secretservice", LinuxLayout.CredentialHelper, Paths.CredentialStoreMarker);
+            else
+                log("The desktop has no working secret service, so docker login keeps Docker's default (base64 in ~/.docker/config.json)");
+        }
+        catch (Exception e) when (e is HttpRequestException or InvalidOperationException or IOException)
+        {
+            log($"The credential store was not set up ({e.Message}); running the wizard again retries it");
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+        }
+    }
 
     // Puts the app in place. A copy running from where it is installed only has to line up the dashboard.
     async Task InstallApp(Action<string> log, bool dashboard, string? tag)
