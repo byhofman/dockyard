@@ -49,6 +49,15 @@ function Linux-Engine {
     throw 'FAIL the Linux engine did not start'
 }
 
+# What a container printed, from its logs and not through an attached docker run.
+function In-Container($command) {
+    $id = (& $docker --context linux run -d alpine:3.24 sh -c $command | Out-String).Trim()
+    & $docker --context linux wait $id | Out-Null
+    $output = (& $docker --context linux logs $id 2>&1 | Out-String).Trim()
+    & $docker --context linux rm -f $id | Out-Null
+    return $output
+}
+
 Section 'wrong arguments are refused'
 if ($OneLiner) {
     $failed = $false
@@ -98,21 +107,20 @@ if ($Wizard) {
         }
     }
     Start-Sleep 3
-    $reply = (& $docker --context linux run --rm alpine:3.24 wget -qO- -T 20 http://host.docker.internal:18080/ | Out-String).Trim()
+    $attached = (& $docker --context linux run --rm alpine:3.24 echo attached 2>&1 | Out-String).Trim()
+    Write-Host "docker run prints: '$attached'"
+    $reply = In-Container 'wget -qO- -T 20 http://host.docker.internal:18080/ 2>&1'
     if ($reply -ne 'from-windows') {
         Write-Host '--- why not'
-        Get-Job | Format-List State, @{n='Error';e={$_.ChildJobs[0].JobStateInfo.Reason}} | Out-String | Write-Host
-        (Test-NetConnection 127.0.0.1 -Port 18080).TcpTestSucceeded | Write-Host
-        wsl.exe -d dockyard -u root -- sh -c 'cat /proc/net/route; gw=$(ip route | sed -n "s/^default via \([^ ]*\).*/\1/p"); echo gw=$gw; wget -qO- -T 5 http://$gw:18080/; echo; iptables -t nat -S | grep -E "REDIRECT|DOCKER$" | head; iptables -S INPUT | head -5; netstat -ltn | grep 2378' | Write-Host
-        & $docker --context linux run --rm alpine:3.24 sh -c 'cat /etc/resolv.conf; nslookup host.docker.internal; wget -S -O- -T 10 http://host.docker.internal:18080/ 2>&1; nc -w 5 198.19.250.254 18080 </dev/null; echo nc=$?' | Write-Host
-        wsl.exe -d dockyard -u root -- sh -c 'dmesg | tail -5' | Write-Host
+        Write-Host (In-Container 'cat /etc/resolv.conf; nslookup host.docker.internal 2>&1; nc -w 5 198.19.250.254 18080 </dev/null; echo nc=$?')
+        wsl.exe -d dockyard -u root -- sh -c 'gw=$(ip route | awk "/^default/{print \$3}"); echo gw=$gw; wget -qO- -T 5 http://$gw:18080/; echo; ps | grep dockyard-agent | head -3' | Write-Host
     }
     Check "the service answers (got '$reply')" ($reply -eq 'from-windows')
     Stop-Job $service; Remove-Job $service -Force
     Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True
-    $engine = (& $docker --context linux run --rm alpine:3.24 sh -c 'wget -qO- -T 5 http://host.docker.internal:2375/version || echo refused' | Out-String).Trim()
+    $engine = In-Container 'wget -qO- -T 5 http://host.docker.internal:2375/version 2>/dev/null || echo refused'
     Check "the engine's own port stays out of reach (got '$engine')" ($engine -eq 'refused')
-    $name = (& $docker --context linux run --rm alpine:3.24 nslookup dl-cdn.alpinelinux.org | Out-String)
+    $name = In-Container 'nslookup dl-cdn.alpinelinux.org 2>&1'
     Check 'other names still resolve' ($name -match 'Address')
 }
 
