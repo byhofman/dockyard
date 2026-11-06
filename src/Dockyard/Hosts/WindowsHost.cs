@@ -216,6 +216,7 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
         if (keepAlive is null || keepAlive.HasExited)
         {
             keepAlive?.Dispose();
+            await UserSetup.ApplyGuest(distro, _ => { });
             keepAlive = runner.Spawn("wsl.exe", distro.KeepAliveArgs());
         }
         var proc = keepAlive;

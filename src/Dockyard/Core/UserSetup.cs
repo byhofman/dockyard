@@ -18,6 +18,7 @@ static partial class UserSetup
     {
         MigrateLegacySettings(log);
         await SetupDistro(log, image);
+        await ApplyGuest(new WslDistro(ProcessRunner.Instance), log);
         await MigrateLegacyEngine(log);
         await CreateContexts(log);
         SetMirroredNetworking(log);
@@ -28,6 +29,12 @@ static partial class UserSetup
         using (var key = Registry.CurrentUser.CreateSubKey(RunKey))
             key.SetValue(Paths.AppName, $"\"{Paths.AppExe}\"");
         log($"{Paths.AppName} autostarts at logon");
+    }
+
+    public static async Task ApplyGuest(WslDistro distro, Action<string> log)
+    {
+        await using var bundle = typeof(UserSetup).Assembly.GetManifestResourceStream("guest.tar.gz");
+        if (bundle is not null) await distro.ApplyGuest(bundle, log);
     }
 
     // Silent setups log to a file: after a restart there is no console to report to.

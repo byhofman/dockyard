@@ -16,4 +16,8 @@ rm -f /var/run/docker.sock /var/run/docker.pid
 if [ "$tcp" = none ]; then
   exec dockerd -H unix:///var/run/docker.sock
 fi
+
+# WSL: nothing else starts the agent. It leaves when dockerd does, so that it does not keep the distro alive by itself,
+# and a crash brings it back because that exits non-zero.
+(until dockyard-agent --mode=wsl; do sleep 1; done) >/dev/null 2>&1 &
 exec dockerd -H unix:///var/run/docker.sock -H "tcp://$tcp" --tls=false

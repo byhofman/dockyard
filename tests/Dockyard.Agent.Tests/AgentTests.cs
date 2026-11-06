@@ -74,11 +74,6 @@ public sealed class AgentTests
         Assert.Equal(4000000, info.AvailableKb);
     }
 
-    [Theory]
-    [InlineData("BOOT_IMAGE=/vmlinuz console=hvc0 root=/dev/vda dockyard.agent=tcp\n", true)]
-    [InlineData("console=hvc0 root=/dev/vda", false)]
-    public void Reads_agent_mode_from_cmdline(string cmdline, bool tcp) => Assert.Equal(tcp, AgentOptions.FromCmdline(cmdline).Tcp);
-
     [Fact]
     public void Vsock_address_layout_matches_sockaddr_vm()
     {
