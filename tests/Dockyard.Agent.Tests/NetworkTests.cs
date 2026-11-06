@@ -53,6 +53,7 @@ public sealed class DomainTests
     [Fact]
     public async Task A_zone_name_nothing_answers_to_does_not_go_to_the_hosts_dns()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "The agent only runs on Linux, and on Windows a UDP socket can be reset by an earlier datagram");
         var ct = TestContext.Current.CancellationToken;
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var dns = new DnsServer(IPAddress.Loopback, _ => null, () => "nameserver 192.0.2.1\n", _ => { }, port: 0, ownedZone: DomainNames.InZone);
@@ -66,17 +67,8 @@ public sealed class DomainTests
         foreach (var label in "gone.dockyard.test".Split('.')) { query.Add((byte)label.Length); query.AddRange(System.Text.Encoding.ASCII.GetBytes(label)); }
         query.AddRange([0, 0, 1, 0, 1]);
         var buffer = new byte[512];
-        // Windows reports a datagram that found no socket receiving yet as a reset of this one.
-        for (var attempt = 0; ; attempt++)
-        {
-            try
-            {
-                await udp.SendAsync(query.ToArray(), ct);
-                await udp.ReceiveAsync(buffer, ct);
-                break;
-            }
-            catch (SocketException e) when (e.SocketErrorCode == SocketError.ConnectionReset && attempt < 20) { await Task.Delay(50, ct); }
-        }
+        await udp.SendAsync(query.ToArray(), ct);
+        await udp.ReceiveAsync(buffer, ct);
         Assert.Equal(DnsServer.NameError, buffer[3] & 0x0F);
 
         await cts.CancelAsync();
@@ -255,6 +247,7 @@ public sealed class NetworkTests
     [Fact]
     public async Task The_dns_server_answers_local_names_and_passes_the_rest_on_over_udp_and_tcp()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "The agent only runs on Linux, and on Windows a UDP socket can be reset by an earlier datagram");
         var ct = TestContext.Current.CancellationToken;
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var dns = new DnsServer(IPAddress.Loopback, GuestAddresses.Resolve, () => "", _ => { }, port: 0);
