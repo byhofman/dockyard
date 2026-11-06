@@ -19,6 +19,9 @@ $src network create e2e-net >/dev/null
 $src run --name e2e-writer -v e2e-data:/data alpine:3.24 sh -c 'echo from-source > /data/file; mkdir /data/sub; echo nested > /data/sub/two; echo changed > /inside' >/dev/null
 $src create --name e2e-app --network e2e-net --network-alias app --restart always -l com.docker.compose.project=e2e -e MARK=1 -v e2e-data:/data alpine:3.24 sleep 1000 >/dev/null
 
+# Starting an engine with --bridge none deletes docker0, for this machine's other engine too, which recreates it when it starts.
+sudo systemctl reset-failed docker.service docker.socket || true
+sudo systemctl restart docker.service
 docker version >/dev/null
 "$WIZARD" --silent --import-from "unix://$sock"
 
