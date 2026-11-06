@@ -43,6 +43,7 @@ static class Program
                 Console.WriteLine("No display, so setup runs without a window.");
                 return RunSilent(options);
             }
+            if (!DisplayGate.WaitUntilUsable(TimeSpan.FromMinutes(10))) return 0;
             return Build(AppMode.Setup, args).StartWithClassicDesktopLifetime(args, ShutdownMode.OnMainWindowClose);
         }
 
@@ -55,6 +56,8 @@ static class Program
             LocalPipe.TrySend(LocalPipe.TrayName, TrayCommand.FromArgs(args).ToString(), timeoutMs: 3000);
             return 0;
         }
+        // The login item can start while the screen is locked; a tray has no reason to give up waiting for it.
+        DisplayGate.WaitUntilUsable(Timeout.InfiniteTimeSpan);
         return Build(AppMode.Tray, args).StartWithClassicDesktopLifetime(args, ShutdownMode.OnExplicitShutdown);
     }
 

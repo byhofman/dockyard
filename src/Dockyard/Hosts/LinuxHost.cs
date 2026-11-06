@@ -61,6 +61,7 @@ static class LinuxLayout
     public static string AppPackage(string? packageManager) =>
         packageManager == "dnf" ? @"^dockyard-[\d.]+-1\.x86_64\.rpm$" : @"^dockyard_[\d.]+_amd64\.deb$";
     public const string Tarball = @"^Dockyard-[\d.]+-linux-x64\.tar\.gz$";
+    public const string AppAsset = @"^Dockyard-linux-x64$";
 
     public static readonly string[] DashboardFiles = ["Dockyard.Dashboard", "libSkiaSharp.so", "libHarfBuzzSharp.so"];
 
@@ -139,7 +140,7 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
         "Engine" => await Updates.LatestStatic(Updates.LinuxStaticIndex, "tgz"),
         "Compose" => await Updates.LatestGitHub("docker/compose", Updates.LinuxComposeAsset),
         "Buildx" => await Updates.LatestGitHub("docker/buildx", Updates.LinuxBuildxAsset),
-        "App" => await Updates.LatestApp(),
+        "App" => await Updates.LatestApp(LinuxLayout.AppAsset),
         _ => null,
     };
 

@@ -106,6 +106,27 @@ static class MacLayout
         if (new FileInfo(kept).LinkTarget is not null) File.Move(kept, plugin);
     }
 
+    public const string BundleId = "com.byhofman.dockyard";
+
+    // Everything that is a Dockyard app bundle: where the login item points, either Applications folder, and what an
+    // interrupted install or update left next to them. A wizard run from a download only knows its own default otherwise.
+    public static IReadOnlyList<string> InstalledBundles(string? launchAgentPlist, string userApplications, string systemApplications = "/Applications")
+    {
+        List<string> candidates = [];
+        foreach (var folder in new[] { userApplications, systemApplications })
+            candidates.AddRange(new[] { "Dockyard.app", "Dockyard.app.new", "Dockyard.app.old" }.Select(name => Path.Combine(folder, name)));
+        if (launchAgentPlist is not null
+            && Regex.Match(launchAgentPlist, @"<string>([^<]+\.app)/Contents/MacOS/Dockyard</string>") is { Success: true } login)
+            candidates.Add(login.Groups[1].Value);
+        return candidates.Distinct().Where(IsDockyardBundle).ToList();
+    }
+
+    static bool IsDockyardBundle(string bundle)
+    {
+        var plist = Path.Combine(bundle, "Contents", "Info.plist");
+        return File.Exists(plist) && File.ReadAllText(plist).Contains($"<string>{BundleId}</string>", StringComparison.Ordinal);
+    }
+
     public static string ContextToRestore(string? saved) => string.IsNullOrWhiteSpace(saved) ? "default" : saved.Trim();
 
     public static string? Bundle(string baseDirectory)
@@ -133,10 +154,12 @@ static class MacLayout
 }
 
 [SupportedOSPlatform("macos")]
-sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null) : IEngineHost
+sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>? helperAnswers = null) : IEngineHost
 {
     public const string Engine = "linux";
+    static readonly TimeSpan HelperPatience = TimeSpan.FromSeconds(60);
     readonly Func<bool> ping = ping ?? Ping;
+    readonly Func<bool> helperAnswers = helperAnswers ?? HelperAnswers;
     Process? vm;
 
     public IReadOnlyList<EngineInfo> Engines { get; } =
@@ -157,18 +180,34 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null) : IEngineHo
 
     public async Task Start(string engine)
     {
-        // The engine can outlive the tray that started it; a second helper would only truncate its console log and fail.
-        if (await Task.Run(ping)) return;
-        if (vm is null || vm.HasExited)
+        for (var attempt = 0; ; attempt++)
         {
-            vm?.Dispose();
-            if (!File.Exists(MacLayout.VmConfig)) throw new InvalidOperationException("Dockyard is not set up yet; run the installer first");
-            // Keeps vm.json on this app's kernel after the app moved, and the root image's modules matching that kernel after an update.
-            await Prepare(_ => { });
-            vm = runner.Spawn(MacLayout.Helper, "run", "--config", MacLayout.VmConfig);
+            // The engine can outlive the tray that started it; a second helper would only truncate its console log and fail.
+            if (await Task.Run(ping)) return;
+            // A helper that answers while its engine does not is starting or stopping, and holds the disk images either way.
+            var until = DateTime.UtcNow + HelperPatience;
+            while (await Task.Run(helperAnswers) && DateTime.UtcNow < until)
+            {
+                if (await Task.Run(ping)) return;
+                await Task.Delay(200);
+            }
+            if (vm is null || vm.HasExited)
+            {
+                vm?.Dispose();
+                if (!File.Exists(MacLayout.VmConfig)) throw new InvalidOperationException("Dockyard is not set up yet; run the installer first");
+                // Keeps vm.json on this app's kernel after the app moved, and the root image's modules matching that kernel after an update.
+                await Prepare(_ => { });
+                vm = runner.Spawn(MacLayout.Helper, "run", "--config", MacLayout.VmConfig);
+            }
+            var process = vm;
+            try
+            {
+                await Wait.For(ping, HelperPatience, "Linux engine", failed: () => process.HasExited);
+                return;
+            }
+            // A stop from elsewhere can arrive while this start waits, which ends the helper it was waiting for.
+            catch (InvalidOperationException) when (attempt == 0) { }
         }
-        var process = vm;
-        await Wait.For(ping, TimeSpan.FromSeconds(60), "Linux engine", failed: () => process.HasExited);
     }
 
     public async Task Stop(string engine)
@@ -410,7 +449,10 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null) : IEngineHo
     public async Task Uninstall(Action<string> log, bool removeData)
     {
         await Stop(Engine);
-        if (!RunsFromInstallLocation) await runner.Run("/usr/bin/pkill", "-f", MacLayout.InstalledExe);
+        var bundles = MacLayout.InstalledBundles(File.Exists(MacLayout.LaunchAgent) ? await File.ReadAllTextAsync(MacLayout.LaunchAgent) : null, MacLayout.UserApplications);
+        var own = MacLayout.Bundle(AppContext.BaseDirectory);
+        foreach (var bundle in bundles.Where(b => b != own))
+            await runner.Run("/usr/bin/pkill", "-f", Path.Combine(bundle, "Contents", "MacOS", "Dockyard"));
         if (File.Exists(MacLayout.LaunchAgent)) File.Delete(MacLayout.LaunchAgent);
         if (File.Exists(MacLayout.DockerCli))
         {
@@ -423,7 +465,11 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null) : IEngineHo
         if (Directory.Exists(MacLayout.BinDir)) Directory.Delete(MacLayout.BinDir, recursive: true);
         foreach (var plugin in new[] { "docker-compose", "docker-buildx" })
             MacLayout.RemovePlugin(Path.Combine(MacLayout.PluginDir, plugin), MacLayout.PluginLinksDir);
-        if (MacLayout.Bundle(MacLayout.AppBase + Path.DirectorySeparatorChar) is { } bundle && Directory.Exists(bundle)) Directory.Delete(bundle, recursive: true);
+        foreach (var bundle in bundles)
+        {
+            try { Directory.Delete(bundle, recursive: true); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { log($"{bundle} could not be removed ({e.Message}); move it to the Trash"); }
+        }
         if (removeData)
         {
             if (Directory.Exists(MacLayout.DataDir)) Directory.Delete(MacLayout.DataDir, recursive: true);
@@ -496,6 +542,21 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null) : IEngineHo
             using var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
             await socket.ConnectAsync(new UnixDomainSocketEndPoint(MacLayout.ControlSocket));
             await socket.SendAsync(Encoding.ASCII.GetBytes(command + "\n"));
+            return true;
+        }
+        catch (SocketException)
+        {
+            return false;
+        }
+    }
+
+    static bool HelperAnswers()
+    {
+        if (!File.Exists(MacLayout.ControlSocket)) return false;
+        try
+        {
+            using var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+            socket.Connect(new UnixDomainSocketEndPoint(MacLayout.ControlSocket));
             return true;
         }
         catch (SocketException)
