@@ -62,6 +62,7 @@ curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install.sh |
 | `--without <names>` | Leave them out, or remove them. Asking for a required one or for the last engine exits 2 and changes nothing. With `--remove-data`, an engine's images go too. |
 | `--dashboard`, `--no-dashboard` | The same as `--with dashboard`, `--without dashboard`. |
 | `--no-start` | Do not start Dockyard afterwards. |
+| `--silent --import` | Copy images, volumes and containers from Docker Desktop, which keeps them. **Import** in the tray window does the same. |
 | `--silent --uninstall` | Remove Dockyard. Images and containers stay. |
 | `--silent --uninstall --remove-data` | Remove Dockyard with its images and containers. |
 

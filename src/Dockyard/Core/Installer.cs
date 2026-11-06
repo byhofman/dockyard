@@ -21,6 +21,13 @@ static class Installer
                 return Ok;
             }
 
+            if (options.Action == SetupAction.Import)
+            {
+                await host.Start(host.Engines[0].Id);
+                await DockerDesktop.Import(options.ImportFrom, host.ImportTarget, host.OwnSocket, log);
+                return Ok;
+            }
+
             if (options.Resume)
             {
                 await host.Resume(log);
