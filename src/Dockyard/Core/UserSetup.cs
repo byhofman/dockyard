@@ -36,7 +36,7 @@ static partial class UserSetup
 
     public static async Task ApplyGuest(WslDistro distro, Action<string> log)
     {
-        await using var bundle = typeof(UserSetup).Assembly.GetManifestResourceStream("guest.tar.gz");
+        await using var bundle = typeof(UserSetup).Assembly.GetManifestResourceStream(GuestBundle.ResourceName);
         if (bundle is not null) await distro.ApplyGuest(bundle, log);
     }
 

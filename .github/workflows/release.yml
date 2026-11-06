@@ -57,12 +57,17 @@ jobs:
             out/Dockyard.Dashboard.zip
 
   linux:
+    needs: [guest]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+      - uses: actions/download-artifact@v4
+        with:
+          name: guest
+          path: guest
 
       - name: Test
         run: dotnet test --solution Dockyard.slnx
@@ -70,7 +75,7 @@ jobs:
       - name: Publish and package
         run: |
           version=0.0.0; [ "$GITHUB_REF_TYPE" = tag ] && version="${GITHUB_REF_NAME#v}"
-          dotnet publish src/Dockyard/Dockyard.csproj -c Release -r linux-x64 -o dist/linux/tray -p:Version=$version -warnaserror
+          dotnet publish src/Dockyard/Dockyard.csproj -c Release -r linux-x64 -o dist/linux/tray -p:Version=$version -p:GuestBundle="$PWD/guest/dockyard-guest-guest-x86_64.tar.gz" -warnaserror
           dotnet publish src/Dockyard.Dashboard/Dockyard.Dashboard.csproj -c Release -r linux-x64 -o dist/linux/dashboard -p:Version=$version -warnaserror
           rm -f dist/linux/*/*.pdb
           mkdir -p out/Dockyard && cp dist/linux/tray/* dist/linux/dashboard/* out/Dockyard/
