@@ -101,6 +101,17 @@ if ($Wizard) {
 }
 
 if ($Wizard) {
+    Section 'localhost reaches a published port, not only 127.0.0.1'
+    & $docker --context linux run -d --name e2e-localhost -p 18090:80 nginx:alpine | Out-Null
+    $tray = Start-Process $appExe -ArgumentList '--tray' -PassThru
+    Start-Sleep 8
+    $v6 = (curl.exe -s -g -o NUL -w '%{http_code}' --max-time 10 'http://[::1]:18090/' | Out-String).Trim()
+    Check "[::1] answers (got $v6)" ($v6 -eq '200')
+    $named = (curl.exe -s -o NUL -w '%{http_code}' --max-time 10 'http://localhost:18090/' | Out-String).Trim()
+    Check "localhost answers (got $named)" ($named -eq '200')
+    Get-Process Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
+    & $docker --context linux rm -f e2e-localhost | Out-Null
+
     Section 'docker login keeps credentials in the Windows credential store'
     Check 'the helper is there' (Test-Path (Join-Path $env:ProgramFiles 'Docker\docker-credential-wincred.exe'))
     Check 'the store is set' ((Get-Content "$env:USERPROFILE\.docker\config.json" -Raw) -match '"credsStore":\s*"wincred"')
