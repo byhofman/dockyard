@@ -6,8 +6,9 @@ ok() { echo "  ok   $1"; }
 fail() { echo "  FAIL $1" >&2; exit 1; }
 work="$(mktemp -d /tmp/dy-import.XXXXXX)"
 sock="$work/source.sock"
-sudo dockerd -H "unix://$sock" --data-root "$work/data" --exec-root "$work/exec" --pidfile "$work/pid" --containerd-namespace dy-import --containerd-plugins-namespace dy-import-plugins --bridge none --iptables=false --ip6tables=false >"$work/log" 2>&1 &
-trap 'sudo kill "$(sudo cat "$work/pid")" 2>/dev/null || true; sleep 2; sudo rm -rf "$work"' EXIT
+sudo dockerd -H "unix://$sock" --data-root "$work/data" --exec-root "$work/exec" --pidfile "$work/pid" --containerd-namespace dy-import --containerd-plugins-namespace dy-import-plugins --default-address-pool base=10.234.0.0/16,size=24 --bridge none --iptables=false --ip6tables=false >"$work/log" 2>&1 &
+# Its networks are real bridges on this machine, which stay behind when it just stops.
+trap 'sudo docker -H "unix://$sock" rm -f e2e-app e2e-writer >/dev/null 2>&1 || true; sudo docker -H "unix://$sock" network rm e2e-net >/dev/null 2>&1 || true; sudo kill "$(sudo cat "$work/pid")" 2>/dev/null || true; sleep 2; sudo rm -rf "$work"' EXIT
 i=0; until sudo docker -H "unix://$sock" version >/dev/null 2>&1; do i=$((i+1)); [ $i -lt 60 ] || { tail -20 "$work/log"; fail "the source engine did not start"; }; sleep 1; done
 sudo chmod 666 "$sock"
 src="docker -H unix://$sock"
