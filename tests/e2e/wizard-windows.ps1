@@ -208,7 +208,10 @@ if ($Wizard) {
     Check 'name constrained' (($root.Extensions | Where-Object { $_.Oid.Value -eq '2.5.29.30' }).Critical)
     $tray = Start-Process $appExe -ArgumentList '--tray' -PassThru
     Start-Sleep 15
-    $code = (curl.exe -s -o NUL -w '%{http_code}' --max-time 15 https://e2e-web.dockyard.test/ | Out-String).Trim()
+    # --ssl-no-revoke: this curl asks Windows to check revocation and fails when a private CA publishes no such list, as this
+    # one does not need to. Browsers do not fail on that; a certificate that is not trusted still fails here.
+    $code = (curl.exe -s --ssl-no-revoke -o NUL -w '%{http_code}' --max-time 15 https://e2e-web.dockyard.test/ | Out-String).Trim()
+    if ($code -ne '200') { curl.exe -sS -v --ssl-no-revoke -o NUL --max-time 15 https://e2e-web.dockyard.test/ 2>&1 | Select-Object -Last 15 | Write-Host; Resolve-DnsName e2e-web.dockyard.test -Type A -ErrorAction SilentlyContinue | Out-String | Write-Host }
     Check "https is trusted by Windows (got $code)" ($code -eq '200')
     Get-Process Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
     & $docker --context linux rm -f e2e-web | Out-Null
