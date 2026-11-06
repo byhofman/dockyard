@@ -101,7 +101,11 @@ static class EngineConfig
     {
         var file = CredentialStore.ConfigFile;
         var existing = File.Exists(file) ? await File.ReadAllTextAsync(file) : null;
-        if (WithClientProxy(existing, endpoint, proxy) is not { } updated) return;
+        string? updated;
+        // A file docker itself cannot read is not this setup's to fail on or to overwrite.
+        try { updated = WithClientProxy(existing, endpoint, proxy); }
+        catch (Exception e) when (e is System.Text.Json.JsonException or InvalidOperationException) { return; }
+        if (updated is null) return;
         Directory.CreateDirectory(Path.GetDirectoryName(file)!);
         var temp = file + ".dockyard";
         await File.WriteAllTextAsync(temp, updated);

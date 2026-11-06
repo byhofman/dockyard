@@ -164,7 +164,7 @@ static class Https
                 }
                 reachable = true;
             }
-            catch (Exception e) when (e is IOException or System.Net.Sockets.SocketException or InvalidOperationException) { reachable = false; }
+            catch (Exception e) when (e is not OperationCanceledException) { reachable = false; }
         }
     }
 }

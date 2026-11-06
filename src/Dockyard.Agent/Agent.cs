@@ -17,7 +17,7 @@ sealed partial class Agent(ITransport transport, Action<string> log, AgentApi? a
 
     readonly object controlLock = new();
     static readonly TimeSpan HostNetworkInterval = TimeSpan.FromSeconds(2);
-    static readonly IReadOnlySet<int> OwnPorts = new HashSet<int> { GuestAddresses.HostProxyPort };
+    static readonly IReadOnlySet<int> OwnPorts = new HashSet<int> { GuestAddresses.HostProxyPort, GuestAddresses.DomainHttpPort, GuestAddresses.DomainHttpsPort, 53 };
     List<PublishedPort> ports = [];
     List<PublishedPort> published = [];
     volatile bool hasHostNetwork;

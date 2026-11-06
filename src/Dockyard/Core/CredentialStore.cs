@@ -15,7 +15,8 @@ static class CredentialStore
 
     static JsonObject Parse(string? json)
     {
-        try { return JsonNode.Parse(json ?? "{}") as JsonObject ?? []; }
+        if (string.IsNullOrWhiteSpace(json)) return [];
+        try { return JsonNode.Parse(json) as JsonObject ?? []; }
         catch (JsonException) { throw new InvalidOperationException($"{ConfigFile} is not valid JSON; it was left as it is"); }
     }
 
@@ -44,9 +45,11 @@ static class CredentialStore
     {
         var config = Parse(json);
         config["credsStore"] = store;
+        // Only what went to the store leaves the file: an entry that could not be read as a login is still someone's secret.
+        var moved = PlainLogins(json).Select(l => l.Server).ToHashSet();
         if (config["auths"] is JsonObject auths)
-            foreach (var (_, node) in auths)
-                if (node is JsonObject entry)
+            foreach (var (server, node) in auths)
+                if (node is JsonObject entry && moved.Contains(server))
                 {
                     entry.Remove("auth");
                     entry.Remove("identitytoken");
@@ -73,7 +76,15 @@ static class CredentialStore
     public static async Task Adopt(Action<string> log, string store, string helper, string marker)
     {
         var existing = File.Exists(ConfigFile) ? await File.ReadAllTextAsync(ConfigFile) : null;
-        if (HasStore(existing)) return;
+        try
+        {
+            if (HasStore(existing)) return;
+        }
+        catch (InvalidOperationException e)
+        {
+            log(e.Message);
+            return;
+        }
         foreach (var login in PlainLogins(existing))
         {
             var r = await Shell.RunWithInput(helper, HelperInput(login), "store");
@@ -98,8 +109,13 @@ static class CredentialStore
     {
         if (!File.Exists(marker)) return;
         var store = (await File.ReadAllTextAsync(marker)).Trim();
-        if (File.Exists(ConfigFile) && WithoutStore(await File.ReadAllTextAsync(ConfigFile), store) is { } updated)
-            await File.WriteAllTextAsync(ConfigFile, updated);
+        try
+        {
+            if (File.Exists(ConfigFile) && WithoutStore(await File.ReadAllTextAsync(ConfigFile), store) is { } updated)
+                await File.WriteAllTextAsync(ConfigFile, updated);
+        }
+        // It is unreadable for docker too, so there is no store in it to take back, and uninstalling goes on.
+        catch (InvalidOperationException) { }
         File.Delete(marker);
     }
 }

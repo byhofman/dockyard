@@ -17,6 +17,7 @@ static class GuestAddresses
     public const int RelayHttpPort = 2382;
     public const int RelayHttpsPort = 2383;
     public const int RelayDnsPort = 2353;
+    public const int ContainerDnsPort = 2354;
 
     // Where the host's browser finds domains where it cannot use the engine's own address: all of 127/8 is loopback,
     // and an address nothing else uses cannot clash with a server on 127.0.0.1:80, such as another Docker app's.
@@ -57,6 +58,15 @@ static class NetworkRules
         var loopback = GuestAddresses.HostLoopback.ToString();
         foreach (var (from, to) in new[] { (80, GuestAddresses.DomainHttpPort), (443, GuestAddresses.DomainHttpsPort) })
             yield return ["iptables", "-t", "nat", "-I", "OUTPUT", "-d", loopback, "-p", "tcp", "--dport", from.ToString(), "-j", "REDIRECT", "--to-ports", to.ToString()];
+
+        var dns = GuestAddresses.Dns.ToString();
+        var target = $"{dns}:{GuestAddresses.ContainerDnsPort}";
+        foreach (var protocol in new[] { "udp", "tcp" })
+        {
+            foreach (var iface in new[] { "docker+", "br-+" })
+                yield return ["iptables", "-t", "nat", "-I", "PREROUTING", "-i", iface, "-d", dns, "-p", protocol, "--dport", "53", "-j", "DNAT", "--to-destination", target];
+            yield return ["iptables", "-t", "nat", "-I", "OUTPUT", "-d", dns, "-p", protocol, "--dport", "53", "-j", "DNAT", "--to-destination", target];
+        }
     }
 
     // Only the VM: there the Mac reaches the engine's Linux at its own address, and published ports never come in that

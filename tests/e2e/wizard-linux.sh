@@ -70,16 +70,17 @@ if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
   echo "== the engine and containers follow this machine's proxy, also one on its loopback"
   sudo apt-get install -y -qq tinyproxy >/dev/null
   sudo systemctl stop tinyproxy
-  printf 'Port 18888\nListen 127.0.0.1\nTimeout 60\nAllow 127.0.0.1\nLogFile "/tmp/tinyproxy.log"\nLogLevel Connect\nMaxClients 20\n' > /tmp/tinyproxy.conf
-  sudo tinyproxy -c /tmp/tinyproxy.conf
+  # Its packaged config path: AppArmor keeps tinyproxy from reading one anywhere else.
+  printf 'User tinyproxy\nGroup tinyproxy\nPort 18888\nListen 127.0.0.1\nTimeout 60\nAllow 127.0.0.1\nLogFile "/var/log/tinyproxy/tinyproxy.log"\nLogLevel Connect\nMaxClients 20\n' | sudo tee /etc/tinyproxy/tinyproxy.conf >/dev/null
+  sudo systemctl start tinyproxy
   HTTP_PROXY=http://127.0.0.1:18888 HTTPS_PROXY=http://127.0.0.1:18888 run --silent --no-start >/dev/null
   grep -q 'http://198.19.250.254:18888' /etc/docker/daemon.json && ok "daemon.json has the proxy, through the agent" || fail "daemon.json: $(cat /etc/docker/daemon.json)"
   docker version >/dev/null; sleep 2
   docker pull -q busybox:1.37 >/dev/null || fail "pull through the proxy"
-  sudo grep -q 'CONNECT.*docker' /tmp/tinyproxy.log && ok "the pull went through the proxy" || fail "not in the proxy's log: $(sudo tail -5 /tmp/tinyproxy.log)"
+  sudo grep -q 'CONNECT.*docker' /var/log/tinyproxy/tinyproxy.log && ok "the pull went through the proxy" || fail "not in the proxy's log: $(sudo tail -5 /var/log/tinyproxy/tinyproxy.log)"
   run --silent --no-start >/dev/null
   if grep -q 18888 /etc/docker/daemon.json; then fail "the proxy stayed after the machine stopped using it"; else ok "gone once the machine stops using it"; fi
-  sudo pkill tinyproxy || true
+  sudo systemctl stop tinyproxy || true
   docker image rm busybox:1.37 >/dev/null 2>&1 || true
 fi
 

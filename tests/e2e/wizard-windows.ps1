@@ -134,14 +134,21 @@ if ($Wizard) {
     Check "[::1] answers (got $v6)" ($v6 -eq '200')
     $named = (curl.exe -s -o NUL -w '%{http_code}' --max-time 10 'http://localhost:18090/' | Out-String).Trim()
     Check "localhost answers (got $named)" ($named -eq '200')
+    # The relay holds 80 and 443 on 127.77.0.1, which must not keep a web server from taking those ports on every address.
+    $web = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Any, 80)
+    $web.Start(); $web.Stop()
+    Ok 'a web server can still listen on port 80 next to the tray'
     Get-Process Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
     & $docker --context linux rm -f e2e-localhost | Out-Null
 
     Section "the engine and containers follow Windows' proxy, also one on its loopback"
     python -m pip install --quiet proxy.py
     $proxyLog = Join-Path $env:TEMP 'e2e-proxy.log'
-    $proxy = Start-Process python -ArgumentList "-m proxy --hostname 127.0.0.1 --port 18888 --log-file `"$proxyLog`"" -PassThru -WindowStyle Hidden
+    $proxy = Start-Process python -ArgumentList "-m proxy --hostname 0.0.0.0 --port 18888 --log-file `"$proxyLog`"" -PassThru -WindowStyle Hidden
     Start-Sleep 5
+    # This runner has NAT networking, where only the gateway reaches Windows: a proxy on loopback alone is out of reach
+    # there, as for any host service. Mirrored networking reaches loopback too, and no runner has that.
+    Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
     $settings = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
     Set-ItemProperty $settings ProxyEnable 1
     Set-ItemProperty $settings ProxyServer '127.0.0.1:18888'
@@ -157,6 +164,7 @@ if ($Wizard) {
         Set-ItemProperty $settings ProxyEnable 0
         Remove-ItemProperty $settings ProxyServer -ErrorAction SilentlyContinue
         Stop-Process $proxy -Force -ErrorAction SilentlyContinue
+        Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True
     }
     Check 'exit 0 without the proxy' ((Run --silent --no-start) -eq 0)
     wsl.exe -d dockyard -u root -- sh -c 'kill -TERM $(pidof dockerd); while pidof dockerd >/dev/null; do sleep 0.2; done'

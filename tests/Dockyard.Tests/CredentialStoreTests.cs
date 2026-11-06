@@ -21,6 +21,19 @@ public sealed class CredentialStoreTests
     public void Nothing_to_move_means_no_logins(string? json) => Assert.Empty(CredentialStore.PlainLogins(json));
 
     [Fact]
+    public void Adopting_a_store_keeps_an_entry_that_was_not_moved_and_an_empty_file_is_no_error()
+    {
+        var unreadable = "not base64!";
+        var config = new JsonObject { ["auths"] = new JsonObject { ["a.example"] = new JsonObject { ["auth"] = B64("u:p") }, ["b.example"] = new JsonObject { ["auth"] = unreadable } } }.ToJsonString();
+        var auths = JsonNode.Parse(CredentialStore.Adopted(config, "osxkeychain"))!["auths"]!;
+        Assert.Null(auths["a.example"]!["auth"]);
+        Assert.Equal(unreadable, auths["b.example"]!["auth"]!.GetValue<string>());
+
+        Assert.False(CredentialStore.HasStore(""));
+        Assert.Empty(CredentialStore.PlainLogins("  "));
+    }
+
+    [Fact]
     public void Adopting_a_store_removes_the_secrets_and_keeps_everything_else()
     {
         var json = """{"auths":{"a.example":{"auth":"AUTH"}},"currentContext":"orbstack","proxies":{"default":{"httpProxy":"x"}}}""".Replace("AUTH", B64("me:secret"));

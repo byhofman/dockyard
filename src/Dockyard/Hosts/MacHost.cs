@@ -367,6 +367,9 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
             if ((await runner.Run("sudo", "-n", "/bin/sh", "-c", script)).ExitCode != 0)
                 await runner.Run("/usr/bin/osascript", MacLayout.AdminShell(script));
         }
+        foreach (var keychain in new[] { MacLayout.LoginKeychain, "/Library/Keychains/System.keychain" })
+            if ((await runner.Run("/usr/bin/security", "find-certificate", "-a", "-Z", "-c", LocalCa.SubjectName, keychain)).Output.Contains(thumbprint, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Dockyard's certificate is still in {keychain}. Nothing was removed, so this can be tried again.");
         log("Dockyard's certificate is out of this Mac's trust store");
     }
 
