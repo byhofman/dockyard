@@ -35,6 +35,11 @@ interface IEngineHost
     // Finishes an install that had to wait for a reboot.
     Task Resume(Action<string> log) => Task.CompletedTask;
 
+    // Registry mirrors, insecure registries and address pools on an engine Dockyard owns; a Linux host's file is the user's.
+    bool HasEngineConfiguration => false;
+    // Puts the settings in place, restarting the engine if it runs: it reads them only when it starts.
+    Task ApplyEngineConfiguration(Action<string> log) => Task.CompletedTask;
+
     // What only the tray keeps running, for as long as it runs.
     void StartTrayServices() { }
 

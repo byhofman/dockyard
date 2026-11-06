@@ -49,10 +49,10 @@ static partial class UserSetup
     }
 
     // Before every start, because what Windows uses changes with the network it is on.
-    static async Task WriteEngineConfig(WslDistro distro, Action<string> log)
+    public static async Task WriteEngineConfig(WslDistro distro, Action<string> log)
     {
         var proxy = HostProxy();
-        await distro.WriteFile("/etc/docker/daemon.json", EngineConfig.Render(proxy));
+        await distro.WriteFile("/etc/docker/daemon.json", EngineConfig.Render(proxy, Settings.Load()));
         await EngineConfig.ApplyClientProxy(Paths.LinuxHost, proxy);
         if (proxy is { IsEmpty: false }) log("The Linux engine and its containers use this PC's proxy");
     }

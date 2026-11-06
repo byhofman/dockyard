@@ -185,6 +185,32 @@
           </Border>
         </StackPanel>
 
+        <!-- Engine configuration -->
+        <StackPanel Spacing="10" IsVisible="{Binding ShowEngineConfiguration}">
+          <TextBlock Classes="h2" Text="LINUX ENGINE" />
+          <Border Classes="card">
+            <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto,Auto">
+              <StackPanel Margin="0,0,10,0" Spacing="4">
+                <TextBlock Classes="muted" FontSize="12" Text="Registry mirrors, one per line" />
+                <TextBox Classes="mono" AcceptsReturn="True" Height="76" Text="{Binding RegistryMirrors}" PlaceholderText="https://mirror.example.com" />
+              </StackPanel>
+              <StackPanel Grid.Column="1" Margin="0,0,10,0" Spacing="4">
+                <TextBlock Classes="muted" FontSize="12" Text="Insecure registries, one per line" />
+                <TextBox Classes="mono" AcceptsReturn="True" Height="76" Text="{Binding InsecureRegistries}" PlaceholderText="registry.example.com:5000" />
+              </StackPanel>
+              <StackPanel Grid.Column="2" Spacing="4">
+                <TextBlock Classes="muted" FontSize="12" Text="Address pools: range and network size" />
+                <TextBox Classes="mono" AcceptsReturn="True" Height="76" Text="{Binding AddressPools}" PlaceholderText="10.20.0.0/16 24" />
+              </StackPanel>
+              <TextBlock Grid.Row="1" Grid.ColumnSpan="3" Foreground="#C4314B" TextWrapping="Wrap" Margin="0,10,0,0" Text="{Binding EngineConfigurationProblem}" IsVisible="{Binding HasEngineConfigurationProblem}" />
+              <Grid Grid.Row="2" Grid.ColumnSpan="3" ColumnDefinitions="*,Auto" Margin="0,12,0,0">
+                <TextBlock Classes="muted" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,16,0" Text="Applying restarts the engine if it is running, which stops containers that have no restart policy." />
+                <Button Grid.Column="1" Classes="primary" Content="Apply" Command="{Binding ApplyEngineConfigurationCommand}" />
+              </Grid>
+            </Grid>
+          </Border>
+        </StackPanel>
+
         <!-- Activity -->
         <Expander Header="Activity" IsExpanded="{Binding IsSetupMode, Mode=OneTime}" HorizontalAlignment="Stretch">
           <SelectableTextBlock x:Name="LogBox" Classes="mono" Text="{Binding LogText}" TextWrapping="Wrap" MinHeight="80" />

@@ -52,9 +52,17 @@ static class EngineConfig
     }
 
     // The file for an engine Dockyard owns, on macOS and in WSL: rendered fresh, nobody else writes it.
-    public static string Render(ProxySettings? proxy)
+    public static string Render(ProxySettings? proxy, Settings? settings = null)
     {
         var config = new JsonObject { ["dns"] = new JsonArray(DnsAddress) };
+        static JsonArray Strings(IEnumerable<string> items) => new(items.Select(i => (JsonNode)JsonValue.Create(i)).ToArray());
+        var mirrors = EngineOptions.Lines(settings?.RegistryMirrors).ToList();
+        if (mirrors.Count > 0) config["registry-mirrors"] = Strings(mirrors);
+        var insecure = EngineOptions.Lines(settings?.InsecureRegistries).ToList();
+        if (insecure.Count > 0) config["insecure-registries"] = Strings(insecure);
+        var pools = EngineOptions.Lines(settings?.AddressPools).Select(l => EngineOptions.ParsePool(l).Pool).OfType<AddressPool>().ToList();
+        if (pools.Count > 0)
+            config["default-address-pools"] = new JsonArray(pools.Select(p => (JsonNode)new JsonObject { ["base"] = p.Base, ["size"] = p.Size }).ToArray());
         if (proxy is { IsEmpty: false })
         {
             var engine = HostProxySettings.ForEngine(proxy);
