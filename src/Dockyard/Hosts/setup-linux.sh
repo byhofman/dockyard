@@ -1,9 +1,12 @@
 #!/bin/sh
-# Dockyard setup for Linux, run as root (pkexec): setup-linux.sh install <user> | uninstall | packages
+# Dockyard setup for Linux, run as root (pkexec): setup-linux.sh install <user> [agent] [daemon.json] | uninstall "" [daemon.json] | packages
 set -eu
 
 action="${1:?usage: setup-linux.sh install <user> | uninstall | packages}"
 user="${2:-}"
+agent="${3:-}"
+daemon_json="${3:-}"
+[ "$action" = install ] && daemon_json="${4:-}"
 rule=/etc/polkit-1/rules.d/50-dockyard.rules
 socket_dropin_dir=/etc/systemd/system/docker.socket.d
 
@@ -107,6 +110,40 @@ EOF
   echo "$user can use docker right away"
 }
 
+# Tied to docker.service in both directions: it needs the engine's socket to be useful, and connecting to that socket
+# itself would start an engine that is supposed to start on demand.
+install_agent() {
+  [ -n "$agent" ] || return 0
+  install -d /usr/local/lib/dockyard
+  install -m 0755 "$agent" /usr/local/lib/dockyard/dockyard-agent
+  has_systemd || return 0
+  cat > /etc/systemd/system/dockyard-agent.service <<'EOF'
+[Unit]
+Description=Dockyard agent: host.docker.internal and names for containers
+BindsTo=docker.service
+After=docker.service
+
+[Service]
+ExecStart=/usr/local/lib/dockyard/dockyard-agent --mode=host
+Restart=on-failure
+
+[Install]
+WantedBy=docker.service
+EOF
+  systemctl daemon-reload
+  systemctl enable dockyard-agent.service >/dev/null 2>&1
+}
+
+# A running engine only reads this when it starts, and restarting it would stop the user's containers without a change to apply.
+apply_daemon_json() {
+  [ -n "$daemon_json" ] && [ -f "$daemon_json" ] || return 0
+  if [ -f /etc/docker/daemon.json ] && cmp -s "$daemon_json" /etc/docker/daemon.json; then return 0; fi
+  install -d /etc/docker
+  install -m 0644 "$daemon_json" /etc/docker/daemon.json
+  if has_systemd && systemctl is-active --quiet docker.service; then systemctl restart docker.service; fi
+  echo "Updated /etc/docker/daemon.json"
+}
+
 configure() {
   getent group docker >/dev/null || groupadd docker
   if [ -n "$user" ]; then
@@ -139,8 +176,12 @@ EOF
 
 case "$action" in
   packages) install_packages ;;
-  install) install_packages; configure; grant_socket_access; install_tray_host; install_libsecret ;;
+  install) install_packages; configure; grant_socket_access; install_tray_host; install_libsecret; install_agent; apply_daemon_json ;;
   uninstall)
+    if has_systemd; then systemctl disable --now dockyard-agent.service >/dev/null 2>&1 || true; fi
+    rm -f /etc/systemd/system/dockyard-agent.service
+    rm -rf /usr/local/lib/dockyard
+    apply_daemon_json
     rm -f "$rule"
     rm -rf "$socket_dropin_dir" /etc/dockyard
     rm -f /usr/local/bin/docker-credential-secretservice

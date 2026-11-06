@@ -202,7 +202,7 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
     public async Task<bool> Install(Action<string> log, InstallRequest request)
     {
         await InstallApp(log, request.Dashboard, tag: null);
-        await RunSetup(log, "install", SetupUser);
+        await InstallWithAgent(log);
         if (Environment.UserName == "root")
             log("Running as root: the tray autostart is set up the first time you run setup as your own user");
         else
@@ -232,7 +232,7 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
     {
         if (File.Exists(AutostartFile)) File.Delete(AutostartFile);
         await CredentialStore.Forget(Paths.CredentialStoreMarker);
-        await RunSetup(log, "uninstall");
+        await UninstallWithConfig(log);
         if (Directory.Exists(LinuxLayout.HomeDir)) Directory.Delete(LinuxLayout.HomeDir, recursive: true);
         if (new FileInfo(LinuxLayout.HomeLink).LinkTarget is not null) File.Delete(LinuxLayout.HomeLink);
         if (Directory.Exists(Paths.SettingsDir)) Directory.Delete(Paths.SettingsDir, recursive: true);
@@ -242,6 +242,45 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
     public void ReleaseResources() { }
 
     static string SetupUser => Environment.UserName == "root" ? Environment.GetEnvironmentVariable("SUDO_USER") ?? "" : Environment.UserName;
+
+    const string DaemonJson = "/etc/docker/daemon.json";
+
+    // The setup script runs as root but has no JSON tools, so the merged file is prepared here and handed to it.
+    async Task InstallWithAgent(Action<string> log)
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var agent = await GuestBundle.ExtractAgent(dir) ?? "";
+            var existing = File.Exists(DaemonJson) ? await File.ReadAllTextAsync(DaemonJson) : null;
+            var config = Path.Combine(dir, "daemon.json");
+            await File.WriteAllTextAsync(config, agent.Length == 0 ? existing ?? "{}" : EngineConfig.WithDockyard(existing));
+            if (agent.Length > 0 && EngineConfig.DnsIsSomeoneElses(existing))
+                log($"{DaemonJson} sets its own dns, so containers do without host.docker.internal; remove that setting to get it");
+            // Root reads these through a path a normal user's temp folder may keep from it otherwise.
+            File.SetUnixFileMode(dir, (UnixFileMode)0b111_101_101);
+            await RunSetup(log, "install", SetupUser, agent, config);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    async Task UninstallWithConfig(Action<string> log)
+    {
+        var config = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}.json");
+        try
+        {
+            if (File.Exists(DaemonJson)) await File.WriteAllTextAsync(config, EngineConfig.WithoutDockyard(await File.ReadAllTextAsync(DaemonJson)));
+            await RunSetup(log, "uninstall", "", File.Exists(config) ? config : "");
+        }
+        finally
+        {
+            File.Delete(config);
+        }
+    }
 
     // A server without a desktop has no secret service to keep logins in. Setting the store anyway would make docker login
     // fail outright, so the helper has to answer first.
