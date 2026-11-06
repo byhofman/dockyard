@@ -9,7 +9,7 @@ using Dockyard.Engine.Transport;
 
 namespace Dockyard.Agent;
 
-sealed partial class Agent(ITransport transport, Action<string> log)
+sealed partial class Agent(ITransport transport, Action<string> log, AgentApi? api = null)
 {
     const string DockerSocket = "/var/run/docker.sock";
     static readonly TimeSpan MemoryInterval = TimeSpan.FromSeconds(5);
@@ -29,6 +29,7 @@ sealed partial class Agent(ITransport transport, Action<string> log)
             Serve(Ports.Docker, ProxyDocker, ct),
             Serve(Ports.Forward, Forward, ct),
             Serve(Ports.Control, Control, ct),
+            Serve(Ports.Api, (client, token) => api is null ? Task.CompletedTask : api.Handle(client.Stream, token), ct),
             WatchPorts(ct),
             WatchHostNetwork(ct),
             ReportMemory(ct),

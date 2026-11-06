@@ -21,7 +21,7 @@ COPY image/rootfs/ /
 RUN chmod 0755 /usr/local/sbin/dockyard-init /usr/local/sbin/dockyard-update
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS agent
-RUN apk add --no-cache clang build-base zlib-dev zlib-static
+RUN apk add --no-cache clang build-base zlib-dev zlib-static openssl-dev openssl-libs-static cmake linux-headers
 WORKDIR /src
 COPY src/Dockyard.Engine/ src/Dockyard.Engine/
 COPY src/Dockyard.Agent/ src/Dockyard.Agent/

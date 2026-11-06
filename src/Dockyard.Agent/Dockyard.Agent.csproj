@@ -14,6 +14,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <DebugType>none</DebugType>
     <StaticExecutable Condition="$(RuntimeIdentifier.StartsWith('linux-musl'))">true</StaticExecutable>
+    <StaticOpenSslLinking Condition="$(RuntimeIdentifier.StartsWith('linux-musl'))">true</StaticOpenSslLinking>
   </PropertyGroup>
 
   <ItemGroup>
