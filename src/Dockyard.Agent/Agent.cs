@@ -16,7 +16,11 @@ sealed partial class Agent(ITransport transport, Action<string> log)
     static readonly TimeSpan TrimInterval = TimeSpan.FromHours(1);
 
     readonly object controlLock = new();
+    static readonly TimeSpan HostNetworkInterval = TimeSpan.FromSeconds(2);
+    static readonly IReadOnlySet<int> OwnPorts = new HashSet<int> { GuestAddresses.HostProxyPort };
     List<PublishedPort> ports = [];
+    List<PublishedPort> published = [];
+    volatile bool hasHostNetwork;
     StreamWriter? control;
 
     public async Task Run(CancellationToken ct)
@@ -26,6 +30,7 @@ sealed partial class Agent(ITransport transport, Action<string> log)
             Serve(Ports.Forward, Forward, ct),
             Serve(Ports.Control, Control, ct),
             WatchPorts(ct),
+            WatchHostNetwork(ct),
             ReportMemory(ct),
             Trim(ct));
     }
@@ -83,12 +88,19 @@ sealed partial class Agent(ITransport transport, Action<string> log)
         }
     }
 
+    // A server in a --network host container may listen on IPv6 only.
     static async Task<SocketConnection> ConnectTcp(int port, CancellationToken ct)
     {
-        var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        try { return await ConnectTcp(IPAddress.Loopback, port, ct); }
+        catch (SocketException) { return await ConnectTcp(IPAddress.IPv6Loopback, port, ct); }
+    }
+
+    static async Task<SocketConnection> ConnectTcp(IPAddress address, int port, CancellationToken ct)
+    {
+        var socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
         try
         {
-            await socket.ConnectAsync(IPAddress.Loopback, port, ct);
+            await socket.ConnectAsync(address, port, ct);
             return new SocketConnection(socket);
         }
         catch
@@ -202,11 +214,39 @@ sealed partial class Agent(ITransport transport, Action<string> log)
 
     async Task Refresh(DockerClient docker, CancellationToken ct)
     {
-        var next = PublishedPorts.From(await docker.ListContainersAsync(all: false, ct));
-        if (next.SequenceEqual(ports)) return;
-        ports = next;
-        log("ports: " + string.Join(", ", ports.Select(p => $"{p.Protocol}/{p.Port}")));
-        Send(new ControlMessage { Type = "ports", Ports = ports });
+        var containers = await docker.ListContainersAsync(all: false, ct);
+        published = PublishedPorts.From(containers);
+        hasHostNetwork = containers.Any(c => c.State == "running" && c.HostConfig?.NetworkMode == "host");
+        ReportPorts();
+    }
+
+    void ReportPorts()
+    {
+        var next = ListeningPorts.Merge(published, hasHostNetwork ? ListeningPorts.Read(ReadIfThere, OwnPorts) : []);
+        lock (controlLock)
+        {
+            if (next.SequenceEqual(ports)) return;
+            ports = next;
+        }
+        log("ports: " + string.Join(", ", next.Select(p => $"{p.Protocol}/{p.Port}")));
+        Send(new ControlMessage { Type = "ports", Ports = next });
+    }
+
+    static string? ReadIfThere(string file)
+    {
+        try { return File.ReadAllText(file); }
+        catch (IOException) { return null; }
+    }
+
+    // A server in a --network host container can start any time after its container did, and only the kernel knows.
+    // Nothing is polled unless such a container runs.
+    async Task WatchHostNetwork(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            await Task.Delay(HostNetworkInterval, ct);
+            if (hasHostNetwork) ReportPorts();
+        }
     }
 
     async Task ReportMemory(CancellationToken ct)

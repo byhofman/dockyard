@@ -83,6 +83,40 @@ public sealed class NetworkTests
         Assert.Equal(Enum.Parse<AgentMode>(mode), AgentOptions.From(arg.Length > 0 ? [arg] : [], cmdline).Mode);
 
     [Fact]
+    public void Listening_servers_are_found_on_wildcard_and_loopback_only()
+    {
+        const string tcp = """
+              sl  local_address rem_address   st tx_queue
+               0: 00000000:1F90 00000000:0000 0A 0
+               1: 0100007F:0BB8 00000000:0000 0A 0
+               2: 01FA13C6:0035 00000000:0000 0A 0
+               3: 0100007F:1F41 0200A8C0:D431 01 0
+            """;
+        Assert.Equal([8080, 3000], ListeningPorts.Parse(tcp.ReplaceLineEndings("\n"), udp: false));
+        const string tcp6 = "header\n 0: 00000000000000000000000001000000:1389 00000000000000000000000000000000:0000 0A 0\n";
+        Assert.Equal([5001], ListeningPorts.Parse(tcp6, udp: false));
+        const string udp = "header\n 0: 00000000:14E9 00000000:0000 07 0\n 1: 00000000:14EA 0100007F:0035 01 0\n";
+        Assert.Equal([5353], ListeningPorts.Parse(udp, udp: true));
+    }
+
+    [Fact]
+    public void Listening_servers_go_to_the_macs_loopback_and_published_ports_keep_their_bind()
+    {
+        var files = new Dictionary<string, string>
+        {
+            ["/proc/net/tcp"] = "h\n 0: 00000000:1F90 00000000:0000 0A 0\n 1: 00000000:094A 00000000:0000 0A 0\n 2: 00000000:0050 00000000:0000 0A 0\n",
+            ["/proc/net/tcp6"] = "h\n 0: 00000000000000000000000000000000:1F90 00000000000000000000000000000000:0000 0A 0\n",
+        };
+        var listening = ListeningPorts.Read(f => files.GetValueOrDefault(f), new HashSet<int> { 2378 }).ToList();
+        Assert.Equal(2, listening.Count);
+        Assert.All(listening, p => Assert.Equal("127.0.0.1", p.HostIp));
+
+        var merged = ListeningPorts.Merge([new Dockyard.Engine.PublishedPort("tcp", "0.0.0.0", 80)], listening);
+        Assert.Equal([80, 8080], merged.Select(p => p.Port));
+        Assert.Equal("0.0.0.0", merged[0].HostIp);
+    }
+
+    [Fact]
     public void Only_the_documented_names_mean_the_host()
     {
         Assert.Equal(GuestAddresses.Host, GuestAddresses.Resolve("host.docker.internal"));

@@ -2,6 +2,7 @@ namespace Dockyard.Engine;
 
 public sealed class ContainerSummary
 {
+    public HostConfigSummary? HostConfig { get; set; }
     public string Id { get; set; } = "";
     public List<string> Names { get; set; } = [];
     public string Image { get; set; } = "";
@@ -62,6 +63,11 @@ public sealed class ContainerConfig
     public Dictionary<string, string>? Labels { get; set; }
     public bool Tty { get; set; }
     public string? WorkingDir { get; set; }
+}
+
+public sealed class HostConfigSummary
+{
+    public string? NetworkMode { get; set; }
 }
 
 public sealed class HostConfigInfo
