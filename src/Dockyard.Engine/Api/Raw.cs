@@ -49,12 +49,7 @@ public sealed partial class DockerClient
     public async Task<string> EnsureEmptyImageAsync(CancellationToken ct = default)
     {
         const string name = "dockyard-empty:1";
-        // One empty file, not an empty archive: an engine on the containerd image store reports success for that and makes no image.
-        var tar = new MemoryStream();
-        using (var writer = new System.Formats.Tar.TarWriter(tar, System.Formats.Tar.TarEntryFormat.Ustar, leaveOpen: true))
-            writer.WriteEntry(new System.Formats.Tar.UstarTarEntry(System.Formats.Tar.TarEntryType.RegularFile, ".dockyard-empty"));
-        tar.Position = 0;
-        await SendTarAsync(HttpMethod.Post, "images/create?fromSrc=-&repo=dockyard-empty&tag=1", tar, ct);
+        await SendTarAsync(HttpMethod.Post, "images/create?fromSrc=-&repo=dockyard-empty&tag=1", new MemoryStream(new byte[1024]), ct);
         return name;
     }
 

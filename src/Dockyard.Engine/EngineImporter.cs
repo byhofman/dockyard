@@ -133,8 +133,12 @@ public sealed class EngineImporter(DockerClient source, DockerClient target, Act
         }
         finally
         {
-            await source.RemoveImageAsync(sourceImage, force: true, CancellationToken.None);
-            await target.RemoveImageAsync(targetImage, force: true, CancellationToken.None);
+            // What was copied must not turn into a failure over a helper image that is already gone.
+            foreach (var engine in new[] { source, target })
+            {
+                try { await engine.RemoveImageAsync(sourceImage, force: true, CancellationToken.None); }
+                catch (DockerException e) { log($"The temporary image {sourceImage} stays behind: {e.Message}"); }
+            }
         }
         return count;
     }
