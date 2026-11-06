@@ -254,7 +254,7 @@ jobs:
         run: |
           sudo systemctl start docker.socket
           # After the uninstalls above, containers must reach the network with nothing of Dockyard's in the way.
-          if ! timeout 60 sudo docker run --rm alpine:3.24 nslookup -timeout=5 dl-cdn.alpinelinux.org; then
+          if ! timeout 60 sudo docker run --rm alpine:3.24 nslookup dl-cdn.alpinelinux.org; then
             cat /etc/docker/daemon.json || true; cat /etc/resolv.conf /run/systemd/resolve/resolv.conf || true
             sudo docker run --rm alpine:3.24 cat /etc/resolv.conf || true
             resolvectl status | head -30 || true; sudo iptables -S | head -40 || true; sudo iptables -t nat -S | head -40 || true; ip addr show lo; ip route; systemctl status --no-pager docker.service | tail -5
