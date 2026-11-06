@@ -125,6 +125,17 @@ if ($Wizard) {
     Check 'other names still resolve' ($name -match 'Address')
 }
 
+if ($Wizard) {
+    Section 'docker login keeps credentials in the Windows credential store'
+    Check 'the helper is there' (Test-Path (Join-Path $env:ProgramFiles 'Docker\docker-credential-wincred.exe'))
+    Check 'the store is set' ((Get-Content "$env:USERPROFILE\.docker\config.json" -Raw) -match '"credsStore":\s*"wincred"')
+    $helper = Join-Path $env:ProgramFiles 'Docker\docker-credential-wincred.exe'
+    '{"ServerURL":"e2e.dockyard.test","Username":"me","Secret":"s3cret"}' | & $helper store
+    Check 'a login round-trips through the store' (('e2e.dockyard.test' | & $helper get | Out-String) -match 's3cret')
+    Check 'the secret is not in config.json' ((Get-Content "$env:USERPROFILE\.docker\config.json" -Raw) -notmatch 's3cret')
+    'e2e.dockyard.test' | & $helper erase
+}
+
 Section 'the Windows engine: no sign-out needed'
 $config = Get-Content 'C:\ProgramData\docker\config\daemon.json' -Raw
 Check 'the user is named on the pipe' ($config.Contains(([Security.Principal.WindowsIdentity]::GetCurrent().Name -replace '\\', '\\')))
@@ -222,6 +233,7 @@ Check 'exit 0' ((Run --silent --uninstall) -eq 0)
 Check 'app removed' (-not (Test-Path $appExe))
 $distros = (wsl.exe -l -q | Out-String) -replace "`0", ''
 Check 'the dockyard distro is kept' ($distros -match 'dockyard')
+Check 'no credential store left in the config' (-not ((Test-Path "$env:USERPROFILE\.docker\config.json") -and ((Get-Content "$env:USERPROFILE\.docker\config.json" -Raw) -match 'credsStore')))
 Check 'our .wslconfig line is gone' (-not ((Test-Path "$env:USERPROFILE\.wslconfig") -and ((Get-Content "$env:USERPROFILE\.wslconfig" -Raw) -match 'networkingMode=mirrored')))
 
 Section 'a fresh install gets the dashboard'

@@ -121,6 +121,7 @@ public sealed class NetworkTests
     [Fact]
     public async Task The_dns_server_answers_local_names_and_passes_the_rest_on_over_udp_and_tcp()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "The agent only runs on Linux, and on Windows a UDP socket can be reset by an earlier datagram");
         var ct = TestContext.Current.CancellationToken;
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var dns = new DnsServer(IPAddress.Loopback, GuestAddresses.Resolve, () => "", _ => { }, port: 0);

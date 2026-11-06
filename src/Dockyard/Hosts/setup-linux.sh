@@ -99,6 +99,16 @@ install_tray_host() {
   esac
 }
 
+install_libsecret() {
+  command -v gnome-shell >/dev/null 2>&1 || [ -n "${XDG_CURRENT_DESKTOP:-}" ] || return 0
+  case "$family" in
+    apt) DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libsecret-1-0 >/dev/null 2>&1 || true ;;
+    dnf) dnf -y -q install libsecret >/dev/null 2>&1 || true ;;
+    pacman) pacman -S --noconfirm --needed libsecret >/dev/null 2>&1 || true ;;
+    zypper) zypper --non-interactive install libsecret-1-0 >/dev/null 2>&1 || true ;;
+  esac
+}
+
 install_acl() {
   command -v setfacl >/dev/null 2>&1 && return 0
   case "$family" in
@@ -161,10 +171,11 @@ case "$action" in
   packages) install_packages ;;
   # $2 is the package here.
   add-plugin) add_plugin ;;
-  install) install_packages; configure; grant_socket_access; install_tray_host ;;
+  install) install_packages; configure; grant_socket_access; install_tray_host; install_libsecret ;;
   uninstall)
     rm -f "$rule"
     rm -rf "$socket_dropin_dir" /etc/dockyard
+    rm -f /usr/local/bin/docker-credential-secretservice
     if has_systemd; then
       systemctl daemon-reload
       systemctl enable docker.service containerd.service >/dev/null 2>&1 || true
