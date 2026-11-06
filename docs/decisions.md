@@ -38,11 +38,11 @@ What Task Manager's Details tab, Activity Monitor and `ps` show comes from the f
 `DOK-16`. A CA in the trust store is a risk to everything the browser trusts, so it is built to be worth little if taken:
 
 - **Name constrained, as a critical extension,** to `dockyard.test`, with path length 0. macOS, Windows, Chrome and Firefox all enforce this; a stolen key cannot sign `www.bank.com`.
-- **Its key never enters the engine's Linux,** where a privileged container could read it. The agent gets a 90 day wildcard leaf, kept in memory only and handed over by the tray after each engine start, so an agent without a tray serves HTTP only.
+- **Its key is never given to the engine's Linux.** The agent gets a 90 day wildcard leaf, kept in memory only and handed over by the tray after each engine start, so an agent without a tray serves HTTP only.
 - **Off by default.** It is a button with the explanation next to it, and declining leaves plain HTTP working. Silent setups only do it with `--trust-https`, and then only with what needs no prompt.
 - **Which store:** Windows uses the machine's, through the wizard's UAC prompt, because the current user's store raises its own dialog. macOS uses the login keychain from a window, and the system keychain from a silent setup with sudo. Linux uses the system's plus the user's NSS database where one exists; a snap or flatpak browser keeps its own and will warn.
 - **Removal:** turning it off and uninstalling both remove the trust and delete the key. Windows removes by subject name, so nothing stays even if the key folder is already gone.
-- **The key is a file**, mode 0600 or owner-only by ACL. On macOS and Windows anything run as this user can read it, and containers can if `/Users` or `C:\\` is mounted; the constraint is what limits that risk. The keychain or DPAPI would not change it for code running as the same user.
+- **The key is a file**, mode 0600 or owner-only by ACL. On macOS and Windows anything run as this user can read it, and containers can if `/Users` or `C:\\` is mounted; the constraint is what limits that risk. The keychain or DPAPI would not change it for code running as the same user. This also means a privileged container on the Linux engine can read the file through the `/Users` share or `/mnt/c`; moving the key out of those shares is the improvement to make if that ever matters more than the constraint.
 
 ## 2026-11-06: Domains resolve per place, and no port 80 is taken on the host
 
