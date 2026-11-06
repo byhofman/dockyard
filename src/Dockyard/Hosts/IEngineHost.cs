@@ -40,6 +40,10 @@ interface IEngineHost
     // Puts the settings in place, restarting the engine if it runs: it reads them only when it starts.
     Task ApplyEngineConfiguration(Action<string> log) => Task.CompletedTask;
 
+    // Where Linux containers imported from another engine go, started if need be; and the socket Dockyard itself links, if any.
+    string ImportTarget => Engines[0].Endpoint;
+    string? OwnSocket => null;
+
     // What only the tray keeps running, for as long as it runs.
     void StartTrayServices() { }
 

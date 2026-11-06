@@ -2,13 +2,14 @@ namespace Dockyard.Core;
 
 sealed class SetupUsageException(string message) : Exception(message);
 
-enum SetupAction { Install, Uninstall }
+enum SetupAction { Install, Uninstall, Import }
 
 sealed record SetupOptions
 {
     public const string Usage = """
         Usage: Dockyard [--silent] [--dashboard | --no-dashboard] [--no-start] [--image <file>]
                Dockyard --silent --uninstall [--remove-data]
+               Dockyard --silent --import [--import-from <endpoint>]
                Dockyard --version
 
           --silent        No window: install, or update what is installed. Progress goes to the console.
@@ -17,6 +18,8 @@ sealed record SetupOptions
                           Without either: a new install gets it, an existing install keeps what it has.
           --no-start      Do not start Dockyard afterwards.
           --image <file>  Windows: the Linux engine image to import instead of downloading it.
+          --import        Copy images, volumes and containers from Docker Desktop, which keeps them.
+          --import-from   The engine to copy from instead, as unix://, npipe:// or tcp://.
           --uninstall     Remove Dockyard. Images and containers stay unless --remove-data is given too.
 
         Exit code: 0 done, 3010 done after a reboot (Windows; setup resumes by itself), 2 wrong arguments, 1 failed.
@@ -35,6 +38,7 @@ sealed record SetupOptions
     public bool OpenSetup { get; init; }
     public bool ShowVersion { get; init; }
     public bool ShowHelp { get; init; }
+    public string? ImportFrom { get; init; }
 
     public static SetupOptions Parse(IReadOnlyList<string> args)
     {
@@ -48,6 +52,8 @@ sealed record SetupOptions
                 // --install is the name earlier one-liners and scripts use.
                 "--install" => options with { Silent = true, Action = SetupAction.Install },
                 "--uninstall" => options with { Silent = true, Action = SetupAction.Uninstall },
+                "--import" => options with { Silent = true, Action = SetupAction.Import },
+                "--import-from" => options with { Silent = true, Action = SetupAction.Import, ImportFrom = ++i < args.Count ? args[i] : throw new SetupUsageException("--import-from needs an endpoint") },
                 "--dashboard" => options with { Dashboard = Choose(options.Dashboard, true) },
                 "--no-dashboard" or "--engine-only" => options with { Dashboard = Choose(options.Dashboard, false) },
                 "--no-start" => options with { Start = false },
