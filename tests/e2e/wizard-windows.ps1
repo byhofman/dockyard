@@ -73,7 +73,7 @@ Check 'settings kept' ((Get-Content "$env:APPDATA\Dockyard\settings.json" -Raw) 
 $distros = (wsl.exe -l -q | Out-String) -replace "`0", ''
 Check 'the dockyard distro is there' ($distros -match 'dockyard')
 Check 'docker contexts' ((& $docker context ls -q) -contains 'linux')
-Check 'mirrored networking set' ((Get-Content "$env:USERPROFILE\.wslconfig" -Raw) -match 'networkingMode=mirrored')
+if ($Wizard) { Check 'no mirrored networking on Windows Server, where it cuts the engine off' (-not ((Test-Path "$env:USERPROFILE\.wslconfig") -and ((Get-Content "$env:USERPROFILE\.wslconfig" -Raw) -match 'networkingMode=mirrored'))) }
 
 Section 'the Linux engine works and holds data'
 Linux-Engine
@@ -81,11 +81,14 @@ Linux-Engine
 Check 'marker volume created' ($LASTEXITCODE -eq 0)
 
 if ($Wizard) {
-    Section 'host.docker.internal reaches a service on the Windows loopback'
+    Section 'host.docker.internal reaches a service on Windows'
     Write-Host "WSL interfaces: $((wsl.exe -d dockyard -u root -- ls /sys/class/net | Out-String) -replace "`\s+", ' ')"
     Check 'the agent runs next to the engine' ((wsl.exe -d dockyard -u root -- pidof dockyard-agent | Out-String).Trim().Length -gt 0)
+    # This runner is Windows Server, so WSL has NAT: there only the gateway reaches Windows, past its firewall. On Windows 11
+    # with mirrored networking a service on 127.0.0.1 is reached too, which only a real machine can show.
+    Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
     $service = Start-Job {
-        $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 18080)
+        $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Any, 18080)
         $listener.Start()
         while ($true) {
             $client = $listener.AcceptTcpClient()
@@ -98,6 +101,7 @@ if ($Wizard) {
     $reply = (& $docker --context linux run --rm alpine:3.24 wget -qO- -T 20 http://host.docker.internal:18080/ | Out-String).Trim()
     Check "the service answers (got '$reply')" ($reply -eq 'from-windows')
     Stop-Job $service; Remove-Job $service -Force
+    Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True
     $engine = (& $docker --context linux run --rm alpine:3.24 sh -c 'wget -qO- -T 5 http://host.docker.internal:2375/version || echo refused' | Out-String).Trim()
     Check "the engine's own port stays out of reach (got '$engine')" ($engine -eq 'refused')
     $name = (& $docker --context linux run --rm alpine:3.24 nslookup dl-cdn.alpinelinux.org | Out-String)
@@ -156,7 +160,7 @@ Check 'exit 0' ((Run --silent --uninstall) -eq 0)
 Check 'app removed' (-not (Test-Path $appExe))
 $distros = (wsl.exe -l -q | Out-String) -replace "`0", ''
 Check 'the dockyard distro is kept' ($distros -match 'dockyard')
-Check 'our .wslconfig line is gone' ((Get-Content "$env:USERPROFILE\.wslconfig" -Raw) -notmatch 'networkingMode=mirrored')
+Check 'our .wslconfig line is gone' (-not ((Test-Path "$env:USERPROFILE\.wslconfig") -and ((Get-Content "$env:USERPROFILE\.wslconfig" -Raw) -match 'networkingMode=mirrored')))
 
 Section 'a fresh install gets the dashboard'
 Check 'exit 0' ((Run --silent --no-start) -eq 0)

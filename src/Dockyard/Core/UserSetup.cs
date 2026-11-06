@@ -17,13 +17,11 @@ static partial class UserSetup
     public static async Task Install(Action<string> log, string? image = null)
     {
         MigrateLegacySettings(log);
-        // Before anything starts WSL: it only reads this when it starts, and mirrored networking is what lets a container reach
-        // Windows' loopback. Nothing here shuts WSL down for it, because that would stop the user's other distros.
-        SetMirroredNetworking(log);
         await SetupDistro(log, image);
         await ApplyGuest(new WslDistro(ProcessRunner.Instance), log);
         await MigrateLegacyEngine(log);
         await CreateContexts(log);
+        SetMirroredNetworking(log);
 
         File.WriteAllText(Path.Combine(Paths.UserProfile, ".testcontainers.properties"), $"docker.host={Paths.LinuxHost}\n");
         log("Testcontainers pinned to the Linux engine");
@@ -50,6 +48,10 @@ static partial class UserSetup
     static void SetMirroredNetworking(Action<string> log)
     {
         if (Environment.OSVersion.Version.Build < MirroredNetworkingBuild) return;
+        // Seen on Windows Server 2025: in mirrored mode WSL comes up with no network interfaces, and 127.0.0.1:2375 no longer
+        // reaches the engine from Windows.
+        using (var version = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion"))
+            if (version?.GetValue("InstallationType") as string != "Client") return;
         var existing = File.Exists(Paths.WslConfigFile) ? File.ReadAllText(Paths.WslConfigFile) : null;
         if (WslConfig.WithMirroredNetworking(existing) is not { } updated) return;
         File.WriteAllText(Paths.WslConfigFile, updated);
