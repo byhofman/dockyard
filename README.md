@@ -28,9 +28,20 @@ The line only downloads the installer, checks its checksum and starts it. Your s
 
 Run the same line again at any time. On an existing install the wizard shows what is installed and what is new, and updates it. Your images, containers and settings stay.
 
-### The dashboard is optional
+### Choose what you want
 
-The wizard asks whether you want the dashboard. Change your mind whenever you like: **Dashboard** in the list of components has **Add** or **Remove**, both in the wizard and in **Engines and settings…** in the tray.
+The wizard lists every component with its version, the latest version and **Update**, plus **Add** or **Remove** where that is possible, also in **Engines and settings…** in the tray. Each row says what it needs or why it cannot go.
+
+| Component | | |
+|---|---|---|
+| Dashboard | Optional | Has its own version and **Update** |
+| Docker Compose, Docker Buildx | Optional | Need the Docker CLI |
+| Windows engine, Linux engine (Windows) | Optional, one has to stay | Removing keeps its images; the wizard brings them back with it |
+| Docker CLI | Required | Everything else goes through it |
+| Docker Engine (macOS VM, Linux) | Required | The only engine there. On Linux, Docker stays yours to remove with your package manager |
+| Dockyard | Required | Uninstall removes it |
+
+What you removed stays removed when you run the wizard again or update.
 
 ### Without a window
 
@@ -47,13 +58,14 @@ curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install.sh |
 | Argument | Meaning |
 |---|---|
 | `--silent` | No window: install, or update what is installed. Progress goes to the console. Needs no display. |
-| `--dashboard` | Add the dashboard, also on an existing install. |
-| `--no-dashboard` | Leave the dashboard out, or remove it from an existing install. |
+| `--with <names>` | Add components, comma separated, also on an existing install: `dashboard`, `compose`, `buildx`, and on Windows `linux-engine`, `windows-engine`. |
+| `--without <names>` | Leave them out, or remove them. Asking for a required one or for the last engine exits 2 and changes nothing. With `--remove-data`, an engine's images go too. |
+| `--dashboard`, `--no-dashboard` | The same as `--with dashboard`, `--without dashboard`. |
 | `--no-start` | Do not start Dockyard afterwards. |
 | `--silent --uninstall` | Remove Dockyard. Images and containers stay. |
 | `--silent --uninstall --remove-data` | Remove Dockyard with its images and containers. |
 
-Without `--dashboard` or `--no-dashboard`, a new install gets the dashboard and an existing install keeps what it has.
+Without these, a new install gets everything and an existing install keeps what it has.
 
 The exit code is `0` when done, `1` on failure with the reason on stderr, `2` for wrong arguments, and `3010` when Windows has to restart to finish. A silent install still needs administrator rights at some point: on Windows run it elevated to skip the prompt, on Linux run it as root or with passwordless sudo. On macOS it shows no prompt at all: without passwordless sudo it leaves out the `docker` entry on the PATH and Rosetta, says so, and running the wizard later adds them.
 
@@ -84,6 +96,8 @@ Dockyard sits in the tray or menu bar. The icon is the Docker whale: blue when t
 - **Settings**: stop the other engine when switching, start the active engine at logon, uninstall.
 
 ### Dashboard
+
+Its process is called `Dockyard Dashboard` in Task Manager and Activity Monitor. On Linux, `ps`, `top` and `/proc` cut process names at 15 characters, so they show `Dockyard Dashbo`; `ps -f` shows the whole path.
 
 It follows the active docker context and updates live from the engine's events. It polls nothing and exits when you close it.
 

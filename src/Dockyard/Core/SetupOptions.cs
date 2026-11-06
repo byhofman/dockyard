@@ -7,14 +7,17 @@ enum SetupAction { Install, Uninstall }
 sealed record SetupOptions
 {
     public const string Usage = """
-        Usage: Dockyard [--silent] [--dashboard | --no-dashboard] [--no-start] [--image <file>]
+        Usage: Dockyard [--silent] [--with <names>] [--without <names>] [--no-start] [--image <file>]
                Dockyard --silent --uninstall [--remove-data]
                Dockyard --version
 
           --silent        No window: install, or update what is installed. Progress goes to the console.
-          --dashboard     Add the dashboard, also on an existing install.
-          --no-dashboard  Leave the dashboard out, or remove it from an existing install.
-                          Without either: a new install gets it, an existing install keeps what it has.
+          --with <names>     Add these components, comma separated, also on an existing install.
+          --without <names>  Leave these out, or remove them from an existing install. Images stay unless --remove-data is given.
+                             Names: dashboard, compose, buildx, linux-engine (Windows), windows-engine (Windows).
+                             Without either: a new install gets everything, an existing install keeps what it has.
+          --dashboard        The same as --with dashboard.
+          --no-dashboard     The same as --without dashboard.
           --no-start      Do not start Dockyard afterwards.
           --image <file>  Windows: the Linux engine image to import instead of downloading it.
           --uninstall     Remove Dockyard. Images and containers stay unless --remove-data is given too.
@@ -35,6 +38,8 @@ sealed record SetupOptions
     public bool OpenSetup { get; init; }
     public bool ShowVersion { get; init; }
     public bool ShowHelp { get; init; }
+    public IReadOnlyList<string> With { get; init; } = [];
+    public IReadOnlyList<string> Without { get; init; } = [];
 
     public static SetupOptions Parse(IReadOnlyList<string> args)
     {
@@ -50,6 +55,8 @@ sealed record SetupOptions
                 "--uninstall" => options with { Silent = true, Action = SetupAction.Uninstall },
                 "--dashboard" => options with { Dashboard = Choose(options.Dashboard, true) },
                 "--no-dashboard" or "--engine-only" => options with { Dashboard = Choose(options.Dashboard, false) },
+                "--with" => Names(options, ++i < args.Count ? args[i] : throw new SetupUsageException("--with needs names"), wanted: true),
+                "--without" => Names(options, ++i < args.Count ? args[i] : throw new SetupUsageException("--without needs names"), wanted: false),
                 "--no-start" => options with { Start = false },
                 "--remove-data" => options with { RemoveData = true },
                 "--resume" => options with { Resume = true },
@@ -62,8 +69,21 @@ sealed record SetupOptions
                 _ => throw new SetupUsageException($"Unknown argument: {arg}"),
             };
         }
-        if (options.RemoveData && options.Action != SetupAction.Uninstall)
-            throw new SetupUsageException("--remove-data only goes with --uninstall");
+        if (options.RemoveData && options.Action != SetupAction.Uninstall && options.Without.Count == 0)
+            throw new SetupUsageException("--remove-data only goes with --uninstall or --without");
+        if (options.With.Intersect(options.Without).FirstOrDefault() is { } both)
+            throw new SetupUsageException($"{both} is in both --with and --without");
+        return options;
+    }
+
+    static SetupOptions Names(SetupOptions options, string names, bool wanted)
+    {
+        foreach (var name in names.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (!ComponentRules.KnownFlags.Contains(name)) throw new SetupUsageException($"Unknown component: {name}. Names: {string.Join(", ", ComponentRules.KnownFlags)}");
+            if (name == "dashboard") options = options with { Dashboard = Choose(options.Dashboard, wanted) };
+            else options = wanted ? options with { With = [.. options.With, name] } : options with { Without = [.. options.Without, name] };
+        }
         return options;
     }
 

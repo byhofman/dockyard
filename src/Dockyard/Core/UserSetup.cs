@@ -14,13 +14,17 @@ static partial class UserSetup
     // Windows 11 22H2; older builds ignore the setting and warn at every WSL start.
     const int MirroredNetworkingBuild = 22621;
 
-    public static async Task Install(Action<string> log, string? image = null)
+    public static async Task Install(Action<string> log, string? image = null, IReadOnlyCollection<string>? without = null)
     {
         MigrateLegacySettings(log);
-        await SetupDistro(log, image);
-        await ApplyGuest(new WslDistro(ProcessRunner.Instance), log);
+        var withLinux = without?.Contains(nameof(Component.LinuxEngine)) != true;
+        if (withLinux)
+        {
+            await SetupDistro(log, image);
+            await ApplyGuest(new WslDistro(ProcessRunner.Instance), log);
+        }
         await MigrateLegacyEngine(log);
-        await CreateContexts(log);
+        await CreateContexts(log, without);
         SetMirroredNetworking(log);
 
         File.WriteAllText(Path.Combine(Paths.UserProfile, ".testcontainers.properties"), $"docker.host={Paths.LinuxHost}\n");
@@ -161,16 +165,55 @@ static partial class UserSetup
         if (Directory.Exists(Paths.LegacySettingsDir)) Directory.Delete(Paths.LegacySettingsDir, recursive: true);
     }
 
-    static async Task CreateContexts(Action<string> log)
+    static async Task CreateContexts(Action<string> log, IReadOnlyCollection<string>? without = null)
     {
-        foreach (var (name, host) in new[] { ("linux", Paths.LinuxHost), ("win", Paths.WindowsHost) })
-        {
-            var exists = (await Shell.Run(Paths.DockerExe, "context", "inspect", name)).ExitCode == 0;
-            await Shell.Check(Paths.DockerExe, "context", exists ? "update" : "create", name, "--docker", $"host={host}");
-        }
+        var withLinux = without?.Contains(nameof(Component.LinuxEngine)) != true;
+        var withWindows = without?.Contains(nameof(Component.Engine)) != true;
+        if (withLinux) await AddContext("linux", Paths.LinuxHost);
+        else await RemoveContext("linux", "win", log);
+        if (withWindows) await AddContext("win", Paths.WindowsHost);
+        else await RemoveContext("win", "linux", log);
         var current = (await Shell.Check(Paths.DockerExe, "context", "show")).Trim();
-        if (current is not ("linux" or "win")) await Shell.Check(Paths.DockerExe, "context", "use", "linux");
-        log("Docker contexts: linux (default), win");
+        if (current is not ("linux" or "win")) await Shell.Check(Paths.DockerExe, "context", "use", withLinux ? "linux" : "win");
+        log(withLinux && withWindows ? "Docker contexts: linux (default), win" : $"Docker context: {(withLinux ? "linux" : "win")}");
+    }
+
+    public static async Task AddContext(string name, string host)
+    {
+        var exists = (await Shell.Run(Paths.DockerExe, "context", "inspect", name)).ExitCode == 0;
+        await Shell.Check(Paths.DockerExe, "context", exists ? "update" : "create", name, "--docker", $"host={host}");
+    }
+
+    // The docker command must not be left pointing at an engine that is gone.
+    public static async Task RemoveContext(string name, string fallback, Action<string> log)
+    {
+        if (!File.Exists(Paths.DockerExe)) return;
+        if ((await Shell.Run(Paths.DockerExe, "context", "show")).Output.Trim() == name)
+        {
+            await Shell.Run(Paths.DockerExe, "context", "use", fallback);
+            log($"The docker context is now {fallback}");
+        }
+        await Shell.Run(Paths.DockerExe, "context", "rm", "-f", name);
+    }
+
+    public static async Task EnableLinuxEngine(Action<string> log)
+    {
+        await SetupDistro(log, null);
+        await ApplyGuest(new WslDistro(ProcessRunner.Instance), log);
+        await AddContext("linux", Paths.LinuxHost);
+    }
+
+    public static async Task DisableLinuxEngine(Action<string> log, bool removeData)
+    {
+        await RemoveContext("linux", "win", log);
+        var distro = new WslDistro(ProcessRunner.Instance);
+        if (!await distro.Exists()) return;
+        if (removeData)
+        {
+            await distro.Unregister();
+            log($"Removed the '{distro.Name}' WSL distro with its Linux images and containers");
+        }
+        else log($"The '{distro.Name}' WSL distro is kept with your Linux images and containers; adding the Linux engine back finds them");
     }
 
     [GeneratedRegex(@"^dockyard-linux-\d+\.\d+\.\d+-x86_64\.tar\.gz$")]

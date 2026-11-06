@@ -104,6 +104,17 @@ check "dashboard added" test -x "$macos/Dockyard Dashboard"
 check "with its libraries" sh -c "ls '$macos'/*.dylib >/dev/null 2>&1"
 check "signature of the dashboard is valid" codesign --verify "$macos/Dockyard Dashboard"
 
+echo "== any component can go and come back, and required ones refuse"
+run --silent --dashboard --no-start --without compose
+check "compose is gone" missing "$home/.docker/cli-plugins/docker-compose"
+run --silent --dashboard --no-start
+check "it stays gone on a rerun" missing "$home/.docker/cli-plugins/docker-compose"
+run --silent --dashboard --no-start --with compose
+check "it is back" test -x "$home/.docker/cli-plugins/docker-compose"
+rc=0; run --silent --no-start --without linux-engine >/dev/null 2>&1 || rc=$?
+if [ "$rc" -eq 2 ]; then ok "the engine is required here"; else fail "--without linux-engine exits $rc"; fi
+if [ "$("$macos/Dockyard Dashboard" --version)" = 0.0.0 ] || "$macos/Dockyard Dashboard" --version >/dev/null; then ok "the dashboard says its version without opening a window"; else fail "dashboard --version"; fi
+
 echo "== remove the dashboard"
 run --silent --no-dashboard --no-start
 check "dashboard removed" missing "$macos/Dockyard Dashboard"

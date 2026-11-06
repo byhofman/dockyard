@@ -105,6 +105,8 @@ static class MacLayout
     public static void RemovePlugin(string plugin, string linksDir)
     {
         if (!Directory.Exists(Path.GetDirectoryName(plugin))) return;
+        // A link is another app's, back in its place: Dockyard's own are plain files. Asking twice must not take it away.
+        if (new FileInfo(plugin).LinkTarget is not null) return;
         File.Delete(plugin);
         var kept = Path.Combine(linksDir, Path.GetFileName(plugin));
         if (new FileInfo(kept).LinkTarget is not null) File.Move(kept, plugin);
@@ -171,11 +173,12 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
 
     public IReadOnlyList<ComponentInfo> Components { get; } =
     [
-        new("LinuxEngine", "Docker Engine (Linux VM)"),
-        new("Cli", "Docker CLI"),
-        new("Compose", "Docker Compose"),
-        new("Buildx", "Docker Buildx"),
-        new("App", "Dockyard"),
+        new("LinuxEngine", "Docker Engine (Linux VM)", RequiredBecause: "it runs your containers, and it is the only engine here. Uninstall removes it.", RequiredFlag: "linux-engine"),
+        new("Cli", "Docker CLI", RequiredBecause: "the engine, Compose and Buildx are used through it.", RequiredFlag: "cli"),
+        new("Compose", "Docker Compose", Flag: "compose", Note: "Needs the Docker CLI. The dashboard's Compose actions use it."),
+        new("Buildx", "Docker Buildx", Flag: "buildx", Note: "Needs the Docker CLI. docker build uses it."),
+        new("App", "Dockyard", RequiredBecause: "it is what runs everything here. Uninstall removes it."),
+        new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard", Note: "Optional. Opens from the menu bar."),
     ];
 
     public bool IsInstalled => File.Exists(MacLayout.VmConfig) && File.Exists(MacLayout.DockerCli);
@@ -244,8 +247,17 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         "Compose" => await Plugin("docker-compose", "version", "--short"),
         "Buildx" => await Plugin("docker-buildx", "version"),
         "App" => InstalledAppVersion(),
+        ComponentRules.DashboardId => await InstalledDashboardVersion(),
         _ => null,
     };
+
+    // Asking the old binary would open its window, since it has no --version: it came with the app's version.
+    async Task<Version?> InstalledDashboardVersion()
+    {
+        var current = Path.Combine(MacLayout.AppBase, MacLayout.DashboardNames[0]);
+        if (File.Exists(current)) return Updates.ParseVersion((await runner.Run(current, "--version")).Output);
+        return HasDashboard ? InstalledAppVersion() : null;
+    }
 
     // The wizard runs from a download and can be newer than what is installed.
     static Version? InstalledAppVersion()
@@ -263,6 +275,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         "Compose" => await Updates.LatestGitHub("docker/compose", MacLayout.ComposeAsset),
         "Buildx" => await Updates.LatestGitHub("docker/buildx", MacLayout.BuildxAsset),
         "App" => await Updates.LatestApp(MacLayout.ZipAsset(!HasDashboard)),
+        ComponentRules.DashboardId => await Updates.LatestApp(MacLayout.ZipAsset(engineOnly: false)),
         _ => null,
     };
 
@@ -275,6 +288,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
                 case "Cli" when release is not null: await InstallCli(log, release); break;
                 case "Compose" when release is not null: await InstallPlugin(log, "docker-compose", release); break;
                 case "Buildx" when release is not null: await InstallPlugin(log, "docker-buildx", release); break;
+                case ComponentRules.DashboardId when release is not null: await AddDashboard(log, release.Tag); break;
                 case "LinuxEngine":
                     var running = ping();
                     if (running) await Stop(Engine);
@@ -300,21 +314,36 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         return false;
     }
 
-    // From this bundle when it has the dashboard (the wizard), otherwise from the release of this version.
-    async Task AddDashboard(Action<string> log)
+    public async Task<bool> SetComponent(Action<string> log, string component, bool installed, bool removeData = false)
+    {
+        var plugin = component switch { "Compose" => "docker-compose", "Buildx" => "docker-buildx", _ => null };
+        if (component == ComponentRules.DashboardId) return await SetDashboard(log, installed);
+        if (plugin is null) throw new InvalidOperationException($"{component} cannot be changed here");
+        if (!installed)
+        {
+            MacLayout.RemovePlugin(Path.Combine(MacLayout.PluginDir, plugin), MacLayout.PluginLinksDir);
+            log($"Removed {plugin}");
+        }
+        else await InstallPlugin(log, plugin, (await Latest(component))!);
+        return false;
+    }
+
+    // From this bundle when it has the dashboard (the wizard), otherwise from the release of this version, or the one named.
+    async Task AddDashboard(Action<string> log, string? tag = null)
     {
         string? downloaded = null;
         try
         {
             var source = AppContext.BaseDirectory;
-            if (!MacLayout.HasDashboardIn(source))
+            if (tag is not null || !MacLayout.HasDashboardIn(source))
             {
                 log("Downloading the dashboard");
                 downloaded = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
-                var zip = await Updates.DownloadReleaseAsset(MacLayout.ZipAsset(engineOnly: false), downloaded, isPattern: true);
+                var zip = await Updates.DownloadReleaseAsset(MacLayout.ZipAsset(engineOnly: false), downloaded, isPattern: true, tag);
                 await runner.Check("/usr/bin/ditto", "-x", "-k", zip, downloaded);
                 source = Path.Combine(downloaded, "Dockyard.app", "Contents", "MacOS");
             }
+            await runner.Run("/usr/bin/pkill", "-f", Path.Combine(MacLayout.AppBase, "Dockyard[. ]Dashboard"));
             foreach (var old in MacLayout.DashboardFiles(MacLayout.AppBase)) File.Delete(old);
             foreach (var file in MacLayout.DashboardFiles(source))
             {
@@ -334,6 +363,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
 
     async Task RemoveDashboard(Action<string> log)
     {
+        await runner.Run("/usr/bin/pkill", "-f", Path.Combine(MacLayout.AppBase, "Dockyard[. ]Dashboard"));
         foreach (var file in MacLayout.DashboardFiles(MacLayout.AppBase)) File.Delete(file);
         await SealBundle();
         log("Removed the dashboard");
@@ -366,8 +396,11 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         await InstallBundle(log, request.Dashboard);
 
         await InstallCli(log, await Updates.LatestStatic(MacLayout.CliIndex, "tgz"));
-        await InstallPlugin(log, "docker-compose", await Updates.LatestGitHub("docker/compose", MacLayout.ComposeAsset));
-        await InstallPlugin(log, "docker-buildx", await Updates.LatestGitHub("docker/buildx", MacLayout.BuildxAsset));
+        foreach (var (component, plugin, repo, asset) in new[] { ("Compose", "docker-compose", "docker/compose", MacLayout.ComposeAsset), ("Buildx", "docker-buildx", "docker/buildx", MacLayout.BuildxAsset) })
+        {
+            if (request.Without.Contains(component)) MacLayout.RemovePlugin(Path.Combine(MacLayout.PluginDir, plugin), MacLayout.PluginLinksDir);
+            else await InstallPlugin(log, plugin, await Updates.LatestGitHub(repo, asset));
+        }
 
         await AdministratorSteps(log, request.Silent);
 

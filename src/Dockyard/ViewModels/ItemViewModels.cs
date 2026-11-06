@@ -28,6 +28,8 @@ sealed class EngineViewModel(EngineInfo info) : Observable
         set { if (Set(ref isActive, value)) Raise(nameof(IsInactive)); }
     }
 
+    bool isAvailable = true;
+    public bool IsAvailable { get => isAvailable; set => Set(ref isAvailable, value); }
     public bool IsStopped => !IsRunning;
     public bool IsInactive => !IsActive;
     public string StatusText => IsRunning ? "Running" : "Stopped";
@@ -42,6 +44,8 @@ sealed class ComponentViewModel(ComponentInfo info) : Observable
     string latest = "–";
     UpdateState state;
     string? error;
+    bool isPresent;
+    bool include = true;
 
     public ComponentInfo Info { get; } = info;
     public string Id => Info.Id;
@@ -61,14 +65,25 @@ sealed class ComponentViewModel(ComponentInfo info) : Observable
         set
         {
             if (Set(ref state, value))
-                Raise(nameof(StatusText), nameof(IsAvailable), nameof(IsUpToDate), nameof(IsProblem), nameof(IsNeutral), nameof(CanAdd), nameof(CanRemove));
+                Raise(nameof(StatusText), nameof(IsAvailable), nameof(IsUpToDate), nameof(IsProblem), nameof(IsNeutral));
         }
     }
 
+    public bool IsPresent { get => isPresent; set { if (Set(ref isPresent, value)) Raise(nameof(CanAdd), nameof(CanRemove)); } }
+    // The first install's choice for this row.
+    public bool Include { get => include; set => Set(ref include, value); }
+    public bool IsOptional => Info.IsOptional;
+    public string AddId => "Add-" + Id;
+    public string RemoveId => "Remove-" + Id;
+    public string UpdateId => "Update-" + Id;
+    public string Note => Info.RequiredBecause is { } reason ? "Required: " + reason : Info.Note ?? "";
+    public bool HasNote => Note.Length > 0;
+    public string IncludeText => $"{Title}" + (Info.Note is { } note ? $". {note}" : "");
+
     public bool IsAvailable => State == UpdateState.Available;
     public bool IsUpToDate => State is UpdateState.UpToDate or UpdateState.OptionalInstalled;
-    public bool CanAdd => State == UpdateState.OptionalAbsent;
-    public bool CanRemove => State == UpdateState.OptionalInstalled;
+    public bool CanAdd => IsOptional && !IsPresent;
+    public bool CanRemove => IsOptional && IsPresent;
     public bool IsProblem => State is UpdateState.Error or UpdateState.NotInstalled;
     public bool IsNeutral => State is UpdateState.Unknown or UpdateState.Checking;
 

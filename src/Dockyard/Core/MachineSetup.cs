@@ -17,16 +17,26 @@ static class MachineSetup
     ];
 
     // Returns true when a reboot is needed.
-    public static async Task<bool> Install(Action<string> log, string userSid, string userName, int keepPid, bool engineOnly = false)
+    public static async Task<bool> Install(Action<string> log, string userSid, string userName, int keepPid, bool engineOnly, IReadOnlyCollection<string> without)
     {
         InUseFiles.CleanUp(Paths.DockerDir);
-        var reboot = await EnableContainersFeature(log);
-        reboot |= await InstallWsl(log);
+        var withWindows = !without.Contains(nameof(Component.Engine));
+        var reboot = withWindows && await EnableContainersFeature(log);
+        if (!without.Contains(nameof(Component.LinuxEngine))) reboot |= await InstallWsl(log);
         await AddDefenderExclusions(log);
-        await UpdateEngine(log, onlyIfNewer: true);
+        if (withWindows) await UpdateEngine(log, onlyIfNewer: true);
+        else
+        {
+            await UpdateCli(log, onlyIfNewer: true);
+            await RemoveWindowsEngine(log);
+        }
         AddToMachinePath(Paths.DockerDir);
-        foreach (var plugin in Plugins) await UpdatePlugin(log, plugin.Component);
-        await ConfigureWindowsEngine(log, userSid, userName);
+        foreach (var plugin in Plugins)
+        {
+            if (without.Contains(plugin.Component.ToString())) RemovePlugin(log, plugin.Component);
+            else await UpdatePlugin(log, plugin.Component);
+        }
+        if (withWindows) await ConfigureWindowsEngine(log, userSid, userName);
         await InstallApp(log, Paths.Self, keepPid, engineOnly);
         RemoveLegacy(log, keepPid);
         return reboot;
@@ -37,6 +47,7 @@ static class MachineSetup
         switch (component)
         {
             case Component.Engine: await UpdateEngine(log, onlyIfNewer: false); break;
+            case Component.Cli: await UpdateCli(log, onlyIfNewer: false); break;
             case Component.Compose or Component.Buildx: await UpdatePlugin(log, component); break;
             case Component.App:
                 // Defender's rule goes by path, and an update can bring the first dashboard with the new name.
@@ -162,6 +173,80 @@ static class MachineSetup
         InUseFiles.MoveAside(target);
         File.Move(incoming, target);
         log($"{plugin.File} {release.Tag}");
+    }
+
+    static void RemovePlugin(Action<string> log, Component component)
+    {
+        var plugin = Plugins.Single(p => p.Component == component);
+        var target = Path.Combine(Paths.PluginDir, plugin.File);
+        if (!File.Exists(target)) return;
+        InUseFiles.MoveAside(target);
+        log($"Removed {plugin.File}");
+    }
+
+    // The CLI on its own, for when the Windows engine that normally brings it is not wanted.
+    static async Task UpdateCli(Action<string> log, bool onlyIfNewer)
+    {
+        var latest = await Updates.LatestStatic();
+        var current = await Updates.Installed(Component.Cli);
+        if (onlyIfNewer && current >= latest.Version) return;
+        log($"Installing the Docker CLI {latest.Version}");
+        var zip = Path.Combine(Path.GetTempPath(), $"docker-{latest.Version}.zip");
+        await Updates.DownloadFile(latest.DownloadUrl!, zip);
+        Directory.CreateDirectory(Paths.DockerDir);
+        using (var archive = ZipFile.OpenRead(zip))
+        {
+            var entry = archive.Entries.First(e => e.Name.Equals("docker.exe", StringComparison.OrdinalIgnoreCase));
+            InUseFiles.MoveAside(Paths.DockerExe);
+            entry.ExtractToFile(Paths.DockerExe);
+        }
+        File.Delete(zip);
+    }
+
+    // The CLI and the plugins stay, and so do the engine's images under ProgramData: adding it back finds them there.
+    static async Task RemoveWindowsEngine(Action<string> log)
+    {
+        if (ServiceExists())
+        {
+            await StopService();
+            await Shell.Check("sc.exe", "delete", Paths.ServiceName);
+            RemoveEventSource();
+        }
+        if (!Directory.Exists(Paths.DockerDir)) return;
+        var removed = false;
+        foreach (var file in Directory.GetFiles(Paths.DockerDir))
+        {
+            var name = Path.GetFileName(file);
+            if (string.Equals(file, Paths.DockerExe, StringComparison.OrdinalIgnoreCase) || name.StartsWith("docker-credential", StringComparison.OrdinalIgnoreCase)) continue;
+            InUseFiles.MoveAside(file);
+            removed = true;
+        }
+        if (removed) log("Removed the Windows engine; its images are kept");
+    }
+
+    public static async Task SetComponent(Action<string> log, Component component, bool installed, string userSid, string userName)
+    {
+        switch (component)
+        {
+            case Component.Compose or Component.Buildx:
+                if (installed) await UpdatePlugin(log, component);
+                else RemovePlugin(log, component);
+                break;
+            case Component.Engine:
+                if (!installed) { await RemoveWindowsEngine(log); break; }
+                if (await EnableContainersFeature(log)) log("Windows has to restart before the Windows engine can run");
+                await UpdateEngine(log, onlyIfNewer: true);
+                await ConfigureWindowsEngine(log, userSid, userName);
+                break;
+            default: throw new ArgumentException($"{component} cannot be changed here");
+        }
+    }
+
+    public static async Task UpdateDashboard(Action<string> log, string sourceDir, int keepPid)
+    {
+        StopApps(keepPid, dashboardOnly: true);
+        await AddDefenderExclusions(log);
+        await InstallDashboard(log, sourceDir);
     }
 
     static async Task ConfigureWindowsEngine(Action<string> log, string userSid, string userName)

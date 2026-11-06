@@ -35,8 +35,17 @@ function Find-Named($window, $name) {
     $window.FindFirst($tree, $condition)
 }
 
+# By the row's id: every optional row has an Add or a Remove now. A release from before that has only the dashboard's.
+function Find-Button($window, $name) {
+    $condition = New-Object System.Windows.Automation.PropertyCondition($auto::AutomationIdProperty, "$name-Dashboard")
+    $byId = $window.FindFirst($tree, $condition)
+    if ($byId) { return $byId }
+    if ($name -eq 'Check for updates' -or -not (Find-Named $window 'Docker CLI')) { Find-Named $window $name }
+}
+
 function Click($window, $name) {
-    $button = Wait-For "the $name button" { Find-Named $window $name }
+    # A button is there but disabled while the window is busy with what the last click started.
+    $button = Wait-For "the $name button" { $b = Find-Button $window $name; if ($b -and $b.Current.IsEnabled) { $b } }
     $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
 }
 
@@ -60,13 +69,26 @@ try {
     if (Test-Path $Dashboard) { throw 'FAIL expected to start without the dashboard' }
     Click $window 'Add'
     Wait-For 'the dashboard to arrive' { Test-Path $Dashboard } | Out-Null
-    Wait-For 'the Remove button' { Find-Named $window 'Remove' } | Out-Null
+    Wait-For 'the Remove button' { Find-Button $window 'Remove' } | Out-Null
     Shot 'added'
     Write-Host '  ok   Add installs the skipped dashboard'
 
+    # A build of this branch is version 0.0.0, so the release that is out is an update for its dashboard; a tagged build is the newest there is.
+    $version = (Get-Item $Dashboard).VersionInfo.ProductVersion
+    Write-Host "  the dashboard says it is version '$version', the wizard '$((Get-Item $Exe).VersionInfo.ProductVersion)'"
+    if (-not $version) { throw 'FAIL the dashboard file has no version, so the wizard cannot show or update it' }
+    if ((Get-Item $Exe).VersionInfo.ProductVersion -like '0.0.0*') {
+        Click $window 'Check for updates'
+        Click $window 'Update'
+        Wait-For 'the dashboard to be updated' { (Get-Item $Dashboard).VersionInfo.ProductVersion -notlike '0.0.0*' } | Out-Null
+        Wait-For 'the Remove button' { Find-Button $window 'Remove' } | Out-Null
+        Shot 'updated'
+        Write-Host "  ok   Update brings the dashboard to $((Get-Item $Dashboard).VersionInfo.ProductVersion) and it stays removable"
+    }
+
     Click $window 'Remove'
     Wait-For 'the dashboard to go' { -not (Test-Path $Dashboard) } | Out-Null
-    Wait-For 'the Add button' { Find-Named $window 'Add' } | Out-Null
+    Wait-For 'the Add button' { Find-Button $window 'Add' } | Out-Null
     Shot 'removed'
     Write-Host '  ok   Remove takes it away again'
 } finally {

@@ -6,13 +6,7 @@ using Dockyard.Hosts;
 
 namespace Dockyard.Core;
 
-enum Component { Engine, Compose, Buildx, LinuxEngine, App }
-
-// Offered by the wizard and the tray window next to the components that always come with Dockyard.
-static class OptionalComponents
-{
-    public const string Dashboard = "Dashboard";
-}
+enum Component { Engine, Compose, Buildx, LinuxEngine, App, Cli, Dashboard }
 
 static partial class Updates
 {
@@ -37,7 +31,9 @@ static partial class Updates
 
     public static string Title(Component c) => c switch
     {
-        Component.Engine => "Docker Engine & CLI (Windows)",
+        Component.Engine => "Docker Engine (Windows)",
+        Component.Cli => "Docker CLI",
+        Component.Dashboard => "Dashboard",
         Component.Compose => "Docker Compose",
         Component.Buildx => "Docker Buildx",
         Component.LinuxEngine => "Docker Engine (Linux, WSL)",
@@ -49,9 +45,11 @@ static partial class Updates
     public static async Task<Version?> Installed(Component c) => c switch
     {
         Component.Engine => File.Exists(Paths.DockerdExe) ? ParseVersion(await Shell.Check(Paths.DockerdExe, "--version")) : null,
+        Component.Cli => File.Exists(Paths.DockerExe) ? ParseVersion((await Shell.Run(Paths.DockerExe, "--version")).Output) : null,
+        Component.Dashboard => new[] { Paths.DashboardExe, Paths.LegacyDashboardExe }.FirstOrDefault(File.Exists) is { } dashboard ? ParseVersion(System.Diagnostics.FileVersionInfo.GetVersionInfo(dashboard).ProductVersion) : null,
         Component.Compose => await PluginVersion("docker-compose.exe", "version", "--short"),
         Component.Buildx => await PluginVersion("docker-buildx.exe", "version"),
-        Component.LinuxEngine => await new WslDistro(ProcessRunner.Instance).DockerVersion(),
+        Component.LinuxEngine => Settings.Load().RemovedComponents.Contains(nameof(Component.LinuxEngine)) ? null : await new WslDistro(ProcessRunner.Instance).DockerVersion(),
         // The wizard runs from elsewhere and can be newer than what is installed, so not this process's own version.
         Component.App => File.Exists(Paths.AppExe) ? ParseVersion(System.Diagnostics.FileVersionInfo.GetVersionInfo(Paths.AppExe).ProductVersion) : null,
         _ => null,
@@ -59,7 +57,8 @@ static partial class Updates
 
     public static async Task<Release?> Latest(Component c) => c switch
     {
-        Component.Engine => await LatestStatic(),
+        Component.Engine or Component.Cli => await LatestStatic(),
+        Component.Dashboard => await LatestApp(@"^Dockyard\.Dashboard\.zip$"),
         Component.Compose => await LatestGitHub("docker/compose", @"^docker-compose-windows-x86_64\.exe$"),
         Component.Buildx => await LatestGitHub("docker/buildx", @"^buildx-v[\d.]+\.windows-amd64\.exe$"),
         Component.LinuxEngine => await LatestStatic(LinuxStaticIndex, "tgz"),
@@ -187,12 +186,24 @@ static partial class Updates
         return target;
     }
 
+    // A dropped connection on a large file should not fail a whole install; what is not found stays an error at once.
     public static async Task DownloadFile(string url, string target)
     {
-        using var response = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
-        response.EnsureSuccessStatusCode();
-        await using var content = await response.Content.ReadAsStreamAsync();
-        await WriteReplacing(content, target);
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                using var response = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+                response.EnsureSuccessStatusCode();
+                await using var content = await response.Content.ReadAsStreamAsync();
+                await WriteReplacing(content, target);
+                return;
+            }
+            catch (Exception e) when (attempt < 3 && e is IOException or HttpRequestException { StatusCode: null })
+            {
+                await Task.Delay(TimeSpan.FromSeconds(2 * attempt));
+            }
+        }
     }
 
     // Renamed into place: writing to the target directly would follow a symlink and overwrite what it points at,

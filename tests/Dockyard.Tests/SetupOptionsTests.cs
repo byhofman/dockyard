@@ -85,4 +85,28 @@ public sealed class SetupOptionsTests
     {
         Assert.Equal(expected, DashboardChoice.Resolve(requested, installed, has, inPlace));
     }
+
+    [Fact]
+    public void With_and_without_name_any_component_and_dashboard_stays_what_the_old_flags_mean()
+    {
+        var o = SetupOptions.Parse(["--silent", "--with", "compose,buildx", "--without", "linux-engine"]);
+        Assert.Equal(["compose", "buildx"], o.With);
+        Assert.Equal(["linux-engine"], o.Without);
+
+        Assert.True(SetupOptions.Parse(["--with", "dashboard"]).Dashboard);
+        Assert.False(SetupOptions.Parse(["--without", "dashboard"]).Dashboard);
+        Assert.True(SetupOptions.Parse(["--dashboard"]).Dashboard);
+        Assert.False(SetupOptions.Parse(["--no-dashboard"]).Dashboard);
+        Assert.Throws<SetupUsageException>(() => SetupOptions.Parse(["--dashboard", "--without", "dashboard"]));
+        Assert.Throws<SetupUsageException>(() => SetupOptions.Parse(["--with", "compose", "--without", "compose"]));
+        Assert.Throws<SetupUsageException>(() => SetupOptions.Parse(["--with", "nonsense"]));
+        Assert.Throws<SetupUsageException>(() => SetupOptions.Parse(["--with"]));
+    }
+
+    [Fact]
+    public void Remove_data_needs_something_that_removes()
+    {
+        Assert.True(SetupOptions.Parse(["--without", "linux-engine", "--remove-data"]).RemoveData);
+        Assert.Throws<SetupUsageException>(() => SetupOptions.Parse(["--remove-data"]));
+    }
 }

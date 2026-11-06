@@ -176,6 +176,28 @@ Check 'exit 0' ((Run --silent --dashboard --no-start) -eq 0)
 Check 'dashboard added' (Test-Path $dashboard)
 Check 'with its libraries' (Test-Path (Join-Path $appDir 'dashboard.files'))
 
+if ($Wizard) {
+    Section 'any component can go and come back, and required ones refuse'
+    $compose = Join-Path $env:ProgramFiles 'Docker\cli-plugins\docker-compose.exe'
+    Check 'exit 0 without compose' ((Run --silent --no-start --without compose) -eq 0)
+    Check 'compose is gone' (-not (Test-Path $compose))
+    Check 'exit 0 on a rerun' ((Run --silent --no-start) -eq 0)
+    Check 'it stays gone' (-not (Test-Path $compose))
+    Check 'exit 0 with compose' ((Run --silent --no-start --with compose) -eq 0)
+    Check 'it is back' (Test-Path $compose)
+    Check 'the last engine cannot go' ((Run --silent --no-start --without 'windows-engine,linux-engine') -eq 2)
+    Check 'exit 0 without the Windows engine' ((Run --silent --no-start --without windows-engine) -eq 0)
+    Check 'dockerd is gone' (-not (Test-Path (Join-Path $env:ProgramFiles 'Docker\dockerd.exe')))
+    Check 'the docker command stays' (Test-Path $docker)
+    Check 'the service is gone' (-not (Get-Service docker -ErrorAction SilentlyContinue))
+    Check 'the win context is gone' ((& $docker context ls -q) -notcontains 'win')
+    & $docker --context linux volume inspect dockyard-e2e | Out-Null
+    Check 'the Linux engine still works' ($LASTEXITCODE -eq 0)
+    Check 'exit 0 with the Windows engine' ((Run --silent --no-start --with windows-engine) -eq 0)
+    Check 'dockerd is back' (Test-Path (Join-Path $env:ProgramFiles 'Docker\dockerd.exe'))
+    Check 'the win context is back' ((& $docker context ls -q) -contains 'win')
+}
+
 Section 'rerun keeps it'
 Check 'exit 0' ((Run --silent --no-start) -eq 0)
 Check 'dashboard kept' (Test-Path $dashboard)
