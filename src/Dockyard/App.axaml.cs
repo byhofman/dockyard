@@ -5,6 +5,8 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using Dockyard.Core;
+using Dockyard.Engine;
+using Dockyard.Engine.Transport;
 using Dockyard.Shared;
 using Dockyard.ViewModels;
 using Dockyard.Views;
@@ -22,6 +24,9 @@ public partial class App : Application
     TrayIcon? tray;
     NativeMenuItem? dashboardItem;
     readonly List<(string Engine, NativeMenuItem Item)> engineItems = [];
+    NativeMenuItem? containersItem;
+    List<TrayContainer> shownContainers = [];
+    bool refreshingContainers;
     IClassicDesktopStyleApplicationLifetime desktop = null!;
 
     public App() : this(AppMode.Setup, []) { }
@@ -124,6 +129,8 @@ public partial class App : Application
             engineItems.Add((engine.Id, item));
             menu.Add(item);
         }
+        containersItem = new NativeMenuItem("Containers") { IsVisible = false, Menu = new NativeMenu() };
+        menu.Add(containersItem);
         menu.Add(new NativeMenuItemSeparator());
         dashboardItem = new NativeMenuItem("Open dashboard") { IsVisible = HasDashboard };
         dashboardItem.Click += (_, _) => OpenDashboard();
@@ -158,6 +165,75 @@ public partial class App : Application
             else item.Header = card.ToggleText + " engine";
             item.IsEnabled = !vm.IsBusy;
         }
+        _ = RefreshContainers();
+    }
+
+    async Task RefreshContainers()
+    {
+        if (refreshingContainers || containersItem is null) return;
+        refreshingContainers = true;
+        try
+        {
+            List<TrayContainer> containers = [];
+            if (vm.ActiveEngine.IsRunning)
+            {
+                using var docker = new DockerClient(DockerEndpoint.Parse(vm.ActiveEngine.Endpoint));
+                containers = TrayContainers.From(await docker.ListContainersAsync(all: true));
+            }
+            if (!containers.SequenceEqual(shownContainers))
+            {
+                shownContainers = containers;
+                BuildContainersMenu();
+            }
+        }
+        catch (Exception e) when (e is DockerException or EngineUnavailableException or IOException) { }
+        finally { refreshingContainers = false; }
+    }
+
+    void BuildContainersMenu()
+    {
+        var items = containersItem!.Menu!;
+        items.Items.Clear();
+        foreach (var container in shownContainers)
+        {
+            var actions = new NativeMenu();
+            void Action(string header, Func<DockerClient, Task> run)
+            {
+                var item = new NativeMenuItem(header);
+                item.Click += (_, _) => _ = ContainerAction(container, run);
+                actions.Add(item);
+            }
+            if (container.Running)
+            {
+                Action("Stop", c => c.StopContainerAsync(container.Id));
+                Action("Restart", c => c.RestartContainerAsync(container.Id));
+                if (container.WebPort is { } port)
+                {
+                    var open = new NativeMenuItem($"Open http://127.0.0.1:{port}");
+                    open.Click += (_, _) => Process.Start(new ProcessStartInfo($"http://127.0.0.1:{port}") { UseShellExecute = true })?.Dispose();
+                    actions.Add(open);
+                }
+            }
+            else Action("Start", c => c.StartContainerAsync(container.Id));
+
+            var label = (container.Running ? "● " : "○ ") + (container.Project is { } project ? $"{project} / " : "") + container.Name;
+            items.Add(new NativeMenuItem(label) { Menu = actions });
+        }
+        containersItem.IsVisible = shownContainers.Count > 0;
+    }
+
+    async Task ContainerAction(TrayContainer container, Func<DockerClient, Task> run)
+    {
+        try
+        {
+            using var docker = new DockerClient(DockerEndpoint.Parse(vm.ActiveEngine.Endpoint));
+            await run(docker);
+        }
+        catch (Exception e) when (e is DockerException or EngineUnavailableException or IOException)
+        {
+            vm.Note($"{container.Name}: {e.Message}");
+        }
+        await RefreshContainers();
     }
 
     void OpenDashboardOrWindow()

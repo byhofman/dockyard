@@ -77,7 +77,7 @@ Each release has `Dockyard.exe` for Windows, `Dockyard-<version>-macos.dmg` for 
 
 ## Using it
 
-Dockyard sits in the tray or menu bar. The icon is the Docker whale: blue when the engine runs, gray when stopped, amber while busy; on Windows a badge shows the active context (`L` or `W`). Click to open the dashboard; right-click for the rest:
+Dockyard sits in the tray or menu bar. The icon is the Docker whale: blue when the engine runs, gray when stopped, amber while busy; on Windows a badge shows the active context (`L` or `W`). Click to open the dashboard; right-click for the rest, including **Containers** with start, stop, restart and open for each container:
 
 - **Linux / Windows** (top right, Windows): switch the docker context. This starts that engine and by default stops the other one.
 - **Engines**: status, endpoint and Start/Stop per engine.

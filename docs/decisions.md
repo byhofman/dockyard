@@ -2,6 +2,10 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-06: Tray actions are a native menu, not a popover window
+
+`DOK-2` says popover. A window in the tray process would load the UI stack it otherwise never touches until the settings window opens, and this app competes on memory. The native menu gives the same actions: start, stop, restart, open the first published port. It lists at most 20 containers, refreshes on the tray's existing 10 second tick while the engine runs, and is only rebuilt when the list changed. A menu replaced while open would close on the user.
+
 ## 2026-11-06: Files in containers and volumes go through the archive API, in the dashboard
 
 `DOK-5` and `DOK-17` share one file browser built on `GET`/`PUT .../archive`. This needs no shell or `ls` in the image, works on stopped containers, and needs nothing new in the VM, so it costs no memory while unused.

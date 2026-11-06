@@ -309,3 +309,41 @@ public sealed class EngineOptionsTests
     public void All_problems_are_listed_at_once() =>
         Assert.Equal(3, EngineOptions.Problems("nope", "http://x", "1.2.3.4").Count);
 }
+
+public sealed class TrayContainersTests
+{
+    static Dockyard.Engine.ContainerSummary C(string name, string state, string? project = null, int? port = null, bool helper = false) => new()
+    {
+        Id = name,
+        Names = ["/" + name],
+        State = state,
+        Labels = new Dictionary<string, string>(
+            (project is null ? [] : new[] { KeyValuePair.Create("com.docker.compose.project", project) })
+            .Concat(helper ? [KeyValuePair.Create("dockyard.helper", "1")] : [])),
+        Ports = port is null ? [] : [new Dockyard.Engine.PortMapping { PublicPort = port, PrivatePort = 80, Type = "tcp" }],
+    };
+
+    [Fact]
+    public void Running_containers_come_first_with_their_project_and_helpers_stay_out()
+    {
+        var items = TrayContainers.From([C("zeta", "exited"), C("web", "running", "shop", 8080), C("alpha", "running"), C("holder", "created", helper: true)]);
+        Assert.Equal(["alpha", "web", "zeta"], items.Select(i => i.Name));
+        Assert.Equal(8080, items[1].WebPort);
+        Assert.Equal("shop", items[1].Project);
+        Assert.False(items[2].Running);
+    }
+
+    [Fact]
+    public void A_stopped_container_offers_no_address()
+    {
+        Assert.Null(TrayContainers.From([C("web", "exited", port: 8080)])[0].WebPort);
+    }
+
+    [Fact]
+    public void The_same_list_compares_equal_so_an_open_menu_is_left_alone() =>
+        Assert.True(TrayContainers.From([C("a", "running")]).SequenceEqual(TrayContainers.From([C("a", "running")])));
+
+    [Fact]
+    public void The_menu_stays_a_menu() =>
+        Assert.Equal(TrayContainers.Limit, TrayContainers.From(Enumerable.Range(0, 50).Select(i => C($"c{i}", "running"))).Count);
+}
