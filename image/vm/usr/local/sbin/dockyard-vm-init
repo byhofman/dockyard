@@ -57,6 +57,12 @@ if mount -t virtiofs dockyard /mnt/host 2>/dev/null; then
   fi
 fi
 
+# What the app rendered for this boot. Without it, the image's own file applies.
+if [ -f /mnt/host/config/daemon.json ]; then
+  mkdir -p /etc/docker
+  cp /mnt/host/config/daemon.json /etc/docker/daemon.json
+fi
+
 mkdir -p /mnt/rosetta
 if mount -t virtiofs rosetta /mnt/rosetta 2>/dev/null && [ -x /mnt/rosetta/rosetta ]; then
   echo ':rosetta:M::\x7fELF\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x3e\x00:\xff\xff\xff\xff\xff\xfe\xfe\x00\xff\xff\xff\xff\xff\xff\xff\xff\xfe\xff\xff\xff:/mnt/rosetta/rosetta:CF' \

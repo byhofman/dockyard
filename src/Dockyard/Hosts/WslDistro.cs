@@ -70,6 +70,20 @@ sealed class WslDistro(ICommandRunner runner, string name = WslDistro.DefaultNam
         }
     }
 
+    public async Task WriteFile(string path, string content)
+    {
+        var temp = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
+        await File.WriteAllTextAsync(temp, content);
+        try
+        {
+            await runner.Check("wsl.exe", "-d", Name, "-u", "root", "--", "sh", "-c", $"mkdir -p \"$(dirname '{path}')\" && cp '{await ToLinuxPath(temp)}' '{path}'");
+        }
+        finally
+        {
+            File.Delete(temp);
+        }
+    }
+
     public async Task<string> ToLinuxPath(string windowsPath) =>
         (await runner.Check("wsl.exe", "-d", Name, "-u", "root", "--", "wslpath", "-a", windowsPath.Replace('\\', '/'))).Trim();
 

@@ -137,6 +137,36 @@ if ($Wizard) {
     Get-Process Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
     & $docker --context linux rm -f e2e-localhost | Out-Null
 
+    Section "the engine and containers follow Windows' proxy, also one on its loopback"
+    python -m pip install --quiet proxy.py
+    $proxyLog = Join-Path $env:TEMP 'e2e-proxy.log'
+    $proxy = Start-Process python -ArgumentList "-m proxy --hostname 0.0.0.0 --port 18888 --log-file `"$proxyLog`"" -PassThru -WindowStyle Hidden
+    Start-Sleep 5
+    # This runner has NAT networking, where only the gateway reaches Windows: a proxy on loopback alone is out of reach
+    # there, as for any host service. Mirrored networking reaches loopback too, and no runner has that.
+    Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
+    $settings = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
+    Set-ItemProperty $settings ProxyEnable 1
+    Set-ItemProperty $settings ProxyServer '127.0.0.1:18888'
+    try {
+        Check 'exit 0' ((Run --silent --no-start) -eq 0)
+        wsl.exe -d dockyard -u root -- sh -c 'kill -TERM $(pidof dockerd); while pidof dockerd >/dev/null; do sleep 0.2; done'
+        Check 'daemon.json has the proxy, through the agent' ((wsl.exe -d dockyard -u root -- cat /etc/docker/daemon.json | Out-String) -match '198\.19\.250\.254:18888')
+        Linux-Engine
+        & $docker --context linux pull -q busybox:1.37 | Out-Null
+        Check 'the pull succeeds' ($LASTEXITCODE -eq 0)
+        Check 'the pull went through the proxy' ((Get-Content $proxyLog -Raw) -match 'docker')
+    } finally {
+        Set-ItemProperty $settings ProxyEnable 0
+        Remove-ItemProperty $settings ProxyServer -ErrorAction SilentlyContinue
+        Stop-Process $proxy -Force -ErrorAction SilentlyContinue
+        Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True
+    }
+    Check 'exit 0 without the proxy' ((Run --silent --no-start) -eq 0)
+    wsl.exe -d dockyard -u root -- sh -c 'kill -TERM $(pidof dockerd); while pidof dockerd >/dev/null; do sleep 0.2; done'
+    Check 'gone once Windows stops using it' ((wsl.exe -d dockyard -u root -- cat /etc/docker/daemon.json | Out-String) -notmatch '18888')
+    Linux-Engine
+
     Section 'docker login keeps credentials in the Windows credential store'
     Check 'the helper is there' (Test-Path (Join-Path $env:ProgramFiles 'Docker\docker-credential-wincred.exe'))
     Check 'the store is set' ((Get-Content "$env:USERPROFILE\.docker\config.json" -Raw) -match '"credsStore":\s*"wincred"')

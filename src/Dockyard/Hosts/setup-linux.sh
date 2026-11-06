@@ -183,8 +183,11 @@ configure() {
   fi
 
   if has_systemd; then
-    systemctl disable --now docker.service containerd.service >/dev/null 2>&1 || true
-    systemctl enable docker.socket >/dev/null 2>&1
+    # Not --now: running this again must not stop the containers of an engine that is already running.
+    systemctl disable docker.service containerd.service >/dev/null 2>&1 || true
+    # Stopping and starting a few times within a minute trips systemd's limit, which stops the socket with it.
+    systemctl reset-failed docker.service docker.socket >/dev/null 2>&1 || true
+    systemctl enable --now docker.socket >/dev/null 2>&1
     echo "Docker starts on demand (docker.socket)"
   fi
 

@@ -24,6 +24,8 @@ public struct VMSettings: Codable, Equatable {
     public var commandLine: String
 
     public static let gib: UInt64 = 1024 * 1024 * 1024
+    /// ~/.dockyard/engine, read by the guest at boot: the only folder that is shared read-only.
+    public static let configShare = "config"
 
     /// Defaults: all cores, half the RAM capped at 8 GiB, the macOS folders bind mounts usually need.
     public static func defaults(home: String, assets: String, cores: Int, physicalMemory: UInt64) -> VMSettings {

@@ -33,6 +33,16 @@ What Task Manager's Details tab, Activity Monitor and `ps` show comes from the f
 - **The old name is still found and stopped:** wizard, update, uninstall and Remove look for both, and installing removes the old file and whatever the old manifest listed.
 - **A v0.2.1 tray updating itself** runs the old installer code, which unpacks the new name next to the old file. The tray finds either, and the next wizard run removes the old file, because the tray cannot write to Program Files by itself.
 - **Defender exclusions go by path,** so an app update now also adds the new path.
+## 2026-11-06: The proxy is read at each engine start, and daemon.json is rendered by the app
+
+On macOS and in WSL the app renders the engine's `daemon.json` at every start (macOS through a read-only virtiofs share, WSL by copying it in), so nothing the user would have to edit lives in the engine. On a Linux host the file belongs to the system's Docker, so it is merged, and a `proxies` block somebody else wrote stays.
+
+- **Containers get the proxy through the CLI's `proxies` in `~/.docker/config.json`, keyed by Dockyard's endpoint.** A `default` entry would also change what happens in OrbStack's or Docker Desktop's contexts.
+- **A proxy on the host's loopback is rewritten to 198.19.250.254**, the host address only the engine's Linux has, so corporate agents listening on `127.0.0.1` work.
+- **A change while the engine runs applies at its next start**, not at once: restarting by itself would stop the user's containers.
+- **PAC files are not followed:** the engine takes one fixed proxy. Following one would need a proxy of our own that evaluates JavaScript, and that is memory this app is competing on.
+- **No VPN code exists on purpose.** On macOS the VM's traffic goes through vmnet NAT and the Mac's routes, and DNS through the Mac's resolver; WSL mirrored networking and DNS tunnelling do the same. CI cannot run a VPN, so this is unverified until tried on a real one.
+
 ## 2026-11-06: Shared Docker paths are only taken when free
 
 `/var/run/docker.sock` and `credsStore` in `~/.docker/config.json` are shared with every other Docker app.
