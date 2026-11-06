@@ -152,3 +152,112 @@ public sealed class EngineConfigTests
     public void A_broken_file_is_not_overwritten() =>
         Assert.Throws<InvalidOperationException>(() => EngineConfig.WithDockyard("{broken"));
 }
+
+public sealed class ProxyTests
+{
+    const string Scutil = """
+        <dictionary> {
+          ExceptionsList : <array> {
+            0 : *.local
+            1 : 169.254/16
+          }
+          FTPPassive : 1
+          HTTPEnable : 1
+          HTTPPort : 3128
+          HTTPProxy : proxy.corp.example
+          HTTPSEnable : 1
+          HTTPSPort : 3129
+          HTTPSProxy : 127.0.0.1
+        }
+        """;
+
+    [Fact]
+    public void The_macs_settings_are_read_from_scutil()
+    {
+        var proxy = HostProxySettings.FromScutil(Scutil.ReplaceLineEndings("\n"));
+        Assert.NotNull(proxy);
+        Assert.Equal("http://proxy.corp.example:3128", proxy.Http);
+        Assert.Equal("http://127.0.0.1:3129", proxy.Https);
+        Assert.Equal(["*.local", "169.254/16"], proxy.NoProxy);
+    }
+
+    [Theory]
+    [InlineData("<dictionary> {\n  HTTPEnable : 0\n  HTTPProxy : x\n  HTTPPort : 1\n}")]
+    [InlineData("<dictionary> {\n  ProxyAutoConfigEnable : 1\n  ProxyAutoConfigURLString : http://x/p.pac\n}")]
+    [InlineData("<dictionary> {\n}")]
+    public void No_fixed_proxy_means_none(string output) => Assert.Null(HostProxySettings.FromScutil(output));
+
+    [Fact]
+    public void Windows_has_one_proxy_for_all_or_one_per_protocol()
+    {
+        var one = HostProxySettings.FromWindows(1, "proxy:8080", "*.corp;<local>")!;
+        Assert.Equal("http://proxy:8080", one.Http);
+        Assert.Equal("http://proxy:8080", one.Https);
+        Assert.Equal(["*.corp"], one.NoProxy);
+
+        var two = HostProxySettings.FromWindows(1, "http=a:1;https=b:2;ftp=c:3", null)!;
+        Assert.Equal("http://a:1", two.Http);
+        Assert.Equal("http://b:2", two.Https);
+
+        Assert.Null(HostProxySettings.FromWindows(0, "proxy:8080", null));
+        Assert.Null(HostProxySettings.FromWindows(1, "", null));
+    }
+
+    [Fact]
+    public void The_environment_wins_in_either_case()
+    {
+        var env = new Dictionary<string, string> { ["HTTPS_PROXY"] = "http://u:1", ["no_proxy"] = "a,b" };
+        var proxy = HostProxySettings.FromEnvironment(n => env.GetValueOrDefault(n))!;
+        Assert.Equal("http://u:1", proxy.Https);
+        Assert.Null(proxy.Http);
+        Assert.Equal(["a", "b"], proxy.NoProxy);
+    }
+
+    [Fact]
+    public void A_proxy_on_the_hosts_loopback_is_reached_through_the_agent()
+    {
+        var engine = HostProxySettings.ForEngine(new ProxySettings("http://127.0.0.1:3128", "http://localhost:3129", ["*.corp"]));
+        Assert.Equal("http://198.19.250.254:3128", engine.Http);
+        Assert.Equal("http://198.19.250.254:3129", engine.Https);
+        Assert.Contains("host.docker.internal", engine.NoProxy);
+        Assert.Contains("*.corp", engine.NoProxy);
+    }
+
+    [Fact]
+    public void The_engine_file_only_has_proxies_when_the_host_uses_one()
+    {
+        Assert.DoesNotContain("proxies", EngineConfig.Render(null));
+        var rendered = EngineConfig.Render(new ProxySettings("http://p:1", null, []));
+        Assert.Contains("\"http-proxy\": \"http://p:1\"", rendered);
+        Assert.DoesNotContain("https-proxy", rendered);
+    }
+
+    [Fact]
+    public void Client_proxies_only_apply_to_dockyards_engine_and_nothing_is_left_on_uninstall()
+    {
+        const string endpoint = "unix:///Users/a/.dockyard/docker.sock";
+        const string theirs = """{"currentContext":"orbstack","proxies":{"default":{"httpProxy":"http://other:1"}}}""";
+        var added = EngineConfig.WithClientProxy(theirs, endpoint, new ProxySettings("http://p:1", null, []))!;
+        var config = System.Text.Json.Nodes.JsonNode.Parse(added)!;
+        Assert.Equal("http://p:1", config["proxies"]![endpoint]!["httpProxy"]!.GetValue<string>());
+        Assert.Equal("http://other:1", config["proxies"]!["default"]!["httpProxy"]!.GetValue<string>());
+
+        Assert.Null(EngineConfig.WithClientProxy(added, endpoint, new ProxySettings("http://p:1", null, [])));
+
+        var removed = EngineConfig.WithClientProxy(added, endpoint, null)!;
+        Assert.DoesNotContain(endpoint, removed);
+        Assert.Contains("http://other:1", removed);
+        Assert.Null(EngineConfig.WithClientProxy(theirs, endpoint, null));
+    }
+
+    [Fact]
+    public void On_a_linux_host_proxies_someone_set_stay()
+    {
+        const string theirs = """{"proxies":{"http-proxy":"http://theirs:1"}}""";
+        Assert.Contains("http://theirs:1", EngineConfig.WithDockyard(theirs, new ProxySettings("http://p:1", null, [])));
+        Assert.Contains("http://theirs:1", EngineConfig.WithDockyard(theirs));
+        var ours = EngineConfig.WithDockyard("{}", new ProxySettings("http://p:1", null, []));
+        Assert.Contains("http://p:1", ours);
+        Assert.DoesNotContain("http://p:1", EngineConfig.WithDockyard(ours));
+    }
+}

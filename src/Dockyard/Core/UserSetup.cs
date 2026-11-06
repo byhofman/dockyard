@@ -38,6 +38,23 @@ static partial class UserSetup
     {
         await using var bundle = typeof(UserSetup).Assembly.GetManifestResourceStream(GuestBundle.ResourceName);
         if (bundle is not null) await distro.ApplyGuest(bundle, log);
+        await WriteEngineConfig(distro, log);
+    }
+
+    static ProxySettings? HostProxy()
+    {
+        if (HostProxySettings.FromEnvironment(Environment.GetEnvironmentVariable) is { } fromEnvironment) return fromEnvironment;
+        using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Internet Settings");
+        return HostProxySettings.FromWindows(key?.GetValue("ProxyEnable") as int? ?? 0, key?.GetValue("ProxyServer") as string, key?.GetValue("ProxyOverride") as string);
+    }
+
+    // Before every start, because what Windows uses changes with the network it is on.
+    static async Task WriteEngineConfig(WslDistro distro, Action<string> log)
+    {
+        var proxy = HostProxy();
+        await distro.WriteFile("/etc/docker/daemon.json", EngineConfig.Render(proxy));
+        await EngineConfig.ApplyClientProxy(Paths.LinuxHost, proxy);
+        if (proxy is { IsEmpty: false }) log("The Linux engine and its containers use this PC's proxy");
     }
 
     // Silent setups log to a file: after a restart there is no console to report to.
@@ -66,6 +83,7 @@ static partial class UserSetup
         }
 
         await CredentialStore.Forget(Paths.CredentialStoreMarker);
+        await EngineConfig.ApplyClientProxy(Paths.LinuxHost, null);
         if (File.Exists(Paths.DockerExe))
         {
             await Shell.Run(Paths.DockerExe, "context", "use", "default");

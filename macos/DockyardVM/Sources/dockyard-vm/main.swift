@@ -37,6 +37,8 @@ func prepare(assets: String) throws {
                                physicalMemory: ProcessInfo.processInfo.physicalMemory)
     settings.kernel = assets + "/kernel"
     settings.initramfs = assets + "/initramfs"
+    settings.shares[VMSettings.configShare] = dir + "/engine"
+    try fm.createDirectory(atPath: dir + "/engine", withIntermediateDirectories: true)
     try settings.save(path: configPath)
 
     // The root image is cloned (APFS copy-on-write) whenever the bundled release changes; the data disk is never replaced.
@@ -112,7 +114,7 @@ final class Machine: NSObject, VZVirtualMachineDelegate {
 
         var directories: [String: VZSharedDirectory] = [:]
         for (tag, path) in settings.shares where FileManager.default.fileExists(atPath: path) {
-            directories[tag] = VZSharedDirectory(url: URL(fileURLWithPath: path), readOnly: false)
+            directories[tag] = VZSharedDirectory(url: URL(fileURLWithPath: path), readOnly: tag == VMSettings.configShare)
         }
         let share = VZVirtioFileSystemDeviceConfiguration(tag: "dockyard")
         share.share = VZMultipleDirectoryShare(directories: directories)
