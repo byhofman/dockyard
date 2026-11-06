@@ -96,12 +96,17 @@ It follows the active docker context and updates live from the engine's events. 
 
 Keys: `Ctrl+K` (`⌘K` on macOS) search, `S` start/stop, `R` restart, `E` terminal, `L` logs, `Del` remove (with confirmation), `Left`/`Right` collapse or expand a compose project.
 
+## Container domains
+
+Every running container answers at `http://<container name>.dockyard.test`, and a Compose service also at `http://<project>-<service>.dockyard.test`, without publishing a port and without clashing with anything else on your machine. Dockyard picks the port by looking at what the container listens on, the usual web ports first. If that is the wrong one, set it next to the name in the dashboard, or with a `dockyard.port` label.
+
 ## Your network
 
 Containers reach your machine as `host.docker.internal`, including services that only listen on its loopback. The engine and its containers use the proxy your system is set to, also one on your machine's own loopback, read each time the engine starts. Name lookups go through your system's DNS at that moment, and traffic leaves through your machine's routes, so VPNs apply to containers as they do to your other apps.
 
 ## Known limits
 
+- Container domains need systemd-resolved on Linux; other setups have no place to route one name space, and the wizard says so. Reaching them on macOS may ask once for Local Network access for your browser, since the name points at the VM.
 - A proxy auto-config (PAC) file is not followed: it can choose a different proxy per address, and the engine takes one fixed proxy. Set a fixed proxy in your system's settings if pulls fail behind one.
 - On macOS, `/var/run/docker.sock` stays with another Docker app when one already has it, such as OrbStack or Docker Desktop. Tools that ignore docker contexts keep using that app until it gives up the path.
 - On Linux without a desktop session there is no OS credential store, so `docker login` keeps Docker's default there.

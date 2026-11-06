@@ -228,10 +228,10 @@ public enum HostDial {
 public final class DockerSocketServer {
     let listener: Int32
 
-    public init(path: String, connector: @escaping GuestConnector) throws {
+    public init(path: String, guestPort: UInt32 = VsockPort.docker, connector: @escaping GuestConnector) throws {
         listener = try Sockets.listenUnix(path: path)
         Sockets.acceptLoop(listener) { client in
-            connector(VsockPort.docker) { guest in
+            connector(guestPort) { guest in
                 guard let guest else { close(client); return }
                 Sockets.pump(client, guest)
             }
@@ -278,6 +278,13 @@ public final class PortForwarder {
     }
 
     public func stopAll() { apply([]) }
+
+    /// Answers this Mac's lookups for container domains: the agent's DNS on 53 in the guest, on a high port on loopback
+    /// that needs no privileges, and that /etc/resolver names so that no other name comes here.
+    public func serveDns(hostPort: Int) throws {
+        let fd = try Sockets.listenInet(host: "127.0.0.1", port: hostPort, datagram: true)
+        serveUdp(fd, PublishedPort(protocol: "udp", hostIp: "127.0.0.1", port: 53))
+    }
 
     func serveTcp(_ listener: Int32, _ port: PublishedPort) {
         Sockets.acceptLoop(listener) { [connector] client in

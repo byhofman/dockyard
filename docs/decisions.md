@@ -2,6 +2,22 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-06: Domains resolve per place, and no port 80 is taken on the host
+
+`*.dockyard.test` (`.test` is reserved, so it can never be a real name) is answered by the agent, which also proxies HTTP by `Host` header to the container. The name resolves to something different from each place, because no single address works from all of them:
+
+| Asked from | Answer | Why |
+|---|---|---|
+| A container | 198.19.250.1 | Ports 80 and 443 there redirect to the proxy |
+| The Mac | The VM's own address, through `/etc/resolver` and a DNS relay on 127.0.0.1:15353 | Needs no root process on the Mac and no port on its loopback. The MAC address is now fixed so the lease stays |
+| Windows | 127.77.0.1, through an NRPT rule, then a relay in the tray to WSL's loopback | Only loopback is shared with WSL. All of 127/8 is loopback on Windows, so this cannot clash with `127.0.0.1:80` |
+| A Linux host | 127.77.0.1, through a systemd-resolved routing domain to port 2353 | iptables redirects 80 and 443 on that address: binding them would make every later `-p 80:80` fail, since Linux refuses a wildcard bind next to a specific one |
+
+- **Names are flat, `project-service.dockyard.test`, not `service.project.dockyard.test`.** A wildcard certificate covers one label, so deeper names would need a certificate per project and the CA key online.
+- **Port choice:** one chosen in the dashboard, then the `dockyard.port` label (`dev.orbstack.http-port` also counts), then what actually listens in the container, then what it exposes. Choices are kept by container name, because Compose replaces containers when their configuration changes.
+- **Redirected listeners are open on all interfaces and refuse anything not redirected from port 80 or 443,** which is what keeps them off the LAN on a Linux host and mirrored WSL.
+- **macOS 15 and later may ask for Local Network access for a browser** reaching the VM's address. The other route is a root daemon holding a loopback alias, and that is a larger thing to install than one prompt.
+
 ## 2026-11-06: Tray actions are a native menu, not a popover window
 
 `DOK-2` says popover. A window in the tray process would load the UI stack it otherwise never touches until the settings window opens, and this app competes on memory. The native menu gives the same actions: start, stop, restart, open the first published port. It lists at most 20 containers, refreshes on the tray's existing 10 second tick while the engine runs, and is only rebuilt when the list changed. A menu replaced while open would close on the user.

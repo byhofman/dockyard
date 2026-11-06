@@ -27,6 +27,7 @@ static class MachineSetup
         AddToMachinePath(Paths.DockerDir);
         foreach (var plugin in Plugins) await UpdatePlugin(log, plugin.Component);
         await InstallCredentialHelper(log);
+        await RouteDomains(log);
         await ConfigureWindowsEngine(log, userSid, userName);
         await InstallApp(log, Paths.Self, keepPid, engineOnly);
         RemoveLegacy(log, keepPid);
@@ -50,6 +51,7 @@ static class MachineSetup
     public static async Task Uninstall(Action<string> log, int keepPid)
     {
         StopApps(keepPid);
+        await UnrouteDomains();
         if (ServiceExists())
         {
             log("Removing docker service");
@@ -77,6 +79,19 @@ static class MachineSetup
         }
         log($"Windows images and containers under {Path.GetDirectoryName(Paths.DaemonConfigDir)} were left in place");
     }
+
+    const string DomainNamespace = ".dockyard.test";
+
+    // A rule for one name space only: everything else keeps using the DNS servers Windows was using.
+    static async Task RouteDomains(Action<string> log)
+    {
+        var r = await Shell.Run("powershell.exe", "-NoProfile", "-Command",
+            $"if (-not (Get-DnsClientNrptRule | Where-Object {{ $_.Namespace -contains '{DomainNamespace}' }})) {{ Add-DnsClientNrptRule -Namespace '{DomainNamespace}' -NameServers '{DomainRelay.Address}' }}");
+        log(r.ExitCode == 0 ? $"Windows asks Dockyard about names under {DomainNamespace}" : $"Container domains were not set up ({r.Error.Trim()})");
+    }
+
+    static async Task UnrouteDomains() => await Shell.Run("powershell.exe", "-NoProfile", "-Command",
+        $"Get-DnsClientNrptRule | Where-Object {{ $_.Namespace -contains '{DomainNamespace}' }} | Remove-DnsClientNrptRule -Force");
 
     // Not worth failing an install over: without it docker login just keeps working the way it did.
     static async Task InstallCredentialHelper(Action<string> log)

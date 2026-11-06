@@ -169,6 +169,7 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
         if (trayServices is not null) return;
         trayServices = new CancellationTokenSource();
         _ = FollowPublishedPorts(trayServices.Token);
+        new DomainRelay(_ => { }).Start();
     }
 
     // The tray does not have to be what started the engine, and the engine comes and goes without telling it.
