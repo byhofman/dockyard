@@ -211,6 +211,17 @@
           </Border>
         </StackPanel>
 
+        <!-- Import -->
+        <StackPanel Spacing="10" IsVisible="{Binding ShowImport}">
+          <TextBlock Classes="h2" Text="DOCKER DESKTOP" />
+          <Border Classes="card">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,16,0" Text="Copy your images, volumes and containers from Docker Desktop. It is started if it is not running, and keeps everything. Containers arrive stopped." />
+              <Button Grid.Column="1" Classes="primary" Content="Import" Command="{Binding ImportCommand}" />
+            </Grid>
+          </Border>
+        </StackPanel>
+
         <!-- Activity -->
         <Expander Header="Activity" IsExpanded="{Binding IsSetupMode, Mode=OneTime}" HorizontalAlignment="Stretch">
           <SelectableTextBlock x:Name="LogBox" Classes="mono" Text="{Binding LogText}" TextWrapping="Wrap" MinHeight="80" />

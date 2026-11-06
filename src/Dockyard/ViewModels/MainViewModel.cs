@@ -63,6 +63,11 @@ sealed class MainViewModel : Observable
         UninstallCommand = Cmd(Uninstall);
         RebootCommand = Cmd(() => { host.Reboot(); return Task.CompletedTask; });
         ApplyEngineConfigurationCommand = Cmd(ApplyEngineConfiguration);
+        ImportCommand = Cmd(() => Run("Importing from Docker Desktop", async () =>
+        {
+            await host.Start(host.Engines[0].Id);
+            await DockerDesktop.Import(null, host.ImportTarget, host.OwnSocket, Log);
+        }));
         registryMirrors = settings.RegistryMirrors ?? "";
         insecureRegistries = settings.InsecureRegistries ?? "";
         addressPools = settings.AddressPools ?? "";
@@ -84,6 +89,8 @@ sealed class MainViewModel : Observable
     public Command UninstallCommand { get; }
     public Command RebootCommand { get; }
     public Command ApplyEngineConfigurationCommand { get; }
+    public Command ImportCommand { get; }
+    public bool ShowImport => ShowManage && DockerDesktop.IsInstalled;
     public ComponentViewModel Dashboard { get; }
 
     string registryMirrors;
@@ -120,14 +127,14 @@ sealed class MainViewModel : Observable
     public bool IsSetupMode
     {
         get => isSetupMode;
-        private set { if (Set(ref isSetupMode, value)) Raise(nameof(IsDashboard), nameof(HasEngineSwitch), nameof(ShowInstall), nameof(ShowManage), nameof(ShowWizardManage), nameof(ShowEngineConfiguration)); }
+        private set { if (Set(ref isSetupMode, value)) Raise(nameof(IsDashboard), nameof(HasEngineSwitch), nameof(ShowInstall), nameof(ShowManage), nameof(ShowWizardManage), nameof(ShowEngineConfiguration), nameof(ShowImport)); }
     }
 
     public bool IsDashboard => !IsSetupMode;
     public bool IsInstalled
     {
         get => isInstalled;
-        private set { if (Set(ref isInstalled, value)) Raise(nameof(ShowInstall), nameof(ShowManage), nameof(ShowWizardManage), nameof(ShowEngineConfiguration)); }
+        private set { if (Set(ref isInstalled, value)) Raise(nameof(ShowInstall), nameof(ShowManage), nameof(ShowWizardManage), nameof(ShowEngineConfiguration), nameof(ShowImport)); }
     }
 
     // The wizard installs once; on an existing install it is the same manage view as the tray window.

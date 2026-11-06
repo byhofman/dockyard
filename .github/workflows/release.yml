@@ -236,6 +236,14 @@ jobs:
           chmod +x wizard/Dockyard-linux-x64
           WIZARD="$PWD/wizard/Dockyard-linux-x64" sh tests/e2e/wizard-linux.sh
 
+      - name: Import from a second engine that plays Docker Desktop
+        env:
+          DOCKYARD_GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          "$PWD/wizard/Dockyard-linux-x64" --silent --no-start
+          WIZARD="$PWD/wizard/Dockyard-linux-x64" sh tests/e2e/import-linux.sh
+          "$PWD/wizard/Dockyard-linux-x64" --silent --uninstall
+
       - name: In containers, as root and refused without root
         env:
           DOCKYARD_GITHUB_TOKEN: ${{ github.token }}

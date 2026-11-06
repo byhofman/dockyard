@@ -50,6 +50,7 @@ curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install.sh |
 | `--dashboard` | Add the dashboard, also on an existing install. |
 | `--no-dashboard` | Leave the dashboard out, or remove it from an existing install. |
 | `--no-start` | Do not start Dockyard afterwards. |
+| `--silent --import` | Copy images, volumes and containers from Docker Desktop, which keeps them. **Import** in the tray window does the same. |
 | `--silent --uninstall` | Remove Dockyard. Images and containers stay. |
 | `--silent --uninstall --remove-data` | Remove Dockyard with its images and containers. |
 
