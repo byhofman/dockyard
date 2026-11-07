@@ -2,6 +2,10 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-07: The window is given its settings, so tests never share the user's file
+
+`DOK-18`. Every `MainViewModel` loaded and saved the real `settings.json`, so the wizard and component tests, which xUnit runs in parallel, read and wrote one file at the same time. On Windows a write while another test reads it fails with a sharing violation, `Run` turned that into the status line, and the row never updated, which is why only Windows failed. The tests also changed the settings of whoever ran them. `Settings` now remembers the file it was loaded from and saves there, and the view model takes one; the app passes none and gets the user's file as before, and each test gets its own in a temporary folder. Nothing in the app changes how or where it saves.
+
 ## 2026-11-07: Releases are read from github.com, not the API
 
 Anonymous API calls are limited to 60 an hour per address, shared by everyone behind one office network or VPN, and an install or update failed on it. Nothing in Dockyard calls the API now.
