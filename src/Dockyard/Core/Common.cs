@@ -63,16 +63,23 @@ sealed class Settings
     public string? AddressPools { get; set; }
     public bool HttpsEnabled { get; set; }
 
-    public static Settings Load()
+    string file = Paths.SettingsFile;
+
+    public static Settings Load() => Load(Paths.SettingsFile);
+
+    public static Settings Load(string file)
     {
-        try { return JsonSerializer.Deserialize(File.ReadAllText(Paths.SettingsFile), SettingsJson.Default.Settings) ?? new(); }
-        catch { return new(); }
+        Settings settings;
+        try { settings = JsonSerializer.Deserialize(File.ReadAllText(file), SettingsJson.Default.Settings) ?? new(); }
+        catch { settings = new(); }
+        settings.file = file;
+        return settings;
     }
 
     public void Save()
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(Paths.SettingsFile)!);
-        File.WriteAllText(Paths.SettingsFile, JsonSerializer.Serialize(this, SettingsJson.Default.Settings));
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        File.WriteAllText(file, JsonSerializer.Serialize(this, SettingsJson.Default.Settings));
     }
 }
 
