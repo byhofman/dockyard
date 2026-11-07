@@ -2,6 +2,10 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-07: On macOS the trust setting goes before the certificate, and one that stays stops the removal
+
+`DOK-20`. The decision on the local CA says turning HTTPS off and uninstalling remove the trust, but on macOS only the certificate went: `remove-trusted-cert` had hung headless uninstalls, so it was left out. It is back, bounded. The trust settings are read first (`dump-trust-settings`, with `-d` for the administrator's), and only a domain that lists the CA is touched, so nothing asks where there is nothing to remove. The administrator's, which a silent setup wrote through sudo, is removed through `sudo -n`, or with the administrator's approval when sudo asks for a password. The user's, which the window wrote with the user's approval, is removed the same way: macOS asks the user. Each attempt has two minutes, so a machine with nobody to approve fails instead of waiting for ever. If either still lists the CA afterwards, nothing else is removed and the error says it can be tried again, as with the certificate. The macOS end-to-end run checks the administrator's setting is there after a silent setup with `--trust-https` and gone after uninstall; the user's needs a person and is covered by the unit tests only.
+
 ## 2026-11-07: Releases are read from github.com, not the API
 
 Anonymous API calls are limited to 60 an hour per address, shared by everyone behind one office network or VPN, and an install or update failed on it. Nothing in Dockyard calls the API now.

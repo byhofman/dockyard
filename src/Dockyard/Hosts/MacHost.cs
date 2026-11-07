@@ -355,9 +355,8 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
     {
         if (!File.Exists(certificateFile)) return;
         var thumbprint = LocalCa.Thumbprint(await File.ReadAllTextAsync(certificateFile));
-        // Asking to remove what is not there can still raise an approval dialog, so it is looked up first. Only the certificate
-        // goes: remove-trusted-cert waits for an approval dialog, even as root and without a screen, so it hung every headless
-        // uninstall. The trust setting left behind is for this certificate's hash alone, and it and its key are gone.
+        await RemoveTrustSettings(certificateFile);
+        // Asking to remove what is not there can still raise an approval dialog, so it is looked up first.
         if ((await runner.Run("/usr/bin/security", "find-certificate", "-a", "-Z", "-c", LocalCa.SubjectName, MacLayout.LoginKeychain)).Output.Contains(thumbprint, StringComparison.OrdinalIgnoreCase))
         {
             await runner.Run("/usr/bin/security", "delete-certificate", "-Z", thumbprint, MacLayout.LoginKeychain);
@@ -374,6 +373,31 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
                 throw new InvalidOperationException($"Dockyard's certificate is still in {keychain}. Nothing was removed, so this can be tried again.");
         log("Dockyard's certificate is out of this Mac's trust store");
     }
+
+    // Trust settings live apart from the certificate, keyed by its hash, so they go first while the file still names them.
+    // A silent setup trusted it in the admin domain through sudo, and is undone the same way or with the administrator's
+    // approval. The window trusted it in the user's domain, where macOS asks the user again; the limit keeps a machine
+    // with nobody to ask from waiting for ever. What is still trusted afterwards stops here, before anything else goes.
+    async Task RemoveTrustSettings(string certificateFile)
+    {
+        async Task<bool> Trusted(bool admin) =>
+            (await runner.Run("/usr/bin/security", admin ? ["dump-trust-settings", "-d"] : ["dump-trust-settings"])).Output.Contains(LocalCa.SubjectName, StringComparison.Ordinal);
+
+        if (await Trusted(admin: true))
+        {
+            var script = $"security remove-trusted-cert -d {Shell.Quote(certificateFile)}";
+            if ((await runner.RunWithin(TrustPromptLimit, "sudo", "-n", "/usr/bin/security", "remove-trusted-cert", "-d", certificateFile)).ExitCode != 0)
+                await runner.RunWithin(TrustPromptLimit, "/usr/bin/osascript", MacLayout.AdminShell(script));
+        }
+        if (await Trusted(admin: false))
+            await runner.RunWithin(TrustPromptLimit, "/usr/bin/security", "remove-trusted-cert", certificateFile);
+
+        foreach (var admin in new[] { true, false })
+            if (await Trusted(admin))
+                throw new InvalidOperationException($"macOS still trusts Dockyard's certificate in the {(admin ? "administrator's" : "user's")} trust settings, as nobody approved removing it. Nothing was removed, so this can be tried again.");
+    }
+
+    static readonly TimeSpan TrustPromptLimit = TimeSpan.FromMinutes(2);
 
     public bool HasEngineConfiguration => true;
     public string? OwnSocket => MacLayout.DockerSocket;
