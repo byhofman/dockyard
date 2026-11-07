@@ -106,8 +106,9 @@ public sealed class ComponentRulesTests
     [InlineData(HttpStatusCode.TooManyRequests)]
     public async Task A_refused_check_is_could_not_check_and_never_claims_up_to_date(HttpStatusCode status)
     {
+        using var settings = new TempSettings();
         var host = new RowsHost { LatestFailure = new HttpRequestException("limited", null, status) };
-        var vm = new MainViewModel(host, setupMode: true);
+        var vm = new MainViewModel(host, setupMode: true, userSettings: settings.Settings);
         await vm.LoadSetup();
 
         Assert.Equal(UpdateState.CouldNotCheck, vm.Dashboard.State);
@@ -118,8 +119,9 @@ public sealed class ComponentRulesTests
     [Fact]
     public async Task Any_other_failed_check_stays_an_error()
     {
+        using var settings = new TempSettings();
         var host = new RowsHost { LatestFailure = new HttpRequestException("gone", null, HttpStatusCode.InternalServerError) };
-        var vm = new MainViewModel(host, setupMode: true);
+        var vm = new MainViewModel(host, setupMode: true, userSettings: settings.Settings);
         await vm.LoadSetup();
 
         Assert.Equal(UpdateState.Error, vm.Dashboard.State);
@@ -128,8 +130,9 @@ public sealed class ComponentRulesTests
     [Fact]
     public async Task The_dashboard_shows_its_versions_and_updates_alone_without_touching_anything_else()
     {
+        using var settings = new TempSettings();
         var host = new RowsHost();
-        var vm = new MainViewModel(host, setupMode: true);
+        var vm = new MainViewModel(host, setupMode: true, userSettings: settings.Settings);
         await vm.LoadSetup();
 
         Assert.Equal("1.0.0", vm.Dashboard.Installed);
@@ -146,10 +149,26 @@ public sealed class ComponentRulesTests
     }
 
     [Fact]
+    public async Task A_removed_component_is_written_to_the_settings_the_window_was_given_and_nowhere_else()
+    {
+        using var mine = new TempSettings();
+        var userFile = Paths.SettingsFile;
+        var userBefore = File.Exists(userFile) ? File.ReadAllText(userFile) : null;
+        var vm = new MainViewModel(new RowsHost(), setupMode: true, userSettings: mine.Settings);
+        await vm.LoadSetup();
+
+        await vm.Components.First(c => c.Id == "Compose").RemoveCommand!.ExecuteAsync();
+
+        Assert.Equal(["Compose"], Settings.Load(mine.File).RemovedComponents);
+        Assert.Equal(userBefore, File.Exists(userFile) ? File.ReadAllText(userFile) : null);
+    }
+
+    [Fact]
     public async Task Rows_say_why_something_is_required_and_only_optional_ones_can_change()
     {
+        using var settings = new TempSettings();
         var host = new RowsHost();
-        var vm = new MainViewModel(host, setupMode: true);
+        var vm = new MainViewModel(host, setupMode: true, userSettings: settings.Settings);
         await vm.LoadSetup();
         var app = vm.Components.First(c => c.Id == "App");
         var compose = vm.Components.First(c => c.Id == "Compose");
