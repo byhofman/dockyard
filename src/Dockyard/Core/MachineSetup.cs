@@ -12,8 +12,8 @@ static class MachineSetup
 {
     static readonly (Component Component, string File, string Repo, string Pattern)[] Plugins =
     [
-        (Component.Compose, "docker-compose.exe", "docker/compose", @"^docker-compose-windows-x86_64\.exe$"),
-        (Component.Buildx, "docker-buildx.exe", "docker/buildx", @"^buildx-v[\d.]+\.windows-amd64\.exe$"),
+        (Component.Compose, "docker-compose.exe", "docker/compose", "docker-compose-windows-x86_64.exe"),
+        (Component.Buildx, "docker-buildx.exe", "docker/buildx", "buildx-{tag}.windows-amd64.exe"),
     ];
 
     // Returns true when a reboot is needed.
@@ -140,7 +140,7 @@ static class MachineSetup
         if (File.Exists(Paths.CredentialHelper)) return;
         try
         {
-            var release = await Updates.LatestGitHub(Paths.CredentialHelpersRepo, @"^docker-credential-wincred-v[\d.]+\.windows-amd64\.exe$");
+            var release = await Updates.LatestGitHub(Paths.CredentialHelpersRepo, "docker-credential-wincred-{tag}.windows-amd64.exe");
             await Updates.DownloadFile(release.DownloadUrl!, Paths.CredentialHelper);
             log($"Credential helper {release.Tag}");
         }

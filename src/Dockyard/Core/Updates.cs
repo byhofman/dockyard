@@ -1,7 +1,8 @@
 using System.Globalization;
+using System.Net;
 using System.Runtime.Versioning;
-using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using Dockyard.Hosts;
 
 namespace Dockyard.Core;
@@ -12,15 +13,15 @@ static partial class Updates
 {
     public const string StaticIndex = "https://download.docker.com/win/static/stable/x86_64/";
     public const string LinuxStaticIndex = "https://download.docker.com/linux/static/stable/x86_64/";
-    public const string LinuxComposeAsset = @"^docker-compose-linux-x86_64$";
-    public const string LinuxBuildxAsset = @"^buildx-v[\d.]+\.linux-amd64$";
+    public const string LinuxComposeAsset = "docker-compose-linux-x86_64";
+    public const string LinuxBuildxAsset = "buildx-{tag}.linux-amd64";
     public const string WindowsAppAsset = @"^Dockyard\.exe$";
     public const string ImageAsset = @"^dockyard-linux-[\d.]+-x86_64\.tar\.gz$";
 
     // Defender ASR's prevalence/age rule blocks freshly published binaries.
     static readonly TimeSpan MinAge = TimeSpan.FromDays(14);
 
-    static readonly HttpClient Http = CreateHttp();
+    internal static HttpClient Http = CreateHttp();
 
     static HttpClient CreateHttp()
     {
@@ -59,28 +60,72 @@ static partial class Updates
     {
         Component.Engine or Component.Cli => await LatestStatic(),
         Component.Dashboard => await LatestApp(@"^Dockyard\.Dashboard\.zip$"),
-        Component.Compose => await LatestGitHub("docker/compose", @"^docker-compose-windows-x86_64\.exe$"),
-        Component.Buildx => await LatestGitHub("docker/buildx", @"^buildx-v[\d.]+\.windows-amd64\.exe$"),
+        Component.Compose => await LatestGitHub("docker/compose", "docker-compose-windows-x86_64.exe"),
+        Component.Buildx => await LatestGitHub("docker/buildx", "buildx-{tag}.windows-amd64.exe"),
         Component.LinuxEngine => await LatestStatic(LinuxStaticIndex, "tgz"),
         Component.App => await LatestApp(WindowsAppAsset),
         _ => null,
     };
 
-    // GitHub allows 60 anonymous API calls an hour per address, too few on shared CI runners.
-    static HttpRequestMessage GitHubApi(string url)
+    public static bool IsRateLimited(HttpRequestException e) => IsRateLimit(e.StatusCode);
+
+    static bool IsRateLimit(HttpStatusCode? status) => status is HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests;
+
+    static void EnsureSuccess(HttpResponseMessage response, string url)
     {
-        var request = new HttpRequestMessage(HttpMethod.Get, url);
-        if (Environment.GetEnvironmentVariable("DOCKYARD_GITHUB_TOKEN") is { Length: > 0 } token)
-            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-        return request;
+        if (response.IsSuccessStatusCode) return;
+        var host = new Uri(url).Host;
+        var code = (int)response.StatusCode;
+        var message = IsRateLimit(response.StatusCode)
+            ? $"{host} is refusing or limiting requests from this network right now ({code}). Try again later."
+            : $"Could not get {url}: {host} answered {code} ({response.StatusCode}).";
+        throw new HttpRequestException(message, null, response.StatusCode);
     }
 
-    static async Task<string> GetGitHubApi(string url)
+    static async Task<string> GetText(string url)
     {
-        using var response = await Http.SendAsync(GitHubApi(url));
-        response.EnsureSuccessStatusCode();
+        using var response = await Http.GetAsync(url);
+        EnsureSuccess(response, url);
         return await response.Content.ReadAsStringAsync();
     }
+
+    static async Task<string?> GetTextIfFound(string url)
+    {
+        try
+        {
+            return await GetText(url);
+        }
+        catch (HttpRequestException e) when (e.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+    }
+
+    static async Task<bool> Exists(string url)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Head, url);
+        using var response = await Http.SendAsync(request);
+        if (response.StatusCode == HttpStatusCode.NotFound) return false;
+        EnsureSuccess(response, url);
+        return true;
+    }
+
+    // Releases are read from github.com and not api.github.com: the API allows 60 anonymous calls an hour per address,
+    // which everyone behind one office network or VPN shares.
+    static string AssetUrl(string repo, string tag, string asset) => $"https://github.com/{repo}/releases/download/{tag}/{asset}";
+
+    internal static async Task<string?> LatestTag(string repo)
+    {
+        var url = $"https://github.com/{repo}/releases/latest";
+        using var request = new HttpRequestMessage(HttpMethod.Head, url);
+        using var response = await Http.SendAsync(request);
+        EnsureSuccess(response, url);
+        return TagOfLatestRedirect(response.RequestMessage!.RequestUri!);
+    }
+
+    // A repository without releases redirects to its release list instead.
+    internal static string? TagOfLatestRedirect(Uri target) =>
+        ReleaseTagPath().Match(target.AbsolutePath) is { Success: true } m ? m.Groups["tag"].Value : null;
 
     static async Task<Version?> PluginVersion(string exe, params string[] args)
     {
@@ -91,7 +136,7 @@ static partial class Updates
     public static Task<Release> LatestStatic() => LatestStatic(StaticIndex, "zip");
 
     public static async Task<Release> LatestStatic(string index, string extension) =>
-        PickStatic(await Http.GetStringAsync(index), index, extension, DateTime.UtcNow);
+        PickStatic(await GetText(index), index, extension, DateTime.UtcNow);
 
     internal static Release PickStatic(string html, string index, string extension, DateTime now)
     {
@@ -105,31 +150,34 @@ static partial class Updates
         return new Release(best.Version, best.Version.ToString(), $"{index}docker-{best.Version}.{extension}");
     }
 
-    public static async Task<Release> LatestGitHub(string repo, string assetPattern)
+    // Asset names follow from the tag, with {tag} standing for it, because a tool's own checksum file does not list them all.
+    public static async Task<Release> LatestGitHub(string repo, string assetTemplate)
     {
-        var releases = JsonNode.Parse(await GetGitHubApi($"https://api.github.com/repos/{repo}/releases?per_page=20"))!.AsArray();
-        foreach (var r in releases)
+        var feed = await GetText($"https://github.com/{repo}/releases.atom");
+        foreach (var tag in StableTagsPastMinAge(feed, DateTime.UtcNow))
         {
-            if (r is null || r["prerelease"]!.GetValue<bool>() || r["draft"]!.GetValue<bool>()) continue;
-            if (DateTime.UtcNow - r["published_at"]!.GetValue<DateTime>() < MinAge) continue;
-            var asset = r["assets"]!.AsArray().FirstOrDefault(a => Regex.IsMatch(a!["name"]!.GetValue<string>(), assetPattern));
-            if (asset is null) continue;
-            var tag = r["tag_name"]!.GetValue<string>();
-            return new Release(ParseVersion(tag)!, tag, asset["browser_download_url"]!.GetValue<string>());
+            var url = AssetUrl(repo, tag, assetTemplate.Replace("{tag}", tag));
+            if (await Exists(url)) return new Release(ParseVersion(tag)!, tag, url);
         }
         throw new InvalidOperationException($"No suitable {repo} release found");
     }
 
+    // The feed is what still gives each release's age without the API; it has no prerelease flag, but Docker's prereleases carry a suffix such as -rc1.
+    internal static IEnumerable<string> StableTagsPastMinAge(string atom, DateTime now)
+    {
+        XNamespace ns = "http://www.w3.org/2005/Atom";
+        return XDocument.Parse(atom).Root!.Elements(ns + "entry")
+            .Select(e => (Tag: e.Element(ns + "id")!.Value.Split('/')[^1], Updated: (DateTime)e.Element(ns + "updated")!))
+            .Where(r => !r.Tag.Contains('-') && ParseVersion(r.Tag) is not null && now - r.Updated.ToUniversalTime() >= MinAge)
+            .Select(r => r.Tag);
+    }
+
     public static async Task<Release?> LatestApp(string assetPattern)
     {
-        using var response = await Http.SendAsync(GitHubApi($"https://api.github.com/repos/{Paths.Repo}/releases/latest"));
-        if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
-        response.EnsureSuccessStatusCode();
-        var release = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
-        var tag = release["tag_name"]!.GetValue<string>();
-        var asset = release["assets"]!.AsArray().FirstOrDefault(a => Regex.IsMatch(a!["name"]!.GetValue<string>(), assetPattern));
-        return ParseVersion(tag) is { } v && asset is not null
-            ? new Release(v, tag, asset["browser_download_url"]!.GetValue<string>())
+        if (await LatestTag(Paths.Repo) is not { } tag || ParseVersion(tag) is not { } version) return null;
+        if (await GetTextIfFound(AssetUrl(Paths.Repo, tag, "SHA256SUMS")) is not { } sums) return null;
+        return Checksums.Names(sums).FirstOrDefault(n => Regex.IsMatch(n, assetPattern)) is { } asset
+            ? new Release(version, tag, AssetUrl(Paths.Repo, tag, asset))
             : null;
     }
 
@@ -145,10 +193,8 @@ static partial class Updates
     public static Task<string> DownloadImage(string targetDir) => DownloadReleaseAsset(ImageAsset, targetDir, isPattern: true);
 
     // From the given release; without one, the release of this build, or the latest for development builds.
-    internal static string ReleaseApiUrl(string appVersion, string? tag) =>
-        tag is not null ? $"https://api.github.com/repos/{Paths.Repo}/releases/tags/{tag}"
-        : appVersion == "0.0.0" ? $"https://api.github.com/repos/{Paths.Repo}/releases/latest"
-        : $"https://api.github.com/repos/{Paths.Repo}/releases/tags/v{appVersion}";
+    internal static string? ReleaseTag(string appVersion, string? tag) =>
+        tag ?? (appVersion == "0.0.0" ? null : $"v{appVersion}");
 
     // Without a tag: an asset next to the running wizard wins, for offline installs and for testing a build before its release.
     public static async Task<string> ReleaseAssetOrLocal(string pattern, string targetDir, string? tag)
@@ -164,19 +210,17 @@ static partial class Updates
 
     public static async Task<string> DownloadReleaseAsset(string name, string targetDir, bool isPattern = false, string? tag = null)
     {
-        var release = JsonNode.Parse(await GetGitHubApi(ReleaseApiUrl(Paths.AppVersion, tag)))!;
-        var assets = release["assets"]!.AsArray();
-        var asset = assets.FirstOrDefault(a =>
-                isPattern ? Regex.IsMatch(a!["name"]!.GetValue<string>(), name) : a!["name"]!.GetValue<string>() == name)
-            ?? throw new InvalidOperationException($"Release {release["tag_name"]} has no {name}");
-        var sums = assets.FirstOrDefault(a => a!["name"]!.GetValue<string>() == "SHA256SUMS")
-            ?? throw new InvalidOperationException($"Release {release["tag_name"]} has no SHA256SUMS");
+        var release = ReleaseTag(Paths.AppVersion, tag) ?? await LatestTag(Paths.Repo)
+            ?? throw new InvalidOperationException("No Dockyard release found");
+        var sums = await GetText(AssetUrl(Paths.Repo, release, "SHA256SUMS"));
+        var asset = Checksums.Names(sums).FirstOrDefault(n => isPattern ? Regex.IsMatch(n, name) : n == name)
+            ?? throw new InvalidOperationException($"Release {release} has no {name}");
         Directory.CreateDirectory(targetDir);
-        var target = Path.Combine(targetDir, asset["name"]!.GetValue<string>());
-        await DownloadFile(asset["browser_download_url"]!.GetValue<string>(), target);
+        var target = Path.Combine(targetDir, asset);
+        await DownloadFile(AssetUrl(Paths.Repo, release, asset), target);
         try
         {
-            Checksums.Verify(await Http.GetStringAsync(sums["browser_download_url"]!.GetValue<string>()), target);
+            Checksums.Verify(sums, target);
         }
         catch
         {
@@ -194,7 +238,7 @@ static partial class Updates
             try
             {
                 using var response = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
-                response.EnsureSuccessStatusCode();
+                EnsureSuccess(response, url);
                 await using var content = await response.Content.ReadAsStreamAsync();
                 await WriteReplacing(content, target);
                 return;
@@ -234,4 +278,7 @@ static partial class Updates
 
     [GeneratedRegex(@"\d+\.\d+\.\d+")]
     private static partial Regex VersionNumber();
+
+    [GeneratedRegex(@"/releases/tag/(?<tag>[^/]+)$")]
+    private static partial Regex ReleaseTagPath();
 }

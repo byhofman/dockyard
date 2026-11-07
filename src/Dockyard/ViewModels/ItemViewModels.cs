@@ -36,7 +36,7 @@ sealed class EngineViewModel(EngineInfo info) : Observable
     public string ToggleText => IsRunning ? "Stop" : "Start";
 }
 
-enum UpdateState { Unknown, Checking, UpToDate, Available, NotInstalled, NoRelease, Error, OptionalInstalled, OptionalAbsent }
+enum UpdateState { Unknown, Checking, UpToDate, Available, NotInstalled, NoRelease, Error, CouldNotCheck, OptionalInstalled, OptionalAbsent }
 
 sealed class ComponentViewModel(ComponentInfo info) : Observable
 {
@@ -85,7 +85,7 @@ sealed class ComponentViewModel(ComponentInfo info) : Observable
     public bool CanAdd => IsOptional && !IsPresent;
     public bool CanRemove => IsOptional && IsPresent;
     public bool IsProblem => State is UpdateState.Error or UpdateState.NotInstalled;
-    public bool IsNeutral => State is UpdateState.Unknown or UpdateState.Checking;
+    public bool IsNeutral => State is UpdateState.Unknown or UpdateState.Checking or UpdateState.CouldNotCheck;
 
     public string StatusText => State switch
     {
@@ -95,6 +95,7 @@ sealed class ComponentViewModel(ComponentInfo info) : Observable
         UpdateState.NotInstalled => "Not installed",
         UpdateState.NoRelease => "No release",
         UpdateState.Error => "Check failed",
+        UpdateState.CouldNotCheck => "Could not check right now",
         UpdateState.OptionalInstalled => "Installed",
         UpdateState.OptionalAbsent => "Not installed",
         _ => "Not checked",

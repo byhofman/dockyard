@@ -13,8 +13,8 @@ static class MacLayout
     public const string Context = "dockyard";
     public const string LaunchAgentLabel = "com.byhofman.dockyard";
     public const string CliIndex = "https://download.docker.com/mac/static/stable/aarch64/";
-    public const string ComposeAsset = @"^docker-compose-darwin-aarch64$";
-    public const string BuildxAsset = @"^buildx-v[\d.]+\.darwin-arm64$";
+    public const string ComposeAsset = "docker-compose-darwin-aarch64";
+    public const string BuildxAsset = "buildx-{tag}.darwin-arm64";
 
     public static string Home => Paths.UserProfile;
     public static string DataDir => Path.Combine(Home, ".dockyard");
@@ -30,7 +30,7 @@ static class MacLayout
     public static string EngineConfigFile => Path.Combine(DataDir, "engine", "daemon.json");
     public static string RootRelease => Path.Combine(DataDir, "root-release");
     public static string CredentialHelper => Path.Combine(BinDir, "docker-credential-osxkeychain");
-    public const string CredentialHelperAsset = @"^docker-credential-osxkeychain-v[\d.]+\.darwin-arm64$";
+    public const string CredentialHelperAsset = "docker-credential-osxkeychain-{tag}.darwin-arm64";
     public const string SystemSocket = "/var/run/docker.sock";
     public static string LoginKeychain => Path.Combine(Home, "Library", "Keychains", "login.keychain-db");
     public const string DomainResolver = "/etc/resolver/dockyard.test";

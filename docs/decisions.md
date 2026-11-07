@@ -2,6 +2,16 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-07: Releases are read from github.com, not the API
+
+Anonymous API calls are limited to 60 an hour per address, shared by everyone behind one office network or VPN, and an install or update failed on it. Nothing in Dockyard calls the API now.
+
+- **Dockyard's own releases:** the `releases/latest` redirect gives the tag, and `SHA256SUMS` gives both the asset names and their hashes.
+- **Compose, Buildx and the credential helpers:** `releases.atom` gives the tags and dates the 14-day wait needs, which the redirect cannot. It shows the last 10 releases and has no prerelease flag, so a tag with a suffix counts as a prerelease. Asset names are fixed templates with the tag in them, because Buildx's `checksums.txt` lists only some of its assets.
+- **A 403 or 429 from any of these** is "could not check right now" on the update row and a plain sentence in an install. github.com has limits of its own, so this can still happen, only far less often.
+
+`UseSystemResourceKeys` is off for the app and wizard: it removed .NET's message texts to save size, so every framework error reached the user as a key such as `net_http_message_not_success_statuscode_reason`.
+
 ## 2026-11-06: The CA's key stays off what containers can read, with the name constraint still as the limit
 
 A privileged container on the engine's Linux can read `/Users` on a Mac and `/mnt/c` on Windows, so a restricted file there is readable. The owner has not decided otherwise, so the name constraint stays what limits the damage, and the key moved where no manual step is needed:

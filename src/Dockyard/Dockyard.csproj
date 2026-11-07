@@ -22,7 +22,6 @@
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <PublishTrimmed>true</PublishTrimmed>
     <InvariantGlobalization>true</InvariantGlobalization>
-    <UseSystemResourceKeys>true</UseSystemResourceKeys>
     <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
     <DebugType>none</DebugType>
   </PropertyGroup>

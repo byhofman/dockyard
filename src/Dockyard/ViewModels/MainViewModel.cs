@@ -284,7 +284,10 @@ sealed class MainViewModel : Observable
         UpdateAllCommand.Refresh();
 
         var available = Components.Count(c => c.IsAvailable);
-        Log(available == 0 ? "Everything is up to date" : $"{available} update(s) available");
+        var allChecked = !targets.Any(c => c.State is UpdateState.Error or UpdateState.CouldNotCheck);
+        Log(available > 0 ? $"{available} update(s) available"
+            : allChecked ? "Everything is up to date"
+            : "Not everything could be checked; try again later");
     }
 
     async Task Check(ComponentViewModel c)
@@ -304,6 +307,12 @@ sealed class MainViewModel : Observable
                 : latest is null ? UpdateState.NoRelease
                 : latest.Version > installed ? UpdateState.Available
                 : UpdateState.UpToDate;
+        }
+        catch (HttpRequestException ex) when (Updates.IsRateLimited(ex))
+        {
+            c.Error = ex.Message;
+            c.State = UpdateState.CouldNotCheck;
+            Log($"{c.Title}: {ex.Message}");
         }
         catch (Exception ex)
         {

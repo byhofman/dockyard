@@ -5,11 +5,15 @@ namespace Dockyard.Core;
 static class Checksums
 {
     // SHA256SUMS as sha256sum writes it: "<hash>  <name>".
-    public static string? Expected(string sums, string fileName) => sums.Split('\n')
+    static IEnumerable<(string Hash, string Name)> Entries(string sums) => sums.Split('\n')
         .Select(line => line.Trim().Split(' ', 2, StringSplitOptions.TrimEntries))
-        .Where(parts => parts.Length == 2 && parts[1].TrimStart('*') == fileName)
-        .Select(parts => parts[0])
-        .FirstOrDefault();
+        .Where(parts => parts.Length == 2)
+        .Select(parts => (parts[0], parts[1].TrimStart('*')));
+
+    public static IEnumerable<string> Names(string sums) => Entries(sums).Select(e => e.Name);
+
+    public static string? Expected(string sums, string fileName) =>
+        Entries(sums).Where(e => e.Name == fileName).Select(e => e.Hash).FirstOrDefault();
 
     public static void Verify(string sums, string file)
     {
