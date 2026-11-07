@@ -12,7 +12,7 @@ IDs are permanent: never renumber or reuse one.
 
 ## Networking
 
-- [ ] DOK-21 Direct `[::1]` on a published port gets an answer, or the limit is documented if the fix is not small (pulled in from Later by the owner, 2026-11-07, SCOPE.md)
+- [x] DOK-21 Direct `[::1]` on a published port gets an answer, or the limit is documented if the fix is not small (pulled in from Later by the owner, 2026-11-07, SCOPE.md)
 
 ## Quality
 

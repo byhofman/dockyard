@@ -71,7 +71,9 @@ public enum Sockets {
         return fd
     }
 
+    /// An IPv6 host listens on IPv6 only, so it can sit next to the IPv4 listener for the same port.
     public static func listenInet(host: String, port: Int, datagram: Bool) throws -> Int32 {
+        if host.contains(":") { return try listenInet6(host: host, port: port, datagram: datagram) }
         let fd = try check(socket(AF_INET, datagram ? datagramType : streamType, 0), "socket")
         var yes: Int32 = 1
         setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, socklen_t(MemoryLayout<Int32>.size))
@@ -86,6 +88,32 @@ public enum Sockets {
             try withUnsafePointer(to: &address) {
                 try $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
                     _ = try check(bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)), "bind \(host):\(port)")
+                }
+            }
+            if !datagram { try check(listen(fd, 128), "listen") }
+        } catch {
+            close(fd)
+            throw error
+        }
+        return fd
+    }
+
+    static func listenInet6(host: String, port: Int, datagram: Bool) throws -> Int32 {
+        let fd = try check(socket(AF_INET6, datagram ? datagramType : streamType, 0), "socket")
+        var yes: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, socklen_t(MemoryLayout<Int32>.size))
+        setsockopt(fd, Int32(IPPROTO_IPV6), IPV6_V6ONLY, &yes, socklen_t(MemoryLayout<Int32>.size))
+        var address = sockaddr_in6()
+        address.sin6_family = sa_family_t(AF_INET6)
+        address.sin6_port = UInt16(port).bigEndian
+        guard inet_pton(AF_INET6, host, &address.sin6_addr) == 1 else {
+            close(fd)
+            throw SocketError(operation: "invalid address \(host)", code: EINVAL)
+        }
+        do {
+            try withUnsafePointer(to: &address) {
+                try $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                    _ = try check(bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in6>.size)), "bind [\(host)]:\(port)")
                 }
             }
             if !datagram { try check(listen(fd, 128), "listen") }
@@ -246,7 +274,7 @@ public final class PortForwarder {
     let connector: GuestConnector
     let log: (String) -> Void
     let lock = NSLock()
-    var listeners: [PublishedPort: Int32] = [:]
+    var listeners: [PublishedPort: [Int32]] = [:]
 
     public init(connector: @escaping GuestConnector, log: @escaping (String) -> Void) {
         self.connector = connector
@@ -262,18 +290,33 @@ public final class PortForwarder {
         lock.lock(); defer { lock.unlock() }
         let change = PortTable.reconcile(open: Set(listeners.keys), desired: desired)
         for port in change.close {
-            if let fd = listeners.removeValue(forKey: port) { Sockets.stop(fd) }
+            listeners.removeValue(forKey: port)?.forEach(Sockets.stop)
             log("stopped forwarding \(port.protocol)/\(port.port)")
         }
         for port in change.open {
+            let wildcard = port.hostIp == "0.0.0.0"
+            let datagram = port.protocol == "udp"
+            let fd: Int32
             do {
-                let fd = try Sockets.listenInet(host: port.hostIp == "0.0.0.0" ? "0.0.0.0" : "127.0.0.1", port: port.port, datagram: port.protocol == "udp")
-                listeners[port] = fd
-                if port.protocol == "udp" { serveUdp(fd, port) } else { serveTcp(fd, port) }
-                log("forwarding \(port.protocol)/\(port.port) on \(port.hostIp)")
+                fd = try Sockets.listenInet(host: wildcard ? "0.0.0.0" : "127.0.0.1", port: port.port, datagram: datagram)
             } catch {
                 log("cannot forward \(port.protocol)/\(port.port): \(error)")
+                continue
             }
+            var fds = [fd]
+            // [::1] too: a URL with it, or a client that tries IPv6 first and does not fall back, finds the port. What
+            // already holds the IPv6 side keeps it, and IPv4 still forwards.
+            let v6 = wildcard ? "::" : "::1"
+            do {
+                fds.append(try Sockets.listenInet(host: v6, port: port.port, datagram: datagram))
+            } catch {
+                log("\(port.protocol)/\(port.port) on [\(v6)] stays with what holds it: \(error)")
+            }
+            listeners[port] = fds
+            for listener in fds {
+                if datagram { serveUdp(listener, port) } else { serveTcp(listener, port) }
+            }
+            log("forwarding \(port.protocol)/\(port.port) on \(port.hostIp)")
         }
     }
 
