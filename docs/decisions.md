@@ -2,6 +2,10 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-07: A published port on macOS also listens on IPv6
+
+`DOK-21`. Only the Mac lacked it: Windows already relays `[::1]` to the published port (`LoopbackForwarder`), and on a Linux host Docker itself binds both families. The helper on the Mac listened on 127.0.0.1 or 0.0.0.0 alone, so `http://[::1]:8080` and clients that try IPv6 first without falling back got a refusal. It now also listens on `::1` for a loopback publish and on `::` for a wildcard one, IPv6-only so the two sit side by side, for TCP and UDP. If something else already holds the IPv6 side it keeps it, the helper says so once, and IPv4 forwards as before. The fix was small, so nothing is documented as a limit.
+
 ## 2026-11-07: Uninstall on a Linux host takes the agent's rules and addresses away, matched by what is Dockyard's
 
 `DOK-19`. Uninstall stopped the agent but left `DOCKYARD-INPUT`, the nat redirects and DNAT rules, the firewall openings on container interfaces, and 198.19.250.1 and .254 on `lo` until a reboot. The setup script now removes them after stopping the agent and before restarting Docker. It finds them in `iptables -S` by what only Dockyard uses (its 198.19.250.0/24 range, 127.77.0.1, its chain, and the three ports of the firewall opening) rather than asking the installed agent, because the binary on disk can be older than the uninstaller and a restarted older agent may have stacked copies. A test runs the script against the agent's own rule list with stand-ins for `iptables` and `ip`, so a rule added later without a matching pattern fails there, and the Linux end-to-end run checks a real machine after uninstall.

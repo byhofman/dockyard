@@ -100,6 +100,49 @@ final class SocketTests: XCTestCase {
         XCTAssertTrue(forwarder.open.isEmpty)
     }
 
+    /// Connects to [::1]:port and returns what an echo answers to "hello", or nil when nothing listens there.
+    func echoOverIPv6Loopback(_ port: Int) -> String? {
+        let client = socket(AF_INET6, Int32(streamType), 0)
+        defer { close(client) }
+        var address = sockaddr_in6()
+        address.sin6_family = sa_family_t(AF_INET6)
+        address.sin6_port = UInt16(port).bigEndian
+        inet_pton(AF_INET6, "::1", &address.sin6_addr)
+        let connected = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(client, $0, socklen_t(MemoryLayout<sockaddr_in6>.size)) }
+        }
+        guard connected == 0, Sockets.writeAll(client, Data("hello".utf8)) else { return nil }
+        shutdown(client, Int32(SHUT_WR))
+        return String(decoding: readAll(client), as: UTF8.self)
+    }
+
+    func testAPublishedPortAnswersOnIPv6LoopbackToo() throws {
+        let forwarder = PortForwarder(connector: FakeGuest { _, fd in
+            _ = readLine(fd)
+            echo(fd)
+        }.connector, log: { _ in })
+        defer { forwarder.stopAll() }
+        for hostIp in ["127.0.0.1", "0.0.0.0"] {
+            let port = 40000 + Int.random(in: 0..<20000)
+            forwarder.apply([PublishedPort(protocol: "tcp", hostIp: hostIp, port: port)])
+            XCTAssertEqual(echoOverIPv6Loopback(port), "hello", "published on \(hostIp)")
+        }
+    }
+
+    func testIPv6LoopbackHeldByAnotherProgramLeavesTheIPv4ForwardInPlace() throws {
+        let port = 40000 + Int.random(in: 0..<20000)
+        let other = try Sockets.listenInet(host: "::1", port: port, datagram: false)
+        defer { Sockets.stop(other) }
+        var logged: [String] = []
+        let forwarder = PortForwarder(connector: FakeGuest { _, fd in close(fd) }.connector, log: { logged.append($0) })
+        defer { forwarder.stopAll() }
+
+        forwarder.apply([PublishedPort(protocol: "tcp", hostIp: "127.0.0.1", port: port)])
+
+        XCTAssertEqual(forwarder.open.count, 1)
+        XCTAssertTrue(logged.contains { $0.contains("[::1]") }, "\(logged)")
+    }
+
     func testControlClientReceivesPortsAndSendsStop() throws {
         let received = expectation(description: "ports")
         let stopped = expectation(description: "stop")
