@@ -61,6 +61,7 @@ sealed class Settings
     public string? RegistryMirrors { get; set; }
     public string? InsecureRegistries { get; set; }
     public string? AddressPools { get; set; }
+    public bool HttpsEnabled { get; set; }
 
     public static Settings Load()
     {

@@ -128,12 +128,19 @@ if ($Wizard) {
 if ($Wizard) {
     Section 'localhost reaches a published port, not only 127.0.0.1'
     & $docker --context linux run -d --name e2e-localhost -p 18090:80 nginx:alpine | Out-Null
+    function Can-Listen-On-80 {
+        try { $web = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Any, 80); $web.Start(); $web.Stop(); return $true } catch { Write-Host "  port 80: $($_.Exception.InnerException.Message)"; return $false }
+    }
+    $free80 = Can-Listen-On-80
     $tray = Start-Process $appExe -ArgumentList '--tray' -PassThru
     Start-Sleep 8
     $v6 = (curl.exe -s -g -o NUL -w '%{http_code}' --max-time 10 'http://[::1]:18090/' | Out-String).Trim()
     Check "[::1] answers (got $v6)" ($v6 -eq '200')
     $named = (curl.exe -s -o NUL -w '%{http_code}' --max-time 10 'http://localhost:18090/' | Out-String).Trim()
     Check "localhost answers (got $named)" ($named -eq '200')
+    # The relay holds 80 and 443 on 127.77.0.1, which must not keep a web server from taking those ports on every address.
+    if ($free80) { Check 'a web server can still listen on port 80 next to the tray' (Can-Listen-On-80) }
+    else { Write-Host '  something on this runner already holds port 80, so this says nothing here'; netstat -ano | Select-String ':80\s' | Write-Host }
     Get-Process Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
     & $docker --context linux rm -f e2e-localhost | Out-Null
 
@@ -185,6 +192,32 @@ if ($Wizard) {
     Check "a new network comes from the pool (got $subnet)" ($subnet -match '^10\.123\.')
     & $docker --context linux network rm e2e-pool | Out-Null
     $saved | Set-Content "$env:APPDATA\Dockyard\settings.json"
+
+    Section 'container domains and trusted HTTPS, without publishing a port'
+    Check 'windows sends the name space to Dockyard' ((Get-DnsClientNrptRule | Where-Object { $_.Namespace -contains '.dockyard.test' }) -ne $null)
+    & $docker --context linux run -d --name e2e-web nginx:alpine | Out-Null
+    $tray = Start-Process $appExe -ArgumentList '--tray' -PassThru
+    Start-Sleep 8
+    Check 'the name resolves' ((Resolve-DnsName e2e-web.dockyard.test -Type A -ErrorAction SilentlyContinue).IPAddress -contains '127.77.0.1')
+    $code = (curl.exe -s -o NUL -w '%{http_code}' --max-time 15 http://e2e-web.dockyard.test/ | Out-String).Trim()
+    Check "http reaches it by name (got $code)" ($code -eq '200')
+    Get-Process Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
+    Check 'exit 0 with --trust-https' ((Run --silent --no-start --trust-https) -eq 0)
+    $root = Get-ChildItem Cert:\LocalMachine\Root | Where-Object Subject -like '*Dockyard Local CA*'
+    Check 'the CA is in the trust store' ($root -ne $null)
+    Check 'name constrained' (($root.Extensions | Where-Object { $_.Oid.Value -eq '2.5.29.30' }).Critical)
+    $tray = Start-Process $appExe -ArgumentList '--tray' -PassThru
+    Start-Sleep 15
+    # --ssl-no-revoke: this curl asks Windows to check revocation and fails when a private CA publishes no such list, as this
+    # one does not need to. Browsers do not fail on that; a certificate that is not trusted still fails here.
+    $code = (curl.exe -s --ssl-no-revoke -o NUL -w '%{http_code}' --max-time 15 https://e2e-web.dockyard.test/ | Out-String).Trim()
+    if ($code -ne '200') { curl.exe -sS -v --ssl-no-revoke -o NUL --max-time 15 https://e2e-web.dockyard.test/ 2>&1 | Select-Object -Last 15 | Write-Host; Resolve-DnsName e2e-web.dockyard.test -Type A -ErrorAction SilentlyContinue | Out-String | Write-Host }
+    Check "https is trusted by Windows (got $code)" ($code -eq '200')
+    Get-Process Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
+    & $docker --context linux rm -f e2e-web | Out-Null
+
+    Section 'memory of the WSL engine, for the record'
+    wsl.exe -d dockyard -u root -- sh -c 'for n in dockerd containerd dockyard-agent; do for p in $(pidof $n); do echo "$n RSS $(awk "/VmRSS/{print \$2}" /proc/$p/status) kB"; done; done; grep -E "MemTotal|MemAvailable" /proc/meminfo' | Write-Host
 
     Section 'docker login keeps credentials in the Windows credential store'
     Check 'the helper is there' (Test-Path (Join-Path $env:ProgramFiles 'Docker\docker-credential-wincred.exe'))
@@ -293,6 +326,10 @@ Check 'exit 0' ((Run --silent --uninstall) -eq 0)
 Check 'app removed' (-not (Test-Path $appExe))
 $distros = (wsl.exe -l -q | Out-String) -replace "`0", ''
 Check 'the dockyard distro is kept' ($distros -match 'dockyard')
+if ($Wizard) {
+    Check 'the CA is out of the trust store' ((Get-ChildItem Cert:\LocalMachine\Root | Where-Object Subject -like '*Dockyard Local CA*') -eq $null)
+    Check 'and names no longer go to Dockyard' ((Get-DnsClientNrptRule | Where-Object { $_.Namespace -contains '.dockyard.test' }) -eq $null)
+}
 Check 'no credential store left in the config' (-not ((Test-Path "$env:USERPROFILE\.docker\config.json") -and ((Get-Content "$env:USERPROFILE\.docker\config.json" -Raw) -match 'credsStore')))
 Check 'our .wslconfig line is gone' (-not ((Test-Path "$env:USERPROFILE\.wslconfig") -and ((Get-Content "$env:USERPROFILE\.wslconfig" -Raw) -match 'networkingMode=mirrored')))
 

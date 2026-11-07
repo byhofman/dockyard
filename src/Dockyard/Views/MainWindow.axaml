@@ -220,6 +220,26 @@
           </Border>
         </StackPanel>
 
+        <!-- HTTPS -->
+        <StackPanel Spacing="10" IsVisible="{Binding ShowManage}">
+          <TextBlock Classes="h2" Text="CONTAINER DOMAINS" />
+          <Border Classes="card">
+            <StackPanel Spacing="10">
+              <TextBlock TextWrapping="Wrap" Text="Every running container answers at http://name.dockyard.test, without publishing a port." />
+              <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HttpsDisabled}">
+                <TextBlock Classes="muted" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,16,0"
+                           Text="Trusted HTTPS needs a certificate of Dockyard's own in this computer's trust store. It is made here, stays on this device and is valid only for names under dockyard.test. Your system asks for approval when you turn it on. Plain HTTP works without it." />
+                <Button Grid.Column="1" Classes="primary" Content="Turn on HTTPS" Command="{Binding EnableHttpsCommand}" />
+              </Grid>
+              <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HttpsEnabled}">
+                <TextBlock Classes="muted" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,16,0"
+                           Text="HTTPS is on, for names under dockyard.test only. Turning it off or uninstalling removes the certificate from the trust store." />
+                <Button Grid.Column="1" Content="Turn off HTTPS" Command="{Binding DisableHttpsCommand}" />
+              </Grid>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
         <!-- Import -->
         <StackPanel Spacing="10" IsVisible="{Binding ShowImport}">
           <TextBlock Classes="h2" Text="DOCKER DESKTOP" />

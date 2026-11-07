@@ -171,19 +171,65 @@ EOF
 route_domains() {
   [ -d /run/systemd/resolve ] || { echo "No systemd-resolved: container domains do not resolve by name here"; return 0; }
   mkdir -p /etc/systemd/resolved.conf.d
-  printf '[Resolve]\nDNS=127.77.0.1\nDomains=~dockyard.test\n' > /etc/systemd/resolved.conf.d/dockyard.conf
+  printf '[Resolve]\nDNS=127.0.0.1:2353\nDomains=~dockyard.test\n' > /etc/systemd/resolved.conf.d/dockyard.conf
   systemctl restart systemd-resolved
   echo "This machine asks Dockyard about names under dockyard.test"
 }
 
-# A running engine only reads this when it starts, and restarting it would stop the user's containers without a change to apply.
+trust_ca() {
+  if [ -d /usr/local/share/ca-certificates ] && command -v update-ca-certificates >/dev/null 2>&1; then
+    install -m 0644 "$agent" /usr/local/share/ca-certificates/dockyard-local-ca.crt
+    update-ca-certificates >/dev/null
+  elif command -v update-ca-trust >/dev/null 2>&1; then
+    # Arch has this command too, with its anchors elsewhere.
+    anchors=/etc/pki/ca-trust/source/anchors
+    [ -d "$anchors" ] || anchors=/etc/ca-certificates/trust-source/anchors
+    install -d "$anchors"
+    install -m 0644 "$agent" "$anchors/dockyard-local-ca.crt"
+    update-ca-trust
+  elif command -v trust >/dev/null 2>&1; then
+    trust anchor --store "$agent"
+    # What takes it out again needs the certificate itself.
+    install -d /etc/dockyard
+    install -m 0644 "$agent" /etc/dockyard/local-ca.crt
+  else
+    echo "This distribution has no trust store Dockyard knows how to change" >&2
+    exit 5
+  fi
+  echo "This machine trusts Dockyard's certificate, for names under dockyard.test only"
+}
+
+untrust_ca() {
+  if [ -f /usr/local/share/ca-certificates/dockyard-local-ca.crt ]; then
+    rm -f /usr/local/share/ca-certificates/dockyard-local-ca.crt
+    update-ca-certificates --fresh >/dev/null
+  fi
+  for anchors in /etc/pki/ca-trust/source/anchors /etc/ca-certificates/trust-source/anchors; do
+    if [ -f "$anchors/dockyard-local-ca.crt" ]; then
+      rm -f "$anchors/dockyard-local-ca.crt"
+      update-ca-trust
+    fi
+  done
+  if [ -f /etc/dockyard/local-ca.crt ]; then
+    trust anchor --remove /etc/dockyard/local-ca.crt
+    rm -f /etc/dockyard/local-ca.crt
+  fi
+}
+
+# A running engine only reads this when it starts. A restart stops the user's containers, so with any running it waits for
+# the engine's next start. Uninstall passes "now": what was written names an agent that is gone, and containers would lose DNS.
 apply_daemon_json() {
   [ -n "$daemon_json" ] && [ -f "$daemon_json" ] || return 0
   if [ -f /etc/docker/daemon.json ] && cmp -s "$daemon_json" /etc/docker/daemon.json; then return 0; fi
   install -d /etc/docker
   install -m 0644 "$daemon_json" /etc/docker/daemon.json
-  if has_systemd && systemctl is-active --quiet docker.service; then systemctl restart docker.service; fi
   echo "Updated /etc/docker/daemon.json"
+  has_systemd && systemctl is-active --quiet docker.service || return 0
+  if [ "${1:-}" = now ] || [ -z "$(docker ps -q 2>/dev/null)" ]; then
+    systemctl restart docker.service
+  else
+    echo "Containers are running, so this applies the next time Docker starts"
+  fi
 }
 
 configure() {
@@ -223,8 +269,11 @@ case "$action" in
   packages) install_packages ;;
   # $2 is the package here.
   add-plugin) add_plugin ;;
+  trust-ca) trust_ca ;;
+  untrust-ca) untrust_ca ;;
   install) install_packages; configure; grant_socket_access; install_tray_host; install_libsecret; install_agent; route_domains; apply_daemon_json ;;
   uninstall)
+    untrust_ca
     if has_systemd; then systemctl disable --now dockyard-agent.service >/dev/null 2>&1 || true; fi
     rm -f /etc/systemd/system/dockyard-agent.service
     if [ -f /etc/systemd/resolved.conf.d/dockyard.conf ]; then
@@ -232,7 +281,7 @@ case "$action" in
       systemctl restart systemd-resolved 2>/dev/null || true
     fi
     rm -rf /usr/local/lib/dockyard
-    apply_daemon_json
+    apply_daemon_json now
     rm -f "$rule"
     rm -rf "$socket_dropin_dir" /etc/dockyard
     rm -f /usr/local/bin/docker-credential-secretservice
