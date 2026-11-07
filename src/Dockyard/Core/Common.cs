@@ -138,6 +138,25 @@ static class Shell
         return new ShellResult(p.ExitCode, await stdout, await stderr);
     }
 
+    public static async Task<ShellResult> Run(string file, string[] args, TimeSpan limit)
+    {
+        using var p = Process.Start(Info(file, args, redirect: true)) ?? throw new InvalidOperationException($"Could not start {file}");
+        var stdout = p.StandardOutput.ReadToEndAsync();
+        var stderr = p.StandardError.ReadToEndAsync();
+        using var timeout = new CancellationTokenSource(limit);
+        try
+        {
+            await p.WaitForExitAsync(timeout.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            p.Kill(entireProcessTree: true);
+            await p.WaitForExitAsync();
+            return new ShellResult(-1, await stdout, $"{Path.GetFileName(file)} did not finish within {limit.TotalSeconds:0}s");
+        }
+        return new ShellResult(p.ExitCode, await stdout, await stderr);
+    }
+
     public static async Task<ShellResult> RunWithInput(string file, string input, params string[] args)
     {
         var info = Info(file, args, redirect: true);

@@ -133,6 +133,7 @@ if [ -n "${ADMIN:-}" ]; then
   check "no file holds the key, /Users being shared with the engine" missing "$home/.dockyard/ca/ca.key"
   if security find-generic-password -s "Dockyard Local CA key" "$home/Library/Keychains/login.keychain-db" >/dev/null; then ok "the key is in the keychain"; else fail "the key is not in the keychain"; fi
   if security find-certificate -c "Dockyard Local CA" /Library/Keychains/System.keychain >/dev/null; then ok "the CA is in the trust store"; else fail "not in the trust store"; fi
+  if security dump-trust-settings -d 2>/dev/null | grep -q "Dockyard Local CA"; then ok "and trusted in the administrator's trust settings"; else fail "no trust setting: $(security dump-trust-settings -d 2>&1 | head -5)"; fi
   if openssl x509 -in "$ca" -noout -text | grep -A2 'Name Constraints: critical' | grep -q 'DNS:dockyard.test'; then ok "the CA is name constrained"; else fail "name constraint"; fi
 fi
 
@@ -189,6 +190,7 @@ if [ -n "${ADMIN:-}" ]; then
   check "the daemon is gone" missing /Library/LaunchDaemons/com.byhofman.dockyard.socket.plist
   check "the resolver entry is gone" missing /etc/resolver/dockyard.test
   if security find-certificate -c "Dockyard Local CA" /Library/Keychains/System.keychain >/dev/null 2>&1; then fail "the CA stayed in the trust store"; else ok "the CA is out of the trust store"; fi
+  if security dump-trust-settings -d 2>/dev/null | grep -q "Dockyard Local CA"; then fail "the trust setting stayed"; else ok "and so is its trust setting"; fi
 fi
 
 echo "== and --remove-data takes it"
