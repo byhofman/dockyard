@@ -68,17 +68,70 @@ public sealed class LocalCaTests : IDisposable
     }
 
     [Fact]
-    public void The_key_is_only_readable_by_its_owner_and_is_reused()
+    public async Task The_key_is_only_readable_by_its_owner_and_is_reused()
     {
         Assert.SkipWhen(OperatingSystem.IsWindows(), "Windows goes by the folder's access list");
         var folder = Path.Combine(dir, "ca");
-        var first = LocalCa.LoadOrCreate(folder);
+        var keys = new FileCaKey(folder);
+        var first = await LocalCa.LoadOrCreate(folder, keys);
 
-        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(LocalCa.KeyFile(folder)));
+        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(Path.Combine(folder, "ca.key")));
         Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute, File.GetUnixFileMode(folder));
-        Assert.Equal(first.Key, LocalCa.LoadOrCreate(folder).Key);
+        Assert.Equal(first.Key, (await LocalCa.LoadOrCreate(folder, keys)).Key);
 
-        LocalCa.Remove(folder);
+        await LocalCa.Remove(folder, keys);
         Assert.False(Directory.Exists(folder));
+    }
+
+    [Fact]
+    public async Task On_windows_the_file_holds_no_readable_key()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "DPAPI is Windows'");
+        var folder = Path.Combine(dir, "ca");
+        var keys = new DpapiCaKey(folder);
+        var first = await LocalCa.LoadOrCreate(folder, keys);
+
+        Assert.DoesNotContain("PRIVATE KEY", await File.ReadAllTextAsync(Path.Combine(folder, "ca.key.dpapi")));
+        Assert.False(File.Exists(Path.Combine(folder, "ca.key")));
+        Assert.Equal(first.Key, (await LocalCa.LoadOrCreate(folder, keys)).Key);
+
+        await LocalCa.Remove(folder, keys);
+        Assert.Null(await keys.Read());
+    }
+
+    [Fact]
+    public async Task On_macos_the_key_is_in_the_keychain_and_no_file_holds_it()
+    {
+        Assert.SkipUnless(OperatingSystem.IsMacOS(), "The keychain is macOS'");
+        var folder = Path.Combine(dir, "ca");
+        var keychain = Path.Combine(dir, "test.keychain");
+        await Shell.Check("/usr/bin/security", "create-keychain", "-p", "test", keychain);
+        await Shell.Check("/usr/bin/security", "unlock-keychain", "-p", "test", keychain);
+        try
+        {
+            var keys = new KeychainCaKey(keychain);
+            Assert.Null(await keys.Read());
+            var first = await LocalCa.LoadOrCreate(folder, keys);
+
+            Assert.False(File.Exists(Path.Combine(folder, "ca.key")));
+            Assert.Equal(first.Key, (await LocalCa.LoadOrCreate(folder, keys)).Key);
+
+            await LocalCa.Remove(folder, keys);
+            Assert.Null(await keys.Read());
+        }
+        finally { await Shell.Run("/usr/bin/security", "delete-keychain", keychain); }
+    }
+
+    [Fact]
+    public void An_elevated_step_only_trusts_a_root_with_the_constraint()
+    {
+        Assert.True(LocalCa.IsConstrainedRoot(LocalCa.Create(Now).Certificate));
+
+        using var key = System.Security.Cryptography.ECDsa.Create();
+        var other = new CertificateRequest($"CN={LocalCa.SubjectName}", key, System.Security.Cryptography.HashAlgorithmName.SHA256);
+        other.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, false, 0, true));
+        using var unconstrained = other.CreateSelfSigned(Now, Now.AddDays(1));
+        Assert.False(LocalCa.IsConstrainedRoot(unconstrained.ExportCertificatePem()));
+        Assert.False(LocalCa.IsConstrainedRoot("not a certificate"));
     }
 }

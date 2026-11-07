@@ -69,6 +69,20 @@ static partial class HostProxySettings
         NoProxy = [.. AlwaysDirect, .. proxy.NoProxy.Except(AlwaysDirect)],
     };
 
+    // The ports of the proxies on the host's loopback, which only some ways of reaching the host can get to.
+    public static IEnumerable<int> LoopbackPorts(ProxySettings proxy) =>
+        new[] { proxy.Http, proxy.Https }
+            .Select(url => Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.IsLoopback ? uri.Port : 0)
+            .Where(port => port > 0).Distinct();
+
+    // An engine told to use a proxy it cannot reach can pull nothing, which is worse than going direct.
+    public static ProxySettings? WithoutPorts(ProxySettings proxy, IReadOnlyCollection<int> unreachable)
+    {
+        bool Lost(string? url) => Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.IsLoopback && unreachable.Contains(uri.Port);
+        var kept = proxy with { Http = Lost(proxy.Http) ? null : proxy.Http, Https = Lost(proxy.Https) ? null : proxy.Https };
+        return kept.IsEmpty ? null : kept;
+    }
+
     static string? ThroughHost(string? url)
     {
         if (url is null || !Uri.TryCreate(url, UriKind.Absolute, out var uri)) return url;

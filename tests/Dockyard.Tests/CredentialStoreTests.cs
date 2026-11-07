@@ -8,6 +8,16 @@ public sealed class CredentialStoreTests
     static string B64(string s) => Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(s));
 
     [Fact]
+    public void Uninstalling_says_which_logins_stay_in_the_store()
+    {
+        var notice = CredentialStore.LeftBehind("wincred", """{"https://ghcr.io":"me","docker.io":"me"}""");
+        Assert.Contains("ghcr.io", notice);
+        Assert.Contains("Windows Credential Manager", notice);
+        Assert.Null(CredentialStore.LeftBehind("wincred", "{}"));
+        Assert.Null(CredentialStore.LeftBehind("wincred", "not json"));
+    }
+
+    [Fact]
     public void Plain_logins_are_read_from_auth_and_identity_tokens()
     {
         var json = """{"auths":{"a.example":{"auth":"AUTH"},"b.example":{"identitytoken":"tok"},"c.example":{}}}""".Replace("AUTH", B64("me:pa:ss"));

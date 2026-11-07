@@ -39,6 +39,7 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
     ];
 
     public bool IsInstalled => File.Exists(Paths.AppExe);
+    public ICaKeyStore CaKeys => new DpapiCaKey(((IEngineHost)this).CaDirectory);
 
     public Task<bool> IsRunning(string engine) => Task.Run(() => engine == Linux ? IsLinuxRunning() : IsWindowsRunning());
 
@@ -108,6 +109,8 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
             case nameof(Component.Dashboard):
                 return await SetDashboard(log, installed);
             case nameof(Component.LinuxEngine):
+                // First: a declined approval then leaves everything as it was.
+                await MachineComponent(log, component, installed);
                 if (installed)
                 {
                     await UserSetup.EnableLinuxEngine(log);
@@ -123,15 +126,19 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
                 await UserSetup.RemoveContext("win", "linux", log);
                 break;
         }
-        var change = installed ? "add" : "remove";
+        await MachineComponent(log, component, installed);
+        if (component == nameof(Component.Engine) && installed) await UserSetup.AddContext("win", Paths.WindowsHost);
+        return false;
+    }
+
+    static async Task MachineComponent(Action<string> log, string component, bool installed)
+    {
         if (Elevation.IsElevated)
         {
             var (sid, name) = Elevation.CurrentUser;
             await MachineSetup.SetComponent(log, Enum.Parse<Component>(component), installed, sid, name);
         }
-        else await Elevation.Run(log, "--machine-component", component, change);
-        if (component == nameof(Component.Engine) && installed) await UserSetup.AddContext("win", Paths.WindowsHost);
-        return false;
+        else await Elevation.Run(log, "--machine-component", component, installed ? "add" : "remove");
     }
 
     // The machine's store: the current user's would show its own dialog from an elevated process nobody is watching, and
@@ -140,8 +147,11 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
     {
         try
         {
-            if (Elevation.IsElevated) MachineSetup.TrustCa(log, certificateFile);
-            else await Elevation.Run(log, "--machine-trust-ca", certificateFile);
+            var pem = await File.ReadAllTextAsync(certificateFile);
+            if (Elevation.IsElevated) MachineSetup.TrustCa(log, pem);
+            // The certificate itself and not its path: approval can come from another administrator's account, which
+            // cannot read this user's owner-only folder.
+            else await Elevation.Run(log, "--machine-trust-ca", MachineSetup.EncodeCertificate(pem));
             return true;
         }
         catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or System.Security.Cryptography.CryptographicException)
@@ -219,7 +229,7 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
     {
         ReleaseResources();
         // Before the user's folder with the certificate goes; the machine step also removes it by name, to leave none behind.
-        LocalCa.Remove(((IEngineHost)this).CaDirectory);
+        await LocalCa.Remove(((IEngineHost)this).CaDirectory, CaKeys);
         await UserSetup.Uninstall(log, removeData);
         if (Elevation.IsElevated) await MachineSetup.Uninstall(log, Environment.ProcessId);
         else await Elevation.Run(log, "--machine-uninstall");

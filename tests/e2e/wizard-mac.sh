@@ -122,10 +122,16 @@ check "tools that look in ~/.docker/run find it" test -L "$home/.docker/run/dock
 if [ -n "${ADMIN:-}" ]; then
   echo "== container domains and trusted HTTPS"
   if grep -q 'port 15353' /etc/resolver/dockyard.test; then ok "this Mac asks Dockyard about the name space"; else fail "resolver: $(cat /etc/resolver/dockyard.test 2>&1)"; fi
+  # Dockyard uses the login keychain by its path, so this home needs one; made here and unlocked, as a login does.
+  mkdir -p "$home/Library/Keychains"
+  security create-keychain -p e2e "$home/Library/Keychains/login.keychain-db"
+  security unlock-keychain -p e2e "$home/Library/Keychains/login.keychain-db"
+  security set-keychain-settings "$home/Library/Keychains/login.keychain-db"
   run --silent --no-start --no-dashboard --trust-https
   ca="$home/.dockyard/ca/ca.pem"
   check "the CA was made" test -f "$ca"
-  if [ "$(stat -f %Lp "$home/.dockyard/ca/ca.key")" = 600 ]; then ok "the key is the owner's only"; else fail "key mode"; fi
+  check "no file holds the key, /Users being shared with the engine" missing "$home/.dockyard/ca/ca.key"
+  if security find-generic-password -s "Dockyard Local CA key" "$home/Library/Keychains/login.keychain-db" >/dev/null; then ok "the key is in the keychain"; else fail "the key is not in the keychain"; fi
   if security find-certificate -c "Dockyard Local CA" /Library/Keychains/System.keychain >/dev/null; then ok "the CA is in the trust store"; else fail "not in the trust store"; fi
   if openssl x509 -in "$ca" -noout -text | grep -A2 'Name Constraints: critical' | grep -q 'DNS:dockyard.test'; then ok "the CA is name constrained"; else fail "name constraint"; fi
 fi
@@ -174,7 +180,9 @@ check "app removed" missing "$app"
 check "login item removed" missing "$home/Library/LaunchAgents/com.byhofman.dockyard.plist"
 check "data kept" test -f "$home/.dockyard/data.img"
 check "the user socket link is gone" missing "$home/.docker/run/docker.sock"
-check "the CA's key is gone, also when the data stays" missing "$home/.dockyard/ca/ca.key"
+if [ -n "${ADMIN:-}" ]; then
+  if security find-generic-password -s "Dockyard Local CA key" "$home/Library/Keychains/login.keychain-db" >/dev/null 2>&1; then fail "the key stayed in the keychain"; else ok "the CA's key is gone, also when the data stays"; fi
+fi
 if [ -f "$home/.docker/config.json" ] && grep -q credsStore "$home/.docker/config.json"; then fail "credsStore left behind"; else ok "no credential store left in the config"; fi
 if [ -n "${ADMIN:-}" ]; then
   check "/var/run/docker.sock is gone" missing /var/run/docker.sock

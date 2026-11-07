@@ -54,6 +54,7 @@ interface IEngineHost
     string? OwnSocket => null;
 
     string CaDirectory => Path.Combine(Core.Paths.SettingsDir, "ca");
+    Core.ICaKeyStore CaKeys => new Core.FileCaKey(CaDirectory);
     // Returns false when the user or the system declined. Silent: nothing may pop up, so only what works without a prompt.
     Task<bool> TrustCa(Action<string> log, string certificateFile, bool silent) => Task.FromResult(false);
     Task UntrustCa(Action<string> log, string certificateFile) => Task.CompletedTask;

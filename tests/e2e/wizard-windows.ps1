@@ -144,8 +144,29 @@ if ($Wizard) {
     Get-Process Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
     & $docker --context linux rm -f e2e-localhost | Out-Null
 
-    Section "the engine and containers follow Windows' proxy, also one on its loopback"
+    Section "a proxy only on Windows' loopback, out of reach with NAT networking, is not given to the engine"
     python -m pip install --quiet proxy.py
+    $loopbackProxy = Start-Process python -ArgumentList '-m proxy --hostname 127.0.0.1 --port 18889' -PassThru -WindowStyle Hidden
+    Start-Sleep 5
+    $internet = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
+    Set-ItemProperty $internet ProxyEnable 1
+    Set-ItemProperty $internet ProxyServer '127.0.0.1:18889'
+    try {
+        Check 'exit 0' ((Run --silent --no-start) -eq 0)
+        wsl.exe -d dockyard -u root -- sh -c 'kill -TERM $(pidof dockerd); while pidof dockerd >/dev/null; do sleep 0.2; done'
+        Check 'daemon.json has no proxy' ((wsl.exe -d dockyard -u root -- cat /etc/docker/daemon.json | Out-String) -notmatch '18889')
+        Check 'neither has the docker command''s config' ((Get-Content "$env:USERPROFILE\.docker\config.json" -Raw) -notmatch '18889')
+        Linux-Engine
+        & $docker --context linux pull -q busybox:1.36 | Out-Null
+        Check 'pulling still works, directly' ($LASTEXITCODE -eq 0)
+        & $docker --context linux image rm busybox:1.36 | Out-Null
+    } finally {
+        Set-ItemProperty $internet ProxyEnable 0
+        Remove-ItemProperty $internet ProxyServer -ErrorAction SilentlyContinue
+        Stop-Process $loopbackProxy -Force -ErrorAction SilentlyContinue
+    }
+
+    Section "the engine and containers follow Windows' proxy, also one on its loopback"
     $proxyLog = Join-Path $env:TEMP 'e2e-proxy.log'
     $proxy = Start-Process python -ArgumentList "-m proxy --hostname 0.0.0.0 --port 18888 --log-file `"$proxyLog`"" -PassThru -WindowStyle Hidden
     Start-Sleep 5
@@ -214,6 +235,35 @@ if ($Wizard) {
     if ($code -ne '200') { curl.exe -sS -v --ssl-no-revoke -o NUL --max-time 15 https://e2e-web.dockyard.test/ 2>&1 | Select-Object -Last 15 | Write-Host; Resolve-DnsName e2e-web.dockyard.test -Type A -ErrorAction SilentlyContinue | Out-String | Write-Host }
     Check "https is trusted by Windows (got $code)" ($code -eq '200')
     Get-Process Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
+    $caDir = "$env:APPDATA\Dockyard\ca"
+    Check 'no plain key on disk, C: being visible from WSL' (-not (Test-Path "$caDir\ca.key"))
+    Check 'what is there is encrypted' ([Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes("$caDir\ca.key.dpapi")) -notmatch 'PRIVATE KEY')
+
+    Section "approving with another administrator's account, which cannot read this user's CA folder"
+    Get-ChildItem Cert:\LocalMachine\Root | Where-Object Subject -like '*Dockyard Local CA*' | Remove-Item
+    $otherPassword = "E2e-$([guid]::NewGuid())"
+    $secret = ConvertTo-SecureString $otherPassword -AsPlainText -Force
+    New-LocalUser e2e-admin -Password $secret -PasswordNeverExpires | Out-Null
+    Add-LocalGroupMember Administrators e2e-admin
+    $shared = New-Item -ItemType Directory (Join-Path $env:ProgramData 'dockyard-e2e')
+    icacls $shared /grant 'Everyone:(OI)(CI)F' | Out-Null
+    Copy-Item (Resolve-Path $Wizard) $shared
+    $me = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Content "$caDir\ca.pem" -Raw)))
+    # A scheduled task: it runs as that account with its full administrator token, as a UAC approval does.
+    $line = "`"$shared\Dockyard.exe`" --machine-trust-ca $encoded --user-sid $($me.User.Value) --user-name `"$($me.Name)`" --log `"$shared\trust.log`" --keep-pid 0"
+    Set-Content "$shared\trust.cmd" "$line`r`nexit /b %ERRORLEVEL%" -Encoding Ascii
+    $action = New-ScheduledTaskAction -Execute cmd.exe -Argument "/c `"$shared\trust.cmd`""
+    Register-ScheduledTask e2e-trust -Action $action -User "$env:COMPUTERNAME\e2e-admin" -Password $otherPassword -RunLevel Highest | Out-Null
+    Start-ScheduledTask e2e-trust
+    foreach ($i in 1..60) { Start-Sleep 1; if ((Get-ScheduledTask e2e-trust).State -eq 'Ready') { break } }
+    $exit = (Get-ScheduledTaskInfo e2e-trust).LastTaskResult
+    Unregister-ScheduledTask e2e-trust -Confirm:$false
+    if (Test-Path "$shared\trust.log") { Get-Content "$shared\trust.log" | Write-Host }
+    Check "exit 0 (was $exit)" ($exit -eq 0)
+    Check 'the CA is back in the trust store' ((Get-ChildItem Cert:\LocalMachine\Root | Where-Object Subject -like '*Dockyard Local CA*') -ne $null)
+    Remove-Item $shared -Recurse -Force
+    Remove-LocalUser e2e-admin
     & $docker --context linux rm -f e2e-web | Out-Null
 
     Section 'memory of the WSL engine, for the record'
@@ -300,6 +350,15 @@ if ($Wizard) {
     Check 'exit 0 with the Windows engine' ((Run --silent --no-start --with windows-engine) -eq 0)
     Check 'dockerd is back' (Test-Path (Join-Path $env:ProgramFiles 'Docker\dockerd.exe'))
     Check 'the win context is back' ((& $docker context ls -q) -contains 'win')
+    $routed = { (Get-DnsClientNrptRule | Where-Object { $_.Namespace -contains '.dockyard.test' }) -ne $null }
+    Check 'exit 0 without the Linux engine' ((Run --silent --no-start --without linux-engine) -eq 0)
+    Check 'names no longer go to Dockyard' (-not (& $routed))
+    Check 'the linux context is gone' ((& $docker context ls -q) -notcontains 'linux')
+    Check 'exit 0 with the Linux engine' ((Run --silent --no-start --with linux-engine) -eq 0)
+    Check 'names go to Dockyard again' (& $routed)
+    Linux-Engine
+    & $docker --context linux volume inspect dockyard-e2e | Out-Null
+    Check 'its images and volumes were still there' ($LASTEXITCODE -eq 0)
 }
 
 Section 'rerun keeps it'
@@ -322,7 +381,17 @@ Check "worker exit 0 (was $($p.ExitCode))" ($p.ExitCode -eq 0)
 Get-Process Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
 
 Section 'uninstall keeps the data'
-Check 'exit 0' ((Run --silent --uninstall) -eq 0)
+if ($Wizard) {
+    '{"ServerURL":"e2e.dockyard.test","Username":"me","Secret":"s3cret"}' | & (Join-Path $env:ProgramFiles 'Docker\docker-credential-wincred.exe') store
+    $said = New-TemporaryFile
+    $p = Start-Process (Resolve-Path $Wizard) -ArgumentList '--silent', '--uninstall' -Wait -PassThru -NoNewWindow -RedirectStandardOutput $said
+    Get-Content $said | Write-Host
+    Check 'exit 0' ($p.ExitCode -eq 0)
+    Check 'it says which login stays in the store' ((Get-Content $said -Raw) -match 'e2e\.dockyard\.test.*Windows Credential Manager')
+    cmdkey /delete:e2e.dockyard.test | Out-Null
+} else {
+    Check 'exit 0' ((Run --silent --uninstall) -eq 0)
+}
 Check 'app removed' (-not (Test-Path $appExe))
 $distros = (wsl.exe -l -q | Out-String) -replace "`0", ''
 Check 'the dockyard distro is kept' ($distros -match 'dockyard')

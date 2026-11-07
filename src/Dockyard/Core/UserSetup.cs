@@ -53,10 +53,21 @@ static partial class UserSetup
     // Before every start, because what Windows uses changes with the network it is on.
     public static async Task WriteEngineConfig(WslDistro distro, Action<string> log)
     {
-        var proxy = HostProxy();
+        var proxy = await ReachableProxy(distro, HostProxy(), log);
         await distro.WriteFile("/etc/docker/daemon.json", EngineConfig.Render(proxy, Settings.Load()));
         await EngineConfig.ApplyClientProxy(Paths.LinuxHost, proxy);
         if (proxy is { IsEmpty: false }) log("The Linux engine and its containers use this PC's proxy");
+    }
+
+    static async Task<ProxySettings?> ReachableProxy(WslDistro distro, ProxySettings? proxy, Action<string> log)
+    {
+        if (proxy is null) return null;
+        List<int> unreachable = [];
+        foreach (var port in HostProxySettings.LoopbackPorts(proxy))
+            if (!await distro.ReachesHostPort(port)) unreachable.Add(port);
+        if (unreachable.Count == 0) return proxy;
+        log($"This PC's proxy listens on its own loopback (port {string.Join(", ", unreachable)}), out of reach of the Linux engine with WSL's NAT networking, so the engine connects directly. Mirrored networking or a proxy that listens on more than loopback changes that.");
+        return HostProxySettings.WithoutPorts(proxy, unreachable);
     }
 
     // Silent setups log to a file: after a restart there is no console to report to.
@@ -88,7 +99,7 @@ static partial class UserSetup
             key?.DeleteValue(Paths.LegacyName, throwOnMissingValue: false);
         }
 
-        await CredentialStore.Forget(Paths.CredentialStoreMarker);
+        await CredentialStore.Forget(Paths.CredentialStoreMarker, Paths.CredentialHelper, log);
         await EngineConfig.ApplyClientProxy(Paths.LinuxHost, null);
         if (File.Exists(Paths.DockerExe))
         {

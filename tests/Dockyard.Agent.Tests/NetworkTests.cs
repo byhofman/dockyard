@@ -237,6 +237,17 @@ public sealed class NetworkTests
     }
 
     [Fact]
+    public void On_a_linux_host_redirected_traffic_gets_past_a_firewall_on_container_interfaces_only()
+    {
+        var commands = NetworkRules.HostCommands().Select(c => string.Join(' ', c)).ToList();
+        var accepts = commands.Where(c => c.Contains("-j ACCEPT")).ToList();
+        Assert.Equal(2, accepts.Count);
+        Assert.All(accepts, c => Assert.Matches("-i (docker\\+|br-\\+) ", c));
+        Assert.All(accepts, c => Assert.DoesNotContain("2375", c));
+        Assert.DoesNotContain(NetworkRules.Commands().Select(c => string.Join(' ', c)), c => c.Contains("-j ACCEPT"));
+    }
+
+    [Fact]
     public void On_a_linux_host_containers_reach_dns_without_holding_port_53()
     {
         var commands = NetworkRules.HostCommands().Select(c => string.Join(' ', c)).ToList();

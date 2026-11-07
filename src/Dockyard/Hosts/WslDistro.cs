@@ -70,6 +70,23 @@ sealed class WslDistro(ICommandRunner runner, string name = WslDistro.DefaultNam
         }
     }
 
+    // Asked the way the agent reaches Windows (WslHost.Address): by loopback when networking is mirrored, else by the gateway.
+    // Separate commands, because wsl.exe hands its command line to a shell first, which would expand any $ in it.
+    public async Task<bool> ReachesHostPort(int port)
+    {
+        var mirrored = (await runner.Run("wsl.exe", "-d", Name, "-u", "root", "--", "test", "-d", "/sys/class/net/loopback0")).ExitCode == 0;
+        var host = mirrored ? "127.0.0.1" : DefaultGateway((await runner.Run("wsl.exe", "-d", Name, "-u", "root", "--", "ip", "route", "show", "default")).Output);
+        return host is not null && (await runner.Run("wsl.exe", "-d", Name, "-u", "root", "--", "nc", "-z", "-w", "3", host, port.ToString())).ExitCode == 0;
+    }
+
+    // Output of `ip route show default`: "default via 172.20.0.1 dev eth0 ...".
+    public static string? DefaultGateway(string route)
+    {
+        var words = route.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        var via = Array.IndexOf(words, "via");
+        return via >= 0 && via + 1 < words.Length ? words[via + 1] : null;
+    }
+
     public async Task WriteFile(string path, string content)
     {
         var temp = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
