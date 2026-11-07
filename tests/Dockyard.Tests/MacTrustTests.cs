@@ -34,12 +34,12 @@ public sealed class MacTrustTests : IDisposable
             var listing = (bool trusted) => new ShellResult(trusted ? 0 : 1, trusted ? $"Number of trusted certs = 1\nCert 0: {LocalCa.SubjectName}\n" : "", trusted ? "" : "SecTrustSettingsCopyCertificates: No Trust Settings were found.");
             if (command == "/usr/bin/security dump-trust-settings -d") return Task.FromResult(listing(Admin));
             if (command == "/usr/bin/security dump-trust-settings") return Task.FromResult(listing(User));
-            if (command.StartsWith("sudo -n /usr/bin/security remove-trusted-cert -d", StringComparison.Ordinal))
+            if (command.StartsWith("sudo -n /bin/sh -c ", StringComparison.Ordinal) && command.Contains("trust-settings-import -d"))
             {
                 if (sudoExit == 0 && removable) Admin = false;
                 return Task.FromResult(new ShellResult(sudoExit, "", ""));
             }
-            if (command.StartsWith("/usr/bin/osascript", StringComparison.Ordinal) && command.Contains("remove-trusted-cert -d") && removable) Admin = false;
+            if (command.StartsWith("/usr/bin/osascript", StringComparison.Ordinal) && command.Contains("trust-settings-import -d") && removable) Admin = false;
             if (command.StartsWith("/usr/bin/security remove-trusted-cert ", StringComparison.Ordinal) && removable) User = false;
             return Task.FromResult(new ShellResult(0, "", ""));
         }
@@ -55,7 +55,8 @@ public sealed class MacTrustTests : IDisposable
 
         await new MacHost(security).UntrustCa(_ => { }, certificate);
 
-        var remove = security.Commands.IndexOf($"sudo -n /usr/bin/security remove-trusted-cert -d {certificate}");
+        var thumbprint = LocalCa.Thumbprint(File.ReadAllText(certificate));
+        var remove = security.Commands.FindIndex(c => c.StartsWith("sudo -n /bin/sh -c ", StringComparison.Ordinal) && c.Contains($"Delete :trustList:{thumbprint}"));
         Assert.True(remove >= 0, string.Join('\n', security.Commands));
         Assert.True(remove < security.Commands.FindIndex(c => c.Contains("delete-certificate") || c.Contains("find-certificate")));
         Assert.False(security.Admin);
@@ -69,7 +70,7 @@ public sealed class MacTrustTests : IDisposable
 
         await new MacHost(security).UntrustCa(_ => { }, certificate);
 
-        Assert.Contains(security.Commands, c => c.StartsWith("/usr/bin/osascript", StringComparison.Ordinal) && c.Contains($"security remove-trusted-cert -d {certificate}"));
+        Assert.Contains(security.Commands, c => c.StartsWith("/usr/bin/osascript", StringComparison.Ordinal) && c.Contains("trust-settings-import -d"));
         Assert.False(security.Admin);
     }
 
@@ -82,7 +83,7 @@ public sealed class MacTrustTests : IDisposable
         await new MacHost(security).UntrustCa(_ => { }, certificate);
 
         Assert.Contains($"/usr/bin/security remove-trusted-cert {certificate}", security.Commands);
-        Assert.DoesNotContain(security.Commands, c => c.Contains("remove-trusted-cert -d"));
+        Assert.DoesNotContain(security.Commands, c => c.Contains("trust-settings-import"));
         Assert.False(security.User);
     }
 
@@ -94,7 +95,7 @@ public sealed class MacTrustTests : IDisposable
 
         await new MacHost(security).UntrustCa(_ => { }, certificate);
 
-        Assert.DoesNotContain(security.Commands, c => c.Contains("remove-trusted-cert"));
+        Assert.DoesNotContain(security.Commands, c => c.Contains("remove-trusted-cert") || c.Contains("trust-settings-import"));
     }
 
     [Fact]

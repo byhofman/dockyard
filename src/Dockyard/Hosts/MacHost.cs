@@ -127,6 +127,13 @@ static class MacLayout
     public static string InstallDomainResolver =>
         $"mkdir -p /etc/resolver && printf 'nameserver 127.0.0.1\\nport {DomainDnsPort}\\n' > {DomainResolver}";
 
+    // remove-trusted-cert -d waits for an approval dialog even as root, so the admin trust settings are exported, the
+    // certificate's entry (keyed by its SHA-1) deleted, and the rest imported back. The watchdog is in the same root
+    // shell, because a process run through sudo cannot be killed by the user who started it.
+    public static string RemoveAdminTrust(string thumbprint) =>
+        "f=$(mktemp); ( security trust-settings-export -d \"$f\" && /usr/libexec/PlistBuddy -c \"Delete :trustList:" + thumbprint + "\" \"$f\" && security trust-settings-import -d \"$f\" ) & job=$!; " +
+        "( sleep 60; pkill -9 -P $job; kill -9 $job ) 2>/dev/null & watch=$!; wait $job; rc=$?; kill $watch 2>/dev/null; rm -f \"$f\"; exit $rc";
+
     // One administrator prompt: AppleScript runs the shell command with administrator privileges.
     public static string[] AdminShell(string command) =>
         ["-e", $"do shell script \"{command.Replace("\\", "\\\\").Replace("\"", "\\\"")}\" with administrator privileges"];
@@ -375,8 +382,8 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
     }
 
     // Trust settings live apart from the certificate, keyed by its hash, so they go first while the file still names them.
-    // A silent setup trusted it in the admin domain through sudo, and is undone the same way or with the administrator's
-    // approval. The window trusted it in the user's domain, where macOS asks the user again; the limit keeps a machine
+    // A silent setup trusted it in the admin domain through sudo, and is undone as root (RemoveAdminTrust) or with the
+    // administrator's approval. The window trusted it in the user's domain, where macOS asks the user again; the limit keeps a machine
     // with nobody to ask from waiting for ever. What is still trusted afterwards stops here, before anything else goes.
     async Task RemoveTrustSettings(string certificateFile)
     {
@@ -385,8 +392,8 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
 
         if (await Trusted(admin: true))
         {
-            var script = $"security remove-trusted-cert -d {Shell.Quote(certificateFile)}";
-            if ((await runner.RunWithin(TrustPromptLimit, "sudo", "-n", "/usr/bin/security", "remove-trusted-cert", "-d", certificateFile)).ExitCode != 0)
+            var script = MacLayout.RemoveAdminTrust(LocalCa.Thumbprint(await File.ReadAllTextAsync(certificateFile)));
+            if ((await runner.RunWithin(TrustPromptLimit, "sudo", "-n", "/bin/sh", "-c", script)).ExitCode != 0)
                 await runner.RunWithin(TrustPromptLimit, "/usr/bin/osascript", MacLayout.AdminShell(script));
         }
         if (await Trusted(admin: false))
