@@ -10,7 +10,7 @@ daemon_json="${3:-}"
 rule=/etc/polkit-1/rules.d/50-dockyard.rules
 socket_dropin_dir=/etc/systemd/system/docker.socket.d
 
-. /etc/os-release
+[ -f /etc/os-release ] && . /etc/os-release
 family=""
 for id in ${ID:-} ${ID_LIKE:-}; do
   case "$id" in
@@ -176,6 +176,28 @@ route_domains() {
   echo "This machine asks Dockyard about names under dockyard.test"
 }
 
+# The agent's addresses on lo and its rules outlive it until a reboot. They are found by what only Dockyard uses: its
+# address range, its loopback address, its chain and its ports. So an older agent's rules go too, and duplicates as well.
+remove_network() {
+  for address in 198.19.250.1 198.19.250.254; do
+    ip addr del "$address/32" dev lo 2>/dev/null || true
+  done
+  command -v iptables >/dev/null 2>&1 || return 0
+  for table in filter nat; do
+    iptables -w -t "$table" -S 2>/dev/null \
+      | grep -E '^-A ' | grep -v '^-A DOCKYARD-INPUT ' \
+      | grep -E '198\.19\.250\.|127\.77\.0\.1|DOCKYARD-INPUT|--dports 2378,2380,2381 ' \
+      | while read -r line; do
+          # shellcheck disable=SC2086
+          set -- $line
+          shift
+          iptables -w -t "$table" -D "$@" || true
+        done
+  done
+  iptables -w -t filter -F DOCKYARD-INPUT 2>/dev/null || true
+  iptables -w -t filter -X DOCKYARD-INPUT 2>/dev/null || true
+}
+
 trust_ca() {
   if [ -d /usr/local/share/ca-certificates ] && command -v update-ca-certificates >/dev/null 2>&1; then
     install -m 0644 "$agent" /usr/local/share/ca-certificates/dockyard-local-ca.crt
@@ -271,10 +293,12 @@ case "$action" in
   add-plugin) add_plugin ;;
   trust-ca) trust_ca ;;
   untrust-ca) untrust_ca ;;
+  remove-network) remove_network ;;
   install) install_packages; configure; grant_socket_access; install_tray_host; install_libsecret; install_agent; route_domains; apply_daemon_json ;;
   uninstall)
     untrust_ca
     if has_systemd; then systemctl disable --now dockyard-agent.service >/dev/null 2>&1 || true; fi
+    remove_network
     rm -f /etc/systemd/system/dockyard-agent.service
     if [ -f /etc/systemd/resolved.conf.d/dockyard.conf ]; then
       rm -f /etc/systemd/resolved.conf.d/dockyard.conf
