@@ -5,6 +5,9 @@ Non-obvious choices, newest first.
 ## 2026-11-07: Uninstall on a Linux host takes the agent's rules and addresses away, matched by what is Dockyard's
 
 `DOK-19`. Uninstall stopped the agent but left `DOCKYARD-INPUT`, the nat redirects and DNAT rules, the firewall openings on container interfaces, and 198.19.250.1 and .254 on `lo` until a reboot. The setup script now removes them after stopping the agent and before restarting Docker. It finds them in `iptables -S` by what only Dockyard uses (its 198.19.250.0/24 range, 127.77.0.1, its chain, and the three ports of the firewall opening) rather than asking the installed agent, because the binary on disk can be older than the uninstaller and a restarted older agent may have stacked copies. A test runs the script against the agent's own rule list with stand-ins for `iptables` and `ip`, so a rule added later without a matching pattern fails there, and the Linux end-to-end run checks a real machine after uninstall.
+## 2026-11-07: The window is given its settings, so tests never share the user's file
+
+`DOK-18`. Every `MainViewModel` loaded and saved the real `settings.json`, so the wizard and component tests, which xUnit runs in parallel, read and wrote one file at the same time. On Windows a write while another test reads it fails with a sharing violation, `Run` turned that into the status line, and the row never updated, which is why only Windows failed. The tests also changed the settings of whoever ran them. `Settings` now remembers the file it was loaded from and saves there, and the view model takes one; the app passes none and gets the user's file as before, and each test gets its own in a temporary folder. Nothing in the app changes how or where it saves.
 
 ## 2026-11-07: Releases are read from github.com, not the API
 
