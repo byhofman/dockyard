@@ -5,6 +5,19 @@ IDs are permanent: never renumber or reuse one.
 
 ## Next
 
+## Install and uninstall
+
+- [ ] DOK-19 On a Linux host, the agent's iptables rules and `lo` addresses are gone after uninstall without a reboot (pulled in from Later by the owner, 2026-11-07, SCOPE.md)
+- [ ] DOK-20 On macOS, uninstall removes the CA trust setting along with the certificate (pulled in from Later by the owner, 2026-11-07, SCOPE.md)
+
+## Networking
+
+- [ ] DOK-21 Direct `[::1]` on a published port gets an answer, or the limit is documented if the fix is not small (pulled in from Later by the owner, 2026-11-07, SCOPE.md)
+
+## Quality
+
+- [ ] DOK-18 `ComponentRulesTests.Rows_say_why_something_is_required_and_only_optional_ones_can_change` no longer fails intermittently on Windows (pulled in from Later by the owner, 2026-11-07, SCOPE.md)
+
 ## Later
 
 - [ ] DOK-1 `linux-arm64` and `win-arm64` builds
@@ -24,7 +37,3 @@ IDs are permanent: never renumber or reuse one.
 - [x] DOK-15 Zero-config domain names for containers and Compose services, without port numbers, with a way to pick the port when detection is wrong — v0.4.0
 - [x] DOK-16 Automatic trusted HTTPS for those domain names — v0.4.0
 - [x] DOK-17 Files in volumes can be viewed and edited from the host — v0.4.0
-- [ ] DOK-18 `ComponentRulesTests.Rows_say_why_something_is_required_and_only_optional_ones_can_change` no longer fails intermittently on Windows
-- [ ] DOK-19 On a Linux host, the agent's iptables rules and `lo` addresses are gone after uninstall without a reboot
-- [ ] DOK-20 On macOS, uninstall removes the CA trust setting along with the certificate
-- [ ] DOK-21 Direct `[::1]` on a published port gets an answer
