@@ -54,6 +54,8 @@ if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
   docker version >/dev/null
   sleep 2
   systemctl is-active --quiet dockyard-agent.service && ok "the agent runs with the engine" || fail "agent: $(systemctl status --no-pager dockyard-agent.service 2>&1 | tail -5)"
+  sudo iptables -S DOCKYARD-INPUT >/dev/null 2>&1 && ok "the agent's chain is in place" || fail "no DOCKYARD-INPUT chain"
+  ip addr show lo | grep -q 198.19.250.1 && ok "and its address on lo" || fail "lo: $(ip addr show lo)"
   d="$(mktemp -d)"; echo from-the-host > "$d/marker"
   python3 -m http.server 18081 --bind 127.0.0.1 -d "$d" >/dev/null 2>&1 &
   service=$!
@@ -175,6 +177,12 @@ if [ "$container" -eq 0 ]; then
   check "the key is gone" missing "$HOME/.config/Dockyard/ca/ca.key"
   check "names no longer route to Dockyard" missing /etc/systemd/resolved.conf.d/dockyard.conf
   if [ -f /etc/docker/daemon.json ] && grep -q 198.19.250.1 /etc/docker/daemon.json; then fail "daemon.json still names the agent"; else ok "daemon.json no longer names the agent"; fi
+  # The one-liner runs the release that is out, which may predate this cleanup.
+  if [ -n "${WIZARD:-}" ]; then
+    if ip addr show lo | grep -q 198.19.250.; then fail "lo kept the agent's addresses: $(ip addr show lo)"; else ok "lo no longer has the agent's addresses"; fi
+    left="$( { sudo iptables -S; sudo iptables -t nat -S; } | grep -E '198\.19\.250\.|127\.77\.0\.1|DOCKYARD-INPUT|--dports 2378,2380,2381 ' || true)"
+    [ -z "$left" ] && ok "no rule of the agent's is left" || fail "rules left after uninstall: $left"
+  fi
 fi
 if [ "$container" -eq 0 ]; then
   sudo systemctl reset-failed docker.socket docker.service || true

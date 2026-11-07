@@ -2,6 +2,10 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-07: Uninstall on a Linux host takes the agent's rules and addresses away, matched by what is Dockyard's
+
+`DOK-19`. Uninstall stopped the agent but left `DOCKYARD-INPUT`, the nat redirects and DNAT rules, the firewall openings on container interfaces, and 198.19.250.1 and .254 on `lo` until a reboot. The setup script now removes them after stopping the agent and before restarting Docker. It finds them in `iptables -S` by what only Dockyard uses (its 198.19.250.0/24 range, 127.77.0.1, its chain, and the three ports of the firewall opening) rather than asking the installed agent, because the binary on disk can be older than the uninstaller and a restarted older agent may have stacked copies. A test runs the script against the agent's own rule list with stand-ins for `iptables` and `ip`, so a rule added later without a matching pattern fails there, and the Linux end-to-end run checks a real machine after uninstall.
+
 ## 2026-11-07: Releases are read from github.com, not the API
 
 Anonymous API calls are limited to 60 an hour per address, shared by everyone behind one office network or VPN, and an install or update failed on it. Nothing in Dockyard calls the API now.
