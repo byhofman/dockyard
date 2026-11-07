@@ -10,7 +10,7 @@ sealed class MainViewModel : Observable
 {
     static readonly TimeSpan AutoCheckInterval = TimeSpan.FromHours(6);
 
-    readonly Settings settings = Settings.Load();
+    readonly Settings settings;
     readonly IEngineHost host;
     readonly List<Command> commands = [];
     readonly StringBuilder log = new();
@@ -26,9 +26,10 @@ sealed class MainViewModel : Observable
     readonly SetupOptions options;
     string active;
 
-    public MainViewModel(IEngineHost host, bool setupMode, SetupOptions? options = null)
+    public MainViewModel(IEngineHost host, bool setupMode, SetupOptions? options = null, Settings? userSettings = null)
     {
         this.host = host;
+        settings = userSettings ?? Settings.Load();
         this.options = options ?? new SetupOptions();
         isSetupMode = setupMode;
         active = host.Engines[0].Id;

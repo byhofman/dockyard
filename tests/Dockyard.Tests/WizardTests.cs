@@ -7,8 +7,9 @@ public sealed class WizardTests
     [Fact]
     public async Task Wizard_on_an_install_without_the_dashboard_offers_to_add_it_and_then_to_remove_it()
     {
+        using var settings = new TempSettings();
         var host = new FakeHost { Installed = true, Dashboard = false };
-        var vm = new MainViewModel(host, setupMode: true);
+        var vm = new MainViewModel(host, setupMode: true, userSettings: settings.Settings);
         await vm.LoadSetup();
 
         Assert.False(vm.ShowInstall);
@@ -32,8 +33,9 @@ public sealed class WizardTests
     [Fact]
     public async Task Wizard_on_a_new_machine_asks_for_the_dashboard_and_honours_the_choice()
     {
+        using var settings = new TempSettings();
         var host = new FakeHost();
-        var vm = new MainViewModel(host, setupMode: true);
+        var vm = new MainViewModel(host, setupMode: true, userSettings: settings.Settings);
         await vm.LoadSetup();
 
         Assert.True(vm.ShowInstall);
@@ -51,8 +53,9 @@ public sealed class WizardTests
     [Fact]
     public async Task Update_from_the_wizard_keeps_what_is_there()
     {
+        using var settings = new TempSettings();
         var host = new FakeHost { Installed = true, Dashboard = true };
-        var vm = new MainViewModel(host, setupMode: true);
+        var vm = new MainViewModel(host, setupMode: true, userSettings: settings.Settings);
         await vm.LoadSetup();
         await vm.InstallCommand.ExecuteAsync();
         Assert.True(host.Dashboard);
@@ -63,8 +66,9 @@ public sealed class WizardTests
     [Fact]
     public async Task Tray_window_has_the_same_row()
     {
+        using var settings = new TempSettings();
         var host = new FakeHost { Installed = true };
-        var vm = new MainViewModel(host, setupMode: false);
+        var vm = new MainViewModel(host, setupMode: false, userSettings: settings.Settings);
         await vm.OnWindowShown();
         Assert.True(vm.ShowManage);
         Assert.False(vm.ShowWizardManage);
