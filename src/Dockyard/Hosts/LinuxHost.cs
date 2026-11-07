@@ -382,7 +382,7 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
         {
             if (!File.Exists(LinuxLayout.CredentialHelper))
             {
-                var release = await Updates.LatestGitHub(Paths.CredentialHelpersRepo, @"^docker-credential-secretservice-v[\d.]+\.linux-amd64$");
+                var release = await Updates.LatestGitHub(Paths.CredentialHelpersRepo, "docker-credential-secretservice-{tag}.linux-amd64");
                 Directory.CreateDirectory(dir);
                 var download = Path.Combine(dir, "helper");
                 await Updates.DownloadFile(release.DownloadUrl!, download);

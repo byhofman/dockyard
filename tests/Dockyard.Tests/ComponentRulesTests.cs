@@ -1,3 +1,4 @@
+using System.Net;
 using Dockyard.Core;
 using Dockyard.Hosts;
 using Dockyard.ViewModels;
@@ -73,7 +74,10 @@ public sealed class ComponentRulesTests
         public string ActiveEngine() => "linux";
         public Task UseContext(string engine) => Task.CompletedTask;
         public Task<Version?> Installed(string component) => Task.FromResult(Versions.GetValueOrDefault(component));
-        public Task<Release?> Latest(string component) => Task.FromResult<Release?>(new Release(Newest, $"v{Newest}", null));
+        public Exception? LatestFailure { get; set; }
+        public Task<Release?> Latest(string component) => LatestFailure is { } failure
+            ? Task.FromException<Release?>(failure)
+            : Task.FromResult<Release?>(new Release(Newest, $"v{Newest}", null));
         public Task<bool> Update(Action<string> log, IReadOnlyList<(string Component, Release? Release)> components)
         {
             foreach (var (component, release) in components)
@@ -95,6 +99,30 @@ public sealed class ComponentRulesTests
         }
         public Task Uninstall(Action<string> log, bool removeData) => Task.CompletedTask;
         public void ReleaseResources() { }
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    public async Task A_refused_check_is_could_not_check_and_never_claims_up_to_date(HttpStatusCode status)
+    {
+        var host = new RowsHost { LatestFailure = new HttpRequestException("limited", null, status) };
+        var vm = new MainViewModel(host, setupMode: true);
+        await vm.LoadSetup();
+
+        Assert.Equal(UpdateState.CouldNotCheck, vm.Dashboard.State);
+        Assert.False(vm.Dashboard.IsProblem);
+        Assert.DoesNotContain("Everything is up to date", vm.LogText);
+    }
+
+    [Fact]
+    public async Task Any_other_failed_check_stays_an_error()
+    {
+        var host = new RowsHost { LatestFailure = new HttpRequestException("gone", null, HttpStatusCode.InternalServerError) };
+        var vm = new MainViewModel(host, setupMode: true);
+        await vm.LoadSetup();
+
+        Assert.Equal(UpdateState.Error, vm.Dashboard.State);
     }
 
     [Fact]
