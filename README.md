@@ -1,3 +1,5 @@
+<img src="branding/app-icon/icon.svg" alt="" width="96" height="96">
+
 # Dockyard
 
 Docker without Docker Desktop, on Windows, macOS and Linux. The engines start only when you need them, and there is one place to see and apply updates.
@@ -90,7 +92,7 @@ Each release has `Dockyard.exe` for Windows, `Dockyard-<version>-macos.dmg` for 
 
 ## Using it
 
-Dockyard sits in the tray or menu bar. The icon is the Docker whale: blue when the engine runs, gray when stopped, amber while busy; on Windows a badge shows the active context (`L` or `W`). Click to open the dashboard; right-click for the rest, including **Containers** with start, stop, restart and open for each container:
+Dockyard sits in the tray or menu bar. The icon is the Dockyard crane and container: blue when the engine runs, gray when stopped, amber while busy; on Windows a badge shows the active context (`L` or `W`). Click to open the dashboard; right-click for the rest, including **Containers** with start, stop, restart and open for each container:
 
 - **Linux / Windows** (top right, Windows): switch the docker context. This starts that engine and by default stops the other one.
 - **Engines**: status, endpoint and Start/Stop per engine.
@@ -146,4 +148,4 @@ The dashboard is a native AOT build and needs the platform's C++ tools. Pushing 
 
 ## License
 
-MIT. The dashboard icons are [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons) (MIT, Microsoft). `src/Dockyard/Assets/docker.ico` comes from [docker/cli](https://github.com/docker/cli/blob/master/cmd/docker/internal/assets/docker.ico) (Apache-2.0); the Docker logo is a trademark of Docker, Inc.
+MIT. The dashboard icons are [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons) (MIT, Microsoft).
