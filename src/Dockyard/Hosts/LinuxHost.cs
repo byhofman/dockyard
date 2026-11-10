@@ -549,5 +549,5 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
 static class DesktopEntry
 {
     public static string Autostart(string exe) =>
-        $"[Desktop Entry]\nType=Application\nName=Dockyard\nComment=Docker engine tray\nExec=\"{exe}\" --tray\nIcon=docker\nTerminal=false\nX-GNOME-Autostart-enabled=true\n";
+        $"[Desktop Entry]\nType=Application\nName=Dockyard\nComment=Docker engine tray\nExec=\"{exe}\" --tray\nIcon=dockyard\nTerminal=false\nX-GNOME-Autostart-enabled=true\n";
 }

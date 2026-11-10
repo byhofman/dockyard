@@ -29,8 +29,9 @@ bundle() {
 }
 
 iconset="$work/Dockyard.iconset"; mkdir -p "$iconset"
-for size in 16 32 64 128 256 512; do
-  sips -z $size $size "$root/src/Dockyard/Assets/whale-blue.png" --out "$iconset/icon_${size}x${size}.png" >/dev/null
+for size in 16 32 128 256 512; do
+  cp "$root/branding/app-icon/png/icon-$size.png" "$iconset/icon_${size}x${size}.png"
+  cp "$root/branding/app-icon/png/icon-$((size * 2)).png" "$iconset/icon_${size}x${size}@2x.png"
 done
 iconutil -c icns "$iconset" -o "$work/Dockyard.icns"
 

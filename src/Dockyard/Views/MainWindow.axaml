@@ -4,7 +4,7 @@
         x:Class="Dockyard.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Title="Dockyard"
-        Icon="avares://Dockyard/Assets/docker.ico"
+        Icon="avares://Dockyard/Assets/dockyard.ico"
         Width="860" Height="700" MinWidth="720" MinHeight="520"
         WindowStartupLocation="CenterScreen">
 
@@ -25,7 +25,7 @@
     <Border DockPanel.Dock="Top" Background="{StaticResource Surface}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="20,14">
       <Grid ColumnDefinitions="Auto,*,Auto">
         <StackPanel Orientation="Horizontal" Spacing="12">
-          <Image Source="avares://Dockyard/Assets/whale-blue.png" Width="34" Height="34" />
+          <Image Source="avares://Dockyard/Assets/dockyard.png" Width="34" Height="34" />
           <StackPanel VerticalAlignment="Center">
             <TextBlock Classes="h1" Text="Dockyard" />
             <TextBlock Classes="muted" FontSize="12" Text="Docker engines on demand, without Docker Desktop" />

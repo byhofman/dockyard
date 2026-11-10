@@ -1,0 +1,14 @@
+# Dockyard icon
+
+Source of truth for the Dockyard app icon. Generated from the byhofman icon suite; regenerate rather than hand-edit.
+
+| File | Use |
+| --- | --- |
+| `icon.svg` | Rounded tile: web favicon (modern browsers), desktop, docs |
+| `icon-full.svg` | Full-bleed square: iOS / iPadOS / App Store (the OS applies its own mask) |
+| `adaptive-foreground.svg`, `adaptive-background.svg` | Android adaptive icon layers (108 dp canvas; mark inside the 66 dp safe zone) |
+| `png/icon-{16..1024}.png` | Rounded tile rasters |
+| `png/icon-full-{180,192,512,1024}.png` | Full-bleed rasters: apple-touch-icon (180), PWA/maskable (192, 512), store (1024) |
+| `png/adaptive-*-432.png` | Android adaptive layers at xxxhdpi |
+| `favicon.ico` | 16/32/48 favicon |
+| `app.ico` | Windows application icon, 16 to 256 |

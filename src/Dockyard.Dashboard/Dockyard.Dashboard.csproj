@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">$(NETCoreSdkRuntimeIdentifier)</RuntimeIdentifier>
     <ApplicationManifest Condition="$(RuntimeIdentifier.StartsWith('win'))">app.manifest</ApplicationManifest>
-    <ApplicationIcon>..\Dockyard\Assets\docker.ico</ApplicationIcon>
+    <ApplicationIcon>..\Dockyard\Assets\dockyard.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <PublishAot>true</PublishAot>
@@ -29,8 +29,8 @@
     <InternalsVisibleTo Include="Dockyard.Dashboard.Tests" />
     <Compile Include="..\Shared\LocalPipe.cs" Link="Shared\LocalPipe.cs" />
     <Compile Include="..\Shared\DisplayGate.cs" Link="Shared\DisplayGate.cs" />
-    <AvaloniaResource Include="..\Dockyard\Assets\docker.ico" Link="Assets\docker.ico" />
-    <AvaloniaResource Include="..\Dockyard\Assets\whale-blue.png" Link="Assets\whale-blue.png" />
+    <AvaloniaResource Include="..\Dockyard\Assets\dockyard.ico" Link="Assets\dockyard.ico" />
+    <AvaloniaResource Include="..\Dockyard\Assets\dockyard.png" Link="Assets\dockyard.png" />
   </ItemGroup>
 
   <ItemGroup>

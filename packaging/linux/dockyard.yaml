@@ -18,7 +18,15 @@ contents:
     type: symlink
   - src: packaging/linux/dockyard.desktop
     dst: /usr/share/applications/dockyard.desktop
-  - src: src/Dockyard/Assets/whale-blue.png
+  - src: branding/app-icon/png/icon-64.png
     dst: /usr/share/icons/hicolor/64x64/apps/dockyard.png
+  - src: branding/app-icon/png/icon-128.png
+    dst: /usr/share/icons/hicolor/128x128/apps/dockyard.png
+  - src: branding/app-icon/png/icon-256.png
+    dst: /usr/share/icons/hicolor/256x256/apps/dockyard.png
+  - src: branding/app-icon/png/icon-512.png
+    dst: /usr/share/icons/hicolor/512x512/apps/dockyard.png
+  - src: branding/app-icon/icon.svg
+    dst: /usr/share/icons/hicolor/scalable/apps/dockyard.svg
 scripts:
   postinstall: packaging/linux/postinstall.sh
