@@ -1,0 +1,17 @@
+name: Dependency submission
+
+on:
+  push:
+    branches: [main, chore/nuget-dependency-submission]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  submit:
+    uses: byhofman/pipeline-templates/.github/workflows/dependency-submission-dotnet.yml@v4
+    with:
+      dotnet-version: '10.0.x'
+    secrets: inherit
