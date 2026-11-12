@@ -39,6 +39,16 @@ function Window {
 
 # The way a user starts it, through the tray, which is also what serves the engine's pipe to Windows. Setup stops the
 # tray, so this runs again after each one.
+function Screen($name) {
+    Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+    New-Item -ItemType Directory -Force $Screenshots | Out-Null
+    $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+    $bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+    [System.Drawing.Graphics]::FromImage($bitmap).CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+    $bitmap.Save((Join-Path $Screenshots "$name.png"))
+    $bitmap.Dispose()
+}
+
 function Linux-Engine {
     Start-Process $appExe -ArgumentList '--start', 'linux' | Out-Null
     foreach ($i in 1..60) {
@@ -376,6 +386,23 @@ if ($Wizard) {
         & $kind create cluster --name e2e --wait 180s
         Check 'kind create cluster' ($LASTEXITCODE -eq 0)
         Check 'kind lists it' ((& $kind get clusters) -contains 'e2e')
+        # The real dashboard with a cluster and its containers running, to look at in the run's screenshots.
+        $shown = Start-Process (Resolve-Path $dashboard).Path -PassThru
+        Start-Sleep 8
+        Screen 'dashboard-containers'
+        Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+        $window = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Children,
+            (New-Object System.Windows.Automation.PropertyCondition ([System.Windows.Automation.AutomationElement]::ProcessIdProperty), $shown.Id))
+        foreach ($section in 'Clusters', 'Images') {
+            $item = if ($window) { $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition ([System.Windows.Automation.AutomationElement]::NameProperty), $section)) }
+            if (-not $item) { Write-Host "  no $section item to click"; continue }
+            $pattern = $null
+            if ($item.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$pattern)) { $pattern.Select() }
+            elseif ($item.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$pattern)) { $pattern.Invoke() }
+            Start-Sleep 3
+            Screen "dashboard-$($section.ToLower())"
+        }
+        Stop-Process -Id $shown.Id -Force -ErrorAction SilentlyContinue
         $server = ((& $kind get kubeconfig --name e2e) | Select-String 'server: (.+)$').Matches[0].Groups[1].Value.Trim()
         Check "kubeconfig points at $server" ($server -like 'https://127.0.0.1:*')
         $livez = (Invoke-WebRequest "$server/livez" -SkipCertificateCheck -UseBasicParsing -TimeoutSec 15).Content
