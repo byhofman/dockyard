@@ -36,8 +36,10 @@ function Window {
     if ($LASTEXITCODE -ne 0) { throw 'FAIL the wizard window' }
 }
 
+# The way a user starts it, through the tray: with WSL's NAT networking, as on this runner, the tray is also what serves
+# 127.0.0.1:2375. Setup stops the tray, so this runs again after each one.
 function Linux-Engine {
-    Start-Process wsl.exe -ArgumentList '-d dockyard -u root -- /usr/local/sbin/dockyard-init' -WindowStyle Hidden | Out-Null
+    Start-Process $appExe -ArgumentList '--start', 'linux' | Out-Null
     foreach ($i in 1..60) {
         & $docker --context linux version *> $null
         if ($LASTEXITCODE -eq 0) { return }
@@ -89,6 +91,26 @@ Section 'the Linux engine works and holds data'
 Linux-Engine
 & $docker --context linux volume create dockyard-e2e | Out-Null
 Check 'marker volume created' ($LASTEXITCODE -eq 0)
+
+if ($Wizard) {
+    Section 'docker exec and attached runs return their output'
+    & $docker --context linux run -d --name e2e-exec alpine:3.24 sh -c 'echo exec-works > /marker; sleep 3600' | Out-Null
+    $exec = (& $docker --context linux exec e2e-exec cat /marker 2>&1 | Out-String).Trim()
+    if ($exec -ne 'exec-works') {
+        Write-Host '--- why not'
+        Write-Host "inside WSL, on the unix socket: '$((wsl.exe -d dockyard -u root -- docker exec e2e-exec cat /marker | Out-String).Trim())'"
+        Write-Host "inside WSL, on 127.0.0.1:2375: '$((wsl.exe -d dockyard -u root -- docker -H tcp://127.0.0.1:2375 exec e2e-exec cat /marker | Out-String).Trim())'"
+        Write-Host "Windows, stdin held open 3 s: '$((cmd.exe /c "ping -n 4 127.0.0.1 >nul | `"$docker`" --context linux exec -i e2e-exec cat /marker" | Out-String).Trim())'"
+        Write-Host "Windows, with a tty: '$((& $docker --context linux exec -t e2e-exec cat /marker | Out-String).Trim())'"
+        Write-Host "listeners on 2375: $((Get-NetTCPConnection -LocalPort 2375 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { "$($_.LocalAddress) pid $($_.OwningProcess) $((Get-Process -Id $_.OwningProcess).ProcessName)" }) -join ', ')"
+    }
+    Check "docker exec returns what the command printed (got '$exec')" ($exec -eq 'exec-works')
+    $attached = (& $docker --context linux run --rm alpine:3.24 echo attached 2>&1 | Out-String).Trim()
+    Check "an attached docker run prints its output (got '$attached')" ($attached -eq 'attached')
+    $piped = ('through-stdin' | & $docker --context linux exec -i e2e-exec cat | Out-String).Trim()
+    Check "stdin reaches the command and its output comes back (got '$piped')" ($piped -eq 'through-stdin')
+    & $docker --context linux rm -f e2e-exec | Out-Null
+}
 
 if ($Wizard) {
     Section 'host.docker.internal reaches a service on Windows'
@@ -264,6 +286,7 @@ if ($Wizard) {
     Check 'the CA is back in the trust store' ((Get-ChildItem Cert:\LocalMachine\Root | Where-Object Subject -like '*Dockyard Local CA*') -ne $null)
     Remove-Item $shared -Recurse -Force
     Remove-LocalUser e2e-admin
+    Linux-Engine
     & $docker --context linux rm -f e2e-web | Out-Null
 
     Section 'memory of the WSL engine, for the record'
@@ -288,6 +311,7 @@ Check 'the win context answers' ($LASTEXITCODE -eq 0)
 Stop-Service docker
 
 Section 'a docker command running in some terminal does not stop an update'
+Linux-Engine
 $running = Start-Process $docker -ArgumentList '--context linux events' -PassThru -WindowStyle Hidden
 Check 'the docker command is running' (-not $running.HasExited)
 
@@ -331,6 +355,32 @@ Check 'dashboard added' (Test-Path $dashboard)
 Check 'with its libraries' (Test-Path (Join-Path $appDir 'dashboard.files'))
 
 if ($Wizard) {
+    Section 'kind: installed, and a cluster from create to delete on the Linux engine'
+    $kind = Join-Path $env:ProgramFiles 'Docker\kind.exe'
+    Check 'kind.exe is next to docker.exe' (Test-Path $kind)
+    Check "it runs: $(& $kind version)" ($LASTEXITCODE -eq 0)
+    & $docker --context linux version *> $null
+    if ($LASTEXITCODE -ne 0) { Linux-Engine }
+    # As a new terminal has it: the machine PATH has the Docker folder, and kind follows the docker context.
+    $env:PATH = (Split-Path $docker) + ';' + $env:PATH
+    $env:DOCKER_CONTEXT = 'linux'
+    try {
+        & $kind create cluster --name e2e --wait 180s
+        Check 'kind create cluster' ($LASTEXITCODE -eq 0)
+        Check 'kind lists it' ((& $kind get clusters) -contains 'e2e')
+        $server = ((& $kind get kubeconfig --name e2e) | Select-String 'server: (.+)$').Matches[0].Groups[1].Value.Trim()
+        Check "kubeconfig points at $server" ($server -like 'https://127.0.0.1:*')
+        $livez = (Invoke-WebRequest "$server/livez" -SkipCertificateCheck -UseBasicParsing -TimeoutSec 15).Content
+        Check 'the API server answers on Windows loopback' ($livez -eq 'ok')
+        & $kind delete cluster --name e2e
+        Check 'deleting leaves no node' (-not (& $docker --context linux ps -aq --filter label=io.x-k8s.kind.cluster=e2e))
+    }
+    finally { Remove-Item Env:DOCKER_CONTEXT }
+    Check 'exit 0 without kind' ((Run --silent --no-start --without kind) -eq 0)
+    Check 'kind is gone' (-not (Test-Path $kind))
+    Check 'exit 0 with kind' ((Run --silent --no-start --with kind) -eq 0)
+    Check 'it is back' (Test-Path $kind)
+
     Section 'any component can go and come back, and required ones refuse'
     $compose = Join-Path $env:ProgramFiles 'Docker\cli-plugins\docker-compose.exe'
     Check 'exit 0 without compose' ((Run --silent --no-start --without compose) -eq 0)
@@ -342,9 +392,11 @@ if ($Wizard) {
     Check 'the last engine cannot go' ((Run --silent --no-start --without 'windows-engine,linux-engine') -eq 2)
     Check 'exit 0 without the Windows engine' ((Run --silent --no-start --without windows-engine) -eq 0)
     Check 'dockerd is gone' (-not (Test-Path (Join-Path $env:ProgramFiles 'Docker\dockerd.exe')))
+    Check 'kind stays' (Test-Path $kind)
     Check 'the docker command stays' (Test-Path $docker)
     Check 'the service is gone' (-not (Get-Service docker -ErrorAction SilentlyContinue))
     Check 'the win context is gone' ((& $docker context ls -q) -notcontains 'win')
+    Linux-Engine
     & $docker --context linux volume inspect dockyard-e2e | Out-Null
     Check 'the Linux engine still works' ($LASTEXITCODE -eq 0)
     Check 'exit 0 with the Windows engine' ((Run --silent --no-start --with windows-engine) -eq 0)

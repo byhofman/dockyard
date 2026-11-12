@@ -60,11 +60,13 @@ abstract class SectionViewModel : Observable, ISearchable
         new Command(async () => { Confirm = null; await action(); }),
         new Command(() => { Confirm = null; return Task.CompletedTask; }));
 
-    protected async Task Run(string what, Func<DockerClient, Task> action)
+    protected Task Run(string what, Func<DockerClient, Task> action) =>
+        Session.Client is { } client ? Run(what, () => action(client)) : Task.CompletedTask;
+
+    protected async Task Run(string what, Func<Task> action)
     {
-        if (Session.Client is not { } client) return;
         Busy = what;
-        try { await action(client); }
+        try { await action(); }
         catch (Exception ex) { Shell.ShowError(ex.Message); }
         finally { Busy = null; }
     }

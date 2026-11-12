@@ -18,10 +18,14 @@ static class Checksums
     public static void Verify(string sums, string file)
     {
         var name = Path.GetFileName(file);
-        var expected = Expected(sums, name) ?? throw new InvalidOperationException($"SHA256SUMS does not list {name}");
+        VerifyHash(file, Expected(sums, name) ?? throw new InvalidOperationException($"SHA256SUMS does not list {name}"), name);
+    }
+
+    public static void VerifyHash(string file, string expected, string? name = null)
+    {
         using var stream = File.OpenRead(file);
         var actual = Convert.ToHexString(SHA256.HashData(stream));
         if (!actual.Equals(expected, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException($"Checksum mismatch for {name}");
+            throw new InvalidOperationException($"Checksum mismatch for {name ?? Path.GetFileName(file)}");
     }
 }

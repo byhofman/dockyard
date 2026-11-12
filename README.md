@@ -38,6 +38,7 @@ The wizard lists every component with its version, the latest version and **Upda
 |---|---|---|
 | Dashboard | Optional | Has its own version and **Update** |
 | Docker Compose, Docker Buildx | Optional | Need the Docker CLI |
+| kind | Optional | Kubernetes clusters in containers, on the Linux engine |
 | Windows engine, Linux engine (Windows) | Optional, one has to stay | Removing keeps its images; the wizard brings them back with it |
 | Docker CLI | Required | Everything else goes through it |
 | Docker Engine (macOS VM, Linux) | Required | The only engine there. On Linux, Docker stays yours to remove with your package manager |
@@ -60,7 +61,7 @@ curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install.sh |
 | Argument | Meaning |
 |---|---|
 | `--silent` | No window: install, or update what is installed. Progress goes to the console. Needs no display. |
-| `--with <names>` | Add components, comma separated, also on an existing install: `dashboard`, `compose`, `buildx`, and on Windows `linux-engine`, `windows-engine`. |
+| `--with <names>` | Add components, comma separated, also on an existing install: `dashboard`, `compose`, `buildx`, `kind`, and on Windows `linux-engine`, `windows-engine`. |
 | `--without <names>` | Leave them out, or remove them. Asking for a required one or for the last engine exits 2 and changes nothing. With `--remove-data`, an engine's images go too. |
 | `--dashboard`, `--no-dashboard` | The same as `--with dashboard`, `--without dashboard`. |
 | `--no-start` | Do not start Dockyard afterwards. |
@@ -112,6 +113,23 @@ It follows the active docker context and updates live from the engine's events. 
 - **Disk**: `docker system df` per category; prune per category or **Clean everything unused**.
 
 Keys: `Ctrl+K` (`⌘K` on macOS) search, `S` start/stop, `R` restart, `E` terminal, `L` logs, `Del` remove (with confirmation), `Left`/`Right` collapse or expand a compose project.
+
+## Kubernetes with kind
+
+Dockyard installs [kind](https://kind.sigs.k8s.io), which runs a Kubernetes cluster as containers on the Linux engine: in `C:\Program Files\Docker` on Windows, `~/.dockyard/bin` on macOS and `/usr/local/bin` on Linux. Its version is fixed per Dockyard release and checked against a checksum kept in Dockyard, and **Update** moves it along with Dockyard. A kind that someone else put in `/usr/local/bin` on Linux is left alone and used.
+
+From a terminal it is kind itself:
+
+```sh
+kind create cluster --name dev     # also adds kind-dev to ~/.kube/config and makes it the current context
+kind get clusters
+kind get kubeconfig --name dev
+kind delete cluster --name dev
+```
+
+On Windows, kind uses the `linux` context, the default; with `win` active it has no Linux engine to run on.
+
+In the dashboard, **Clusters** lists them from the engine with their Kubernetes version, nodes and API server, creates and deletes them, copies a cluster's kubeconfig and makes its context the current one. kubectl is not part of Dockyard; any kubectl reaches the cluster with `--context kind-<name>`.
 
 ## Container domains
 

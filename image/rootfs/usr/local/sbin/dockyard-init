@@ -20,4 +20,10 @@ fi
 # WSL: nothing else starts the agent. It leaves when dockerd does, so that it does not keep the distro alive by itself,
 # and a crash brings it back because that exits non-zero.
 (until dockyard-agent --mode=wsl; do sleep 1; done) >/dev/null 2>&1 &
+# With NAT networking WSL's localhost relay would carry this port to Windows, and it loses what the engine sends after a
+# client half-closes (docker exec, attach). The agent serves Windows instead, and the tray carries 127.0.0.1:2375 to it.
+# Mirrored networking (loopback0) shares loopback with Windows itself. DOCKYARD_TCP still asks for the port explicitly.
+if [ -z "${DOCKYARD_TCP:-}" ] && [ ! -d /sys/class/net/loopback0 ]; then
+  exec dockerd -H unix:///var/run/docker.sock
+fi
 exec dockerd -H unix:///var/run/docker.sock -H "tcp://$tcp" --tls=false

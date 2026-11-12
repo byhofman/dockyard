@@ -36,6 +36,8 @@ static class MachineSetup
             if (without.Contains(plugin.Component.ToString())) RemovePlugin(log, plugin.Component);
             else await UpdatePlugin(log, plugin.Component);
         }
+        if (without.Contains(Kind.Id)) RemoveKind(log);
+        else if (await Updates.Installed(Component.Kind) != Kind.Version) await InstallKind(log);
         await InstallCredentialHelper(log);
         if (without.Contains(nameof(Component.LinuxEngine))) await UnrouteDomains();
         else await RouteDomains(log);
@@ -52,6 +54,7 @@ static class MachineSetup
             case Component.Engine: await UpdateEngine(log, onlyIfNewer: false); break;
             case Component.Cli: await UpdateCli(log, onlyIfNewer: false); break;
             case Component.Compose or Component.Buildx: await UpdatePlugin(log, component); break;
+            case Component.Kind: await InstallKind(log); break;
             case Component.App:
                 // Defender's rule goes by path, and an update can bring the first dashboard with the new name.
                 await AddDefenderExclusions(log);
@@ -235,6 +238,23 @@ static class MachineSetup
         log($"{plugin.File} {release.Tag}");
     }
 
+    static async Task InstallKind(Action<string> log)
+    {
+        Directory.CreateDirectory(Paths.DockerDir);
+        var incoming = Paths.KindExe + ".new";
+        await Kind.Download(incoming);
+        InUseFiles.MoveAside(Paths.KindExe);
+        File.Move(incoming, Paths.KindExe);
+        log($"kind {Kind.Tag}");
+    }
+
+    static void RemoveKind(Action<string> log)
+    {
+        if (!File.Exists(Paths.KindExe)) return;
+        InUseFiles.MoveAside(Paths.KindExe);
+        log("Removed kind");
+    }
+
     static void RemovePlugin(Action<string> log, Component component)
     {
         var plugin = Plugins.Single(p => p.Component == component);
@@ -276,8 +296,7 @@ static class MachineSetup
         var removed = false;
         foreach (var file in Directory.GetFiles(Paths.DockerDir))
         {
-            var name = Path.GetFileName(file);
-            if (string.Equals(file, Paths.DockerExe, StringComparison.OrdinalIgnoreCase) || name.StartsWith("docker-credential", StringComparison.OrdinalIgnoreCase)) continue;
+            if (WindowsEngineFiles.Keep(Path.GetFileName(file))) continue;
             InUseFiles.MoveAside(file);
             removed = true;
         }
@@ -291,6 +310,10 @@ static class MachineSetup
             case Component.Compose or Component.Buildx:
                 if (installed) await UpdatePlugin(log, component);
                 else RemovePlugin(log, component);
+                break;
+            case Component.Kind:
+                if (installed) await InstallKind(log);
+                else RemoveKind(log);
                 break;
             // The distro and its images are the user's half, in UserSetup. Only the engine answers those names.
             case Component.LinuxEngine:
@@ -515,3 +538,12 @@ static class MachineSetup
     }
 }
 
+
+// What shares C:\Program Files\Docker with the Windows engine but stays when the engine goes.
+static class WindowsEngineFiles
+{
+    public static bool Keep(string name) =>
+        name.Equals("docker.exe", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("kind.exe", StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith("docker-credential", StringComparison.OrdinalIgnoreCase);
+}

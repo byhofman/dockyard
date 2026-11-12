@@ -2,6 +2,28 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-12: With WSL's NAT networking, Dockyard carries 127.0.0.1:2375 itself
+
+kind on the Windows runner failed at "Writing configuration": it reads a file through `docker exec`, and the output arrived empty. Every `docker exec`, `docker attach` and `docker run` without `-d` printed nothing from Windows, while the same exec inside WSL, also over TCP on its own `127.0.0.1:2375`, worked. The listener on Windows' `127.0.0.1:2375` was `wslrelay`, WSL's localhost relay for NAT networking. The docker CLI half-closes the connection once stdin is done, and the engine only writes the output after that; the relay loses what comes after the half-close. Pulls and other plain requests were never affected, which is why nothing caught it.
+
+- **dockerd no longer listens on WSL's loopback with NAT networking,** so `wslrelay` does not take the port. dockyard-agent serves the engine on WSL's own address, port 2375, and accepts only the default gateway, which is Windows. A container reaching that address is refused, like `host.docker.internal:2375` already was.
+- **The tray, or the wizard while it runs the engine, listens on `127.0.0.1:2375` and relays to it,** passing half-closes on. The endpoint, contexts and `.testcontainers.properties` stay as they are.
+- **Mirrored networking is unchanged:** loopback is shared for real there, and the WSL interface `loopback0` is how both the agent and dockyard-init tell. `DOCKYARD_TCP` still asks for the old listener explicitly.
+- **The engine now needs a Dockyard process on Windows with NAT networking,** which it already did in practice: the tray's `wsl.exe` keeps the distro alive. A tray that starts while an engine runs finds it and relays again, rather than starting a second dockyard-init that would take the running engine's socket away.
+- **Tests:** the agent's listener and the Windows relay each pass an exchange where the engine answers only after the client half-closed, and the Windows end-to-end run now checks `docker exec`, an attached `docker run` and stdin through `docker exec -i`, and starts the engine through the tray as a user does.
+
+## 2026-11-12: kind is pinned with its checksums, installed by default, and the dashboard reads clusters from the engine
+
+`DOK-22`, the owner's "basic kind support" (feedback round 1).
+
+- **Pinned, unlike Compose and Buildx.** Those follow upstream's newest release after 14 days and are downloaded without a checksum; kind publishes its checksums next to the binary, so only a hash reviewed into `Kind.cs` catches a replaced file. A Dockyard release moves kind, which costs one line per platform. v0.33.0, Kubernetes 1.37 by default. The checksums were checked against our own download of each binary. That Compose, Buildx and the credential helpers are not checksummed is left as it was here and named for the audit.
+- **Installed by default, as every optional component is.** A new install gets everything (2026-11-06); kind is a 10 MB file that runs nothing until a cluster is created. Existing installs get it on their next setup run or update, and `--without kind` or **Remove** keeps it out.
+- **Where:** next to `docker` on Windows and macOS, in folders Dockyard owns. On Linux `/usr/local/bin`, through the setup script as root, with a marker in `/etc/dockyard`: a kind there without the marker is the user's and is never replaced or removed. GitHub's Ubuntu runner has such a kind, which the end-to-end test removes first.
+- **The CLI is kind.** Dockyard has no command of its own to wrap, and a wrapper would only rename kind's verbs. kind follows the docker context; on Windows that has to be `linux`.
+- **The dashboard reads clusters from the engine's containers** by kind's labels (`io.x-k8s.kind.cluster`, `.role`), so it updates live from events and needs kind only to create, delete and get a kubeconfig. It runs kind with `DOCKER_CONTEXT` set to the context it shows and the docker CLI's folder first on `PATH`, since an app started from the menu bar has no shell `PATH`.
+- **Use context runs `kind export kubeconfig`,** which changes `~/.kube/config` the way `kind create` already does. Nothing else of the user's Kubernetes setup is touched. kubectl is not installed: the owner asked for kind, and any kubectl works with the context.
+- **Verified in CI only, never on the owner's machine:** the VM image test creates a cluster on the VM kernel the Mac uses (x86_64 build of the same Alpine kernel), and the Linux and Windows end-to-end runs create one, reach its API server on `127.0.0.1` and delete it. The Mac end-to-end runs cannot boot the VM, so on macOS only install and removal are checked there.
+
 ## 2026-11-07: A published port on macOS also listens on IPv6
 
 `DOK-21`. Only the Mac lacked it: Windows already relays `[::1]` to the published port (`LoopbackForwarder`), and on a Linux host Docker itself binds both families. The helper on the Mac listened on 127.0.0.1 or 0.0.0.0 alone, so `http://[::1]:8080` and clients that try IPv6 first without falling back got a refusal. It now also listens on `::1` for a loopback publish and on `::` for a wildcard one, IPv6-only so the two sit side by side, for TCP and UDP. If something else already holds the IPv6 side it keeps it, the helper says so once, and IPv4 forwards as before. The fix was small, so nothing is documented as a limit.

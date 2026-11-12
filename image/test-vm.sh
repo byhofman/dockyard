@@ -91,6 +91,22 @@ control="$( (sleep 6) | nc -w 7 127.0.0.1 12377 | head -3)"
 echo "$control" | grep -q '"type":"ports".*"port":8080' && echo "control reports port 8080" || { echo "FAIL: control: $control"; exit 1; }
 echo "$control" | grep -q '"type":"memory"' && echo "control reports memory" || { echo "FAIL: no memory report"; exit 1; }
 
+# kind on the VM's kernel, which the Mac's VM shares: KIND_TAG and KIND_SHA256 are the pins in src/Dockyard/Core/Kind.cs.
+if [ -n "${KIND_TAG:-}" ]; then
+  wget -qO /usr/local/bin/kind "https://github.com/kubernetes-sigs/kind/releases/download/$KIND_TAG/kind-linux-amd64"
+  echo "$KIND_SHA256  /usr/local/bin/kind" | sha256sum -c -s || { echo "FAIL: kind does not match its pinned checksum"; exit 1; }
+  chmod +x /usr/local/bin/kind
+  docker rm -f web >/dev/null
+  if ! kind create cluster --name e2e --wait 180s; then echo "FAIL: kind create cluster"; tail -40 console.log; exit 1; fi
+  kind get clusters | grep -qx e2e && echo "kind lists the cluster" || { echo "FAIL: kind get clusters"; exit 1; }
+  kind get kubeconfig --name e2e | grep -q 'server: https://127.0.0.1:' && echo "its kubeconfig points at the published API server" || { echo "FAIL: kubeconfig"; exit 1; }
+  docker exec e2e-control-plane kubectl get nodes --no-headers | grep -q ' Ready ' && echo "the node is Ready on this kernel" || { echo "FAIL: node not Ready"; docker exec e2e-control-plane kubectl get nodes; exit 1; }
+  docker exec e2e-control-plane kubectl -n kube-system wait --for=condition=Ready pod -l k8s-app=kube-dns --timeout=120s >/dev/null \
+    && echo "cluster DNS runs" || { echo "FAIL: CoreDNS"; docker exec e2e-control-plane kubectl -n kube-system get pods; exit 1; }
+  kind delete cluster --name e2e
+  [ -z "$(docker ps -aq --filter label=io.x-k8s.kind.cluster=e2e)" ] && echo "deleting leaves no node behind" || { echo "FAIL: nodes left"; exit 1; }
+fi
+
 stop_vm
 
 boot

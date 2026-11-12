@@ -63,6 +63,9 @@ static class LinuxLayout
         packageManager == "dnf" ? @"^dockyard-[\d.]+-1\.x86_64\.rpm$" : @"^dockyard_[\d.]+_amd64\.deb$";
     public const string Tarball = @"^Dockyard-[\d.]+-linux-x64\.tar\.gz$";
     public const string CredentialHelper = "/usr/local/bin/docker-credential-secretservice";
+    public const string Kind = "/usr/local/bin/kind";
+    // Written by setup-linux.sh next to a kind it installed; one without it is the user's own.
+    public const string KindMarker = "/etc/dockyard/kind";
     public const string AppAsset = @"^Dockyard-linux-x64$";
 
     public static readonly string[] DashboardFiles = ["Dockyard Dashboard", "Dockyard.Dashboard", "libSkiaSharp.so", "libHarfBuzzSharp.so"];
@@ -81,11 +84,14 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
     public IReadOnlyList<EngineInfo> Engines { get; } =
         [new(Engine, "Linux", "Docker Engine", "system dockerd, started on demand", "default", "unix:///var/run/docker.sock")];
 
-    public IReadOnlyList<ComponentInfo> Components { get; } =
+    public IReadOnlyList<ComponentInfo> Components => Catalog;
+
+    public static IReadOnlyList<ComponentInfo> Catalog { get; } =
     [
         new("Engine", "Docker Engine & CLI", RequiredBecause: "it is what Dockyard starts and stops. It stays yours to remove with your package manager, also after uninstalling Dockyard.", RequiredFlag: "linux-engine"),
         new("Compose", "Docker Compose", Flag: "compose", Note: "Needs Docker. The dashboard's Compose actions use it."),
         new("Buildx", "Docker Buildx", Flag: "buildx", Note: "Needs Docker. docker build uses it."),
+        Core.Kind.Component,
         new("App", "Dockyard", RequiredBecause: "it is what runs everything here. Uninstall removes it."),
         new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard", Note: "Optional. Its package is versioned with Dockyard, so updating it updates both."),
     ];
@@ -118,6 +124,7 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
         "Engine" => Updates.ParseVersion((await runner.Run("dockerd", "--version")).Output),
         "Compose" => Updates.ParseVersion((await runner.Run("docker", "compose", "version", "--short")).Output),
         "Buildx" => Updates.ParseVersion((await runner.Run("docker", "buildx", "version")).Output),
+        Core.Kind.Id => File.Exists(LinuxLayout.Kind) ? Updates.ParseVersion((await runner.Run(LinuxLayout.Kind, "version")).Output) : null,
         "App" => await InstalledAppVersion(),
         ComponentRules.DashboardId => await InstalledDashboardVersion(),
         _ => null,
@@ -166,6 +173,12 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
     public async Task<bool> SetComponent(Action<string> log, string component, bool installed, bool removeData = false)
     {
         if (component == ComponentRules.DashboardId) return await SetDashboard(log, installed);
+        if (component == Core.Kind.Id)
+        {
+            if (installed) await InstallKind(log);
+            else await RunSetup(log, "remove-kind");
+            return false;
+        }
         if (component is not ("Compose" or "Buildx")) throw new InvalidOperationException($"{component} cannot be changed here");
         await ChangePlugin(log, component, installed);
         return false;
@@ -194,6 +207,7 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
         "Engine" => await Updates.LatestStatic(Updates.LinuxStaticIndex, "tgz"),
         "Compose" => await Updates.LatestGitHub("docker/compose", Updates.LinuxComposeAsset),
         "Buildx" => await Updates.LatestGitHub("docker/buildx", Updates.LinuxBuildxAsset),
+        Core.Kind.Id => Core.Kind.Release,
         "App" or ComponentRules.DashboardId => await Updates.LatestApp(LinuxLayout.AppAsset),
         _ => null,
     };
@@ -214,6 +228,7 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
             foreach (var line in Lines(r.Output + r.Error).TakeLast(6)) log("  " + line);
             if (r.ExitCode != 0) throw new InvalidOperationException($"{command[0]} failed ({r.ExitCode})");
         }
+        if (components.Any(c => c.Component == Core.Kind.Id)) await InstallKind(log);
         if (components.FirstOrDefault(c => c.Component is "App" or ComponentRules.DashboardId) is { Release: { } app })
         {
             await StopDashboard();
@@ -267,6 +282,11 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
             log($"{Paths.AppName} autostarts at login ({AutostartFile})");
         }
         await SetUpCredentialStore(log);
+        if (request.Without.Contains(Core.Kind.Id))
+        {
+            if (File.Exists(LinuxLayout.KindMarker)) await RunSetup(log, "remove-kind");
+        }
+        else if (await Installed(Core.Kind.Id) != Core.Kind.Version) await InstallKind(log);
         if (request.TrustHttps) await Https.Enable(this, log, request.Silent);
         await TryRun("gnome-extensions", "enable", "appindicatorsupport@rgcjonas.gmail.com");
         if ((await TryRun("docker", "context", "show"))?.Output.Trim() is { Length: > 0 } current && current != "default")
@@ -483,6 +503,22 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
         finally
         {
             if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    // Root puts it in /usr/local/bin, where every shell finds it, and only over a kind that Dockyard put there.
+    async Task InstallKind(Action<string> log)
+    {
+        var dir = Directory.CreateTempSubdirectory("dockyard-kind").FullName;
+        try
+        {
+            var file = Path.Combine(dir, "kind");
+            await Core.Kind.Download(file);
+            await RunSetup(log, "add-kind", "", file);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
         }
     }
 

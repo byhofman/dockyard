@@ -13,6 +13,7 @@ static class Paths
     public static readonly string CredentialHelper = Path.Combine(DockerDir, "docker-credential-wincred.exe");
     public static readonly string DockerdExe = Path.Combine(DockerDir, "dockerd.exe");
     public static readonly string PluginDir = Path.Combine(DockerDir, "cli-plugins");
+    public static readonly string KindExe = Path.Combine(DockerDir, "kind.exe");
     public static readonly string AppDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Dockyard");
     public static readonly string AppExe = Path.Combine(AppDir, "Dockyard.exe");
     public static readonly string DashboardExe = Path.Combine(AppDir, DashboardProcess + ".exe");

@@ -6,6 +6,11 @@ using Dockyard.Hosts;
 
 namespace Dockyard.Tests;
 
+// Classes that swap Updates.Http, which is static, cannot run side by side.
+[CollectionDefinition(nameof(SharedHttp))]
+public sealed class SharedHttp;
+
+[Collection(nameof(SharedHttp))]
 public sealed class UpdatesTests : IDisposable
 {
     const string Base = "https://github.com/byhofman/dockyard/releases";

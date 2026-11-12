@@ -3,6 +3,7 @@
         xmlns:shell="using:Dockyard.Dashboard.Shell"
         xmlns:cont="using:Dockyard.Dashboard.Features.Containers"
         xmlns:res="using:Dockyard.Dashboard.Features.Resources"
+        xmlns:clu="using:Dockyard.Dashboard.Features.Clusters"
         x:Class="Dockyard.Dashboard.Shell.MainWindow"
         x:DataType="shell:ShellViewModel"
         Title="Dockyard"
@@ -25,6 +26,9 @@
     </DataTemplate>
     <DataTemplate DataType="res:DiskViewModel">
       <res:DiskView />
+    </DataTemplate>
+    <DataTemplate DataType="clu:ClustersViewModel">
+      <clu:ClustersView />
     </DataTemplate>
   </Window.DataTemplates>
 

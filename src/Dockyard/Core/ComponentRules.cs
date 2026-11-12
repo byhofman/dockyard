@@ -8,7 +8,7 @@ static class ComponentRules
     public const string DashboardId = "Dashboard";
 
     // Every name --with and --without accept on any system. Whether it exists on this one is a host's catalog's business.
-    public static readonly string[] KnownFlags = ["dashboard", "compose", "buildx", "linux-engine", "windows-engine"];
+    public static readonly string[] KnownFlags = ["dashboard", "compose", "buildx", "kind", "linux-engine", "windows-engine"];
 
     public static ComponentInfo? ByFlag(IEnumerable<ComponentInfo> catalog, string flag) => catalog.FirstOrDefault(c => c.Flag == flag);
 

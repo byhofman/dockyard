@@ -11,7 +11,7 @@ namespace Dockyard.Agent;
 
 sealed partial class Agent(ITransport transport, Action<string> log, AgentApi? api = null)
 {
-    const string DockerSocket = "/var/run/docker.sock";
+    internal const string DockerSocket = "/var/run/docker.sock";
     static readonly TimeSpan MemoryInterval = TimeSpan.FromSeconds(5);
     static readonly TimeSpan TrimInterval = TimeSpan.FromHours(1);
 
@@ -63,14 +63,16 @@ sealed partial class Agent(ITransport transport, Action<string> log, AgentApi? a
         }
     }
 
-    static async Task ProxyDocker(IConnection client, CancellationToken ct)
+    static Task ProxyDocker(IConnection client, CancellationToken ct) => ProxyDocker(client, DockerSocket, ct);
+
+    internal static async Task ProxyDocker(IConnection client, string dockerSocket, CancellationToken ct)
     {
         for (var attempt = 0; ; attempt++)
         {
             var docker = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
             try
             {
-                await docker.ConnectAsync(new UnixDomainSocketEndPoint(DockerSocket), ct);
+                await docker.ConnectAsync(new UnixDomainSocketEndPoint(dockerSocket), ct);
             }
             catch (SocketException) when (attempt < 100)
             {
