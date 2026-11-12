@@ -2,6 +2,10 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-13: DOK-20 stays open: macOS asks a person before any trust setting goes
+
+Tried in the refactor pass: the user's setting with `security remove-trusted-cert`, the system's by exporting the admin trust settings as root, deleting our SHA-1 entry with PlistBuddy and importing them back. The macOS end-to-end run hung at uninstall and was cancelled after 12 minutes, as `remove-trusted-cert` did before: macOS waits for an authorization dialog for trust-setting changes, also as root and without a screen. So the change was taken back. What is left is removing it only where a person can answer the dialog (the tray window and the wizard window), which needs uninstall to know whether it runs silent; the entry left after a silent uninstall names a certificate and key that are already gone.
+
 ## 2026-11-13: Security audit (feedback round 1): every download pinned, the Linux engine behind this user's pipe
 
 The owner asked for a full audit. What changed and why:

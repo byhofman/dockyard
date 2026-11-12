@@ -46,19 +46,6 @@ public sealed class MacHostTests
         Assert.EndsWith("exec '/Users/O'\\''Brien/.dockyard/bin/docker' \"$@\"\n", wrapper);
     }
 
-    [Fact]
-    public void Trust_settings_are_found_by_the_name_of_ours_and_removed_by_its_hash()
-    {
-        Assert.True(MacLayout.HasTrustSetting("Number of trusted certs = 2\nCert 0: Contoso Root\n   Number of trust settings : 1\nCert 1: Dockyard Local CA\n"));
-        Assert.False(MacLayout.HasTrustSetting("SecTrustSettingsCopyCertificates: No Trust Settings were found."));
-        Assert.False(MacLayout.HasTrustSetting("Cert 0: Not Dockyard Local CA Either\n"));
-
-        var script = MacLayout.RemoveSystemTrustSetting("ab12");
-        Assert.Contains("security trust-settings-export -d", script);
-        Assert.Contains("PlistBuddy -c 'Delete :trustList:AB12'", script);
-        Assert.Contains("security trust-settings-import -d", script);
-    }
-
     [Theory]
     [InlineData("plain", "'plain'")]
     [InlineData("O'Brien", "'O'\\''Brien'")]

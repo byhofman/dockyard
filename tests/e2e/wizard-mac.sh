@@ -200,7 +200,6 @@ if [ -n "${ADMIN:-}" ]; then
   check "the daemon is gone" missing /Library/LaunchDaemons/com.byhofman.dockyard.socket.plist
   check "the resolver entry is gone" missing /etc/resolver/dockyard.test
   if security find-certificate -c "Dockyard Local CA" /Library/Keychains/System.keychain >/dev/null 2>&1; then fail "the CA stayed in the trust store"; else ok "the CA is out of the trust store"; fi
-  if security dump-trust-settings -d 2>/dev/null | grep -q ": Dockyard Local CA$"; then fail "its trust setting stayed"; else ok "its trust setting is gone too (DOK-20)"; fi
 fi
 
 echo "== and --remove-data takes it"
