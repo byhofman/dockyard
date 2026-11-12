@@ -81,10 +81,11 @@ public sealed class ClusterLogicTests
     public void Kind_runs_against_the_dashboard_s_context_with_the_docker_cli_it_found()
     {
         var sep = Path.PathSeparator;
-        var env = KindCli.Environment("linux", Path.Combine("/Users/me/.dockyard/bin", "docker"), $"/usr/bin{sep}/bin");
+        var bin = Path.Combine(Path.GetTempPath(), ".dockyard", "bin");
+        var env = KindCli.Environment("linux", Path.Combine(bin, "docker"), $"/usr/bin{sep}/bin");
         Assert.Equal("linux", env["DOCKER_CONTEXT"]);
         Assert.Equal("docker", env["KIND_EXPERIMENTAL_PROVIDER"]);
-        Assert.Equal($"/Users/me/.dockyard/bin{sep}/usr/bin{sep}/bin", env["PATH"]);
+        Assert.Equal($"{bin}{sep}/usr/bin{sep}/bin", env["PATH"]);
 
         Assert.Equal($"/usr/bin{sep}/bin", KindCli.Environment("default", "docker", $"/usr/bin{sep}/bin")["PATH"]);
     }
