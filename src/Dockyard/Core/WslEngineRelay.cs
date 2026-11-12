@@ -83,7 +83,8 @@ sealed class WslEngineRelay(IPAddress gate, string token) : IDisposable
             using var client = new TcpClient(address.AddressFamily);
             return client.ConnectAsync(address, port).Wait(timeoutMs) && client.Connected;
         }
-        catch { return false; }
+        catch (AggregateException e) when (e.InnerException is SocketException) { return false; }
+        catch (SocketException) { return false; }
     }
 
     public void Dispose() => lifetime.Cancel();

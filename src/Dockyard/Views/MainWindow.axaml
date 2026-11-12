@@ -150,7 +150,7 @@
               <Grid ColumnDefinitions="*,90,90,130,160" Margin="18,12">
                 <TextBlock Classes="muted" FontSize="12" Text="Component" />
                 <TextBlock Grid.Column="1" Classes="muted" FontSize="12" Text="Installed" />
-                <TextBlock Grid.Column="2" Classes="muted" FontSize="12" Text="Latest" />
+                <TextBlock Grid.Column="2" Classes="muted" FontSize="12" Text="Available" />
                 <TextBlock Grid.Column="3" Classes="muted" FontSize="12" Text="Status" />
               </Grid>
               <ItemsControl ItemsSource="{Binding Components}">

@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Security.Principal;
@@ -509,7 +510,8 @@ static class MachineSetup
                 var file = p.MainModule?.FileName;
                 if (new[] { Paths.AppExe, Paths.DashboardExe, Paths.LegacyDashboardExe }.Contains(file, StringComparer.OrdinalIgnoreCase)) Kill(p, keepPid);
             }
-            catch { }
+            // Gone by now, or another user's process whose file cannot be read: not one of ours to stop.
+            catch (Exception e) when (e is Win32Exception or InvalidOperationException) { }
         }
     }
 
@@ -523,7 +525,7 @@ static class MachineSetup
                 p.Kill();
                 p.WaitForExit(5000);
             }
-            catch { }
+            catch (Exception e) when (e is Win32Exception or InvalidOperationException) { }
         }
     }
 

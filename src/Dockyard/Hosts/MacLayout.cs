@@ -127,6 +127,14 @@ static class MacLayout
         $"mkdir -p /etc/resolver && printf 'nameserver 127.0.0.1\\nport {DomainDnsPort}\\n' > {DomainResolver}";
 
     // One administrator prompt: AppleScript runs the shell command with administrator privileges.
+    // What `security dump-trust-settings` prints for a domain: "Cert 0: Dockyard Local CA" when one of ours is in it.
+    public static bool HasTrustSetting(string dump) =>
+        dump.Split('\n').Any(line => line.Trim() is var l && l.StartsWith("Cert ", StringComparison.Ordinal) && l.EndsWith(": " + LocalCa.SubjectName, StringComparison.Ordinal));
+
+    // The system's trust settings are a list keyed by each certificate's SHA-1: exported, ours taken out, imported back.
+    public static string RemoveSystemTrustSetting(string sha1) =>
+        $"f=$(mktemp) && security trust-settings-export -d \"$f\" && /usr/libexec/PlistBuddy -c 'Delete :trustList:{sha1.ToUpperInvariant()}' \"$f\" && security trust-settings-import -d \"$f\"; r=$?; rm -f \"$f\"; [ $r -eq 0 ]";
+
     public static string[] AdminShell(string command) =>
         ["-e", $"do shell script \"{command.Replace("\\", "\\\\").Replace("\"", "\\\"")}\" with administrator privileges"];
 

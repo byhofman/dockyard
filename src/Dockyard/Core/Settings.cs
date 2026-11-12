@@ -22,7 +22,8 @@ sealed class Settings
     {
         Settings settings;
         try { settings = JsonSerializer.Deserialize(File.ReadAllText(file), SettingsJson.Default.Settings) ?? new(); }
-        catch { settings = new(); }
+        // None yet, or one this version cannot read: the defaults, which the next save writes.
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException) { settings = new(); }
         settings.file = file;
         return settings;
     }
