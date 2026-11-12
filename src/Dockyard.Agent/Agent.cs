@@ -165,7 +165,7 @@ sealed partial class Agent(ITransport transport, Action<string> log, AgentApi? a
         using var reader = new StreamReader(client.Stream);
         try
         {
-            while (await reader.ReadLineAsync(ct) is { } line)
+            while (await Lines.Read(reader, ct) is { } line)
             {
                 var message = JsonSerializer.Deserialize(line, ControlJson.Default.ControlMessage);
                 switch (message?.Type)

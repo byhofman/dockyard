@@ -12,7 +12,11 @@ using var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 AppDomain.CurrentDomain.ProcessExit += (_, _) => cts.Cancel();
 
-await NetworkRules.Apply(Agent.Exit, log, vm: options.Mode is AgentMode.Vm or AgentMode.TcpTest, linuxHost: options.Mode == AgentMode.Host);
+// dockyard-vm-init has eth0 up with its lease before the agent starts.
+var vmHost = options.Mode is AgentMode.Vm or AgentMode.TcpTest
+    ? WslHost.DefaultGateway(File.ReadAllText("/proc/net/route")) ?? throw new InvalidOperationException("the VM has no gateway to the Mac yet")
+    : null;
+await NetworkRules.Apply(Agent.Exit, log, vmHost, linuxHost: options.Mode == AgentMode.Host);
 
 var table = new DomainTable(() => new DockerClient(DockerEndpoint.Parse("unix:///var/run/docker.sock")), "/var/lib/docker/dockyard/domain-ports.json", log);
 var proxy = new DomainProxy(table, log);

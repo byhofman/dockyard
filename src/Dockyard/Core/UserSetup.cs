@@ -76,7 +76,8 @@ static partial class UserSetup
     public static void ResumeAfterReboot(bool silent, Action<string> log)
     {
         using var key = Registry.CurrentUser.CreateSubKey(RunOnceKey);
-        key.SetValue(Paths.AppName, $"\"{Paths.AppExe}\" {(silent ? "--silent" : "--setup")} --resume");
+        var assets = Updates.LocalAssets is { } dir ? $" --assets {Shell.Quote(dir)}" : "";
+        key.SetValue(Paths.AppName, $"\"{Paths.AppExe}\" {(silent ? "--silent" : "--setup")} --resume{assets}");
         log("Setup carries on by itself after the restart");
     }
 
@@ -131,15 +132,11 @@ static partial class UserSetup
             if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
     }
 
-    // Prefers a dockyard-linux-*.tar.gz next to the installer, then the matching release asset.
+    // --image, then a dockyard-linux-*.tar.gz given with --assets; without either the release asset is downloaded.
     public static string? FindLocalImage(string? explicitPath)
     {
         if (explicitPath is not null) return File.Exists(explicitPath) ? explicitPath : throw new FileNotFoundException("Image not found", explicitPath);
-        var dir = Path.GetDirectoryName(Paths.Self)!;
-        return Directory.EnumerateFiles(dir, "dockyard-linux-*-x86_64.tar.gz")
-            .Where(f => ImageName().IsMatch(Path.GetFileName(f)))
-            .OrderByDescending(f => Updates.ParseVersion(Path.GetFileName(f)))
-            .FirstOrDefault();
+        return Updates.LocalAsset(Updates.ImageAsset);
     }
 
     static async Task SetupDistro(Action<string> log, string? image)

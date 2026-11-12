@@ -61,7 +61,7 @@ sealed class WslDistro(ICommandRunner runner, string name = WslDistro.DefaultNam
             if (current.ExitCode == 0 && current.Output.Trim() == hash) return;
             var path = await ToLinuxPath(temp);
             await runner.Check("wsl.exe", "-d", Name, "-u", "root", "--", "sh", "-c",
-                $"mkdir -p /etc/docker && tar -xzf '{path}' -C / && chmod 0755 {InitPath} {UpdatePath} {AgentPath} && echo {hash} > {GuestMarker}");
+                $"mkdir -p /etc/docker && tar -xzf {Shell.ShQuote(path)} -C / && chmod 0755 {InitPath} {UpdatePath} {AgentPath} && echo {hash} > {GuestMarker}");
             log("Linux engine: Dockyard's part is up to date");
         }
         finally
@@ -95,7 +95,7 @@ sealed class WslDistro(ICommandRunner runner, string name = WslDistro.DefaultNam
         try
         {
             var mode = secret ? "0600" : "0644";
-            await runner.Check("wsl.exe", "-d", Name, "-u", "root", "--", "sh", "-c", $"mkdir -p \"$(dirname '{path}')\" && install -m {mode} '{await ToLinuxPath(temp)}' '{path}'");
+            await runner.Check("wsl.exe", "-d", Name, "-u", "root", "--", "sh", "-c", $"mkdir -p \"$(dirname {Shell.ShQuote(path)})\" && install -m {mode} {Shell.ShQuote(await ToLinuxPath(temp))} {Shell.ShQuote(path)}");
         }
         finally
         {

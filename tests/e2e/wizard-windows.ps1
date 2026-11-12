@@ -24,7 +24,8 @@ function Run {
         return $global:LASTEXITCODE
     }
     $out = New-TemporaryFile; $err = New-TemporaryFile
-    $p = Start-Process (Resolve-Path $Wizard) -ArgumentList $args -Wait -PassThru -NoNewWindow -RedirectStandardOutput $out -RedirectStandardError $err
+    # The image and dashboard built next to the wizard, which a build before its release cannot download.
+    $p = Start-Process (Resolve-Path $Wizard) -ArgumentList (@($args) + '--assets', (Split-Path (Resolve-Path $Wizard))) -Wait -PassThru -NoNewWindow -RedirectStandardOutput $out -RedirectStandardError $err
     Get-Content $out, $err | Write-Host
     return $p.ExitCode
 }
@@ -32,7 +33,7 @@ function Run {
 function Window {
     param([string]$LookOnly)
     $exe = if ($OneLiner) { Join-Path $env:USERPROFILE 'Downloads\Dockyard.exe' } else { (Resolve-Path $Wizard).Path }
-    powershell.exe -NoProfile -File (Join-Path $PSScriptRoot 'wizard-window.ps1') -Exe $exe -Screenshots $Screenshots -Dashboard $dashboard $(if ($LookOnly) { '-LookOnly', $LookOnly })
+    powershell.exe -NoProfile -File (Join-Path $PSScriptRoot 'wizard-window.ps1') -Exe $exe -Assets $(if ($OneLiner) { '' } else { Split-Path $exe }) -Screenshots $Screenshots -Dashboard $dashboard $(if ($LookOnly) { '-LookOnly', $LookOnly })
     if ($LASTEXITCODE -ne 0) { throw 'FAIL the wizard window' }
 }
 

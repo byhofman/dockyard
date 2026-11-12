@@ -32,7 +32,9 @@ Run the same line again at any time. On an existing install the wizard shows wha
 
 ### Choose what you want
 
-The wizard lists every component with its version, the latest version and **Update**, plus **Add** or **Remove** where that is possible, also in **Engines and settings…** in the tray. Each row says what it needs or why it cannot go.
+The wizard lists every component with its version, the version this Dockyard brings and **Update**, plus **Add** or **Remove** where that is possible, also in **Engines and settings…** in the tray. Each row says what it needs or why it cannot go.
+
+Every tool Dockyard downloads from someone else (Docker, Compose, Buildx, the credential helpers and kind) has its version fixed per Dockyard release and is checked against a SHA-256 kept in Dockyard (`image/versions.env`, `image/versions.sha256`), so a replaced file upstream is refused. A new Dockyard release is what moves them.
 
 | Component | | |
 |---|---|---|
@@ -65,6 +67,7 @@ curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install.sh |
 | `--without <names>` | Leave them out, or remove them. Asking for a required one or for the last engine exits 2 and changes nothing. With `--remove-data`, an engine's images go too. |
 | `--dashboard`, `--no-dashboard` | The same as `--with dashboard`, `--without dashboard`. |
 | `--no-start` | Do not start Dockyard afterwards. |
+| `--assets <folder>` | Take Dockyard's own release files (image, dashboard, packages) from this folder instead of downloading them, for an install without internet or a build before its release. They are not checked, so only name a folder you filled yourself. |
 | `--trust-https` | Add Dockyard's own certificate to the trust store, for HTTPS on container domains. |
 | `--silent --import` | Copy images, volumes and containers from Docker Desktop, which keeps them. **Import** in the tray window does the same. |
 | `--silent --uninstall` | Remove Dockyard. Images and containers stay. |
@@ -84,10 +87,12 @@ Each release has `Dockyard.exe` for Windows, `Dockyard-<version>-macos.dmg` for 
 
 | Context | Engine | Endpoint |
 |---|---|---|
-| `linux` (default) | Docker in the `dockyard` WSL distro (Alpine with Docker's static binaries) | `tcp://127.0.0.1:2375` |
+| `linux` (default) | Docker in the `dockyard` WSL distro (Alpine with Docker's static binaries) | `npipe:////./pipe/dockyard_linux` |
 | `win` | `dockerd.exe` Windows service (ltsc2025 images, process isolation) | `npipe:////./pipe/docker_windows` |
 
-**macOS.** Docker's `docker` CLI with compose and buildx, Rosetta for `linux/amd64` images, a small Linux VM on Apple's Virtualization.framework in `~/.dockyard`, the `dockyard` docker context, `~/Applications/Dockyard.app` and a login item. It makes `/var/run/docker.sock` point at the engine unless another Docker app has it, and `docker login` keeps credentials in the Keychain. In the VM: `/Users`, `/Volumes` and the temp folders are shared at the same paths, so `-v $PWD:/app` works; published ports reach `127.0.0.1`, and so do servers in `--network host` containers; memory the guest does not use goes back to macOS.
+The Linux engine has no open port on Windows: the tray serves it on a named pipe only you can open, and passes it to the distro with a secret only you can read. Tools that need `DOCKER_HOST` use that pipe; `tcp://127.0.0.1:2375` from earlier versions is gone, because every user of the PC and any web page could reach it.
+
+**macOS.** Docker's `docker` CLI with compose and buildx, Rosetta for `linux/amd64` images, a small Linux VM on Apple's Virtualization.framework in `~/.dockyard`, the `dockyard` docker context, `docker` and `kind` on the PATH through `/usr/local/dockyard/bin` (small scripts that run your copy for your account only), `~/Applications/Dockyard.app` and a login item. It makes `/var/run/docker.sock` point at the engine unless another Docker app has it, and `docker login` keeps credentials in the Keychain. In the VM: `/Users`, `/Volumes` and the temp folders are shared at the same paths, so `-v $PWD:/app` works; published ports reach `127.0.0.1`, and so do servers in `--network host` containers; memory the guest does not use goes back to macOS.
 
 **Linux.** Docker CE with buildx and compose from Docker's repository on Debian, Ubuntu, Fedora, RHEL and their derivatives, or from the distribution on Arch and openSUSE; the Dockyard packages, or a copy in `~/.local/lib/dockyard` on distributions without apt or dnf; the engine started on demand; docker access for you right away; the tray with its GNOME extension where needed; autostart at login.
 
@@ -97,7 +102,7 @@ Dockyard sits in the tray or menu bar. The icon is the Dockyard crane and contai
 
 - **Linux / Windows** (top right, Windows): switch the docker context. This starts that engine and by default stops the other one.
 - **Engines**: status, endpoint and Start/Stop per engine.
-- **Components**: installed and latest version of everything, with **Update** per component and **Update all**. Dashboard has **Add** or **Remove**. Checked when the window opens, at most every 6 hours, or on **Check for updates**. Updating an engine keeps its images and containers.
+- **Components**: installed version of everything and the one this Dockyard brings, with **Update** per component and **Update all**. Dashboard has **Add** or **Remove**. Checked when the window opens, at most every 6 hours, or on **Check for updates**. Updating an engine keeps its images and containers.
 - **Settings**: stop the other engine when switching, start the active engine at logon, uninstall.
 
 ### Dashboard
@@ -116,7 +121,7 @@ Keys: `Ctrl+K` (`⌘K` on macOS) search, `S` start/stop, `R` restart, `E` termin
 
 ## Kubernetes with kind
 
-Dockyard installs [kind](https://kind.sigs.k8s.io), which runs a Kubernetes cluster as containers on the Linux engine: in `C:\Program Files\Docker` on Windows, `~/.dockyard/bin` on macOS and `/usr/local/bin` on Linux. Its version is fixed per Dockyard release and checked against a checksum kept in Dockyard, and **Update** moves it along with Dockyard. A kind that someone else put in `/usr/local/bin` on Linux is left alone and used.
+Dockyard installs [kind](https://kind.sigs.k8s.io), which runs a Kubernetes cluster as containers on the Linux engine: in `C:\Program Files\Docker` on Windows, `~/.dockyard/bin` on macOS and `/usr/local/bin` on Linux. Like the other tools, its version is fixed per Dockyard release and checked against a checksum kept in Dockyard, and **Update** moves it along with Dockyard. A kind that someone else put in `/usr/local/bin` on Linux is left alone and used.
 
 From a terminal it is kind itself:
 

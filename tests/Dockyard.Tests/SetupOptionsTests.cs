@@ -120,4 +120,21 @@ public sealed class SetupOptionsTests
         Assert.Equal("unix:///tmp/x.sock", SetupOptions.Parse(["--import-from", "unix:///tmp/x.sock"]).ImportFrom);
         Assert.Throws<SetupUsageException>(() => SetupOptions.Parse(["--import-from"]));
     }
+
+    [Fact]
+    public void Local_files_are_only_taken_from_a_folder_that_was_named()
+    {
+        var dir = Directory.CreateTempSubdirectory("dy-assets").FullName;
+        try
+        {
+            Assert.Null(SetupOptions.Parse(["--silent"]).Assets);
+            Assert.Equal(dir, SetupOptions.Parse(["--silent", "--assets", dir]).Assets);
+            Assert.Throws<SetupUsageException>(() => SetupOptions.Parse(["--assets", Path.Combine(dir, "missing")]));
+            Assert.Throws<SetupUsageException>(() => SetupOptions.Parse(["--assets"]));
+        }
+        finally
+        {
+            Directory.Delete(dir);
+        }
+    }
 }

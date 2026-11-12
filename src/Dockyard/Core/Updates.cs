@@ -149,11 +149,18 @@ static partial class Updates
     internal static string? ReleaseTag(string appVersion, string? tag) =>
         tag ?? (appVersion == "0.0.0" ? null : $"v{appVersion}");
 
-    // Without a tag: an asset next to the running wizard wins, for offline installs and for testing a build before its release.
+    // --assets: Dockyard's own files from a folder the user named, for offline installs and for testing a build before its
+    // release. Never the installer's own folder by itself: that is usually Downloads, where any web page can leave a file.
+    public static string? LocalAssets { get; set; }
+
+    public static string? LocalAsset(string pattern) => LocalAssets is null ? null
+        : Directory.EnumerateFiles(LocalAssets).Where(f => Regex.IsMatch(Path.GetFileName(f), pattern))
+            .OrderByDescending(f => ParseVersion(Path.GetFileName(f))).FirstOrDefault();
+
+    // Without a tag, a file given with --assets wins.
     public static async Task<string> ReleaseAssetOrLocal(string pattern, string targetDir, string? tag)
     {
-        var local = tag is not null ? null : Directory.EnumerateFiles(Path.GetDirectoryName(Paths.Self)!)
-            .FirstOrDefault(f => Regex.IsMatch(Path.GetFileName(f), pattern));
+        var local = tag is not null ? null : LocalAsset(pattern);
         if (local is null) return await DownloadReleaseAsset(pattern, targetDir, isPattern: true, tag);
         Directory.CreateDirectory(targetDir);
         var copy = Path.Combine(targetDir, Path.GetFileName(local));

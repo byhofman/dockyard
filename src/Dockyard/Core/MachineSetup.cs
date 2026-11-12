@@ -43,7 +43,7 @@ static class MachineSetup
         if (without.Contains(nameof(Component.LinuxEngine))) await UnrouteDomains();
         else await RouteDomains(log);
         if (withWindows) await ConfigureWindowsEngine(log, userSid, userName);
-        await InstallApp(log, Paths.Self, keepPid, engineOnly);
+        await InstallApp(log, Paths.Self, keepPid, engineOnly, Updates.LocalAssets);
         RemoveLegacy(log, keepPid);
         return reboot;
     }
@@ -59,7 +59,9 @@ static class MachineSetup
             case Component.App:
                 // Defender's rule goes by path, and an update can bring the first dashboard with the new name.
                 await AddDefenderExclusions(log);
-                await InstallApp(log, source ?? throw new ArgumentException("--source is required for the app update"), keepPid, engineOnly: !File.Exists(Paths.DashboardExe) && !File.Exists(Paths.LegacyDashboardExe));
+                // Next to the new exe in the folder the tray downloaded and checked both into.
+                var exe = source ?? throw new ArgumentException("--source is required for the app update");
+                await InstallApp(log, exe, keepPid, engineOnly: !File.Exists(Paths.DashboardExe) && !File.Exists(Paths.LegacyDashboardExe), Path.GetDirectoryName(Path.GetFullPath(exe)));
                 Shell.StartUnelevated(Paths.AppExe);
                 break;
             default: throw new ArgumentException($"{component} is not a machine component");
@@ -79,9 +81,9 @@ static class MachineSetup
             RemoveEventSource();
         }
         await Shell.Run("powershell.exe", "-NoProfile", "-Command",
-            $"Remove-MpPreference -ControlledFolderAccessAllowedApplications '{Paths.DockerdExe}'");
+            $"Remove-MpPreference -ControlledFolderAccessAllowedApplications {Shell.PsQuote(Paths.DockerdExe)}");
         await Shell.Run("powershell.exe", "-NoProfile", "-Command",
-            $"Remove-MpPreference -AttackSurfaceReductionOnlyExclusions {string.Join(',', EverExcludedFromAsr.Select(p => $"'{p}'"))}");
+            $"Remove-MpPreference -AttackSurfaceReductionOnlyExclusions {string.Join(',', EverExcludedFromAsr.Select(Shell.PsQuote))}");
         await Shell.Run("net.exe", "localgroup", "docker-users", "/delete");
         RemoveFromMachinePath(Paths.DockerDir);
         RemoveLegacy(log, keepPid);
@@ -169,13 +171,16 @@ static class MachineSetup
         return true;
     }
 
+    // Only files in Program Files, which only administrators can write: an exclusion goes by path and exempts whatever is
+    // there from every ASR rule. Earlier versions also excluded the installer wherever it ran, and the one-liner asks for
+    // its own download path when Defender blocks it, so uninstall takes those back too.
     static IEnumerable<string> ExcludedFromAsr => new[] { Paths.AppExe, Paths.DashboardExe };
-    static IEnumerable<string> EverExcludedFromAsr => ExcludedFromAsr.Append(Paths.LegacyDashboardExe);
+    static IEnumerable<string> EverExcludedFromAsr => ExcludedFromAsr.Append(Paths.LegacyDashboardExe).Append(Paths.OneLinerExe);
 
     // Defender's prevalence/age rule (event 1121) blocks every new build, and an exclusion goes by path because a hash changes with each build.
     static async Task AddDefenderExclusions(Action<string> log)
     {
-        var paths = ExcludedFromAsr.Append(Paths.Self).Distinct(StringComparer.OrdinalIgnoreCase).Select(p => $"'{p}'");
+        var paths = ExcludedFromAsr.Select(Shell.PsQuote);
         var r = await Shell.Run("powershell.exe", "-NoProfile", "-Command",
             $"Add-MpPreference -AttackSurfaceReductionOnlyExclusions {string.Join(',', paths)}");
         log(r.ExitCode == 0 ? "Defender: Dockyard is excluded from the prevalence rule" : "Defender exclusions were not added (managed device?); ask your administrator if Defender blocks Dockyard");
@@ -210,7 +215,9 @@ static class MachineSetup
         {
             foreach (var entry in archive.Entries.Where(e => e.Name.Length > 0))
             {
-                var target = Path.Combine(root, entry.FullName.Replace('/', '\\'));
+                var target = Path.GetFullPath(Path.Combine(root, entry.FullName.Replace('/', '\\')));
+                if (!target.StartsWith(Paths.DockerDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException($"The Docker archive has an entry outside {Paths.DockerDir}: {entry.FullName}");
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                 InUseFiles.MoveAside(target);
                 entry.ExtractToFile(target);
@@ -367,7 +374,7 @@ static class MachineSetup
         // Controlled Folder Access otherwise blocks dockerd unpacking image layers ("hcsshim::ProcessBaseLayer ... Access is denied").
         // When Intune manages this list it may override the local entry; then it has to be added there.
         await Shell.Run("powershell.exe", "-NoProfile", "-Command",
-            $"Add-MpPreference -ControlledFolderAccessAllowedApplications '{Paths.DockerdExe}'");
+            $"Add-MpPreference -ControlledFolderAccessAllowedApplications {Shell.PsQuote(Paths.DockerdExe)}");
 
         Directory.CreateDirectory(Paths.DaemonConfigDir);
         var daemonJson = Path.Combine(Paths.DaemonConfigDir, "daemon.json");
@@ -415,7 +422,7 @@ static class MachineSetup
         }
     }
 
-    static async Task InstallApp(Action<string> log, string source, int keepPid, bool engineOnly)
+    static async Task InstallApp(Action<string> log, string source, int keepPid, bool engineOnly, string? dashboardDir)
     {
         var isInstalledCopy = string.Equals(Path.GetFullPath(source), Paths.AppExe, StringComparison.OrdinalIgnoreCase);
         StopApps(keepPid);
@@ -425,7 +432,7 @@ static class MachineSetup
             ReplaceAppExe(source);
             log($"Installed {Paths.AppExe}");
         }
-        if (!engineOnly) await InstallDashboard(log, Path.GetDirectoryName(Path.GetFullPath(source))!);
+        if (!engineOnly) await InstallDashboard(log, dashboardDir);
         else if (File.Exists(Paths.DashboardExe) || File.Exists(Paths.LegacyDashboardExe)) RemoveDashboard(log);
         else log("The dashboard is not installed");
     }
@@ -451,19 +458,20 @@ static class MachineSetup
     public static async Task SetDashboard(Action<string> log, bool installed, int keepPid)
     {
         StopApps(keepPid, dashboardOnly: true);
-        if (installed) await InstallDashboard(log, Path.GetDirectoryName(Paths.Self)!);
+        if (installed) await InstallDashboard(log, Updates.LocalAssets);
         else RemoveDashboard(log);
     }
 
-    // Uses Dockyard.Dashboard.zip next to the installer, or downloads the one from this release.
-    static async Task InstallDashboard(Action<string> log, string sourceDir)
+    // Dockyard.Dashboard.zip from the given folder, or the one from this release. A download goes to Program Files, which
+    // only administrators can write, so nothing can swap it between the check and the extraction.
+    static async Task InstallDashboard(Action<string> log, string? sourceDir)
     {
-        var zip = Path.Combine(sourceDir, Paths.DashboardZipName);
+        var zip = sourceDir is null ? null : Path.Combine(sourceDir, Paths.DashboardZipName);
         string? downloaded = null;
-        if (!File.Exists(zip))
+        if (zip is null || !File.Exists(zip))
         {
             log("Downloading the dashboard");
-            zip = downloaded = await Updates.DownloadReleaseAsset(Paths.DashboardZipName, Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}"));
+            zip = downloaded = await Updates.DownloadReleaseAsset(Paths.DashboardZipName, Path.Combine(Paths.AppDir, $".download-{Guid.NewGuid():N}"));
         }
         try
         {

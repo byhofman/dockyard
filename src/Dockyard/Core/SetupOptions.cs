@@ -7,7 +7,7 @@ enum SetupAction { Install, Uninstall, Import }
 sealed record SetupOptions
 {
     public const string Usage = """
-        Usage: Dockyard [--silent] [--with <names>] [--without <names>] [--no-start] [--image <file>] [--trust-https]
+        Usage: Dockyard [--silent] [--with <names>] [--without <names>] [--no-start] [--image <file>] [--assets <folder>] [--trust-https]
                Dockyard --silent --uninstall [--remove-data]
                Dockyard --silent --import [--import-from <endpoint>]
                Dockyard --version
@@ -22,6 +22,8 @@ sealed record SetupOptions
           --no-start      Do not start Dockyard afterwards.
           --trust-https   Add Dockyard's own certificate to this computer's trust store, for HTTPS on container domains.
           --image <file>  Windows: the Linux engine image to import instead of downloading it.
+          --assets <folder>  Take Dockyard's own release files from this folder instead of downloading them, for an
+                             install without internet or a build before its release. They are not checked.
           --import        Copy images, volumes and containers from Docker Desktop, which keeps them.
           --import-from   The engine to copy from instead, as unix://, npipe:// or tcp://.
           --uninstall     Remove Dockyard. Images and containers stay unless --remove-data is given too.
@@ -37,6 +39,7 @@ sealed record SetupOptions
     public bool? Dashboard { get; init; }
     public bool Start { get; init; } = true;
     public string? Image { get; init; }
+    public string? Assets { get; init; }
     public bool RemoveData { get; init; }
     public bool Resume { get; init; }
     public bool OpenSetup { get; init; }
@@ -71,6 +74,7 @@ sealed record SetupOptions
                 "--resume" => options with { Resume = true },
                 "--setup" => options with { OpenSetup = true },
                 "--image" => options with { Image = ++i < args.Count ? args[i] : throw new SetupUsageException("--image needs a file") },
+                "--assets" => options with { Assets = ++i < args.Count && Directory.Exists(args[i]) ? Path.GetFullPath(args[i]) : throw new SetupUsageException("--assets needs a folder that exists") },
                 "--version" => options with { ShowVersion = true },
                 "--help" or "-h" => options with { ShowHelp = true },
                 _ when WindowArguments.Contains(arg) => options,

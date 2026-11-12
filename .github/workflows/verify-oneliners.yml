@@ -16,17 +16,20 @@ env:
   RAW: https://raw.githubusercontent.com/byhofman/dockyard/${{ github.event.pull_request.head.sha || github.sha }}
   DOCKYARD_GITHUB_TOKEN: ${{ github.token }}
 
+permissions:
+  contents: read
+
 jobs:
   scripts-only-fetch:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - run: sh tests/oneliners/oneliners.sh
 
   scripts-only-fetch-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - shell: pwsh
         run: ./tests/oneliners/oneliner.ps1
       - name: Windows PowerShell 5.1, which is what most people have
@@ -36,7 +39,7 @@ jobs:
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: The one-liner, on a Windows runner with WSL 2, starting from v0.1.0
         shell: pwsh
         run: ./tests/e2e/wizard-windows.ps1 -OneLiner "$env:RAW/install.ps1"
@@ -44,7 +47,7 @@ jobs:
   linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: The one-liner, with systemd and sudo
         run: ONELINER="$RAW/install.sh" sh tests/e2e/wizard-linux.sh
 

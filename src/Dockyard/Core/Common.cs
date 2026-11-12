@@ -25,6 +25,8 @@ static class Paths
     public const string DashboardZipName = "Dockyard.Dashboard.zip";
     public static readonly string DaemonConfigDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "docker", "config");
     public static readonly string UserProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    // Where install.ps1 puts the installer, and asks Defender to allow when it blocks it.
+    public static readonly string OneLinerExe = Path.Combine(UserProfile, "Downloads", "Dockyard.exe");
     public static readonly string SettingsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Dockyard");
     public static readonly string SettingsFile = Path.Combine(SettingsDir, "settings.json");
 
@@ -97,6 +99,12 @@ sealed record ShellResult(int ExitCode, string Output, string Error);
 
 static class Shell
 {
+    // For a value inside a POSIX shell script, whatever it holds.
+    public static string ShQuote(string value) => "'" + value.Replace("'", "'\\''") + "'";
+
+    // For a value inside a PowerShell command, whatever it holds.
+    public static string PsQuote(string value) => "'" + value.Replace("'", "''") + "'";
+
     public static string Quote(string arg)
     {
         if (arg.Length > 0 && arg.IndexOfAny([' ', '\t', '"']) < 0) return arg;

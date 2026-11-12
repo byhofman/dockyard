@@ -131,4 +131,29 @@ public sealed class UpdatesTests : IDisposable
         Assert.False(Updates.IsRateLimited(e));
         Assert.Equal($"Could not get {Base}/download/v9.9.9/SHA256SUMS: github.com answered 404 (NotFound).", e.Message);
     }
+
+    [Fact]
+    public void Nothing_local_is_used_unless_a_folder_was_named()
+    {
+        File.WriteAllText(Path.Combine(dir, "dockyard-linux-9.9.9-x86_64.tar.gz"), "planted");
+        Updates.LocalAssets = null;
+
+        Assert.Null(Updates.LocalAsset(Updates.ImageAsset));
+    }
+
+    [Fact]
+    public void A_named_folder_gives_its_newest_matching_file()
+    {
+        File.WriteAllText(Path.Combine(dir, "dockyard-linux-0.4.0-x86_64.tar.gz"), "");
+        File.WriteAllText(Path.Combine(dir, "dockyard-linux-0.10.0-x86_64.tar.gz"), "");
+        Updates.LocalAssets = dir;
+        try
+        {
+            Assert.Equal(Path.Combine(dir, "dockyard-linux-0.10.0-x86_64.tar.gz"), Updates.LocalAsset(Updates.ImageAsset));
+        }
+        finally
+        {
+            Updates.LocalAssets = null;
+        }
+    }
 }

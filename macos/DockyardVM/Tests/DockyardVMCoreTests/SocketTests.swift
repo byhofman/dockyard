@@ -209,3 +209,20 @@ final class HostDialTests: XCTestCase {
         }
     }
 }
+
+final class UdpSessionTests: XCTestCase {
+    func testAQuietSenderOrElseTheQuietestMakesWayForANewOne() {
+        let sessions = UdpSessions(listener: -1, port: PublishedPort(protocol: "udp", hostIp: "0.0.0.0", port: 5353),
+                                   connector: { _, _ in }, limit: 2, idle: 60)
+        let now = Date()
+        sessions.streams = [Data([1]): 11, Data([2]): 12]
+        sessions.lastSeen = [Data([1]): now.addingTimeInterval(-10), Data([2]): now.addingTimeInterval(-5)]
+        XCTAssertEqual(sessions.makeRoom(now: now), [11])
+        XCTAssertEqual(sessions.makeRoom(now: now), [])
+
+        sessions.streams[Data([3])] = 13
+        sessions.lastSeen[Data([3])] = now.addingTimeInterval(-120)
+        XCTAssertEqual(sessions.makeRoom(now: now), [13])
+        XCTAssertEqual(Array(sessions.streams.keys), [Data([2])])
+    }
+}

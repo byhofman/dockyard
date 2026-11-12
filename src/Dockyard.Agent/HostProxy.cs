@@ -82,14 +82,15 @@ static class NetworkRules
     }
 
     // Only the VM: there the Mac reaches the engine's Linux at its own address, and published ports never come in that
-    // way (they go over vsock), so ports 80 and 443 on that interface are free to mean the proxy.
-    public static IEnumerable<string[]> VmCommands()
+    // way (they go over vsock), so ports 80 and 443 on that interface are free to mean the proxy. Only from the Mac, the
+    // gateway: other VMs on the same virtual network are not for the domains to answer.
+    public static IEnumerable<string[]> VmCommands(IPAddress mac)
     {
         foreach (var (from, to) in new[] { (80, GuestAddresses.DomainHttpPort), (443, GuestAddresses.DomainHttpsPort) })
-            yield return ["iptables", "-t", "nat", "-I", "PREROUTING", "-i", "eth0", "-p", "tcp", "--dport", from.ToString(), "-j", "REDIRECT", "--to-ports", to.ToString()];
+            yield return ["iptables", "-t", "nat", "-I", "PREROUTING", "-i", "eth0", "-s", mac.ToString(), "-p", "tcp", "--dport", from.ToString(), "-j", "REDIRECT", "--to-ports", to.ToString()];
     }
 
-    public static async Task Apply(Func<string, string[], Task<int>> run, Action<string> log, bool vm = false, bool linuxHost = false)
+    public static async Task Apply(Func<string, string[], Task<int>> run, Action<string> log, IPAddress? vmHost = null, bool linuxHost = false)
     {
         foreach (var address in new[] { GuestAddresses.Dns, GuestAddresses.Host })
             await run("ip", ["addr", "replace", $"{address}/32", "dev", "lo"]);
@@ -102,7 +103,7 @@ static class NetworkRules
             await Iptables("-A", "DOCKYARD-INPUT", "-i", iface, "-j", "ACCEPT");
         await Iptables("-A", "DOCKYARD-INPUT", "-j", "DROP");
 
-        foreach (var command in Commands().Concat(vm ? VmCommands() : []).Concat(linuxHost ? HostCommands() : []))
+        foreach (var command in Commands().Concat(vmHost is not null ? VmCommands(vmHost) : []).Concat(linuxHost ? HostCommands() : []))
         {
             // -C is the same rule as -I at the same place; a restarted agent must not stack copies.
             if (await Iptables([.. command.Skip(1).Select(a => a == "-I" ? "-C" : a)]) == 0) continue;

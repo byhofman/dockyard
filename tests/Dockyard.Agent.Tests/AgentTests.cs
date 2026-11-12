@@ -137,4 +137,17 @@ public sealed class AgentTests
         var ports = JsonSerializer.Serialize(new ControlMessage { Type = "ports", Ports = [new("tcp", "0.0.0.0", 80)] }, ControlJson.Default.ControlMessage);
         Assert.Equal("""{"type":"ports","ports":[{"protocol":"tcp","hostIp":"0.0.0.0","port":80}]}""", ports);
     }
+
+    [Fact]
+    public async Task Lines_are_read_one_by_one_and_an_endless_one_ends_the_connection()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var normal = new StreamReader(new MemoryStream("{\"op\":\"domains\"}\r\nsecond"u8.ToArray()));
+        Assert.Equal("{\"op\":\"domains\"}", await Lines.Read(normal, ct));
+        Assert.Equal("second", await Lines.Read(normal, ct));
+        Assert.Null(await Lines.Read(normal, ct));
+
+        using var endless = new StreamReader(new MemoryStream(new byte[Lines.Max + 1].Select(_ => (byte)'a').ToArray()));
+        await Assert.ThrowsAsync<IOException>(() => Lines.Read(endless, ct));
+    }
 }

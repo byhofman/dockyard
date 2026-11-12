@@ -349,7 +349,7 @@ sealed class AgentApi(DomainTable table, DomainProxy proxy)
     {
         using var reader = new StreamReader(stream, leaveOpen: true);
         await using var writer = new StreamWriter(stream, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true, NewLine = "\n" };
-        while (await reader.ReadLineAsync(ct) is { } line)
+        while (await Lines.Read(reader, ct) is { } line)
             await writer.WriteLineAsync(JsonSerializer.Serialize(Reply(line), AgentApiJson.Default.AgentReply));
     }
 
@@ -374,6 +374,25 @@ sealed class AgentApi(DomainTable table, DomainProxy proxy)
         {
             return new AgentReply { Error = e.Message };
         }
+    }
+}
+
+static class Lines
+{
+    // Nothing the agent is asked comes near this; a longer line ends the connection instead of growing without end.
+    public const int Max = 64 * 1024;
+
+    public static async Task<string?> Read(StreamReader reader, CancellationToken ct)
+    {
+        var line = new StringBuilder();
+        var one = new char[1];
+        while (await reader.ReadAsync(one, ct) == 1)
+        {
+            if (one[0] == '\n') return line.ToString().TrimEnd('\r');
+            if (line.Length == Max) throw new IOException($"a line longer than {Max} characters");
+            line.Append(one[0]);
+        }
+        return line.Length > 0 ? line.ToString() : null;
     }
 }
 

@@ -134,4 +134,35 @@ public sealed class LocalCaTests : IDisposable
         Assert.False(LocalCa.IsConstrainedRoot(unconstrained.ExportCertificatePem()));
         Assert.False(LocalCa.IsConstrainedRoot("not a certificate"));
     }
+
+    [Fact]
+    public void A_certificate_for_an_IP_address_does_not_validate_against_the_ca()
+    {
+        var ca = LocalCa.Create(Now);
+        using var root = X509Certificate2.CreateFromPem(ca.Certificate, ca.Key);
+        using var key = System.Security.Cryptography.ECDsa.Create(System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
+        var request = new CertificateRequest("CN=10.0.0.1", key, System.Security.Cryptography.HashAlgorithmName.SHA256);
+        var san = new SubjectAlternativeNameBuilder();
+        san.AddIpAddress(System.Net.IPAddress.Parse("10.0.0.1"));
+        request.CertificateExtensions.Add(san.Build(critical: true));
+        request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension([new System.Security.Cryptography.Oid("1.3.6.1.5.5.7.3.1")], false));
+        using var issued = request.Create(root, Now.AddDays(-1), Now.AddDays(30), [1, 2, 3, 4]);
+        using var publicRoot = X509Certificate2.CreateFromPem(ca.Certificate);
+        using var chain = ChainTrusting(publicRoot);
+
+        Assert.False(chain.Build(issued));
+    }
+
+    [Fact]
+    public void A_root_from_before_the_IP_and_usage_limits_is_not_trusted_any_more()
+    {
+        using var key = System.Security.Cryptography.ECDsa.Create();
+        var old = new CertificateRequest($"CN={LocalCa.SubjectName}", key, System.Security.Cryptography.HashAlgorithmName.SHA256);
+        old.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, true, 0, true));
+        // The constraint as earlier versions wrote it: dockyard.test permitted, nothing excluded, no extended key usage.
+        old.CertificateExtensions.Add(new X509Extension("2.5.29.30", Convert.FromHexString("3013A011300F820D646F636B796172642E74657374"), critical: true));
+        using var earlier = old.CreateSelfSigned(Now, Now.AddDays(1));
+
+        Assert.False(LocalCa.IsConstrainedRoot(earlier.ExportCertificatePem()));
+    }
 }

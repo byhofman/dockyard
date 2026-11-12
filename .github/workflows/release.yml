@@ -6,8 +6,9 @@ on:
     tags: ['v*']
   pull_request:
 
+# Read only, except for the job that publishes the release.
 permissions:
-  contents: write
+  contents: read
 
 env:
   DOTNET_NOLOGO: true
@@ -17,9 +18,9 @@ jobs:
   guest:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - run: sh image/build.sh x86_64 guest guest
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: guest
           path: out/dockyard-guest-*.tar.gz
@@ -28,11 +29,11 @@ jobs:
     needs: [guest]
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           dotnet-version: '10.0.x'
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: guest
           path: guest
@@ -49,7 +50,7 @@ jobs:
           dotnet publish src/Dockyard.Dashboard/Dockyard.Dashboard.csproj -c Release -r win-x64 -o out/dashboard -p:Version=$version -warnaserror
           Compress-Archive -Path out/dashboard/*.exe, out/dashboard/*.dll -DestinationPath out/Dockyard.Dashboard.zip
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: windows
           path: |
@@ -60,11 +61,11 @@ jobs:
     needs: [guest]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           dotnet-version: '10.0.x'
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: guest
           path: guest
@@ -85,12 +86,12 @@ jobs:
           tar -czf "out/Dockyard-$version-linux-x64.tar.gz" -C out Dockyard
           for config in dockyard dockyard-dashboard; do
             for packager in deb rpm; do
-              docker run --rm -v "$PWD:/work" -w /work -e VERSION="$version" goreleaser/nfpm \
+              docker run --rm -v "$PWD:/work" -w /work -e VERSION="$version" goreleaser/nfpm:v2.49.0@sha256:9ea46a59c4d055ef7071b22f3520b53e8dad98e18043b2f881b53bd7ffec634e \
                 pkg --config "packaging/linux/$config.yaml" --packager "$packager" --target out/
             done
           done
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: linux
           path: |
@@ -102,7 +103,7 @@ jobs:
   image:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Build and test the Linux engine image
         run: |
@@ -110,7 +111,7 @@ jobs:
           sh image/build.sh x86_64 "$version"
           pwsh image/test.ps1 -Tarball "out/dockyard-linux-$version-x86_64.tar.gz"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: image
           path: out/dockyard-linux-*.tar.gz
@@ -118,7 +119,7 @@ jobs:
   vm-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Boot the VM image with QEMU/KVM
         run: |
@@ -132,14 +133,14 @@ jobs:
   vm-image:
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Build the aarch64 VM assets
         run: |
           version=0.0.0; [ "$GITHUB_REF_TYPE" = tag ] && version="${GITHUB_REF_NAME#v}"
           sh image/build.sh aarch64 "$version" vm
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: vm-image
           path: out/dockyard-vm-*-aarch64.tar.gz
@@ -148,8 +149,8 @@ jobs:
     needs: [vm-image]
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           dotnet-version: '10.0.x'
 
@@ -158,7 +159,7 @@ jobs:
           dotnet test --solution Dockyard.slnx
           swift test --package-path macos/DockyardVM
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: vm-image
           path: vm-image
@@ -174,7 +175,7 @@ jobs:
           rm -f dist/macos/*.pdb
           sh packaging/macos/build-app.sh "$version" dist/macos out
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: macos
           path: |
@@ -186,12 +187,12 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: windows
           path: wizard
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: image
           path: wizard
@@ -202,7 +203,7 @@ jobs:
           DOCKYARD_GITHUB_TOKEN: ${{ github.token }}
         run: ./tests/e2e/wizard-windows.ps1 -Wizard wizard/Dockyard.exe
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: wizard-screenshots
@@ -213,8 +214,8 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: macos
           path: wizard
@@ -229,8 +230,8 @@ jobs:
     needs: [linux]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: linux
           path: wizard
@@ -246,7 +247,7 @@ jobs:
         env:
           DOCKYARD_GITHUB_TOKEN: ${{ github.token }}
         run: |
-          "$PWD/wizard/Dockyard-linux-x64" --silent --no-start
+          "$PWD/wizard/Dockyard-linux-x64" --silent --no-start --assets "$PWD/wizard"
           WIZARD="$PWD/wizard/Dockyard-linux-x64" sh tests/e2e/import-linux.sh
           "$PWD/wizard/Dockyard-linux-x64" --silent --uninstall
 
@@ -277,8 +278,8 @@ jobs:
     needs: [windows, linux, image, macos, vm-image]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: dist
           merge-multiple: true
@@ -295,9 +296,11 @@ jobs:
     if: github.ref_type == 'tag'
     needs: [windows, linux, image, vm-test, macos, wizard-windows, wizard-linux, wizard-mac, release-assets]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: dist
           merge-multiple: true

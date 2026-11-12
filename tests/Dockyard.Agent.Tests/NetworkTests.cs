@@ -335,4 +335,13 @@ public sealed class NetworkTests
         await cts.CancelAsync();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => running);
     }
+
+    [Fact]
+    public void Domains_on_the_VM_address_answer_the_Mac_alone()
+    {
+        var commands = NetworkRules.VmCommands(System.Net.IPAddress.Parse("192.168.64.1")).Select(c => string.Join(' ', c)).ToList();
+
+        Assert.Equal(2, commands.Count);
+        Assert.All(commands, c => Assert.Contains("-i eth0 -s 192.168.64.1 -p tcp", c));
+    }
 }

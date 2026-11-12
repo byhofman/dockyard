@@ -5,7 +5,7 @@ set -eu
 container=0; [ "${1:-}" = --container ] && container=1
 
 run() {
-  if [ -n "${ONELINER:-}" ]; then curl -fsSL "$ONELINER" | sh -s -- "$@"; else "$WIZARD" "$@"; fi
+  if [ -n "${ONELINER:-}" ]; then curl -fsSL "$ONELINER" | sh -s -- "$@"; else "$WIZARD" "$@" --assets "$(dirname "$WIZARD")"; fi
 }
 ok() { echo "  ok   $1"; }
 fail() { echo "  FAIL $1" >&2; exit 1; }
@@ -234,7 +234,7 @@ if [ "$container" -eq 1 ] && [ "$ID" != arch ]; then
   echo "== removed again, silent without root has no way up"
   run --silent --uninstall
   useradd -m dockyard-e2e 2>/dev/null || true
-  if [ -n "${ONELINER:-}" ]; then as_user="curl -fsSL $ONELINER | sh -s -- --silent --no-start"; else as_user="$WIZARD --silent --no-start"; fi
+  if [ -n "${ONELINER:-}" ]; then as_user="curl -fsSL $ONELINER | sh -s -- --silent --no-start"; else as_user="$WIZARD --silent --no-start --assets $(dirname "$WIZARD")"; fi
   out="$(su dockyard-e2e -c "$as_user" 2>&1)" && fail "exited 0 without root"
   echo "$out" | grep -q "needs root" && ok "non-zero with a clear message" || fail "message was: $out"
 fi

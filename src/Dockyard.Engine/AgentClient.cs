@@ -49,13 +49,20 @@ public sealed class AgentClient(DockerEndpoint endpoint)
 
     async Task<AgentMessage> Ask(AgentMessage request, CancellationToken ct)
     {
-        await using var stream = await DockerTransport.Connect(endpoint, ct);
+        await using var stream = await Connect(ct);
         await using var writer = new StreamWriter(stream, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true, NewLine = "\n" };
         using var reader = new StreamReader(stream, leaveOpen: true);
         await writer.WriteLineAsync(JsonSerializer.Serialize(request, AgentClientJson.Default.AgentMessage));
         var line = await reader.ReadLineAsync(ct) ?? throw new IOException("The agent closed the connection");
         var reply = JsonSerializer.Deserialize(line, AgentClientJson.Default.AgentMessage) ?? throw new IOException("The agent sent nothing usable");
         return reply.Error is { } error ? throw new InvalidOperationException(error) : reply;
+    }
+
+    // A pipe nobody serves, as when no tray runs on Windows, times out instead of refusing; callers treat both alike.
+    async Task<Stream> Connect(CancellationToken ct)
+    {
+        try { return await DockerTransport.Connect(endpoint, ct); }
+        catch (TimeoutException e) { throw new IOException("The agent next to the engine did not answer", e); }
     }
 
     static DomainList List(AgentMessage reply) => new(reply.Domains ?? [], reply.Https);

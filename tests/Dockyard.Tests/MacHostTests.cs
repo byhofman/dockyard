@@ -19,11 +19,41 @@ public sealed class MacHostTests
     [Fact]
     public void Admin_shell_escapes_for_applescript()
     {
-        var args = MacLayout.AdminShell(MacLayout.PathsEntry("/Users/me/.dockyard/bin"));
+        var args = MacLayout.AdminShell("echo '/Users/me/.dockyard/bin' > /etc/paths.d/dockyard");
         Assert.Equal("-e", args[0]);
-        Assert.Equal("do shell script \"echo '/Users/me/.dockyard/bin' > /etc/paths.d/dockyard && chmod 644 /etc/paths.d/dockyard\" with administrator privileges", args[1]);
+        Assert.Equal("do shell script \"echo '/Users/me/.dockyard/bin' > /etc/paths.d/dockyard\" with administrator privileges", args[1]);
         Assert.Contains("\\\"x\\\"", MacLayout.AdminShell("echo \"x\"")[1]);
     }
+
+    [Fact]
+    public void The_PATH_gets_a_folder_only_root_can_write_and_not_this_users_own()
+    {
+        var script = MacLayout.PathsEntry("501", "/Users/me/.dockyard/bin");
+
+        Assert.EndsWith("echo /usr/local/dockyard/bin > /etc/paths.d/dockyard && chmod 644 /etc/paths.d/dockyard", script);
+        Assert.Contains("chown root:wheel /usr/local/dockyard /usr/local/dockyard/bin", script);
+        foreach (var command in new[] { "docker", "kind", "docker-credential-osxkeychain" })
+            Assert.Contains($"> /usr/local/dockyard/bin/{command} && chmod 755 /usr/local/dockyard/bin/{command}", script);
+    }
+
+    [Fact]
+    public void A_command_on_the_PATH_runs_this_users_copy_for_this_user_alone()
+    {
+        var wrapper = MacLayout.Wrapper("501", "/Users/O'Brien/.dockyard/bin", "docker");
+
+        Assert.StartsWith("#!/bin/sh\n[ \"$(id -u)\" = 501 ] || {", wrapper);
+        Assert.Contains("exit 127", wrapper);
+        Assert.EndsWith("exec '/Users/O'\\''Brien/.dockyard/bin/docker' \"$@\"\n", wrapper);
+    }
+
+    [Theory]
+    [InlineData("plain", "'plain'")]
+    [InlineData("O'Brien", "'O'\\''Brien'")]
+    [InlineData("$(reboot)", "'$(reboot)'")]
+    public void Shell_values_are_quoted_whatever_they_hold(string value, string quoted) => Assert.Equal(quoted, Shell.ShQuote(value));
+
+    [Fact]
+    public void PowerShell_values_are_quoted_whatever_they_hold() => Assert.Equal("'C:\\Users\\O''Brien'", Shell.PsQuote("C:\\Users\\O'Brien"));
 
     [Fact]
     public void Reads_docker_version_from_release_file() =>
