@@ -11,7 +11,6 @@ static class GuestAddresses
     public static readonly IPAddress Host = IPAddress.Parse("198.19.250.254");
     public const string Subnet = "198.19.250.0/24";
     public const int HostProxyPort = 2378;
-    public const int ApiPort = 2379;
     public const int DomainHttpPort = 2380;
     public const int DomainHttpsPort = 2381;
     public const int RelayHttpPort = 2382;
@@ -26,6 +25,13 @@ static class GuestAddresses
     static readonly HashSet<string> HostNames = ["host.docker.internal", "gateway.docker.internal"];
 
     public static IPAddress? Resolve(string name) => HostNames.Contains(name) ? Host : null;
+
+    // What host.docker.internal never reaches on the host: Docker's own TCP ports and Dockyard's, whose services are for
+    // the host and the tray, not for any image a container runs.
+    public static readonly IReadOnlySet<int> RefusedOnHost = new HashSet<int>
+    {
+        2375, 2376, 2377, HostProxyPort, 2379, DomainHttpPort, DomainHttpsPort, RelayHttpPort, RelayHttpsPort, RelayDnsPort, ContainerDnsPort,
+    };
 }
 
 static class NetworkRules
@@ -153,9 +159,6 @@ sealed class TcpHostDialer(IPAddress host, IReadOnlySet<int>? refused = null) : 
 
 static class WslHost
 {
-    // The engine's own unauthenticated port: a container must not get root on the engine through host.docker.internal.
-    public static readonly IReadOnlySet<int> Refused = new HashSet<int> { 2375, GuestAddresses.HostProxyPort };
-
     // Mirrored networking gives WSL an interface named loopback0, and 127.0.0.1 then reaches Windows. With NAT only the
     // gateway reaches Windows, and only services that listen on more than loopback and that its firewall lets through.
     public static IPAddress Address(bool mirrored, string procNetRoute) =>

@@ -3,7 +3,7 @@
 set -eu
 
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-tcp="${DOCKYARD_TCP:-127.0.0.1:2375}"
+tcp="${DOCKYARD_TCP:-}"
 
 if ! grep -q ' /sys/fs/cgroup cgroup2 ' /proc/mounts; then
   mkdir -p /sys/fs/cgroup
@@ -20,10 +20,9 @@ fi
 # WSL: nothing else starts the agent. It leaves when dockerd does, so that it does not keep the distro alive by itself,
 # and a crash brings it back because that exits non-zero.
 (until dockyard-agent --mode=wsl; do sleep 1; done) >/dev/null 2>&1 &
-# With NAT networking WSL's localhost relay would carry this port to Windows, and it loses what the engine sends after a
-# client half-closes (docker exec, attach). The agent serves Windows instead, and the tray carries 127.0.0.1:2375 to it.
-# Mirrored networking (loopback0) shares loopback with Windows itself. DOCKYARD_TCP still asks for the port explicitly.
-if [ -z "${DOCKYARD_TCP:-}" ] && [ ! -d /sys/class/net/loopback0 ]; then
+# dockerd has no TCP listener of its own: whatever reaches a port here, every Windows user and web page can reach too.
+# The agent serves the engine to Windows only with the tray's token. DOCKYARD_TCP asks for a plain port, for tests.
+if [ -z "$tcp" ]; then
   exec dockerd -H unix:///var/run/docker.sock
 fi
 exec dockerd -H unix:///var/run/docker.sock -H "tcp://$tcp" --tls=false

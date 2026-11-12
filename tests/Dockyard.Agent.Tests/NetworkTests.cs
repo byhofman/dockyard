@@ -155,7 +155,7 @@ public sealed class NetworkTests
     [Fact]
     public async Task A_container_cannot_reach_the_engines_port_through_the_host_address()
     {
-        var dialer = new TcpHostDialer(IPAddress.Loopback, WslHost.Refused);
+        var dialer = new TcpHostDialer(IPAddress.Loopback, GuestAddresses.RefusedOnHost);
         await Assert.ThrowsAsync<SocketException>(() => dialer.Dial(2375, TestContext.Current.CancellationToken));
     }
 

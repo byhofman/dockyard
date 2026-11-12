@@ -87,13 +87,15 @@ sealed class WslDistro(ICommandRunner runner, string name = WslDistro.DefaultNam
         return via >= 0 && via + 1 < words.Length ? words[via + 1] : null;
     }
 
-    public async Task WriteFile(string path, string content)
+    // Readable by root alone with secret, which is everyone who could run the engine anyway.
+    public async Task WriteFile(string path, string content, bool secret = false)
     {
         var temp = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
         await File.WriteAllTextAsync(temp, content);
         try
         {
-            await runner.Check("wsl.exe", "-d", Name, "-u", "root", "--", "sh", "-c", $"mkdir -p \"$(dirname '{path}')\" && cp '{await ToLinuxPath(temp)}' '{path}'");
+            var mode = secret ? "0600" : "0644";
+            await runner.Check("wsl.exe", "-d", Name, "-u", "root", "--", "sh", "-c", $"mkdir -p \"$(dirname '{path}')\" && install -m {mode} '{await ToLinuxPath(temp)}' '{path}'");
         }
         finally
         {

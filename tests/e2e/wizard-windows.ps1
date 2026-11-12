@@ -36,8 +36,8 @@ function Window {
     if ($LASTEXITCODE -ne 0) { throw 'FAIL the wizard window' }
 }
 
-# The way a user starts it, through the tray: with WSL's NAT networking, as on this runner, the tray is also what serves
-# 127.0.0.1:2375. Setup stops the tray, so this runs again after each one.
+# The way a user starts it, through the tray, which is also what serves the engine's pipe to Windows. Setup stops the
+# tray, so this runs again after each one.
 function Linux-Engine {
     Start-Process $appExe -ArgumentList '--start', 'linux' | Out-Null
     foreach ($i in 1..60) {
@@ -47,8 +47,8 @@ function Linux-Engine {
     }
     Write-Host '--- what WSL says'
     wsl.exe --version | Write-Host
-    wsl.exe -d dockyard -u root -- sh -c 'ls /sys/class/net; ip -4 addr; pidof dockerd dockyard-agent; netstat -ltn 2>/dev/null | head -20; wget -qO- -T 3 http://127.0.0.1:2375/_ping; echo; cat /etc/docker/daemon.json' | Write-Host
-    Test-NetConnection 127.0.0.1 -Port 2375 | Out-String | Write-Host
+    wsl.exe -d dockyard -u root -- sh -c 'ls /sys/class/net; ip -4 addr; pidof dockerd dockyard-agent; netstat -ltn 2>/dev/null | head -20; docker version --format "{{.Server.Version}}"; ls -l /etc/dockyard; cat /etc/docker/daemon.json' | Write-Host
+    Write-Host "pipes: $((Get-ChildItem \\.\pipe\ | Where-Object Name -like 'dockyard*' | ForEach-Object Name) -join ', ')"
     throw 'FAIL the Linux engine did not start'
 }
 
@@ -99,10 +99,8 @@ if ($Wizard) {
     if ($exec -ne 'exec-works') {
         Write-Host '--- why not'
         Write-Host "inside WSL, on the unix socket: '$((wsl.exe -d dockyard -u root -- docker exec e2e-exec cat /marker | Out-String).Trim())'"
-        Write-Host "inside WSL, on 127.0.0.1:2375: '$((wsl.exe -d dockyard -u root -- docker -H tcp://127.0.0.1:2375 exec e2e-exec cat /marker | Out-String).Trim())'"
         Write-Host "Windows, stdin held open 3 s: '$((cmd.exe /c "ping -n 4 127.0.0.1 >nul | `"$docker`" --context linux exec -i e2e-exec cat /marker" | Out-String).Trim())'"
         Write-Host "Windows, with a tty: '$((& $docker --context linux exec -t e2e-exec cat /marker | Out-String).Trim())'"
-        Write-Host "listeners on 2375: $((Get-NetTCPConnection -LocalPort 2375 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { "$($_.LocalAddress) pid $($_.OwningProcess) $((Get-Process -Id $_.OwningProcess).ProcessName)" }) -join ', ')"
     }
     Check "docker exec returns what the command printed (got '$exec')" ($exec -eq 'exec-works')
     $attached = (& $docker --context linux run --rm alpine:3.24 echo attached 2>&1 | Out-String).Trim()
@@ -110,6 +108,15 @@ if ($Wizard) {
     $piped = ('through-stdin' | & $docker --context linux exec -i e2e-exec cat | Out-String).Trim()
     Check "stdin reaches the command and its output comes back (got '$piped')" ($piped -eq 'through-stdin')
     & $docker --context linux rm -f e2e-exec | Out-Null
+
+    Section 'the engine answers no one without the tray token'
+    $gate = ((wsl.exe -d dockyard -u root -- sh -c '[ -d /sys/class/net/loopback0 ] && echo 127.0.0.1 || ip -4 -o addr show eth0 | sed -n "s/.*inet \([0-9.]*\)\/.*/\1/p"') | Out-String).Trim()
+    foreach ($target in @('127.0.0.1', $gate) | Select-Object -Unique) {
+        $open = $true
+        try { Invoke-WebRequest "http://$($target):2375/_ping" -TimeoutSec 5 -UseBasicParsing | Out-Null } catch { $open = $false }
+        Check "no docker API on $($target):2375 without the token" (-not $open)
+    }
+    Check 'dockerd itself listens on no TCP port' (-not ((wsl.exe -d dockyard -u root -- netstat -ltnp | Out-String) -match 'dockerd'))
 }
 
 if ($Wizard) {

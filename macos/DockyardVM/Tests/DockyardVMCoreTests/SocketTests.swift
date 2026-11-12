@@ -194,8 +194,8 @@ final class HostDialTests: XCTestCase {
         close(service[0])
     }
 
-    func testHostDialClosesOnANonsenseHeaderWithoutDialing() throws {
-        for header in ["udp 53\n", "tcp 0\n", "tcp 99999\n", "tcp 80 extra\n", "/etc/passwd\n"] {
+    func testHostDialClosesOnANonsenseHeaderOrARefusedPortWithoutDialing() throws {
+        for header in ["udp 53\n", "tcp 0\n", "tcp 99999\n", "tcp 80 extra\n", "/etc/passwd\n", "tcp 2375\n", "tcp 15353\n"] {
             var guest: [Int32] = [0, 0]
             XCTAssertEqual(socketpair(AF_UNIX, streamType, 0, &guest), 0)
             HostDial.serve(guest[1]) { _ in

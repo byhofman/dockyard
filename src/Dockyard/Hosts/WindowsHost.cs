@@ -276,8 +276,8 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
         if (trayServices is not null) return;
         trayServices = new CancellationTokenSource();
         _ = FollowPublishedPorts(trayServices.Token);
-        // An engine this tray did not start, for example before the tray was replaced, is served on Windows' loopback again.
-        if (LinuxEngineWanted) _ = Task.Run(RelayToNatEngine);
+        // An engine this tray did not start, for example before the tray was replaced, gets its pipes again.
+        if (LinuxEngineWanted) _ = Task.Run(RelayToEngine);
         if (LinuxEngineWanted) StartDomainRelay();
     }
 
@@ -341,29 +341,25 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
         }
     }
 
-    // With NAT networking 127.0.0.1:2375 is this process's own relay, so the engine behind it is what has to answer.
+    // Windows reaches the engine only through this process's pipes, so the agent behind them is what has to answer.
     bool IsLinuxRunning()
     {
-        if (relay is { } active)
-        {
-            if (active.EngineAnswers(300)) return true;
-            active.Dispose();
-            relay = null;
-            return false;
-        }
-        return WslEngineRelay.Answers(System.Net.IPAddress.Loopback, Paths.LinuxPort, 300);
+        if (relay is not { } active) return false;
+        if (active.EngineAnswers(300)) return true;
+        active.Dispose();
+        relay = null;
+        return false;
     }
 
-    // An engine on WSL's own address, which is what dockyard-agent serves with NAT networking, gets the relay. Only asked
-    // while the distro runs: running anything in it would otherwise start it.
-    async Task<bool> RelayToNatEngine()
+    // Only asked while the distro runs: running anything in it would otherwise start it.
+    async Task<bool> RelayToEngine()
     {
         if (relay is not null) return true;
         var running = await runner.Run("wsl.exe", "-l", "--running", "-q");
         if (!running.Output.Split('\n').Select(l => l.Trim().Trim('\0')).Contains(distro.Name, StringComparer.OrdinalIgnoreCase)) return false;
-        var ip = await runner.Run("wsl.exe", "-d", distro.Name, "-u", "root", "--", "sh", "-c", "[ -d /sys/class/net/loopback0 ] || ip -4 -o addr show eth0");
-        if (WslEngineRelay.AddressFromIp(ip.Output) is not { } address || !WslEngineRelay.Answers(address, Paths.LinuxPort, 500)) return false;
-        var candidate = new WslEngineRelay(address);
+        var ip = await runner.Run("wsl.exe", "-d", distro.Name, "-u", "root", "--", "sh", "-c", "[ -d /sys/class/net/loopback0 ] && echo mirrored || ip -4 -o addr show eth0");
+        if (WslEngineGate.AddressFromIp(ip.Output) is not { } address || !WslEngineRelay.Answers(address, Paths.LinuxPort, 500)) return false;
+        var candidate = new WslEngineRelay(address, WslEngineGate.Token(Paths.EngineTokenFile));
         if (!candidate.Start())
         {
             candidate.Dispose();
@@ -378,7 +374,7 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
         if (IsLinuxRunning()) return true;
         if (DateTime.UtcNow - lastNatLook < TimeSpan.FromSeconds(2)) return false;
         lastNatLook = DateTime.UtcNow;
-        return RelayToNatEngine().GetAwaiter().GetResult();
+        return RelayToEngine().GetAwaiter().GetResult();
     }
 
     static bool IsWindowsRunning()
@@ -395,7 +391,7 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
     {
         if (keepAlive is { HasExited: false } && IsLinuxRunning()) return;
         // Started by something else, such as a tray that was replaced: a second dockyard-init would take its socket away.
-        if ((keepAlive is null || keepAlive.HasExited) && await RelayToNatEngine()) return;
+        if ((keepAlive is null || keepAlive.HasExited) && await RelayToEngine()) return;
         if (keepAlive is null || keepAlive.HasExited)
         {
             keepAlive?.Dispose();

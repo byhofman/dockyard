@@ -228,13 +228,17 @@ public enum HostDial {
     /// because dev servers often bind only one of them. Nothing but loopback is reachable this way.
     public static func serve(_ guest: Int32, connect: @escaping (Int) -> Int32? = Sockets.connectLoopback) {
         Thread.detachNewThread {
-            guard let port = readPort(guest), let host = connect(port) else {
+            guard let port = readPort(guest), !refused.contains(port), let host = connect(port) else {
                 close(guest)
                 return
             }
             Sockets.pump(guest, host)
         }
     }
+
+    /// Docker's own TCP ports and Dockyard's, as the agent refuses them on Linux and Windows: they are for this Mac, not
+    /// for any image a container runs. 15353 answers container domains to macOS.
+    static let refused: Set<Int> = [2353, 2354, 2375, 2376, 2377, 2378, 2379, 2380, 2381, 2382, 2383, 15353]
 
     static func readPort(_ fd: Int32) -> Int? {
         var line = [UInt8]()

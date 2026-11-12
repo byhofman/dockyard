@@ -34,8 +34,14 @@ static class Paths
 
     public const string WindowsPipeName = "docker_windows";
     public const string WindowsHost = "npipe:////./pipe/" + WindowsPipeName;
+    // Where dockyard-agent serves the Linux engine to Windows, to the tray's token only.
     public const int LinuxPort = 2375;
-    public static readonly string LinuxHost = $"tcp://127.0.0.1:{LinuxPort}";
+    public const string LinuxPipeName = "dockyard_linux";
+    public const string LinuxAgentPipeName = "dockyard_linux_agent";
+    public const string LinuxHost = "npipe:////./pipe/" + LinuxPipeName;
+    // What the linux context pointed at up to v0.4: an open port every Windows user and web page could reach.
+    public const string LegacyLinuxHost = "tcp://127.0.0.1:2375";
+    public static readonly string EngineTokenFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Dockyard", "engine.token");
     public const string ServiceName = "docker";
     public const string Repo = "byhofman/dockyard";
     public const string AppName = "Dockyard";

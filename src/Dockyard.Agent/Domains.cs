@@ -396,15 +396,6 @@ static class InterfaceAddress
 
 static class AgentApiServer
 {
-    public static async Task Tcp(AgentApi api, int port, CancellationToken ct)
-    {
-        using var listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-        listener.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-        listener.Bind(new IPEndPoint(IPAddress.Loopback, port));
-        listener.Listen(16);
-        await Accept(listener, api, ct);
-    }
-
     public static async Task Unix(AgentApi api, string path, CancellationToken ct)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);

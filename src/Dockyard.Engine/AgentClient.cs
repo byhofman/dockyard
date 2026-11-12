@@ -35,12 +35,10 @@ partial class AgentClientJson : JsonSerializerContext;
 // and neither does whatever else a docker context may point at.
 public sealed class AgentClient(DockerEndpoint endpoint)
 {
-    public const int WslApiPort = 2379;
-
     public static AgentClient? For(DockerEndpoint engine)
     {
-        if (engine.Kind == EndpointKind.Tcp && engine.Address is "127.0.0.1" or "localhost" && engine.Port == 2375)
-            return new AgentClient(new DockerEndpoint(EndpointKind.Tcp, "127.0.0.1", WslApiPort, $"tcp://127.0.0.1:{WslApiPort}"));
+        if (engine.Kind == EndpointKind.NamedPipe && engine.Address == "dockyard_linux")
+            return new AgentClient(DockerEndpoint.Parse("npipe:////./pipe/dockyard_linux_agent"));
         if (engine.Kind != EndpointKind.Unix) return null;
         if (engine.Address is "/var/run/docker.sock" or "/run/docker.sock")
             return new AgentClient(DockerEndpoint.Parse("unix:///run/dockyard/agent.sock"));
