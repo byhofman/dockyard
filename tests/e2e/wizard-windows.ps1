@@ -91,6 +91,26 @@ Linux-Engine
 Check 'marker volume created' ($LASTEXITCODE -eq 0)
 
 if ($Wizard) {
+    Section 'docker exec and attached runs return their output'
+    & $docker --context linux run -d --name e2e-exec alpine:3.24 sh -c 'echo exec-works > /marker; sleep 3600' | Out-Null
+    $exec = (& $docker --context linux exec e2e-exec cat /marker 2>&1 | Out-String).Trim()
+    if ($exec -ne 'exec-works') {
+        Write-Host '--- why not'
+        Write-Host "inside WSL, on the unix socket: '$((wsl.exe -d dockyard -u root -- docker exec e2e-exec cat /marker | Out-String).Trim())'"
+        Write-Host "inside WSL, on 127.0.0.1:2375: '$((wsl.exe -d dockyard -u root -- docker -H tcp://127.0.0.1:2375 exec e2e-exec cat /marker | Out-String).Trim())'"
+        Write-Host "Windows, stdin held open 3 s: '$((cmd.exe /c "ping -n 4 127.0.0.1 >nul | `"$docker`" --context linux exec -i e2e-exec cat /marker" | Out-String).Trim())'"
+        Write-Host "Windows, with a tty: '$((& $docker --context linux exec -t e2e-exec cat /marker | Out-String).Trim())'"
+        Write-Host "listeners on 2375: $((Get-NetTCPConnection -LocalPort 2375 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { "$($_.LocalAddress) pid $($_.OwningProcess) $((Get-Process -Id $_.OwningProcess).ProcessName)" }) -join ', ')"
+    }
+    Check "docker exec returns what the command printed (got '$exec')" ($exec -eq 'exec-works')
+    $attached = (& $docker --context linux run --rm alpine:3.24 echo attached 2>&1 | Out-String).Trim()
+    Check "an attached docker run prints its output (got '$attached')" ($attached -eq 'attached')
+    $piped = ('through-stdin' | & $docker --context linux exec -i e2e-exec cat | Out-String).Trim()
+    Check "stdin reaches the command and its output comes back (got '$piped')" ($piped -eq 'through-stdin')
+    & $docker --context linux rm -f e2e-exec | Out-Null
+}
+
+if ($Wizard) {
     Section 'host.docker.internal reaches a service on Windows'
     Write-Host "WSL interfaces: $((wsl.exe -d dockyard -u root -- ls /sys/class/net | Out-String) -replace "`\s+", ' ')"
     Check 'the agent runs next to the engine' ((wsl.exe -d dockyard -u root -- pidof dockyard-agent | Out-String).Trim().Length -gt 0)
