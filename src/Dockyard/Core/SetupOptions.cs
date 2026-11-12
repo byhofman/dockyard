@@ -8,21 +8,23 @@ sealed record SetupOptions
                Dockyard --silent --import [--import-from <endpoint>]
                Dockyard --version
 
-          --silent        No window: install, or update what is installed. Progress goes to the console.
+          --silent           No window: install, or update what is installed. Progress goes to the console.
           --with <names>     Add these components, comma separated, also on an existing install.
           --without <names>  Leave these out, or remove them from an existing install. Images stay unless --remove-data is given.
                              Names: dashboard, compose, buildx, kind, linux-engine (Windows), windows-engine (Windows).
                              Without either: a new install gets everything, an existing install keeps what it has.
           --dashboard        The same as --with dashboard.
           --no-dashboard     The same as --without dashboard.
-          --no-start      Do not start Dockyard afterwards.
-          --trust-https   Add Dockyard's own certificate to this computer's trust store, for HTTPS on container domains.
-          --image <file>  Windows: the Linux engine image to import instead of downloading it.
+          --no-start         Do not start Dockyard afterwards.
+          --trust-https      Add Dockyard's own certificate to this computer's trust store, for HTTPS on container domains.
+          --image <file>     Windows: the Linux engine image to import instead of downloading it.
           --assets <folder>  Take Dockyard's own release files from this folder instead of downloading them, for an
                              install without internet or a build before its release. They are not checked.
-          --import        Copy images, volumes and containers from Docker Desktop, which keeps them.
-          --import-from   The engine to copy from instead, as unix://, npipe:// or tcp://.
-          --uninstall     Remove Dockyard. Images and containers stay unless --remove-data is given too.
+          --import           Copy images, volumes and containers from Docker Desktop, which keeps them.
+          --import-from      The engine to copy from instead, as unix://, npipe:// or tcp://.
+          --uninstall        Remove Dockyard. Images and containers stay unless --remove-data is given too.
+          --remove-data      With --uninstall or --without: remove the images and containers too.
+          --version          Print the version.
 
         Exit code: 0 done, 3010 done after a reboot (Windows; setup resumes by itself), 2 wrong arguments, 1 failed.
         """;
