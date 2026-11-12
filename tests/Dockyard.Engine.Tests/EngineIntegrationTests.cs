@@ -5,9 +5,12 @@ namespace Dockyard.Engine.Tests;
 [Trait("Category", "Engine")]
 public sealed class EngineIntegrationTests
 {
+    // Dockyard serves the Linux engine on Windows on the tray's pipe.
+    static string LinuxEngine => OperatingSystem.IsWindows() ? "npipe:////./pipe/dockyard_linux" : "tcp://127.0.0.1:2375";
+
     [Fact]
     public Task Linux_container_lifecycle() =>
-        Lifecycle("tcp://127.0.0.1:2375", "alpine:3.20", ["sh", "-c", "echo hello; echo oops >&2"]);
+        Lifecycle(LinuxEngine, "alpine:3.20", ["sh", "-c", "echo hello; echo oops >&2"]);
 
     [Fact]
     public Task Windows_container_lifecycle()
@@ -20,7 +23,7 @@ public sealed class EngineIntegrationTests
     [Fact]
     public async Task Linux_lists_resources_and_disk_usage()
     {
-        var client = await TryConnect("tcp://127.0.0.1:2375");
+        var client = await TryConnect(LinuxEngine);
         if (client is null) Assert.Skip("Linux engine not running");
         using (client)
         {
