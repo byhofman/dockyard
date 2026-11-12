@@ -7,6 +7,9 @@ user="${2:-}"
 agent="${3:-}"
 daemon_json="${3:-}"
 [ "$action" = install ] && daemon_json="${4:-}"
+kind_file="${3:-}"
+kind_bin=/usr/local/bin/kind
+kind_marker=/etc/dockyard/kind
 rule=/etc/polkit-1/rules.d/50-dockyard.rules
 socket_dropin_dir=/etc/systemd/system/docker.socket.d
 
@@ -23,6 +26,24 @@ for id in ${ID:-} ${ID_LIKE:-}; do
 done
 
 has_systemd() { [ -d /run/systemd/system ]; }
+
+# A kind someone else put in /usr/local/bin stays theirs: Dockyard replaces and removes only the one it installed.
+add_kind() {
+  if [ -e "$kind_bin" ] && [ ! -f "$kind_marker" ]; then
+    echo "$kind_bin was not installed by Dockyard and stays as it is"
+    return 0
+  fi
+  install -m 0755 "${kind_file:?add-kind needs the file}" "$kind_bin"
+  mkdir -p /etc/dockyard
+  : > "$kind_marker"
+  echo "Installed $kind_bin"
+}
+
+remove_kind() {
+  [ -f "$kind_marker" ] || return 0
+  rm -f "$kind_bin" "$kind_marker"
+  echo "Removed $kind_bin"
+}
 
 add_docker_repo() {
   case "$family" in
@@ -294,6 +315,9 @@ case "$action" in
   trust-ca) trust_ca ;;
   untrust-ca) untrust_ca ;;
   remove-network) remove_network ;;
+  # $3 is the checked kind binary here.
+  add-kind) add_kind ;;
+  remove-kind) remove_kind ;;
   install) install_packages; configure; grant_socket_access; install_tray_host; install_libsecret; install_agent; route_domains; apply_daemon_json ;;
   uninstall)
     untrust_ca
@@ -307,6 +331,7 @@ case "$action" in
     rm -rf /usr/local/lib/dockyard
     apply_daemon_json now
     rm -f "$rule"
+    remove_kind
     rm -rf "$socket_dropin_dir" /etc/dockyard
     rm -f /usr/local/bin/docker-credential-secretservice
     if has_systemd; then

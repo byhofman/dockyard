@@ -14,6 +14,10 @@ IDs are permanent: never renumber or reuse one.
 
 - [x] DOK-21 Direct `[::1]` on a published port gets an answer, or the limit is documented if the fix is not small (pulled in from Later by the owner, 2026-11-07, SCOPE.md) — v0.4.2
 
+## Kubernetes
+
+- [x] DOK-22 Basic kind support: kind installed or detected, versions pinned and checked; create, list and delete clusters, get a cluster's kubeconfig and context; clusters in the dashboard and the CLI, on Windows, macOS and Linux (owner, feedback round 1, 2026-11-12)
+
 ## Quality
 
 - [x] DOK-18 `ComponentRulesTests.Rows_say_why_something_is_required_and_only_optional_ones_can_change` no longer fails intermittently on Windows (pulled in from Later by the owner, 2026-11-07, SCOPE.md) — v0.4.2

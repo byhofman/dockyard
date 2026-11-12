@@ -158,6 +158,17 @@ run --silent --dashboard --no-start
 check "it stays gone on a rerun" missing "$home/.docker/cli-plugins/docker-compose"
 run --silent --dashboard --no-start --with compose
 check "it is back" test -x "$home/.docker/cli-plugins/docker-compose"
+if [ -z "${ONELINER:-}" ]; then
+  kind="$home/.dockyard/bin/kind"
+  check "kind is next to docker" test -x "$kind"
+  "$kind" version | grep -q '^kind v' && ok "it runs: $("$kind" version)" || fail "kind version"
+  run --silent --dashboard --no-start --without kind
+  check "kind is gone" missing "$kind"
+  run --silent --dashboard --no-start
+  check "it stays gone on a rerun" missing "$kind"
+  run --silent --dashboard --no-start --with kind
+  check "it is back" test -x "$kind"
+fi
 rc=0; run --silent --no-start --without linux-engine >/dev/null 2>&1 || rc=$?
 if [ "$rc" -eq 2 ]; then ok "the engine is required here"; else fail "--without linux-engine exits $rc"; fi
 if [ "$("$macos/Dockyard Dashboard" --version)" = 0.0.0 ] || "$macos/Dockyard Dashboard" --version >/dev/null; then ok "the dashboard says its version without opening a window"; else fail "dashboard --version"; fi

@@ -7,7 +7,7 @@ using Dockyard.Hosts;
 
 namespace Dockyard.Core;
 
-enum Component { Engine, Compose, Buildx, LinuxEngine, App, Cli, Dashboard }
+enum Component { Engine, Compose, Buildx, LinuxEngine, App, Cli, Dashboard, Kind }
 
 static partial class Updates
 {
@@ -39,6 +39,7 @@ static partial class Updates
         Component.Buildx => "Docker Buildx",
         Component.LinuxEngine => "Docker Engine (Linux, WSL)",
         Component.App => "Dockyard",
+        Component.Kind => Kind.Title,
         _ => c.ToString(),
     };
 
@@ -50,6 +51,7 @@ static partial class Updates
         Component.Dashboard => new[] { Paths.DashboardExe, Paths.LegacyDashboardExe }.FirstOrDefault(File.Exists) is { } dashboard ? ParseVersion(System.Diagnostics.FileVersionInfo.GetVersionInfo(dashboard).ProductVersion) : null,
         Component.Compose => await PluginVersion("docker-compose.exe", "version", "--short"),
         Component.Buildx => await PluginVersion("docker-buildx.exe", "version"),
+        Component.Kind => File.Exists(Paths.KindExe) ? ParseVersion((await Shell.Run(Paths.KindExe, "version")).Output) : null,
         Component.LinuxEngine => Settings.Load().RemovedComponents.Contains(nameof(Component.LinuxEngine)) ? null : await new WslDistro(ProcessRunner.Instance).DockerVersion(),
         // The wizard runs from elsewhere and can be newer than what is installed, so not this process's own version.
         Component.App => File.Exists(Paths.AppExe) ? ParseVersion(System.Diagnostics.FileVersionInfo.GetVersionInfo(Paths.AppExe).ProductVersion) : null,
@@ -64,6 +66,7 @@ static partial class Updates
         Component.Buildx => await LatestGitHub("docker/buildx", "buildx-{tag}.windows-amd64.exe"),
         Component.LinuxEngine => await LatestStatic(LinuxStaticIndex, "tgz"),
         Component.App => await LatestApp(WindowsAppAsset),
+        Component.Kind => Kind.Release,
         _ => null,
     };
 

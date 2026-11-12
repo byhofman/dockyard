@@ -30,6 +30,9 @@ rc=0; run --silent --typo >/dev/null 2>&1 || rc=$?
 [ "$rc" -eq 2 ] && ok "exit 2" || fail "--typo exits $rc"
 check "and nothing was installed" missing "$marker"
 
+# GitHub's runner image comes with a kind of its own in /usr/local/bin, which Dockyard would rightly leave alone.
+if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then sudo rm -f /usr/local/bin/kind; fi
+
 echo "== first install, no dashboard"
 run --silent --no-dashboard --no-start
 check "app in place" test -x "$app_dir/Dockyard"
@@ -125,6 +128,37 @@ if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
   docker rm -f e2e-web e2e-custom >/dev/null
 fi
 
+if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
+  echo "== kind: installed, and a cluster from create to delete"
+  check "kind is on the PATH" test -x /usr/local/bin/kind
+  check "marked as Dockyard's" test -f /etc/dockyard/kind
+  kind version | grep -q '^kind v' && ok "it runs: $(kind version)" || fail "kind version"
+  kind create cluster --name e2e --wait 180s || fail "kind create cluster"
+  kind get clusters | grep -qx e2e && ok "kind lists it" || fail "kind get clusters: $(kind get clusters 2>&1)"
+  docker ps --filter label=io.x-k8s.kind.cluster=e2e --format '{{.Names}}' | grep -qx e2e-control-plane && ok "its node is a container with kind's labels" || fail "node labels"
+  server="$(kind get kubeconfig --name e2e | sed -n 's/.*server: //p')"
+  case "$server" in https://127.0.0.1:*) ok "kubeconfig points at $server" ;; *) fail "kubeconfig server: '$server'" ;; esac
+  [ "$(curl -sk --max-time 10 "$server/livez")" = ok ] && ok "the API server answers there" || fail "API server at $server"
+  grep -q 'current-context: kind-e2e' "$HOME/.kube/config" && ok "the context is kind-e2e" || fail "context: $(grep current-context "$HOME/.kube/config")"
+  kind delete cluster --name e2e
+  [ -z "$(docker ps -aq --filter label=io.x-k8s.kind.cluster=e2e)" ] && ok "deleting leaves no node" || fail "nodes left after delete"
+
+  echo "== kind can go and come back, and someone else's kind is left alone"
+  run --silent --no-start --without kind
+  check "kind is gone" missing /usr/local/bin/kind
+  check "and its marker" missing /etc/dockyard/kind
+  run --silent --no-start
+  check "it stays gone on a rerun" missing /usr/local/bin/kind
+  printf '#!/bin/sh\necho mine\n' | sudo tee /usr/local/bin/kind >/dev/null
+  sudo chmod +x /usr/local/bin/kind
+  run --silent --no-start --with kind
+  [ "$(/usr/local/bin/kind)" = mine ] && ok "a kind Dockyard did not install stays" || fail "the user's kind was replaced"
+  sudo rm /usr/local/bin/kind
+  run --silent --no-start --with kind
+  check "it is back" test -f /etc/dockyard/kind
+  kind version >/dev/null && ok "and runs" || fail "kind after --with kind"
+fi
+
 echo "== rerun keeps the choice and the data"
 run --silent --no-start
 check "still no dashboard" missing "$(dash)"
@@ -172,6 +206,7 @@ check "app removed" missing "$app_dir/Dockyard"
 check "setup undone" missing "$marker"
 if [ "$container" -eq 0 ]; then
   check "the agent is gone" missing /etc/systemd/system/dockyard-agent.service
+  [ -n "${WIZARD:-}" ] && check "kind is gone" missing /usr/local/bin/kind
   check "the CA is out of the trust store" missing /usr/local/share/ca-certificates/dockyard-local-ca.crt
   if grep -rl "Dockyard Local CA" /etc/ssl/certs >/dev/null 2>&1; then fail "the CA stayed in the system's bundle"; else ok "and out of the system's bundle"; fi
   check "the key is gone" missing "$HOME/.config/Dockyard/ca/ca.key"

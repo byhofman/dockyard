@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using Avalonia.Threading;
+using Dockyard.Dashboard.Features.Clusters;
 using Dockyard.Dashboard.Features.Containers;
 using Dockyard.Dashboard.Features.Resources;
 using Dockyard.Dashboard.Store;
@@ -32,6 +33,7 @@ sealed class ShellViewModel : Observable
             new Section("Images", new ImagesViewModel(this, Session), Section.Resource("IconImages")),
             new Section("Volumes", new VolumesViewModel(this, Session), Section.Resource("IconVolumes")),
             new Section("Networks", new NetworksViewModel(this, Session), Section.Resource("IconNetworks")),
+            new Section("Clusters", new ClustersViewModel(this, Session), Section.Resource("IconClusters")),
             new Section("Disk", new DiskViewModel(this, Session), Section.Resource("IconDisk")),
         ];
         currentSection = Sections[0];

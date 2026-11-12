@@ -2,6 +2,18 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-12: kind is pinned with its checksums, installed by default, and the dashboard reads clusters from the engine
+
+`DOK-22`, the owner's "basic kind support" (feedback round 1).
+
+- **Pinned, unlike Compose and Buildx.** Those follow upstream's newest release after 14 days and are downloaded without a checksum; kind publishes its checksums next to the binary, so only a hash reviewed into `Kind.cs` catches a replaced file. A Dockyard release moves kind, which costs one line per platform. v0.33.0, Kubernetes 1.37 by default. The checksums were checked against our own download of each binary. That Compose, Buildx and the credential helpers are not checksummed is left as it was here and named for the audit.
+- **Installed by default, as every optional component is.** A new install gets everything (2026-11-06); kind is a 10 MB file that runs nothing until a cluster is created. Existing installs get it on their next setup run or update, and `--without kind` or **Remove** keeps it out.
+- **Where:** next to `docker` on Windows and macOS, in folders Dockyard owns. On Linux `/usr/local/bin`, through the setup script as root, with a marker in `/etc/dockyard`: a kind there without the marker is the user's and is never replaced or removed. GitHub's Ubuntu runner has such a kind, which the end-to-end test removes first.
+- **The CLI is kind.** Dockyard has no command of its own to wrap, and a wrapper would only rename kind's verbs. kind follows the docker context; on Windows that has to be `linux`.
+- **The dashboard reads clusters from the engine's containers** by kind's labels (`io.x-k8s.kind.cluster`, `.role`), so it updates live from events and needs kind only to create, delete and get a kubeconfig. It runs kind with `DOCKER_CONTEXT` set to the context it shows and the docker CLI's folder first on `PATH`, since an app started from the menu bar has no shell `PATH`.
+- **Use context runs `kind export kubeconfig`,** which changes `~/.kube/config` the way `kind create` already does. Nothing else of the user's Kubernetes setup is touched. kubectl is not installed: the owner asked for kind, and any kubectl works with the context.
+- **Verified in CI only, never on the owner's machine:** the VM image test creates a cluster on the VM kernel the Mac uses (x86_64 build of the same Alpine kernel), and the Linux and Windows end-to-end runs create one, reach its API server on `127.0.0.1` and delete it. The Mac end-to-end runs cannot boot the VM, so on macOS only install and removal are checked there.
+
 ## 2026-11-07: A published port on macOS also listens on IPv6
 
 `DOK-21`. Only the Mac lacked it: Windows already relays `[::1]` to the published port (`LoopbackForwarder`), and on a Linux host Docker itself binds both families. The helper on the Mac listened on 127.0.0.1 or 0.0.0.0 alone, so `http://[::1]:8080` and clients that try IPv6 first without falling back got a refusal. It now also listens on `::1` for a loopback publish and on `::` for a wildcard one, IPv6-only so the two sit side by side, for TCP and UDP. If something else already holds the IPv6 side it keeps it, the helper says so once, and IPv4 forwards as before. The fix was small, so nothing is documented as a limit.

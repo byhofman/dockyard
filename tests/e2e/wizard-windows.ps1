@@ -331,6 +331,32 @@ Check 'dashboard added' (Test-Path $dashboard)
 Check 'with its libraries' (Test-Path (Join-Path $appDir 'dashboard.files'))
 
 if ($Wizard) {
+    Section 'kind: installed, and a cluster from create to delete on the Linux engine'
+    $kind = Join-Path $env:ProgramFiles 'Docker\kind.exe'
+    Check 'kind.exe is next to docker.exe' (Test-Path $kind)
+    Check "it runs: $(& $kind version)" ($LASTEXITCODE -eq 0)
+    & $docker --context linux version *> $null
+    if ($LASTEXITCODE -ne 0) { Linux-Engine }
+    # As a new terminal has it: the machine PATH has the Docker folder, and kind follows the docker context.
+    $env:PATH = (Split-Path $docker) + ';' + $env:PATH
+    $env:DOCKER_CONTEXT = 'linux'
+    try {
+        & $kind create cluster --name e2e --wait 180s
+        Check 'kind create cluster' ($LASTEXITCODE -eq 0)
+        Check 'kind lists it' ((& $kind get clusters) -contains 'e2e')
+        $server = ((& $kind get kubeconfig --name e2e) | Select-String 'server: (.+)$').Matches[0].Groups[1].Value.Trim()
+        Check "kubeconfig points at $server" ($server -like 'https://127.0.0.1:*')
+        $livez = (Invoke-WebRequest "$server/livez" -SkipCertificateCheck -UseBasicParsing -TimeoutSec 15).Content
+        Check 'the API server answers on Windows loopback' ($livez -eq 'ok')
+        & $kind delete cluster --name e2e
+        Check 'deleting leaves no node' (-not (& $docker --context linux ps -aq --filter label=io.x-k8s.kind.cluster=e2e))
+    }
+    finally { Remove-Item Env:DOCKER_CONTEXT }
+    Check 'exit 0 without kind' ((Run --silent --no-start --without kind) -eq 0)
+    Check 'kind is gone' (-not (Test-Path $kind))
+    Check 'exit 0 with kind' ((Run --silent --no-start --with kind) -eq 0)
+    Check 'it is back' (Test-Path $kind)
+
     Section 'any component can go and come back, and required ones refuse'
     $compose = Join-Path $env:ProgramFiles 'Docker\cli-plugins\docker-compose.exe'
     Check 'exit 0 without compose' ((Run --silent --no-start --without compose) -eq 0)
@@ -342,6 +368,7 @@ if ($Wizard) {
     Check 'the last engine cannot go' ((Run --silent --no-start --without 'windows-engine,linux-engine') -eq 2)
     Check 'exit 0 without the Windows engine' ((Run --silent --no-start --without windows-engine) -eq 0)
     Check 'dockerd is gone' (-not (Test-Path (Join-Path $env:ProgramFiles 'Docker\dockerd.exe')))
+    Check 'kind stays' (Test-Path $kind)
     Check 'the docker command stays' (Test-Path $docker)
     Check 'the service is gone' (-not (Get-Service docker -ErrorAction SilentlyContinue))
     Check 'the win context is gone' ((& $docker context ls -q) -notcontains 'win')

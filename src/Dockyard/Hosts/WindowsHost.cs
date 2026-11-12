@@ -27,13 +27,16 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
         new(Windows, "Windows", "Windows containers", "ltsc2025 · process isolation", "win", Paths.WindowsHost, nameof(Component.Engine)),
     ];
 
-    public IReadOnlyList<ComponentInfo> Components { get; } =
+    public IReadOnlyList<ComponentInfo> Components => Catalog;
+
+    public static IReadOnlyList<ComponentInfo> Catalog { get; } =
     [
         new(nameof(Component.Cli), Updates.Title(Component.Cli), RequiredBecause: "both engines, Compose and Buildx are used through it.", RequiredFlag: "cli"),
         new(nameof(Component.Engine), Updates.Title(Component.Engine), Flag: "windows-engine", Note: "Windows containers. Its images stay when you remove it. One engine has to stay.", IsEngine: true),
         new(nameof(Component.LinuxEngine), Updates.Title(Component.LinuxEngine), CheckNeedsEngine: Linux, Flag: "linux-engine", Note: "Linux containers. Its images stay when you remove it. One engine has to stay.", IsEngine: true),
         new(nameof(Component.Compose), Updates.Title(Component.Compose), Flag: "compose", Note: "Needs the Docker CLI. The dashboard's Compose actions use it."),
         new(nameof(Component.Buildx), Updates.Title(Component.Buildx), Flag: "buildx", Note: "Needs the Docker CLI. docker build uses it."),
+        Kind.Component with { Note = "Local Kubernetes clusters in containers. Needs the Linux engine; the dashboard's Clusters section uses it." },
         new(nameof(Component.App), Updates.Title(Component.App), RequiredBecause: "it is what runs everything here. Uninstall removes it."),
         new(nameof(Component.Dashboard), Updates.Title(Component.Dashboard), Flag: "dashboard", Note: "Optional. Opens from the tray."),
     ];
@@ -65,7 +68,7 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
     {
         var parsed = components.Select(c => (Component: Enum.Parse<Component>(c.Component), c.Release)).ToList();
 
-        var machine = parsed.Where(c => c.Component is Component.Engine or Component.Cli or Component.Compose or Component.Buildx).ToList();
+        var machine = parsed.Where(c => c.Component is Component.Engine or Component.Cli or Component.Compose or Component.Buildx or Component.Kind).ToList();
         if (machine.Count > 0)
             await Elevation.Run(log, "--machine-update", string.Join(',', machine.Select(m => m.Component)));
 

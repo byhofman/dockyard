@@ -20,6 +20,7 @@ static class MacLayout
     public static string DataDir => Path.Combine(Home, ".dockyard");
     public static string BinDir => Path.Combine(DataDir, "bin");
     public static string DockerCli => Path.Combine(BinDir, "docker");
+    public static string KindCli => Path.Combine(BinDir, "kind");
     public static string PluginDir => Path.Combine(Home, ".docker", "cli-plugins");
     public static string DockerSocket => Path.Combine(DataDir, "docker.sock");
     public static string ControlSocket => Path.Combine(DataDir, "run", "vm.sock");
@@ -228,12 +229,15 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
     public IReadOnlyList<EngineInfo> Engines { get; } =
         [new(Engine, "Linux", "Linux containers", "Dockyard VM (Virtualization.framework)", MacLayout.Context, "unix://" + MacLayout.DockerSocket)];
 
-    public IReadOnlyList<ComponentInfo> Components { get; } =
+    public IReadOnlyList<ComponentInfo> Components => Catalog;
+
+    public static IReadOnlyList<ComponentInfo> Catalog { get; } =
     [
         new("LinuxEngine", "Docker Engine (Linux VM)", RequiredBecause: "it runs your containers, and it is the only engine here. Uninstall removes it.", RequiredFlag: "linux-engine"),
         new("Cli", "Docker CLI", RequiredBecause: "the engine, Compose and Buildx are used through it.", RequiredFlag: "cli"),
         new("Compose", "Docker Compose", Flag: "compose", Note: "Needs the Docker CLI. The dashboard's Compose actions use it."),
         new("Buildx", "Docker Buildx", Flag: "buildx", Note: "Needs the Docker CLI. docker build uses it."),
+        Kind.Component,
         new("App", "Dockyard", RequiredBecause: "it is what runs everything here. Uninstall removes it."),
         new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard", Note: "Optional. Opens from the menu bar."),
     ];
@@ -304,6 +308,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         "Cli" => File.Exists(MacLayout.DockerCli) ? Updates.ParseVersion((await runner.Run(MacLayout.DockerCli, "--version")).Output) : null,
         "Compose" => await Plugin("docker-compose", "version", "--short"),
         "Buildx" => await Plugin("docker-buildx", "version"),
+        Kind.Id => File.Exists(MacLayout.KindCli) ? Updates.ParseVersion((await runner.Run(MacLayout.KindCli, "version")).Output) : null,
         "App" => InstalledAppVersion(),
         ComponentRules.DashboardId => await InstalledDashboardVersion(),
         _ => null,
@@ -332,6 +337,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         "Cli" => await Updates.LatestStatic(MacLayout.CliIndex, "tgz"),
         "Compose" => await Updates.LatestGitHub("docker/compose", MacLayout.ComposeAsset),
         "Buildx" => await Updates.LatestGitHub("docker/buildx", MacLayout.BuildxAsset),
+        Kind.Id => Kind.Release,
         "App" => await Updates.LatestApp(MacLayout.ZipAsset(!HasDashboard)),
         ComponentRules.DashboardId => await Updates.LatestApp(MacLayout.ZipAsset(engineOnly: false)),
         _ => null,
@@ -393,6 +399,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
                 case "Cli" when release is not null: await InstallCli(log, release); break;
                 case "Compose" when release is not null: await InstallPlugin(log, "docker-compose", release); break;
                 case "Buildx" when release is not null: await InstallPlugin(log, "docker-buildx", release); break;
+                case Kind.Id: await InstallKind(log); break;
                 case ComponentRules.DashboardId when release is not null: await AddDashboard(log, release.Tag); break;
                 case "LinuxEngine":
                     var running = ping();
@@ -423,6 +430,12 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
     {
         var plugin = component switch { "Compose" => "docker-compose", "Buildx" => "docker-buildx", _ => null };
         if (component == ComponentRules.DashboardId) return await SetDashboard(log, installed);
+        if (component == Kind.Id)
+        {
+            if (installed) await InstallKind(log);
+            else RemoveKind(log);
+            return false;
+        }
         if (plugin is null) throw new InvalidOperationException($"{component} cannot be changed here");
         if (!installed)
         {
@@ -506,6 +519,8 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
             if (request.Without.Contains(component)) MacLayout.RemovePlugin(Path.Combine(MacLayout.PluginDir, plugin), MacLayout.PluginLinksDir);
             else await InstallPlugin(log, plugin, await Updates.LatestGitHub(repo, asset));
         }
+        if (request.Without.Contains(Kind.Id)) RemoveKind(log);
+        else if (await Installed(Kind.Id) != Kind.Version) await InstallKind(log);
 
         await AdministratorSteps(log, request.Silent);
         await InstallCredentialHelper(log);
@@ -775,6 +790,20 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         {
             Directory.Delete(dir, recursive: true);
         }
+    }
+
+    static async Task InstallKind(Action<string> log)
+    {
+        Directory.CreateDirectory(MacLayout.BinDir);
+        await Kind.Download(MacLayout.KindCli);
+        log($"kind {Kind.Tag} in {MacLayout.BinDir}");
+    }
+
+    static void RemoveKind(Action<string> log)
+    {
+        if (!File.Exists(MacLayout.KindCli)) return;
+        File.Delete(MacLayout.KindCli);
+        log("Removed kind");
     }
 
     async Task InstallPlugin(Action<string> log, string name, Release release)
