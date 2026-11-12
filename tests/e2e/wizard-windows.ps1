@@ -281,6 +281,8 @@ if ($Wizard) {
     $me = [Security.Principal.WindowsIdentity]::GetCurrent()
     $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Content "$caDir\ca.pem" -Raw)))
     # A scheduled task: it runs as that account with its full administrator token, as a UAC approval does.
+    # As Elevation.Run does: the caller makes the log file, and the elevated worker only appends to that very file.
+    New-Item -ItemType File "$shared\trust.log" | Out-Null
     $line = "`"$shared\Dockyard.exe`" --machine-trust-ca $encoded --user-sid $($me.User.Value) --user-name `"$($me.Name)`" --log `"$shared\trust.log`" --keep-pid 0"
     Set-Content "$shared\trust.cmd" "$line`r`nexit /b %ERRORLEVEL%" -Encoding Ascii
     $action = New-ScheduledTaskAction -Execute cmd.exe -Argument "/c `"$shared\trust.cmd`""
