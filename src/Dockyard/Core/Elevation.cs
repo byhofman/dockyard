@@ -124,7 +124,14 @@ static partial class Elevation
         string? Opt(string name) => args.SkipWhile(a => a != name).Skip(1).FirstOrDefault();
         string Arg(string name) => Opt(name) ?? throw new ArgumentException($"Missing {name}");
 
-        using var writer = new StreamWriter(OpenCallerLog(Arg("--log")), Encoding.UTF8) { AutoFlush = true };
+        FileStream log;
+        try { log = OpenCallerLog(Arg("--log")); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            // Nowhere to report to; the caller reads the exit code and says the administrator step failed.
+            return 1;
+        }
+        using var writer = new StreamWriter(log, Encoding.UTF8) { AutoFlush = true };
         void Log(string line) { lock (writer) writer.WriteLine(line); }
 
         try
