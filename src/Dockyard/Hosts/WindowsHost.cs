@@ -323,15 +323,10 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
         {
             log($"Downloading Docker {release.Version} for Linux");
             var tgz = Path.Combine(dir, "docker.tgz");
-            await Updates.DownloadFile(release.DownloadUrl!, tgz);
-            foreach (var (repo, pattern, file) in new[]
+            await Pinned.Download(release, tgz);
+            foreach (var (plugin, file) in new[] { (Updates.LinuxCompose, "docker-compose"), (Updates.LinuxBuildx, "docker-buildx") })
             {
-                ("docker/compose", Updates.LinuxComposeAsset, "docker-compose"),
-                ("docker/buildx", Updates.LinuxBuildxAsset, "docker-buildx"),
-            })
-            {
-                var plugin = await Updates.LatestGitHub(repo, pattern);
-                await Updates.DownloadFile(plugin.DownloadUrl!, Path.Combine(plugins, file));
+                await Pinned.Download(plugin, Path.Combine(plugins, file));
                 log($"{file} {plugin.Tag}");
             }
 

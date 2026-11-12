@@ -124,8 +124,8 @@ jobs:
         run: |
           sudo chmod 666 /dev/kvm
           sh image/build.sh x86_64 0.0.0 vm
-          kind_tag="$(sed -n 's/.*const string Tag = "\(v[0-9.]*\)".*/\1/p' src/Dockyard/Core/Kind.cs)"
-          kind_sha="$(sed -n 's/.*\["kind-linux-amd64"\] = "\([0-9a-f]*\)".*/\1/p' src/Dockyard/Core/Kind.cs)"
+          kind_tag="v$(sed -n 's/^KIND=//p' image/versions.env)"
+          kind_sha="$(awk -v u="https://github.com/kubernetes-sigs/kind/releases/download/$kind_tag/kind-linux-amd64" '$2 == u { print $1 }' image/versions.sha256)"
           docker run --rm --device /dev/kvm -e KIND_TAG="$kind_tag" -e KIND_SHA256="$kind_sha" -v "$PWD/image/test-vm.sh:/test-vm.sh:ro" -v "$PWD/out:/out:ro" alpine:3.24 \
             sh /test-vm.sh /out/dockyard-vm-0.0.0-x86_64.tar.gz
 

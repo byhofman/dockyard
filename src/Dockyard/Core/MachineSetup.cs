@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Security.Principal;
 using System.ServiceProcess;
 using System.Text.RegularExpressions;
+using Dockyard.Hosts;
 
 namespace Dockyard.Core;
 
@@ -10,10 +11,10 @@ namespace Dockyard.Core;
 [System.Runtime.Versioning.SupportedOSPlatform("windows")]
 static class MachineSetup
 {
-    static readonly (Component Component, string File, string Repo, string Pattern)[] Plugins =
+    static readonly (Component Component, string File, Release Release)[] Plugins =
     [
-        (Component.Compose, "docker-compose.exe", "docker/compose", "docker-compose-windows-x86_64.exe"),
-        (Component.Buildx, "docker-buildx.exe", "docker/buildx", "buildx-{tag}.windows-amd64.exe"),
+        (Component.Compose, "docker-compose.exe", Updates.WindowsCompose),
+        (Component.Buildx, "docker-buildx.exe", Updates.WindowsBuildx),
     ];
 
     // Returns true when a reboot is needed.
@@ -34,7 +35,7 @@ static class MachineSetup
         foreach (var plugin in Plugins)
         {
             if (without.Contains(plugin.Component.ToString())) RemovePlugin(log, plugin.Component);
-            else await UpdatePlugin(log, plugin.Component);
+            else if (await Updates.Installed(plugin.Component) is not { } installed || installed < plugin.Release.Version) await UpdatePlugin(log, plugin.Component);
         }
         if (without.Contains(Kind.Id)) RemoveKind(log);
         else if (await Updates.Installed(Component.Kind) != Kind.Version) await InstallKind(log);
@@ -143,8 +144,8 @@ static class MachineSetup
         if (File.Exists(Paths.CredentialHelper)) return;
         try
         {
-            var release = await Updates.LatestGitHub(Paths.CredentialHelpersRepo, "docker-credential-wincred-{tag}.windows-amd64.exe");
-            await Updates.DownloadFile(release.DownloadUrl!, Paths.CredentialHelper);
+            var release = Pinned.CredentialHelper("wincred", "windows-amd64.exe");
+            await Pinned.Download(release, Paths.CredentialHelper);
             log($"Credential helper {release.Tag}");
         }
         catch (Exception e) when (e is HttpRequestException or InvalidOperationException or IOException)
@@ -194,18 +195,18 @@ static class MachineSetup
 
     static async Task UpdateEngine(Action<string> log, bool onlyIfNewer)
     {
-        var latest = await Updates.LatestStatic();
+        var latest = Updates.WindowsDocker;
         var current = await Updates.Installed(Component.Engine);
         if (onlyIfNewer && current >= latest.Version) { log($"Docker {current} is up to date"); return; }
 
         log($"Installing Docker {latest.Version}" + (current is null ? "" : $" (was {current})"));
+        // Downloaded first, so a failed download leaves the engine running as it was.
+        var zip = await DownloadDockerZip(latest);
         var wasRunning = ServiceExists() && ServiceStatus() == ServiceControllerStatus.Running;
         await StopService();
 
-        var zip = Path.Combine(Path.GetTempPath(), $"docker-{latest.Version}.zip");
-        await Updates.DownloadFile(latest.DownloadUrl!, zip);
         var root = Path.GetDirectoryName(Paths.DockerDir)!;
-        using (var archive = ZipFile.OpenRead(zip))
+        ExtractDockerZip(zip, archive =>
         {
             foreach (var entry in archive.Entries.Where(e => e.Name.Length > 0))
             {
@@ -214,8 +215,7 @@ static class MachineSetup
                 InUseFiles.MoveAside(target);
                 entry.ExtractToFile(target);
             }
-        }
-        File.Delete(zip);
+        });
 
         if (wasRunning)
         {
@@ -228,14 +228,36 @@ static class MachineSetup
     static async Task UpdatePlugin(Action<string> log, Component component)
     {
         var plugin = Plugins.Single(p => p.Component == component);
-        var release = await Updates.LatestGitHub(plugin.Repo, plugin.Pattern);
         Directory.CreateDirectory(Paths.PluginDir);
         var target = Path.Combine(Paths.PluginDir, plugin.File);
         var incoming = target + ".new";
-        await Updates.DownloadFile(release.DownloadUrl!, incoming);
+        await Pinned.Download(plugin.Release, incoming);
         InUseFiles.MoveAside(target);
         File.Move(incoming, target);
-        log($"{plugin.File} {release.Tag}");
+        log($"{plugin.File} {plugin.Release.Tag}");
+    }
+
+    // Into Program Files, which only administrators can write: in this user's temp folder a process without elevation
+    // could swap the checked zip before this elevated one extracts it.
+    static async Task<string> DownloadDockerZip(Release release)
+    {
+        Directory.CreateDirectory(Paths.DockerDir);
+        var zip = Path.Combine(Paths.DockerDir, $"docker-{release.Version}.zip");
+        await Pinned.Download(release, zip);
+        return zip;
+    }
+
+    static void ExtractDockerZip(string zip, Action<ZipArchive> extract)
+    {
+        try
+        {
+            using var archive = ZipFile.OpenRead(zip);
+            extract(archive);
+        }
+        finally
+        {
+            File.Delete(zip);
+        }
     }
 
     static async Task InstallKind(Action<string> log)
@@ -267,20 +289,16 @@ static class MachineSetup
     // The CLI on its own, for when the Windows engine that normally brings it is not wanted.
     static async Task UpdateCli(Action<string> log, bool onlyIfNewer)
     {
-        var latest = await Updates.LatestStatic();
+        var latest = Updates.WindowsDocker;
         var current = await Updates.Installed(Component.Cli);
         if (onlyIfNewer && current >= latest.Version) return;
         log($"Installing the Docker CLI {latest.Version}");
-        var zip = Path.Combine(Path.GetTempPath(), $"docker-{latest.Version}.zip");
-        await Updates.DownloadFile(latest.DownloadUrl!, zip);
-        Directory.CreateDirectory(Paths.DockerDir);
-        using (var archive = ZipFile.OpenRead(zip))
+        ExtractDockerZip(await DownloadDockerZip(latest), archive =>
         {
             var entry = archive.Entries.First(e => e.Name.Equals("docker.exe", StringComparison.OrdinalIgnoreCase));
             InUseFiles.MoveAside(Paths.DockerExe);
             entry.ExtractToFile(Paths.DockerExe);
-        }
-        File.Delete(zip);
+        });
     }
 
     // The CLI and the plugins stay, and so do the engine's images under ProgramData: adding it back finds them there.

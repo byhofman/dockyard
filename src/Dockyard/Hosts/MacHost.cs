@@ -12,9 +12,10 @@ static class MacLayout
 {
     public const string Context = "dockyard";
     public const string LaunchAgentLabel = "com.byhofman.dockyard";
-    public const string CliIndex = "https://download.docker.com/mac/static/stable/aarch64/";
-    public const string ComposeAsset = "docker-compose-darwin-aarch64";
-    public const string BuildxAsset = "buildx-{tag}.darwin-arm64";
+    public static Release Cli => Pinned.Docker("mac", "aarch64", "tgz");
+    public static Release Compose => Pinned.Compose("docker-compose-darwin-aarch64");
+    public static Release Buildx => Pinned.Buildx("darwin-arm64");
+    public static Release CredentialHelperRelease => Pinned.CredentialHelper("osxkeychain", "darwin-arm64");
 
     public static string Home => Paths.UserProfile;
     public static string DataDir => Path.Combine(Home, ".dockyard");
@@ -31,7 +32,6 @@ static class MacLayout
     public static string EngineConfigFile => Path.Combine(DataDir, "engine", "daemon.json");
     public static string RootRelease => Path.Combine(DataDir, "root-release");
     public static string CredentialHelper => Path.Combine(BinDir, "docker-credential-osxkeychain");
-    public const string CredentialHelperAsset = "docker-credential-osxkeychain-{tag}.darwin-arm64";
     public const string SystemSocket = "/var/run/docker.sock";
     public static string LoginKeychain => Path.Combine(Home, "Library", "Keychains", "login.keychain-db");
     public const string DomainResolver = "/etc/resolver/dockyard.test";
@@ -334,9 +334,9 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         "LinuxEngine" => File.Exists(Path.Combine(MacLayout.Assets, "dockyard-release")) && MacLayout.DockerVersion(
             await File.ReadAllTextAsync(Path.Combine(MacLayout.Assets, "dockyard-release"))) is { } bundled
             ? new Release(bundled, bundled.ToString(), null) : null,
-        "Cli" => await Updates.LatestStatic(MacLayout.CliIndex, "tgz"),
-        "Compose" => await Updates.LatestGitHub("docker/compose", MacLayout.ComposeAsset),
-        "Buildx" => await Updates.LatestGitHub("docker/buildx", MacLayout.BuildxAsset),
+        "Cli" => MacLayout.Cli,
+        "Compose" => MacLayout.Compose,
+        "Buildx" => MacLayout.Buildx,
         Kind.Id => Kind.Release,
         "App" => await Updates.LatestApp(MacLayout.ZipAsset(!HasDashboard)),
         ComponentRules.DashboardId => await Updates.LatestApp(MacLayout.ZipAsset(engineOnly: false)),
@@ -513,11 +513,11 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
     {
         await InstallBundle(log, request.Dashboard);
 
-        await InstallCli(log, await Updates.LatestStatic(MacLayout.CliIndex, "tgz"));
-        foreach (var (component, plugin, repo, asset) in new[] { ("Compose", "docker-compose", "docker/compose", MacLayout.ComposeAsset), ("Buildx", "docker-buildx", "docker/buildx", MacLayout.BuildxAsset) })
+        await InstallCli(log, MacLayout.Cli);
+        foreach (var (component, plugin, release) in new[] { ("Compose", "docker-compose", MacLayout.Compose), ("Buildx", "docker-buildx", MacLayout.Buildx) })
         {
             if (request.Without.Contains(component)) MacLayout.RemovePlugin(Path.Combine(MacLayout.PluginDir, plugin), MacLayout.PluginLinksDir);
-            else await InstallPlugin(log, plugin, await Updates.LatestGitHub(repo, asset));
+            else await InstallPlugin(log, plugin, release);
         }
         if (request.Without.Contains(Kind.Id)) RemoveKind(log);
         else if (await Installed(Kind.Id) != Kind.Version) await InstallKind(log);
@@ -638,10 +638,8 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         {
             if (!File.Exists(MacLayout.CredentialHelper))
             {
-                var release = await Updates.LatestGitHub(Paths.CredentialHelpersRepo, MacLayout.CredentialHelperAsset);
                 Directory.CreateDirectory(MacLayout.BinDir);
-                await Updates.DownloadFile(release.DownloadUrl!, MacLayout.CredentialHelper);
-                File.SetUnixFileMode(MacLayout.CredentialHelper, (UnixFileMode)0b111_101_101);
+                await Pinned.Download(MacLayout.CredentialHelperRelease, MacLayout.CredentialHelper);
             }
             // docker finds the helper through the PATH: a store it cannot find would break every docker login, also from other Docker apps.
             if (File.Exists("/etc/paths.d/dockyard"))
@@ -779,7 +777,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         try
         {
             var tgz = Path.Combine(dir, "docker.tgz");
-            await Updates.DownloadFile(release.DownloadUrl!, tgz);
+            await Pinned.Download(release, tgz);
             await runner.Check("/usr/bin/tar", "-xzf", tgz, "-C", dir, "docker/docker");
             Directory.CreateDirectory(MacLayout.BinDir);
             File.Copy(Path.Combine(dir, "docker", "docker"), MacLayout.DockerCli, overwrite: true);
@@ -811,8 +809,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         Directory.CreateDirectory(MacLayout.PluginDir);
         var target = Path.Combine(MacLayout.PluginDir, name);
         MacLayout.SetAsideLinkedPlugin(target, MacLayout.PluginLinksDir);
-        await Updates.DownloadFile(release.DownloadUrl!, target);
-        File.SetUnixFileMode(target, (UnixFileMode)0b111_101_101);
+        await Pinned.Download(release, target);
         log($"{name} {release.Tag}");
     }
 

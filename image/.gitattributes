@@ -6,3 +6,5 @@ extract-kernel.sh text eol=lf
 build.sh text eol=lf
 test-vm.sh text eol=lf
 wsl/** text eol=lf
+versions.env text eol=lf
+versions.sha256 text eol=lf

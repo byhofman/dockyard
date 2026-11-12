@@ -49,10 +49,6 @@ public sealed class UpdatesTests : IDisposable
 
     static string Sum(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
 
-    static string Atom(params (string Tag, DateTime Updated)[] entries) =>
-        $"""<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><id>tag:github.com,2008:https://github.com/x/releases</id>{string.Concat(entries.Select(e =>
-            $"<entry><id>tag:github.com,2008:Repository/1/{e.Tag}</id><updated>{e.Updated:yyyy-MM-ddTHH:mm:ssZ}</updated><title>{e.Tag}</title></entry>"))}</feed>""";
-
     void ServeRelease(string tag, string asset, string content, string? sums = null)
     {
         github.Serve($"{Base}/download/{tag}/SHA256SUMS", sums ?? $"{Sum(content)}  {asset}\n");
@@ -111,32 +107,6 @@ public sealed class UpdatesTests : IDisposable
         var e = await Assert.ThrowsAsync<InvalidOperationException>(() => Updates.DownloadReleaseAsset("other.zip", dir, tag: "v1.2.3"));
 
         Assert.Equal("Release v1.2.3 has no other.zip", e.Message);
-    }
-
-    [Fact]
-    public async Task Tools_come_from_the_newest_stable_release_past_the_waiting_period_without_the_api()
-    {
-        const string releases = "https://github.com/docker/buildx/releases";
-        var now = DateTime.UtcNow;
-        github.Serve($"{releases}.atom", Atom(("v0.3.0-rc1", now.AddDays(-30)), ("v0.2.0", now.AddDays(-1)), ("v0.1.1", now.AddDays(-20)), ("v0.1.0", now.AddDays(-40))));
-        github.Serve($"{releases}/download/v0.1.1/buildx-v0.1.1.linux-amd64", "");
-
-        var release = await Updates.LatestGitHub("docker/buildx", Updates.LinuxBuildxAsset);
-
-        Assert.Equal("v0.1.1", release.Tag);
-        Assert.Equal($"{releases}/download/v0.1.1/buildx-v0.1.1.linux-amd64", release.DownloadUrl);
-        Assert.DoesNotContain(github.Requested, url => url.Contains("api.github.com"));
-    }
-
-    [Fact]
-    public async Task A_tool_release_without_the_asset_is_passed_over()
-    {
-        const string releases = "https://github.com/docker/buildx/releases";
-        var now = DateTime.UtcNow;
-        github.Serve($"{releases}.atom", Atom(("v0.2.0", now.AddDays(-30)), ("v0.1.0", now.AddDays(-40))));
-        github.Serve($"{releases}/download/v0.1.0/buildx-v0.1.0.linux-amd64", "");
-
-        Assert.Equal("v0.1.0", (await Updates.LatestGitHub("docker/buildx", Updates.LinuxBuildxAsset)).Tag);
     }
 
     [Theory]

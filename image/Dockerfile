@@ -9,13 +9,23 @@ ARG TARGETARCH
 ARG IMAGE_VERSION=0.0.0
 RUN apk add --no-cache iptables ip6tables ca-certificates e2fsprogs \
  && addgroup -S docker
+# Every download is checked against the hash pinned in versions.sha256, the same file Dockyard checks its own downloads with.
+COPY image/versions.sha256 /tmp/versions.sha256
 RUN set -eu; \
     case "$TARGETARCH" in amd64) a=x86_64; b=amd64; c=x86_64 ;; arm64) a=aarch64; b=arm64; c=aarch64 ;; *) exit 1 ;; esac; \
-    wget -qO- "https://download.docker.com/linux/static/stable/$a/docker-$DOCKER.tgz" | tar -xz -C /usr/local/bin --strip-components=1; \
+    fetch() { \
+      sum="$(awk -v u="$1" '$2 == u { print $1 }' /tmp/versions.sha256)"; \
+      [ -n "$sum" ] || { echo "$1 has no pinned checksum in versions.sha256" >&2; exit 1; }; \
+      wget -qO "$2" "$1"; \
+      echo "$sum  $2" | sha256sum -c -s || { echo "$1 does not match its pinned checksum" >&2; exit 1; }; \
+    }; \
+    fetch "https://download.docker.com/linux/static/stable/$a/docker-$DOCKER.tgz" /tmp/docker.tgz; \
+    tar -xzf /tmp/docker.tgz -C /usr/local/bin --strip-components=1; \
     mkdir -p /usr/local/lib/docker/cli-plugins; \
-    wget -qO /usr/local/lib/docker/cli-plugins/docker-buildx "https://github.com/docker/buildx/releases/download/v$BUILDX/buildx-v$BUILDX.linux-$b"; \
-    wget -qO /usr/local/lib/docker/cli-plugins/docker-compose "https://github.com/docker/compose/releases/download/v$COMPOSE/docker-compose-linux-$c"; \
+    fetch "https://github.com/docker/buildx/releases/download/v$BUILDX/buildx-v$BUILDX.linux-$b" /usr/local/lib/docker/cli-plugins/docker-buildx; \
+    fetch "https://github.com/docker/compose/releases/download/v$COMPOSE/docker-compose-linux-$c" /usr/local/lib/docker/cli-plugins/docker-compose; \
     chmod +x /usr/local/lib/docker/cli-plugins/*; \
+    rm /tmp/docker.tgz /tmp/versions.sha256; \
     printf 'VERSION=%s\nDOCKER_VERSION=%s\n' "$IMAGE_VERSION" "$DOCKER" > /etc/dockyard-release
 COPY image/rootfs/ /
 RUN chmod 0755 /usr/local/sbin/dockyard-init /usr/local/sbin/dockyard-update

@@ -47,7 +47,6 @@ static class Paths
         (Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0").Split('+')[0];
 
     public static readonly string CredentialStoreMarker = Path.Combine(SettingsDir, "credential-store");
-    public const string CredentialHelpersRepo = "docker/docker-credential-helpers";
 
     public static readonly string WslConfigFile = Path.Combine(UserProfile, ".wslconfig");
 }
