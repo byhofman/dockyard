@@ -1,13 +1,6 @@
 using System.Net;
-using System.Text.Json.Serialization;
 
 namespace Dockyard.Core;
-
-sealed class AddressPool
-{
-    [JsonPropertyName("base")] public string Base { get; set; } = "";
-    [JsonPropertyName("size")] public int Size { get; set; }
-}
 
 // What the user sets for the Linux engine on macOS and in WSL. Text, one entry per line, is how the window edits it.
 static class EngineOptions

@@ -1,31 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using Dockyard.Engine.Transport;
 
 namespace Dockyard.Engine;
-
-public sealed record PingResult(string ApiVersion, string OsType);
-
-public sealed class VersionInfo
-{
-    public string Version { get; set; } = "";
-    public string ApiVersion { get; set; } = "";
-    public string Os { get; set; } = "";
-    public string Arch { get; set; } = "";
-}
-
-public sealed class PruneResult
-{
-    public long SpaceReclaimed { get; set; }
-}
-
-sealed class ErrorResponse
-{
-    public string? Message { get; set; }
-}
 
 public sealed partial class DockerClient : IDisposable
 {
@@ -147,10 +126,3 @@ public sealed partial class DockerClient : IDisposable
 
     public void Dispose() => http.Dispose();
 }
-
-[JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
-[JsonSerializable(typeof(ErrorResponse))]
-[JsonSerializable(typeof(VersionInfo))]
-[JsonSerializable(typeof(PruneResult))]
-[JsonSerializable(typeof(Dictionary<string, string[]>))]
-partial class CoreJson : JsonSerializerContext;

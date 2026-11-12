@@ -32,8 +32,7 @@
     <EmbeddedResource Include="..\..\image\versions.env" LogicalName="versions.env" />
     <EmbeddedResource Include="..\..\image\versions.sha256" LogicalName="versions.sha256" />
     <EmbeddedResource Condition="'$(GuestBundle)' != ''" Include="$(GuestBundle)" LogicalName="guest.tar.gz" />
-    <Compile Include="..\Shared\LocalPipe.cs" Link="Shared\LocalPipe.cs" />
-    <Compile Include="..\Shared\DisplayGate.cs" Link="Shared\DisplayGate.cs" />
+    <Compile Include="..\Shared\*.cs" LinkBase="Shared" />
     <InternalsVisibleTo Include="Dockyard.Tests" />
   </ItemGroup>
 

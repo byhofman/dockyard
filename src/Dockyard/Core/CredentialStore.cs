@@ -4,8 +4,6 @@ using System.Text.Json.Nodes;
 
 namespace Dockyard.Core;
 
-sealed record PlainLogin(string Server, string Username, string Secret);
-
 // ~/.docker/config.json is shared with every other Docker app on the machine, so a store someone already chose stays,
 // and only the keys below change. Without a store, docker login writes the password there as base64.
 static class CredentialStore

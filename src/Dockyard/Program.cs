@@ -96,10 +96,3 @@ static class Program
     // Used by the XAML previewer.
     public static AppBuilder BuildAvaloniaApp() => Build(AppMode.Setup);
 }
-
-static partial class NativeConsole
-{
-    [System.Runtime.InteropServices.LibraryImport("kernel32.dll")]
-    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
-    public static partial bool AttachConsole(int processId);
-}

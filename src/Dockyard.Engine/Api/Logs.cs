@@ -3,12 +3,6 @@ using Dockyard.Engine.Internal;
 
 namespace Dockyard.Engine;
 
-public enum LogStream { Stdout = 1, Stderr = 2 }
-
-public readonly record struct LogLine(LogStream Stream, DateTimeOffset? Time, string Text);
-
-public sealed record LogOptions(bool Follow = true, int? Tail = 1000, bool Tty = false);
-
 public sealed partial class DockerClient
 {
     public async IAsyncEnumerable<LogLine> LogsAsync(string id, LogOptions options, [EnumeratorCancellation] CancellationToken ct = default)

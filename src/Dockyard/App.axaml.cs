@@ -10,10 +10,7 @@ using Dockyard.Engine.Transport;
 using Dockyard.Shared;
 using Dockyard.ViewModels;
 using Dockyard.Views;
-
 namespace Dockyard;
-
-enum AppMode { Setup, Tray }
 
 public partial class App : Application
 {

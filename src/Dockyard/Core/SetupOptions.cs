@@ -1,9 +1,5 @@
 namespace Dockyard.Core;
 
-sealed class SetupUsageException(string message) : Exception(message);
-
-enum SetupAction { Install, Uninstall, Import }
-
 sealed record SetupOptions
 {
     public const string Usage = """
@@ -103,11 +99,4 @@ sealed record SetupOptions
     static bool Choose(bool? current, bool wanted) => current is null || current == wanted
         ? wanted
         : throw new SetupUsageException("--dashboard and --no-dashboard exclude each other");
-}
-
-static class DashboardChoice
-{
-    // A copy running from where it is installed was put there by an earlier script, which already chose the edition.
-    public static bool Resolve(bool? requested, bool isInstalled, bool hasDashboard, bool runsFromInstallLocation) =>
-        requested ?? (!isInstalled && !runsFromInstallLocation || hasDashboard);
 }

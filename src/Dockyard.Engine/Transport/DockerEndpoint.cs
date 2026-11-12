@@ -1,7 +1,5 @@
 namespace Dockyard.Engine.Transport;
 
-public enum EndpointKind { Tcp, Unix, NamedPipe }
-
 public sealed record DockerEndpoint(EndpointKind Kind, string Address, int Port, string Uri)
 {
     const int DefaultTcpPort = 2375;

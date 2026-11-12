@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-using System.Text.Json.Serialization;
 using Dockyard.Engine.Internal;
 
 namespace Dockyard.Engine;
@@ -19,7 +18,3 @@ public sealed partial class DockerClient
         await foreach (var e in JsonLines.ReadAsync(stream, EventJson.Default.DockerEvent, ct)) yield return e;
     }
 }
-
-[JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
-[JsonSerializable(typeof(DockerEvent))]
-partial class EventJson : JsonSerializerContext;

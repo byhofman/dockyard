@@ -2,10 +2,6 @@ using System.Formats.Tar;
 
 namespace Dockyard.Engine;
 
-public sealed record FileEntry(string Name, bool IsDirectory, long Size, string? LinkTarget, DateTimeOffset Modified, UnixFileMode Mode, int Uid, int Gid);
-
-public sealed record FileContent(byte[] Data, bool Truncated, FileEntry Entry);
-
 // Files through the engine's archive API, so it works in stopped containers and in images without a shell or ls.
 // The price: listing a folder reads its whole subtree, though only the headers are looked at and nothing is kept.
 public static class ContainerFiles

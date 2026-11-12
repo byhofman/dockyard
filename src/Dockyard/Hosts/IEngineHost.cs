@@ -1,24 +1,5 @@
 namespace Dockyard.Hosts;
 
-sealed record EngineInfo(string Id, string Name, string Title, string Subtitle, string Context, string Endpoint, string? ComponentId = null);
-
-// CheckNeedsEngine: checking this component starts that engine (e.g. the WSL distro), so automatic checks skip it while it is stopped.
-// RequiredBecause: it cannot be removed, and the row says why. Flag: its name for --with and --without, and it has Add and Remove.
-// Note: what depends on it or what it depends on. IsEngine: the last one left cannot be removed.
-sealed record ComponentInfo(string Id, string Title, string? CheckNeedsEngine = null, string? RequiredBecause = null, string? Flag = null, string? Note = null, bool IsEngine = false, string? RequiredFlag = null)
-{
-    public bool IsOptional => Flag is not null;
-}
-
-sealed record Release(Version Version, string Tag, string? DownloadUrl);
-
-// Silent: nothing may pop up, so a step that would need a prompt uses what works without one, or says what was skipped.
-sealed record InstallRequest(bool Dashboard, string? Image = null, bool Silent = false, bool TrustHttps = false)
-{
-    // Ids from the catalog that stay out, or go if they are there. Empty for almost everyone, and then setup is what it always was.
-    public IReadOnlyCollection<string> Without { get; init; } = [];
-}
-
 interface IEngineHost
 {
     IReadOnlyList<EngineInfo> Engines { get; }
@@ -79,42 +60,4 @@ interface IEngineHost
     Task Uninstall(Action<string> log, bool removeData);
 
     void ReleaseResources();
-}
-
-interface ICommandRunner
-{
-    Task<Core.ShellResult> Run(string file, params string[] args);
-    System.Diagnostics.Process Spawn(string file, params string[] args);
-}
-
-sealed class ProcessRunner : ICommandRunner
-{
-    public static readonly ProcessRunner Instance = new();
-    public Task<Core.ShellResult> Run(string file, params string[] args) => Core.Shell.Run(file, args);
-    public System.Diagnostics.Process Spawn(string file, params string[] args) => Core.Shell.Spawn(file, args);
-}
-
-static class RunnerExtensions
-{
-    public static async Task<string> Check(this ICommandRunner runner, string file, params string[] args)
-    {
-        var r = await runner.Run(file, args);
-        if (r.ExitCode != 0)
-            throw new InvalidOperationException($"{Path.GetFileName(file)} {string.Join(' ', args)} failed ({r.ExitCode}): {(r.Error + r.Output).Trim()}");
-        return r.Output;
-    }
-}
-
-static class Wait
-{
-    public static async Task For(Func<bool> ready, TimeSpan timeout, string what, Func<bool>? failed = null)
-    {
-        var until = DateTime.UtcNow + timeout;
-        while (!await Task.Run(ready))
-        {
-            if (failed?.Invoke() == true) throw new InvalidOperationException($"{what} failed to start");
-            if (DateTime.UtcNow > until) throw new TimeoutException($"{what} not ready after {timeout.TotalSeconds:0}s");
-            await Task.Delay(500);
-        }
-    }
 }

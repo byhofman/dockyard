@@ -2,11 +2,6 @@ using System.Text.RegularExpressions;
 
 namespace Dockyard.Core;
 
-sealed record ProxySettings(string? Http, string? Https, IReadOnlyList<string> NoProxy)
-{
-    public bool IsEmpty => Http is null && Https is null;
-}
-
 // What the host is set to use, read from where its own apps read it. A proxy auto-config file is not followed: it can
 // choose a different proxy per URL, and the engine takes one fixed address.
 static partial class HostProxySettings

@@ -1,6 +1,5 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Skia;
 using Dockyard.Shared;
 
 namespace Dockyard.Dashboard;

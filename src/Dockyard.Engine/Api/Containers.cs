@@ -1,5 +1,3 @@
-using System.Text.Json.Serialization;
-
 namespace Dockyard.Engine;
 
 public sealed partial class DockerClient
@@ -36,10 +34,3 @@ public sealed partial class DockerClient
 
     static string StopTimeout(int? seconds) => seconds is { } t ? $"?t={t}" : "";
 }
-
-[JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
-[JsonSerializable(typeof(List<ContainerSummary>))]
-[JsonSerializable(typeof(ContainerInspect))]
-[JsonSerializable(typeof(CreateContainerRequest))]
-[JsonSerializable(typeof(CreateContainerResponse))]
-partial class ContainerJson : JsonSerializerContext;
