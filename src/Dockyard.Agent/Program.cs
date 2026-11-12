@@ -51,6 +51,8 @@ switch (options.Mode)
         services.Add(Optional("HTTP on domains from Windows", () => proxy.Serve(DomainProxy.Listen(IPAddress.Loopback, GuestAddresses.RelayHttpPort), tls: false, guarded: false, cts.Token)));
         services.Add(Optional("HTTPS on domains from Windows", () => proxy.Serve(DomainProxy.Listen(IPAddress.Loopback, GuestAddresses.RelayHttpsPort), tls: true, guarded: false, cts.Token)));
         services.Add(Optional("the agent API", () => AgentApiServer.Tcp(api, GuestAddresses.ApiPort, cts.Token)));
+        if (!Directory.Exists("/sys/class/net/loopback0"))
+            services.Add(ServeWindows());
         services.Add(ExitWithEngine());
         break;
     default:
@@ -90,6 +92,16 @@ async Task Optional(string what, Func<Task> service)
         log($"{what} is off: {e.Message}");
         await Task.Delay(Timeout.Infinite, cts.Token);
     }
+}
+
+// Without the engine reachable from Windows nothing works there, so this is not optional: failing ends the agent and the
+// loop in dockyard-init starts it again.
+async Task ServeWindows()
+{
+    var address = InterfaceAddress.Of("eth0") ?? throw new InvalidOperationException("eth0 has no IPv4 address");
+    var windows = WslHost.DefaultGateway(File.ReadAllText("/proc/net/route")) ?? throw new InvalidOperationException("no default gateway");
+    log($"the engine for Windows on {address}:{Ports.Docker}, for {windows} only");
+    await WindowsEngine.Serve(WindowsEngine.Listen(address), windows, Agent.DockerSocket, cts.Token);
 }
 
 async Task ExitWithEngine()

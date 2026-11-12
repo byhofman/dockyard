@@ -18,6 +18,8 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
 
     readonly WslDistro distro = new(runner);
     Process? keepAlive;
+    WslEngineRelay? relay;
+    DateTime lastNatLook;
     CancellationTokenSource? trayServices;
     DomainRelay? domainRelay;
 
@@ -274,6 +276,8 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
         if (trayServices is not null) return;
         trayServices = new CancellationTokenSource();
         _ = FollowPublishedPorts(trayServices.Token);
+        // An engine this tray did not start, for example before the tray was replaced, is served on Windows' loopback again.
+        if (LinuxEngineWanted) _ = Task.Run(RelayToNatEngine);
         if (LinuxEngineWanted) StartDomainRelay();
     }
 
@@ -303,6 +307,8 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
 
     public void ReleaseResources()
     {
+        relay?.Dispose();
+        relay = null;
         if (keepAlive is { HasExited: false }) keepAlive.Kill(entireProcessTree: true);
         keepAlive?.Dispose();
         keepAlive = null;
@@ -340,14 +346,44 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
         }
     }
 
-    static bool IsLinuxRunning()
+    // With NAT networking 127.0.0.1:2375 is this process's own relay, so the engine behind it is what has to answer.
+    bool IsLinuxRunning()
     {
-        try
+        if (relay is { } active)
         {
-            using var client = new TcpClient();
-            return client.ConnectAsync("127.0.0.1", Paths.LinuxPort).Wait(300) && client.Connected;
+            if (active.EngineAnswers(300)) return true;
+            active.Dispose();
+            relay = null;
+            return false;
         }
-        catch { return false; }
+        return WslEngineRelay.Answers(System.Net.IPAddress.Loopback, Paths.LinuxPort, 300);
+    }
+
+    // An engine on WSL's own address, which is what dockyard-agent serves with NAT networking, gets the relay. Only asked
+    // while the distro runs: running anything in it would otherwise start it.
+    async Task<bool> RelayToNatEngine()
+    {
+        if (relay is not null) return true;
+        var running = await runner.Run("wsl.exe", "-l", "--running", "-q");
+        if (!running.Output.Split('\n').Select(l => l.Trim().Trim('\0')).Contains(distro.Name, StringComparer.OrdinalIgnoreCase)) return false;
+        var ip = await runner.Run("wsl.exe", "-d", distro.Name, "-u", "root", "--", "sh", "-c", "[ -d /sys/class/net/loopback0 ] || ip -4 -o addr show eth0");
+        if (WslEngineRelay.AddressFromIp(ip.Output) is not { } address || !WslEngineRelay.Answers(address, Paths.LinuxPort, 500)) return false;
+        var candidate = new WslEngineRelay(address);
+        if (!candidate.Start())
+        {
+            candidate.Dispose();
+            return false;
+        }
+        relay = candidate;
+        return true;
+    }
+
+    bool LinuxReady()
+    {
+        if (IsLinuxRunning()) return true;
+        if (DateTime.UtcNow - lastNatLook < TimeSpan.FromSeconds(2)) return false;
+        lastNatLook = DateTime.UtcNow;
+        return RelayToNatEngine().GetAwaiter().GetResult();
     }
 
     static bool IsWindowsRunning()
@@ -363,6 +399,8 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
     async Task StartLinux()
     {
         if (keepAlive is { HasExited: false } && IsLinuxRunning()) return;
+        // Started by something else, such as a tray that was replaced: a second dockyard-init would take its socket away.
+        if ((keepAlive is null || keepAlive.HasExited) && await RelayToNatEngine()) return;
         if (keepAlive is null || keepAlive.HasExited)
         {
             keepAlive?.Dispose();
@@ -370,7 +408,8 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
             keepAlive = runner.Spawn("wsl.exe", distro.KeepAliveArgs());
         }
         var proc = keepAlive;
-        await Wait.For(IsLinuxRunning, TimeSpan.FromSeconds(90), "Linux engine", failed: () => proc.HasExited);
+        lastNatLook = DateTime.MinValue;
+        await Wait.For(LinuxReady, TimeSpan.FromSeconds(90), "Linux engine", failed: () => proc.HasExited);
     }
 
     async Task StopLinux()

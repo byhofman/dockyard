@@ -2,6 +2,16 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-12: With WSL's NAT networking, Dockyard carries 127.0.0.1:2375 itself
+
+kind on the Windows runner failed at "Writing configuration": it reads a file through `docker exec`, and the output arrived empty. Every `docker exec`, `docker attach` and `docker run` without `-d` printed nothing from Windows, while the same exec inside WSL, also over TCP on its own `127.0.0.1:2375`, worked. The listener on Windows' `127.0.0.1:2375` was `wslrelay`, WSL's localhost relay for NAT networking. The docker CLI half-closes the connection once stdin is done, and the engine only writes the output after that; the relay loses what comes after the half-close. Pulls and other plain requests were never affected, which is why nothing caught it.
+
+- **dockerd no longer listens on WSL's loopback with NAT networking,** so `wslrelay` does not take the port. dockyard-agent serves the engine on WSL's own address, port 2375, and accepts only the default gateway, which is Windows. A container reaching that address is refused, like `host.docker.internal:2375` already was.
+- **The tray, or the wizard while it runs the engine, listens on `127.0.0.1:2375` and relays to it,** passing half-closes on. The endpoint, contexts and `.testcontainers.properties` stay as they are.
+- **Mirrored networking is unchanged:** loopback is shared for real there, and the WSL interface `loopback0` is how both the agent and dockyard-init tell. `DOCKYARD_TCP` still asks for the old listener explicitly.
+- **The engine now needs a Dockyard process on Windows with NAT networking,** which it already did in practice: the tray's `wsl.exe` keeps the distro alive. A tray that starts while an engine runs finds it and relays again, rather than starting a second dockyard-init that would take the running engine's socket away.
+- **Tests:** the agent's listener and the Windows relay each pass an exchange where the engine answers only after the client half-closed, and the Windows end-to-end run now checks `docker exec`, an attached `docker run` and stdin through `docker exec -i`, and starts the engine through the tray as a user does.
+
 ## 2026-11-12: kind is pinned with its checksums, installed by default, and the dashboard reads clusters from the engine
 
 `DOK-22`, the owner's "basic kind support" (feedback round 1).

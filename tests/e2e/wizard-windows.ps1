@@ -36,8 +36,10 @@ function Window {
     if ($LASTEXITCODE -ne 0) { throw 'FAIL the wizard window' }
 }
 
+# The way a user starts it, through the tray: with WSL's NAT networking, as on this runner, the tray is also what serves
+# 127.0.0.1:2375. Setup stops the tray, so this runs again after each one.
 function Linux-Engine {
-    Start-Process wsl.exe -ArgumentList '-d dockyard -u root -- /usr/local/sbin/dockyard-init' -WindowStyle Hidden | Out-Null
+    Start-Process $appExe -ArgumentList '--start', 'linux' | Out-Null
     foreach ($i in 1..60) {
         & $docker --context linux version *> $null
         if ($LASTEXITCODE -eq 0) { return }
@@ -284,6 +286,7 @@ if ($Wizard) {
     Check 'the CA is back in the trust store' ((Get-ChildItem Cert:\LocalMachine\Root | Where-Object Subject -like '*Dockyard Local CA*') -ne $null)
     Remove-Item $shared -Recurse -Force
     Remove-LocalUser e2e-admin
+    Linux-Engine
     & $docker --context linux rm -f e2e-web | Out-Null
 
     Section 'memory of the WSL engine, for the record'
@@ -308,6 +311,7 @@ Check 'the win context answers' ($LASTEXITCODE -eq 0)
 Stop-Service docker
 
 Section 'a docker command running in some terminal does not stop an update'
+Linux-Engine
 $running = Start-Process $docker -ArgumentList '--context linux events' -PassThru -WindowStyle Hidden
 Check 'the docker command is running' (-not $running.HasExited)
 
@@ -392,6 +396,7 @@ if ($Wizard) {
     Check 'the docker command stays' (Test-Path $docker)
     Check 'the service is gone' (-not (Get-Service docker -ErrorAction SilentlyContinue))
     Check 'the win context is gone' ((& $docker context ls -q) -notcontains 'win')
+    Linux-Engine
     & $docker --context linux volume inspect dockyard-e2e | Out-Null
     Check 'the Linux engine still works' ($LASTEXITCODE -eq 0)
     Check 'exit 0 with the Windows engine' ((Run --silent --no-start --with windows-engine) -eq 0)
