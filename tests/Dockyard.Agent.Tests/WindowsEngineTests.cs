@@ -71,7 +71,12 @@ public sealed class WindowsEngineTests : IDisposable
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var serving = WindowsEngine.Serve(listener, IPAddress.Parse("172.20.0.1"), EngineSocket, cts.Token);
 
-        Assert.Equal("", await Exchange(port, "GET /_ping", ct));
+        // Closing with the request still unread resets the connection on macOS and Windows and ends it on Linux; either
+        // way nothing of the engine's comes back.
+        string reply;
+        try { reply = await Exchange(port, "GET /_ping", ct); }
+        catch (SocketException e) when (e.SocketErrorCode is SocketError.ConnectionReset or SocketError.ConnectionAborted) { reply = ""; }
+        Assert.Equal("", reply);
 
         cts.Cancel();
         await serving;
