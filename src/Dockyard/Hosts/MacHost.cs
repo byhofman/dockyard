@@ -140,7 +140,7 @@ static class MacLayout
     public static readonly string[] SharedCommands = ["docker", "kind", "docker-credential-osxkeychain"];
 
     public static string Wrapper(string uid, string binDir, string command) =>
-        $"#!/bin/sh\n[ \"$(id -u)\" = {uid} ] || {{ echo \"{command}: this is Dockyard for another account on this Mac\" >&2; exit 127; }}\nexec {Shell.ShQuote(Path.Combine(binDir, command))} \"$@\"\n";
+        $"#!/bin/sh\n[ \"$(id -u)\" = {uid} ] || {{ echo \"{command}: this is Dockyard for another account on this Mac\" >&2; exit 127; }}\nexec {Shell.ShQuote($"{binDir}/{command}")} \"$@\"\n";
 
     public static string PathsEntry(string uid, string binDir) =>
         $"mkdir -p {SharedBinDir} && chown root:wheel /usr/local/dockyard {SharedBinDir} && chmod 755 /usr/local/dockyard {SharedBinDir} && "
