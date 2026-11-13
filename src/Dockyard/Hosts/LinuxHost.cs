@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Runtime.Versioning;
 using Dockyard.Core;
+using Dockyard.Engine;
 
 namespace Dockyard.Hosts;
 
@@ -289,14 +290,25 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
             var agent = await GuestBundle.ExtractAgent(dir) ?? "";
             var existing = File.Exists(DaemonJson) ? await File.ReadAllTextAsync(DaemonJson) : null;
             var config = Path.Combine(dir, "daemon.json");
-            await File.WriteAllTextAsync(config, agent.Length == 0 ? existing ?? "{}" : EngineConfig.WithDockyard(existing, HostProxySettings.FromEnvironment(Environment.GetEnvironmentVariable)));
+            var kept = "";
             // Without systemd nothing runs the agent, and a dns entry naming it would leave containers without any DNS.
-            if (!Directory.Exists("/run/systemd/system")) await File.WriteAllTextAsync(config, existing ?? "{}");
-            else if (agent.Length > 0 && EngineConfig.DnsIsSomeoneElses(existing))
-                log($"{DaemonJson} sets its own dns, so containers do without host.docker.internal; remove that setting to get it");
+            if (agent.Length == 0 || !Directory.Exists("/run/systemd/system")) await File.WriteAllTextAsync(config, existing ?? "{}");
+            else
+            {
+                await File.WriteAllTextAsync(config, EngineConfig.WithDockyard(existing, HostProxySettings.FromEnvironment(Environment.GetEnvironmentVariable)));
+                // Once the file names the agent, the servers kept from before it are the ones to stay. An empty file tells
+                // setup there are none.
+                if (!EngineConfig.NamesTheAgent(existing))
+                {
+                    kept = Path.Combine(dir, "dns-upstreams");
+                    await File.WriteAllTextAsync(kept, EngineConfig.KeptDns(existing) ?? "");
+                }
+                if (EngineConfig.DnsIsSomeoneElses(existing))
+                    log($"{DaemonJson} named its own DNS servers; containers keep using them, through Dockyard's agent");
+            }
             // Root reads these through a path a normal user's temp folder may keep from it otherwise.
             File.SetUnixFileMode(dir, (UnixFileMode)0b111_101_101);
-            await RunSetup(log, "install", SetupUser, agent, config);
+            await RunSetup(log, "install", SetupUser, agent, config, kept);
         }
         finally
         {
@@ -309,7 +321,8 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
         var config = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}.json");
         try
         {
-            if (File.Exists(DaemonJson)) await File.WriteAllTextAsync(config, EngineConfig.WithoutDockyard(await File.ReadAllTextAsync(DaemonJson)));
+            var kept = File.Exists(AgentFiles.KeptDns) ? await File.ReadAllTextAsync(AgentFiles.KeptDns) : null;
+            if (File.Exists(DaemonJson)) await File.WriteAllTextAsync(config, EngineConfig.WithoutDockyard(await File.ReadAllTextAsync(DaemonJson), kept));
             await RunSetup(log, "uninstall", "", File.Exists(config) ? config : "");
         }
         finally

@@ -19,17 +19,33 @@ static class EngineConfig
     static bool HasOurDns(JsonObject config) =>
         config["dns"] is JsonArray { Count: 1 } dns && dns[0]?.GetValue<string>() == DnsAddress;
 
+    public static bool NamesTheAgent(string? existing) => HasOurDns(Parse(existing));
+
     public static bool DnsIsSomeoneElses(string? existing)
     {
         var config = Parse(existing);
         return config["dns"] is JsonArray { Count: > 0 } && !HasOurDns(config);
     }
 
-    // DNS someone configured is theirs: then containers do without Dockyard's names, and the wizard says so.
+    // DNS servers someone else put in daemon.json, in resolv.conf form: the agent takes their place in the file and asks
+    // them for every name that is not Dockyard's, so containers resolve as before and also get Dockyard's names.
+    public static string? KeptDns(string? existing)
+    {
+        var servers = Parse(existing)["dns"] is JsonArray dns
+            ? dns.Select(n => n?.GetValue<string>()).OfType<string>().Where(s => s != DnsAddress).ToList()
+            : [];
+        return servers.Count == 0 ? null : string.Concat(servers.Select(s => $"nameserver {s}\n"));
+    }
+
+    static IEnumerable<string> KeptServers(string kept) => kept.Split('\n')
+        .Select(l => l.Split((char[])[' ', '\t'], StringSplitOptions.RemoveEmptyEntries))
+        .Where(p => p.Length >= 2 && p[0] == "nameserver")
+        .Select(p => p[1]);
+
     public static string WithDockyard(string? existing, ProxySettings? proxy = null)
     {
         var config = Parse(existing);
-        if (!DnsIsSomeoneElses(existing)) config["dns"] = new JsonArray(DnsAddress);
+        config["dns"] = new JsonArray(DnsAddress);
         // Only into a file with no proxies of its own, or back out of one this code wrote.
         if (config["proxies"] is null or JsonObject { Count: > 0 } && (config["proxies"] is null || IsOurs(config["proxies"]!)))
         {
@@ -42,10 +58,13 @@ static class EngineConfig
     // A loopback proxy goes through the agent's address, and every no-proxy list here starts with the same entries.
     static bool IsOurs(JsonNode proxies) => proxies["no-proxy"]?.GetValue<string>().StartsWith("localhost,127.0.0.1,::1,host.docker.internal", StringComparison.Ordinal) == true;
 
-    public static string WithoutDockyard(string? existing)
+    public static string WithoutDockyard(string? existing, string? kept)
     {
         var config = Parse(existing);
-        if (HasOurDns(config)) config.Remove("dns");
+        if (!HasOurDns(config)) return config.ToJsonString(Indented);
+        var servers = kept is null ? [] : KeptServers(kept).ToList();
+        if (servers.Count == 0) config.Remove("dns");
+        else config["dns"] = new JsonArray(servers.Select(s => (JsonNode)JsonValue.Create(s)).ToArray());
         return config.ToJsonString(Indented);
     }
 

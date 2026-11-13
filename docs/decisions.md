@@ -237,3 +237,12 @@ The research standard says a thesis never decides what to build. The owner's bri
 ## 2026-11-13: Sidebar items carry their section's name for automation
 
 The Windows end-to-end run's "Clusters" and "Images" screenshots showed the containers list. The dashboard switched sections fine when clicked; the automation never clicked. A sidebar item's automation name was the `Section` record's `ToString`, so UI Automation's search for "Clusters" found the text inside the item, which has no select pattern, and the script skipped silently. Screen readers read the same record text. Items are now named after their section, a headless test selects each one through its automation peer on every CI platform, and the e2e script selects the list item and fails when it is missing or not selected.
+
+## 2026-11-13: DNS servers in a Linux host's daemon.json become the agent's upstream
+
+The Linux end-to-end run failed once on "daemon.json names the agent". It was not a race: some of GitHub's runners (those provisioned with the hosted compute agent's DNS resolver) boot with `/etc/docker/daemon.json` set to `{"dns": ["168.63.129.16"]}`, written before the job starts; most boot with no file. Dockyard treated any `dns` it had not written as the owner's choice and left it, so on those machines containers silently had no `host.docker.internal` and no `dockyard.test` names. A probe of 30 runners found the file on one.
+
+- **Dockyard now takes the `dns` key and keeps the servers it held** in `/etc/dockyard/dns-upstreams` (resolv.conf form). The agent asks those servers, not `/etc/resolv.conf`, for every name that is not Dockyard's, so containers resolve other names through the same servers as before and also get Dockyard's names. The agent runs in the host's network namespace and as root, so it reaches whatever server the containers could.
+- **Uninstall puts those servers back** into `daemon.json`. A reinstall over a file that already names the agent keeps the saved servers; one over a file without `dns` removes them.
+- **Rejected: leaving the setting and telling the user**, the old behaviour. It made the product's core feature depend on a file some provisioners write without the user knowing, and the message was easy to miss in a silent install.
+- **The e2e starts every run from a daemon.json naming the runner's DNS server**, and the later fresh install from none, so both kinds of runner test both paths.

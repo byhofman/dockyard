@@ -33,6 +33,13 @@ check "and nothing was installed" missing "$marker"
 # GitHub's runner image comes with a kind of its own in /usr/local/bin, which Dockyard would rightly leave alone.
 if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then sudo rm -f /usr/local/bin/kind; fi
 
+if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
+  # Some of GitHub's runners come with a daemon.json naming their DNS server and some with none: start every run from the
+  # first, and the later fresh install from the second.
+  upstream="$(awk '$1 == "nameserver" { print $2; exit }' /run/systemd/resolve/resolv.conf)"
+  printf '{"dns": ["%s"]}\n' "$upstream" | sudo tee /etc/docker/daemon.json >/dev/null
+fi
+
 echo "== first install, no dashboard"
 run --silent --no-dashboard --no-start
 check "app in place" test -x "$app_dir/Dockyard"
@@ -54,6 +61,7 @@ fi
 if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
   echo "== host.docker.internal reaches a service on this machine's loopback"
   grep -q 198.19.250.1 /etc/docker/daemon.json && ok "daemon.json names the agent" || fail "daemon.json: $(cat /etc/docker/daemon.json)"
+  grep -qx "nameserver $upstream" /etc/dockyard/dns-upstreams && ok "in place of the server it named, which the agent asks" || fail "kept servers: $(cat /etc/dockyard/dns-upstreams 2>&1)"
   docker version >/dev/null
   sleep 2
   systemctl is-active --quiet dockyard-agent.service && ok "the agent runs with the engine" || fail "agent: $(systemctl status --no-pager dockyard-agent.service 2>&1 | tail -5)"
@@ -212,6 +220,9 @@ if [ "$container" -eq 0 ]; then
   check "the key is gone" missing "$HOME/.config/Dockyard/ca/ca.key"
   check "names no longer route to Dockyard" missing /etc/systemd/resolved.conf.d/dockyard.conf
   if [ -f /etc/docker/daemon.json ] && grep -q 198.19.250.1 /etc/docker/daemon.json; then fail "daemon.json still names the agent"; else ok "daemon.json no longer names the agent"; fi
+  if [ -n "${WIZARD:-}" ]; then
+    grep -q "\"$upstream\"" /etc/docker/daemon.json && ok "and names its own server again" || fail "daemon.json: $(cat /etc/docker/daemon.json)"
+  fi
   # The one-liner runs the release that is out, which may predate this cleanup.
   if [ -n "${WIZARD:-}" ]; then
     if ip addr show lo | grep -q 198.19.250.; then fail "lo kept the agent's addresses: $(ip addr show lo)"; else ok "lo no longer has the agent's addresses"; fi
@@ -226,9 +237,14 @@ if [ "$container" -eq 0 ]; then
   docker volume rm dockyard-e2e >/dev/null
 fi
 
+if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then sudo rm -f /etc/docker/daemon.json; fi
 echo "== a fresh install gets the dashboard"
 run --silent --no-start
 check "dashboard there" test -x "$(dash)"
+if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
+  grep -q 198.19.250.1 /etc/docker/daemon.json && ok "a daemon.json of its own names the agent" || fail "daemon.json: $(cat /etc/docker/daemon.json 2>&1)"
+  check "with no servers kept" missing /etc/dockyard/dns-upstreams
+fi
 
 if [ "$container" -eq 1 ] && [ "$ID" != arch ]; then
   echo "== removed again, silent without root has no way up"

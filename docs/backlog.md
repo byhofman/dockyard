@@ -12,6 +12,7 @@ IDs are permanent: never renumber or reuse one.
 
 ## Networking
 
+- [x] DOK-24 On a Linux host whose daemon.json already names DNS servers, containers still get `host.docker.internal` and `dockyard.test` names, and their other lookups keep going to those servers (flaky wizard-linux e2e, 2026-11-13)
 - [x] DOK-21 Direct `[::1]` on a published port gets an answer, or the limit is documented if the fix is not small (pulled in from Later by the owner, 2026-11-07, SCOPE.md) — v0.4.2
 
 ## Kubernetes

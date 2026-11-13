@@ -156,19 +156,37 @@ public sealed class EngineConfigTests
         Assert.Contains("198.19.250.1", merged);
         Assert.Contains("journald", merged);
 
-        var back = EngineConfig.WithoutDockyard(merged);
+        var back = EngineConfig.WithoutDockyard(merged, kept: null);
         Assert.DoesNotContain("198.19.250.1", back);
         Assert.Contains("journald", back);
     }
 
+    // GitHub's runners come with {"dns":["168.63.129.16"]} on some machines, which used to leave containers without
+    // host.docker.internal there.
     [Fact]
-    public void Dns_someone_configured_stays()
+    public void Dns_someone_configured_becomes_the_agents_upstream_and_comes_back_on_uninstall()
     {
-        const string theirs = """{"dns":["10.0.0.2"]}""";
-        Assert.True(EngineConfig.DnsIsSomeoneElses(theirs));
-        Assert.Contains("10.0.0.2", EngineConfig.WithDockyard(theirs));
-        Assert.DoesNotContain("198.19.250.1", EngineConfig.WithDockyard(theirs));
-        Assert.Contains("10.0.0.2", EngineConfig.WithoutDockyard(theirs));
+        const string theirs = """{"dns":["10.0.0.2","10.0.0.3"],"log-driver":"journald"}""";
+
+        var merged = EngineConfig.WithDockyard(theirs);
+        Assert.Equal(["198.19.250.1"], JsonNode.Parse(merged)!["dns"]!.AsArray().Select(n => n!.GetValue<string>()));
+        Assert.Contains("journald", merged);
+
+        var kept = EngineConfig.KeptDns(theirs);
+        Assert.Equal("nameserver 10.0.0.2\nnameserver 10.0.0.3\n", kept);
+
+        var back = JsonNode.Parse(EngineConfig.WithoutDockyard(merged, kept))!;
+        Assert.Equal(["10.0.0.2", "10.0.0.3"], back["dns"]!.AsArray().Select(n => n!.GetValue<string>()));
+        Assert.Equal("journald", back["log-driver"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void Only_someone_elses_servers_are_kept()
+    {
+        Assert.Null(EngineConfig.KeptDns("{}"));
+        Assert.Null(EngineConfig.KeptDns(EngineConfig.WithDockyard("{}")));
+        Assert.Equal("nameserver 10.0.0.2\n", EngineConfig.KeptDns("""{"dns":["198.19.250.1","10.0.0.2"]}"""));
+        Assert.DoesNotContain("dns", EngineConfig.WithoutDockyard(EngineConfig.WithDockyard("{}"), kept: null));
     }
 
     [Fact]

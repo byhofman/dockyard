@@ -1,5 +1,5 @@
 #!/bin/sh
-# Dockyard setup for Linux, run as root (pkexec): setup-linux.sh install <user> [agent] [daemon.json] | uninstall "" [daemon.json] | packages
+# Dockyard setup for Linux, run as root (pkexec): setup-linux.sh install <user> [agent] [daemon.json] [dns-upstreams] | uninstall "" [daemon.json] | packages
 set -eu
 
 action="${1:?usage: setup-linux.sh install <user> | uninstall | packages}"
@@ -7,6 +7,7 @@ user="${2:-}"
 agent="${3:-}"
 daemon_json="${3:-}"
 [ "$action" = install ] && daemon_json="${4:-}"
+kept_dns="${5:-}"
 kind_file="${3:-}"
 kind_bin=/usr/local/bin/kind
 kind_marker=/etc/dockyard/kind
@@ -259,6 +260,13 @@ untrust_ca() {
   fi
 }
 
+# The DNS servers daemon.json named before the agent took their place; the agent asks them for containers. An empty
+# file means there are none to keep any more.
+keep_dns() {
+  [ -n "$kept_dns" ] && [ -f "$kept_dns" ] || return 0
+  if [ -s "$kept_dns" ]; then install -m 0644 "$kept_dns" /etc/dockyard/dns-upstreams; else rm -f /etc/dockyard/dns-upstreams; fi
+}
+
 # A running engine only reads this when it starts. A restart stops the user's containers, so with any running it waits for
 # the engine's next start. Uninstall passes "now": what was written names an agent that is gone, and containers would lose DNS.
 apply_daemon_json() {
@@ -318,7 +326,7 @@ case "$action" in
   # $3 is the checked kind binary here.
   add-kind) add_kind ;;
   remove-kind) remove_kind ;;
-  install) install_packages; configure; grant_socket_access; install_tray_host; install_libsecret; install_agent; route_domains; apply_daemon_json ;;
+  install) install_packages; configure; grant_socket_access; install_tray_host; install_libsecret; install_agent; route_domains; keep_dns; apply_daemon_json ;;
   uninstall)
     untrust_ca
     if has_systemd; then systemctl disable --now dockyard-agent.service >/dev/null 2>&1 || true; fi
