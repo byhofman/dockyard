@@ -42,8 +42,10 @@ function Window {
 function Linux-Engine {
     Start-Process $appExe -ArgumentList '--start', 'linux' | Out-Null
     foreach ($i in 1..60) {
-        & $docker --context linux version *> $null
-        if ($LASTEXITCODE -eq 0) { return }
+        # Bounded: a pipe whose instances are all taken makes docker wait without end.
+        $asking = Start-Process $docker -ArgumentList '--context', 'linux', 'version' -PassThru -NoNewWindow -RedirectStandardOutput (New-TemporaryFile)
+        if (-not $asking.WaitForExit(30000)) { $asking.Kill(); Write-Host '  docker version did not return within 30 s'; break }
+        if ($asking.ExitCode -eq 0) { return }
         Start-Sleep 2
     }
     Write-Host '--- what WSL says'
