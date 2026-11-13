@@ -162,12 +162,12 @@ static partial class Elevation
             }
             if (Opt("--machine-trust-ca") is { } certificate)
             {
-                MachineSetup.TrustCa(Log, MachineSetup.DecodeCertificate(certificate));
+                MachineTrust.TrustCa(Log, MachineTrust.DecodeCertificate(certificate));
                 return 0;
             }
             if (args.Contains("--machine-untrust-ca"))
             {
-                MachineSetup.UntrustCa(Log);
+                MachineTrust.UntrustCa(Log);
                 return 0;
             }
             if (Opt("--machine-dashboard") is { } dashboard)

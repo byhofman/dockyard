@@ -1,51 +1,38 @@
-using System.ComponentModel;
-using System.Diagnostics;
-using System.IO.Compression;
-using System.Security.Principal;
-using System.ServiceProcess;
-using System.Text.RegularExpressions;
-using Dockyard.Hosts;
-
 namespace Dockyard.Core;
 
-// Runs elevated. Everything per-user lives in UserSetup.
+// Runs elevated. Everything per-user lives in UserSetup. The Windows engine, the apps and tools, and the trust store each
+// have a class of their own; this is the order they are set up and taken down in.
 [System.Runtime.Versioning.SupportedOSPlatform("windows")]
 static class MachineSetup
 {
-    static readonly (Component Component, string File, Release Release)[] Plugins =
-    [
-        (Component.Compose, "docker-compose.exe", Updates.WindowsCompose),
-        (Component.Buildx, "docker-buildx.exe", Updates.WindowsBuildx),
-    ];
-
     // Returns true when a reboot is needed.
     public static async Task<bool> Install(Action<string> log, string userSid, string userName, int keepPid, bool engineOnly, IReadOnlyCollection<string> without)
     {
         InUseFiles.CleanUp(Paths.DockerDir);
         var withWindows = !without.Contains(nameof(Component.Engine));
-        var reboot = withWindows && await EnableContainersFeature(log);
+        var reboot = withWindows && await MachineEngine.EnableContainersFeature(log);
         if (!without.Contains(nameof(Component.LinuxEngine))) reboot |= await InstallWsl(log);
-        await AddDefenderExclusions(log);
-        if (withWindows) await UpdateEngine(log, onlyIfNewer: true);
+        await MachineApps.AddDefenderExclusions(log);
+        if (withWindows) await MachineEngine.Update(log, onlyIfNewer: true);
         else
         {
-            await UpdateCli(log, onlyIfNewer: true);
-            await RemoveWindowsEngine(log);
+            await MachineEngine.UpdateCli(log, onlyIfNewer: true);
+            await MachineEngine.Remove(log);
         }
-        AddToMachinePath(Paths.DockerDir);
-        foreach (var plugin in Plugins)
+        MachineApps.AddToMachinePath(Paths.DockerDir);
+        foreach (var plugin in MachineApps.Plugins)
         {
-            if (without.Contains(plugin.Component.ToString())) RemovePlugin(log, plugin.Component);
-            else if (await Updates.Installed(plugin.Component) is not { } installed || installed < plugin.Release.Version) await UpdatePlugin(log, plugin.Component);
+            if (without.Contains(plugin.Component.ToString())) MachineApps.RemovePlugin(log, plugin.Component);
+            else if (await Updates.Installed(plugin.Component) is not { } installed || installed < plugin.Release.Version) await MachineApps.UpdatePlugin(log, plugin.Component);
         }
-        if (without.Contains(Kind.Id)) RemoveKind(log);
-        else if (await Updates.Installed(Component.Kind) != Kind.Version) await InstallKind(log);
-        await InstallCredentialHelper(log);
+        if (without.Contains(Kind.Id)) MachineApps.RemoveKind(log);
+        else if (await Updates.Installed(Component.Kind) != Kind.Version) await MachineApps.InstallKind(log);
+        await MachineApps.InstallCredentialHelper(log);
         if (without.Contains(nameof(Component.LinuxEngine))) await UnrouteDomains();
         else await RouteDomains(log);
-        if (withWindows) await ConfigureWindowsEngine(log, userSid, userName);
-        await InstallApp(log, Paths.Self, keepPid, engineOnly, Updates.LocalAssets);
-        RemoveLegacy(log, keepPid);
+        if (withWindows) await MachineEngine.Configure(log, userSid, userName);
+        await MachineApps.InstallApp(log, Paths.Self, keepPid, engineOnly, Updates.LocalAssets);
+        MachineApps.RemoveLegacy(log, keepPid);
         return reboot;
     }
 
@@ -53,16 +40,16 @@ static class MachineSetup
     {
         switch (component)
         {
-            case Component.Engine: await UpdateEngine(log, onlyIfNewer: false); break;
-            case Component.Cli: await UpdateCli(log, onlyIfNewer: false); break;
-            case Component.Compose or Component.Buildx: await UpdatePlugin(log, component); break;
-            case Component.Kind: await InstallKind(log); break;
+            case Component.Engine: await MachineEngine.Update(log, onlyIfNewer: false); break;
+            case Component.Cli: await MachineEngine.UpdateCli(log, onlyIfNewer: false); break;
+            case Component.Compose or Component.Buildx: await MachineApps.UpdatePlugin(log, component); break;
+            case Component.Kind: await MachineApps.InstallKind(log); break;
             case Component.App:
                 // Defender's rule goes by path, and an update can bring the first dashboard with the new name.
-                await AddDefenderExclusions(log);
+                await MachineApps.AddDefenderExclusions(log);
                 // Next to the new exe in the folder the tray downloaded and checked both into.
                 var exe = source ?? throw new ArgumentException("--source is required for the app update");
-                await InstallApp(log, exe, keepPid, engineOnly: !File.Exists(Paths.DashboardExe) && !File.Exists(Paths.LegacyDashboardExe), Path.GetDirectoryName(Path.GetFullPath(exe)));
+                await MachineApps.InstallApp(log, exe, keepPid, engineOnly: !File.Exists(Paths.DashboardExe) && !File.Exists(Paths.LegacyDashboardExe), Path.GetDirectoryName(Path.GetFullPath(exe)));
                 Shell.StartUnelevated(Paths.AppExe);
                 break;
             default: throw new ArgumentException($"{component} is not a machine component");
@@ -71,23 +58,17 @@ static class MachineSetup
 
     public static async Task Uninstall(Action<string> log, int keepPid)
     {
-        StopApps(keepPid);
+        MachineApps.StopApps(keepPid);
         await UnrouteDomains();
-        UntrustCa(log);
-        if (ServiceExists())
-        {
-            log("Removing docker service");
-            await StopService();
-            await Shell.Check("sc.exe", "delete", Paths.ServiceName);
-            RemoveEventSource();
-        }
+        MachineTrust.UntrustCa(log);
+        await MachineEngine.RemoveService(log);
         await Shell.Run("powershell.exe", "-NoProfile", "-Command",
             $"Remove-MpPreference -ControlledFolderAccessAllowedApplications {Shell.PsQuote(Paths.DockerdExe)}");
         await Shell.Run("powershell.exe", "-NoProfile", "-Command",
-            $"Remove-MpPreference -AttackSurfaceReductionOnlyExclusions {string.Join(',', EverExcludedFromAsr.Select(Shell.PsQuote))}");
+            $"Remove-MpPreference -AttackSurfaceReductionOnlyExclusions {string.Join(',', MachineApps.EverExcludedFromAsr.Select(Shell.PsQuote))}");
         await Shell.Run("net.exe", "localgroup", "docker-users", "/delete");
-        RemoveFromMachinePath(Paths.DockerDir);
-        RemoveLegacy(log, keepPid);
+        MachineApps.RemoveFromMachinePath(Paths.DockerDir);
+        MachineApps.RemoveLegacy(log, keepPid);
 
         foreach (var dir in new[] { Paths.DockerDir, Paths.AppDir })
         {
@@ -102,30 +83,45 @@ static class MachineSetup
         log($"Windows images and containers under {Path.GetDirectoryName(Paths.DaemonConfigDir)} were left in place");
     }
 
-    public static string EncodeCertificate(string pem) => Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(pem));
-    public static string DecodeCertificate(string encoded) => System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(encoded));
-
-    public static void TrustCa(Action<string> log, string certificatePem)
+    public static async Task SetComponent(Action<string> log, Component component, bool installed, string userSid, string userName)
     {
-        if (!LocalCa.IsConstrainedRoot(certificatePem)) throw new InvalidOperationException("That is not Dockyard's certificate, so it was not trusted");
-        using var certificate = System.Security.Cryptography.X509Certificates.X509Certificate2.CreateFromPem(certificatePem);
-        using var store = new System.Security.Cryptography.X509Certificates.X509Store(System.Security.Cryptography.X509Certificates.StoreName.Root, System.Security.Cryptography.X509Certificates.StoreLocation.LocalMachine);
-        store.Open(System.Security.Cryptography.X509Certificates.OpenFlags.ReadWrite);
-        store.Add(certificate);
-        log("Windows trusts Dockyard's certificate, for names under dockyard.test only");
+        switch (component)
+        {
+            case Component.Compose or Component.Buildx:
+                if (installed) await MachineApps.UpdatePlugin(log, component);
+                else MachineApps.RemovePlugin(log, component);
+                break;
+            case Component.Kind:
+                if (installed) await MachineApps.InstallKind(log);
+                else MachineApps.RemoveKind(log);
+                break;
+            // The distro and its images are the user's half, in UserSetup. Only the engine answers those names.
+            case Component.LinuxEngine:
+                if (installed) await RouteDomains(log);
+                else await UnrouteDomains();
+                break;
+            case Component.Engine:
+                if (!installed) { await MachineEngine.Remove(log); break; }
+                if (await MachineEngine.EnableContainersFeature(log)) log("Windows has to restart before the Windows engine can run");
+                await MachineEngine.Update(log, onlyIfNewer: true);
+                await MachineEngine.Configure(log, userSid, userName);
+                break;
+            default: throw new ArgumentException($"{component} cannot be changed here");
+        }
     }
 
-    public static void UntrustCa(Action<string> log)
+    public static async Task UpdateDashboard(Action<string> log, string sourceDir, int keepPid)
     {
-        using var store = new System.Security.Cryptography.X509Certificates.X509Store(System.Security.Cryptography.X509Certificates.StoreName.Root, System.Security.Cryptography.X509Certificates.StoreLocation.LocalMachine);
-        store.Open(System.Security.Cryptography.X509Certificates.OpenFlags.ReadWrite);
-        var removed = 0;
-        foreach (var certificate in store.Certificates.Find(System.Security.Cryptography.X509Certificates.X509FindType.FindBySubjectName, LocalCa.SubjectName, validOnly: false))
-        {
-            store.Remove(certificate);
-            removed++;
-        }
-        if (removed > 0) log("Dockyard's certificate is out of Windows' trust store");
+        MachineApps.StopApps(keepPid, dashboardOnly: true);
+        await MachineApps.AddDefenderExclusions(log);
+        await MachineApps.InstallDashboard(log, sourceDir);
+    }
+
+    public static async Task SetDashboard(Action<string> log, bool installed, int keepPid)
+    {
+        MachineApps.StopApps(keepPid, dashboardOnly: true);
+        if (installed) await MachineApps.InstallDashboard(log, Updates.LocalAssets);
+        else MachineApps.RemoveDashboard(log);
     }
 
     const string DomainNamespace = ".dockyard.test";
@@ -141,22 +137,6 @@ static class MachineSetup
     static async Task UnrouteDomains() => await Shell.Run("powershell.exe", "-NoProfile", "-Command",
         $"Get-DnsClientNrptRule | Where-Object {{ $_.Namespace -contains '{DomainNamespace}' }} | Remove-DnsClientNrptRule -Force");
 
-    // Not worth failing an install over: without it docker login just keeps working the way it did.
-    static async Task InstallCredentialHelper(Action<string> log)
-    {
-        if (File.Exists(Paths.CredentialHelper)) return;
-        try
-        {
-            var release = Pinned.CredentialHelper("wincred", "windows-amd64.exe");
-            await Pinned.Download(release, Paths.CredentialHelper);
-            log($"Credential helper {release.Tag}");
-        }
-        catch (Exception e) when (e is HttpRequestException or InvalidOperationException or IOException)
-        {
-            log($"The credential helper was not installed ({e.Message}); running the wizard again retries it");
-        }
-    }
-
     // Returns true when a reboot has to finish the WSL install.
     static async Task<bool> InstallWsl(Action<string> log)
     {
@@ -170,398 +150,5 @@ static class MachineSetup
         if (install.ExitCode == 0 && (await Shell.Run("wsl.exe", "--status")).ExitCode == 0) { log("WSL is ready"); return false; }
         log("WSL is installed; a restart finishes it");
         return true;
-    }
-
-    // Only files in Program Files, which only administrators can write: an exclusion goes by path and exempts whatever is
-    // there from every ASR rule. Earlier versions also excluded the installer wherever it ran, and the one-liner asks for
-    // its own download path when Defender blocks it, so uninstall takes those back too.
-    static IEnumerable<string> ExcludedFromAsr => new[] { Paths.AppExe, Paths.DashboardExe };
-    static IEnumerable<string> EverExcludedFromAsr => ExcludedFromAsr.Append(Paths.LegacyDashboardExe).Append(Paths.OneLinerExe);
-
-    // Defender's prevalence/age rule (event 1121) blocks every new build, and an exclusion goes by path because a hash changes with each build.
-    static async Task AddDefenderExclusions(Action<string> log)
-    {
-        var paths = ExcludedFromAsr.Select(Shell.PsQuote);
-        var r = await Shell.Run("powershell.exe", "-NoProfile", "-Command",
-            $"Add-MpPreference -AttackSurfaceReductionOnlyExclusions {string.Join(',', paths)}");
-        log(r.ExitCode == 0 ? "Defender: Dockyard is excluded from the prevalence rule" : "Defender exclusions were not added (managed device?); ask your administrator if Defender blocks Dockyard");
-    }
-
-    static async Task<bool> EnableContainersFeature(Action<string> log)
-    {
-        var info = await Shell.Check("dism.exe", "/online", "/get-featureinfo", "/featurename:Containers", "/English");
-        if (Regex.IsMatch(info, @"State : Enabled")) { log("Containers feature already enabled"); return false; }
-
-        log("Enabling Windows Containers feature");
-        var r = await Shell.Run("dism.exe", "/online", "/enable-feature", "/featurename:Containers", "/all", "/norestart", "/quiet");
-        if (r.ExitCode == 3010) { log("Containers feature enabled (reboot required)"); return true; }
-        if (r.ExitCode != 0) throw new InvalidOperationException($"Enabling Containers feature failed ({r.ExitCode}): {r.Output.Trim()}");
-        return false;
-    }
-
-    static async Task UpdateEngine(Action<string> log, bool onlyIfNewer)
-    {
-        var latest = Updates.WindowsDocker;
-        var current = await Updates.Installed(Component.Engine);
-        if (onlyIfNewer && current >= latest.Version) { log($"Docker {current} is up to date"); return; }
-
-        log($"Installing Docker {latest.Version}" + (current is null ? "" : $" (was {current})"));
-        // Downloaded first, so a failed download leaves the engine running as it was.
-        var zip = await DownloadDockerZip(latest);
-        var wasRunning = ServiceExists() && ServiceStatus() == ServiceControllerStatus.Running;
-        await StopService();
-
-        var root = Path.GetDirectoryName(Paths.DockerDir)!;
-        ExtractDockerZip(zip, archive =>
-        {
-            foreach (var entry in archive.Entries.Where(e => e.Name.Length > 0))
-            {
-                var target = Path.GetFullPath(Path.Combine(root, entry.FullName.Replace('/', '\\')));
-                if (!target.StartsWith(Paths.DockerDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException($"The Docker archive has an entry outside {Paths.DockerDir}: {entry.FullName}");
-                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                InUseFiles.MoveAside(target);
-                entry.ExtractToFile(target);
-            }
-        });
-
-        if (wasRunning)
-        {
-            using var sc = new ServiceController(Paths.ServiceName);
-            sc.Start();
-            await Task.Run(() => sc.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(60)));
-        }
-    }
-
-    static async Task UpdatePlugin(Action<string> log, Component component)
-    {
-        var plugin = Plugins.Single(p => p.Component == component);
-        Directory.CreateDirectory(Paths.PluginDir);
-        var target = Path.Combine(Paths.PluginDir, plugin.File);
-        var incoming = target + ".new";
-        await Pinned.Download(plugin.Release, incoming);
-        InUseFiles.MoveAside(target);
-        File.Move(incoming, target);
-        log($"{plugin.File} {plugin.Release.Tag}");
-    }
-
-    // Into Program Files, which only administrators can write: in this user's temp folder a process without elevation
-    // could swap the checked zip before this elevated one extracts it.
-    static async Task<string> DownloadDockerZip(Release release)
-    {
-        Directory.CreateDirectory(Paths.DockerDir);
-        var zip = Path.Combine(Paths.DockerDir, $"docker-{release.Version}.zip");
-        await Pinned.Download(release, zip);
-        return zip;
-    }
-
-    static void ExtractDockerZip(string zip, Action<ZipArchive> extract)
-    {
-        try
-        {
-            using var archive = ZipFile.OpenRead(zip);
-            extract(archive);
-        }
-        finally
-        {
-            File.Delete(zip);
-        }
-    }
-
-    static async Task InstallKind(Action<string> log)
-    {
-        Directory.CreateDirectory(Paths.DockerDir);
-        var incoming = Paths.KindExe + ".new";
-        await Kind.Download(incoming);
-        InUseFiles.MoveAside(Paths.KindExe);
-        File.Move(incoming, Paths.KindExe);
-        log($"kind {Kind.Tag}");
-    }
-
-    static void RemoveKind(Action<string> log)
-    {
-        if (!File.Exists(Paths.KindExe)) return;
-        InUseFiles.MoveAside(Paths.KindExe);
-        log("Removed kind");
-    }
-
-    static void RemovePlugin(Action<string> log, Component component)
-    {
-        var plugin = Plugins.Single(p => p.Component == component);
-        var target = Path.Combine(Paths.PluginDir, plugin.File);
-        if (!File.Exists(target)) return;
-        InUseFiles.MoveAside(target);
-        log($"Removed {plugin.File}");
-    }
-
-    // The CLI on its own, for when the Windows engine that normally brings it is not wanted.
-    static async Task UpdateCli(Action<string> log, bool onlyIfNewer)
-    {
-        var latest = Updates.WindowsDocker;
-        var current = await Updates.Installed(Component.Cli);
-        if (onlyIfNewer && current >= latest.Version) return;
-        log($"Installing the Docker CLI {latest.Version}");
-        ExtractDockerZip(await DownloadDockerZip(latest), archive =>
-        {
-            var entry = archive.Entries.First(e => e.Name.Equals("docker.exe", StringComparison.OrdinalIgnoreCase));
-            InUseFiles.MoveAside(Paths.DockerExe);
-            entry.ExtractToFile(Paths.DockerExe);
-        });
-    }
-
-    // The CLI and the plugins stay, and so do the engine's images under ProgramData: adding it back finds them there.
-    static async Task RemoveWindowsEngine(Action<string> log)
-    {
-        if (ServiceExists())
-        {
-            await StopService();
-            await Shell.Check("sc.exe", "delete", Paths.ServiceName);
-            RemoveEventSource();
-        }
-        if (!Directory.Exists(Paths.DockerDir)) return;
-        var removed = false;
-        foreach (var file in Directory.GetFiles(Paths.DockerDir))
-        {
-            if (WindowsEngineFiles.Keep(Path.GetFileName(file))) continue;
-            InUseFiles.MoveAside(file);
-            removed = true;
-        }
-        if (removed) log("Removed the Windows engine; its images are kept");
-    }
-
-    public static async Task SetComponent(Action<string> log, Component component, bool installed, string userSid, string userName)
-    {
-        switch (component)
-        {
-            case Component.Compose or Component.Buildx:
-                if (installed) await UpdatePlugin(log, component);
-                else RemovePlugin(log, component);
-                break;
-            case Component.Kind:
-                if (installed) await InstallKind(log);
-                else RemoveKind(log);
-                break;
-            // The distro and its images are the user's half, in UserSetup. Only the engine answers those names.
-            case Component.LinuxEngine:
-                if (installed) await RouteDomains(log);
-                else await UnrouteDomains();
-                break;
-            case Component.Engine:
-                if (!installed) { await RemoveWindowsEngine(log); break; }
-                if (await EnableContainersFeature(log)) log("Windows has to restart before the Windows engine can run");
-                await UpdateEngine(log, onlyIfNewer: true);
-                await ConfigureWindowsEngine(log, userSid, userName);
-                break;
-            default: throw new ArgumentException($"{component} cannot be changed here");
-        }
-    }
-
-    public static async Task UpdateDashboard(Action<string> log, string sourceDir, int keepPid)
-    {
-        StopApps(keepPid, dashboardOnly: true);
-        await AddDefenderExclusions(log);
-        await InstallDashboard(log, sourceDir);
-    }
-
-    static async Task ConfigureWindowsEngine(Action<string> log, string userSid, string userName)
-    {
-        if ((await Shell.Run("net.exe", "localgroup", "docker-users")).ExitCode != 0)
-            await Shell.Check("net.exe", "localgroup", "docker-users", "/add", "/comment:Access to the Windows Docker engine");
-        var add = await Shell.Run("net.exe", "localgroup", "docker-users", userName, "/add");
-        if (add.ExitCode == 0) log($"Added {userName} to docker-users");
-        else if (!(add.Output + add.Error).Contains("1378"))
-            throw new InvalidOperationException($"Adding {userName} to docker-users failed: {(add.Error + add.Output).Trim()}");
-
-        // Controlled Folder Access otherwise blocks dockerd unpacking image layers ("hcsshim::ProcessBaseLayer ... Access is denied").
-        // When Intune manages this list it may override the local entry; then it has to be added there.
-        await Shell.Run("powershell.exe", "-NoProfile", "-Command",
-            $"Add-MpPreference -ControlledFolderAccessAllowedApplications {Shell.PsQuote(Paths.DockerdExe)}");
-
-        Directory.CreateDirectory(Paths.DaemonConfigDir);
-        var daemonJson = Path.Combine(Paths.DaemonConfigDir, "daemon.json");
-        var existing = File.Exists(daemonJson) ? File.ReadAllText(daemonJson) : null;
-        var config = DaemonJson.WithAccessFor(existing, Paths.WindowsHost, ResolvesTo(userName, userSid) ? userName : null);
-        File.WriteAllText(daemonJson, config);
-        var changed = existing != config;
-
-        if (!ServiceExists())
-        {
-            log("Registering docker service");
-            RemoveEventSource();
-            await Shell.Check(Paths.DockerdExe, "--register-service");
-        }
-        await Shell.Check("sc.exe", "config", Paths.ServiceName, "start=", "demand");
-
-        var ace = $"(A;;CCLCSWRPWPDTLOCRRC;;;{userSid})";
-        var sddl = (await Shell.Check("sc.exe", "sdshow", Paths.ServiceName)).Trim();
-        if (!sddl.Contains(ace))
-        {
-            sddl = sddl.Contains("S:") ? sddl.Replace("S:", ace + "S:") : sddl + ace;
-            await Shell.Check("sc.exe", "sdset", Paths.ServiceName, sddl);
-        }
-        log($"Windows engine: on demand, start/stop allowed for {userName}");
-
-        if (changed && ServiceStatus() == ServiceControllerStatus.Running)
-        {
-            await StopService();
-            using var sc = new ServiceController(Paths.ServiceName);
-            sc.Start();
-            await Task.Run(() => sc.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(60)));
-        }
-    }
-
-    // dockerd refuses to start when it cannot resolve a name in "group", so only a name that resolves goes in.
-    static bool ResolvesTo(string userName, string userSid)
-    {
-        try
-        {
-            return new NTAccount(userName).Translate(typeof(SecurityIdentifier)).Value == userSid;
-        }
-        catch (Exception e) when (e is IdentityNotMappedException or SystemException)
-        {
-            return false;
-        }
-    }
-
-    static async Task InstallApp(Action<string> log, string source, int keepPid, bool engineOnly, string? dashboardDir)
-    {
-        var isInstalledCopy = string.Equals(Path.GetFullPath(source), Paths.AppExe, StringComparison.OrdinalIgnoreCase);
-        StopApps(keepPid);
-        Directory.CreateDirectory(Paths.AppDir);
-        if (!isInstalledCopy)
-        {
-            ReplaceAppExe(source);
-            log($"Installed {Paths.AppExe}");
-        }
-        if (!engineOnly) await InstallDashboard(log, dashboardDir);
-        else if (File.Exists(Paths.DashboardExe) || File.Exists(Paths.LegacyDashboardExe)) RemoveDashboard(log);
-        else log("The dashboard is not installed");
-    }
-
-    // A running exe cannot be overwritten but can be renamed, and the worker doing this may be running from that very
-    // file. Earlier versions copied over it, which is why their tray could never update itself.
-    static void ReplaceAppExe(string source)
-    {
-        var old = Paths.AppExe + ".old";
-        try { File.Delete(old); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
-        if (File.Exists(Paths.AppExe)) File.Move(Paths.AppExe, old, overwrite: true);
-        try
-        {
-            File.Copy(source, Paths.AppExe);
-        }
-        catch
-        {
-            if (!File.Exists(Paths.AppExe)) File.Move(old, Paths.AppExe);
-            throw;
-        }
-    }
-
-    public static async Task SetDashboard(Action<string> log, bool installed, int keepPid)
-    {
-        StopApps(keepPid, dashboardOnly: true);
-        if (installed) await InstallDashboard(log, Updates.LocalAssets);
-        else RemoveDashboard(log);
-    }
-
-    // Dockyard.Dashboard.zip from the given folder, or the one from this release. A download goes to Program Files, which
-    // only administrators can write, so nothing can swap it between the check and the extraction.
-    static async Task InstallDashboard(Action<string> log, string? sourceDir)
-    {
-        var zip = sourceDir is null ? null : Path.Combine(sourceDir, Paths.DashboardZipName);
-        string? downloaded = null;
-        if (zip is null || !File.Exists(zip))
-        {
-            log("Downloading the dashboard");
-            zip = downloaded = await Updates.DownloadReleaseAsset(Paths.DashboardZipName, Path.Combine(Paths.AppDir, $".download-{Guid.NewGuid():N}"));
-        }
-        try
-        {
-            DashboardFiles.Extract(zip, Paths.AppDir, Path.GetFileName(Paths.LegacyDashboardExe));
-            log($"Installed {Paths.DashboardExe}");
-        }
-        finally
-        {
-            if (downloaded is not null) Directory.Delete(Path.GetDirectoryName(downloaded)!, recursive: true);
-        }
-    }
-
-    static void RemoveDashboard(Action<string> log)
-    {
-        DashboardFiles.Remove(Paths.AppDir, [Path.GetFileName(Paths.DashboardExe), Path.GetFileName(Paths.LegacyDashboardExe)], log);
-        log("Removed the dashboard");
-    }
-
-    static void RemoveLegacy(Action<string> log, int keepPid)
-    {
-        if (!Directory.Exists(Paths.LegacyTrayDir)) return;
-        foreach (var p in Process.GetProcessesByName(Paths.LegacyName)) Kill(p, keepPid);
-        Directory.Delete(Paths.LegacyTrayDir, recursive: true);
-        log($"Removed the old {Paths.LegacyName} from {Paths.LegacyTrayDir}");
-    }
-
-    static void StopApps(int keepPid, bool dashboardOnly = false)
-    {
-        var processes = Process.GetProcessesByName(Paths.DashboardProcess).Concat(Process.GetProcessesByName(Paths.LegacyDashboardProcess));
-        if (!dashboardOnly) processes = processes.Concat(Process.GetProcessesByName(Paths.AppName));
-        foreach (var p in processes)
-        {
-            try
-            {
-                var file = p.MainModule?.FileName;
-                if (new[] { Paths.AppExe, Paths.DashboardExe, Paths.LegacyDashboardExe }.Contains(file, StringComparer.OrdinalIgnoreCase)) Kill(p, keepPid);
-            }
-            // Gone by now, or another user's process whose file cannot be read: not one of ours to stop.
-            catch (Exception e) when (e is Win32Exception or InvalidOperationException) { }
-        }
-    }
-
-    static void Kill(Process p, int keepPid)
-    {
-        using (p)
-        {
-            if (p.Id == keepPid || p.Id == Environment.ProcessId) return;
-            try
-            {
-                p.Kill();
-                p.WaitForExit(5000);
-            }
-            catch (Exception e) when (e is Win32Exception or InvalidOperationException) { }
-        }
-    }
-
-    // dockerd refuses to register when its event source is left over, and "sc delete" leaves it. Without this,
-    // installing again after an uninstall fails.
-    static void RemoveEventSource() =>
-        Microsoft.Win32.Registry.LocalMachine.DeleteSubKeyTree(@"SYSTEM\CurrentControlSet\Services\EventLog\Application\" + Paths.ServiceName, throwOnMissingSubKey: false);
-
-    static bool ServiceExists() => ServiceController.GetServices().Any(s => s.ServiceName == Paths.ServiceName);
-
-    static ServiceControllerStatus ServiceStatus()
-    {
-        using var sc = new ServiceController(Paths.ServiceName);
-        return sc.Status;
-    }
-
-    static async Task StopService()
-    {
-        if (!ServiceExists()) return;
-        using var sc = new ServiceController(Paths.ServiceName);
-        if (sc.Status == ServiceControllerStatus.Stopped) return;
-        if (sc.Status != ServiceControllerStatus.StopPending) sc.Stop();
-        await Task.Run(() => sc.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(60)));
-    }
-
-    static void AddToMachinePath(string dir)
-    {
-        var path = Environment.GetEnvironmentVariable("Path", EnvironmentVariableTarget.Machine) ?? "";
-        if (path.Split(';').Any(p => string.Equals(p.TrimEnd('\\'), dir, StringComparison.OrdinalIgnoreCase))) return;
-        Environment.SetEnvironmentVariable("Path", path.TrimEnd(';') + ";" + dir, EnvironmentVariableTarget.Machine);
-    }
-
-    static void RemoveFromMachinePath(string dir)
-    {
-        var path = Environment.GetEnvironmentVariable("Path", EnvironmentVariableTarget.Machine) ?? "";
-        var kept = path.Split(';').Where(p => !string.Equals(p.TrimEnd('\\'), dir, StringComparison.OrdinalIgnoreCase));
-        Environment.SetEnvironmentVariable("Path", string.Join(';', kept), EnvironmentVariableTarget.Machine);
     }
 }
