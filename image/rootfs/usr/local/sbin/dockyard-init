@@ -5,6 +5,13 @@ set -eu
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 tcp="${DOCKYARD_TCP:-}"
 
+# A second start while an engine runs, as from a tray that did not see it in time, would remove the running engine's
+# socket below and leave it unreachable. It keeps the session alive with that engine instead.
+if pidof dockerd >/dev/null 2>&1; then
+  while pidof dockerd >/dev/null 2>&1; do sleep 2; done
+  exit 0
+fi
+
 if ! grep -q ' /sys/fs/cgroup cgroup2 ' /proc/mounts; then
   mkdir -p /sys/fs/cgroup
   mount -t cgroup2 cgroup2 /sys/fs/cgroup
