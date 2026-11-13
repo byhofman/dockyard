@@ -23,6 +23,7 @@ var proxy = new DomainProxy(table, log);
 var api = new AgentApi(table, proxy);
 
 string ReadResolvConf() => File.Exists("/etc/resolv.conf") ? File.ReadAllText("/etc/resolv.conf") : "";
+string ContainerResolvConf() => ResolvConf.ForContainers(options.Mode, File.Exists(AgentFiles.KeptDns) ? File.ReadAllText(AgentFiles.KeptDns) : null, ReadResolvConf());
 
 // Each place a name is looked up from gets the address that works from there.
 IPAddress? ContainerView(string name) => GuestAddresses.Resolve(name) ?? (table.Contains(name) ? GuestAddresses.Dns : null);
@@ -31,7 +32,7 @@ Func<string, IPAddress?> HostView(Func<IPAddress?> address) => name => table.Con
 List<Task> services =
 [
     // On a Linux host port 53 may belong to dnsmasq or the like, so a rule brings containers' queries to a port of its own.
-    new DnsServer(GuestAddresses.Dns, ContainerView, ReadResolvConf, log, options.Mode == AgentMode.Host ? GuestAddresses.ContainerDnsPort : 53, DomainNames.InZone).Run(cts.Token),
+    new DnsServer(GuestAddresses.Dns, ContainerView, ContainerResolvConf, log, options.Mode == AgentMode.Host ? GuestAddresses.ContainerDnsPort : 53, DomainNames.InZone).Run(cts.Token),
     table.Run(cts.Token),
     Optional("HTTP on domains", () => proxy.Serve(DomainProxy.Listen(IPAddress.Any, GuestAddresses.DomainHttpPort), tls: false, guarded: true, cts.Token)),
     Optional("HTTPS on domains", () => proxy.Serve(DomainProxy.Listen(IPAddress.Any, GuestAddresses.DomainHttpsPort), tls: true, guarded: true, cts.Token)),

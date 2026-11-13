@@ -11,4 +11,9 @@ static class ResolvConf
         .Select(p => IPAddress.Parse(p[1]))
         .Where(a => !a.Equals(self))
         .ToList();
+
+    // On a Linux host, servers someone had put in daemon.json before Dockyard's agent took their place stay the ones
+    // containers' names go to; the machine's own resolver is for everything else.
+    public static string ForContainers(AgentMode mode, string? kept, string machine) =>
+        mode == AgentMode.Host && !string.IsNullOrWhiteSpace(kept) ? kept : machine;
 }

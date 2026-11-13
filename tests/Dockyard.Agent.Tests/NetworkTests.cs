@@ -144,6 +144,17 @@ public sealed class NetworkTests
     }
 
     [Fact]
+    public void Containers_on_a_linux_host_ask_the_servers_daemon_json_named_before_dockyard()
+    {
+        const string machine = "nameserver 127.0.0.53\n";
+        const string kept = "nameserver 10.0.0.2\n";
+        Assert.Equal(kept, ResolvConf.ForContainers(AgentMode.Host, kept, machine));
+        Assert.Equal(machine, ResolvConf.ForContainers(AgentMode.Host, null, machine));
+        Assert.Equal(machine, ResolvConf.ForContainers(AgentMode.Host, " \n", machine));
+        Assert.Equal(machine, ResolvConf.ForContainers(AgentMode.Wsl, kept, machine));
+    }
+
+    [Fact]
     public void Wsl_reaches_windows_through_loopback_when_mirrored_and_the_gateway_otherwise()
     {
         const string route = "Iface\tDestination\tGateway\tFlags\neth0\t00000000\t0101A8C0\t0003\neth0\t0001A8C0\t00000000\t0001\n";
