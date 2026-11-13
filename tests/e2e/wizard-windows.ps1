@@ -413,9 +413,9 @@ if ($Wizard) {
         Check 'the dashboard window is there to click through' ($null -ne $window)
         # The sidebar's list item itself: the text inside it has the same name but cannot be selected.
         foreach ($section in 'Clusters', 'Images') {
-            $item = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.AndCondition(
-                (New-Object System.Windows.Automation.PropertyCondition ($auto::ControlTypeProperty), [System.Windows.Automation.ControlType]::ListItem),
-                (New-Object System.Windows.Automation.PropertyCondition ($auto::NameProperty), $section))))
+            $item = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.AndCondition]::new(
+                [System.Windows.Automation.PropertyCondition]::new($auto::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem),
+                [System.Windows.Automation.PropertyCondition]::new($auto::NameProperty, $section)))
             Check "the sidebar has a $section item" ($null -ne $item)
             $item.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
             Start-Sleep 3
