@@ -34,12 +34,14 @@ static class ComposeCatalog
             .Select(g =>
             {
                 var first = g.First();
-                var files = first.Labels.GetValueOrDefault(ConfigFilesLabel)?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? [];
+                var files = (first.Labels.GetValueOrDefault(ConfigFilesLabel)?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? [])
+                    .Where(f => IsLocal(f) && File.Exists(f)).ToArray();
+                var workingDir = first.Labels.GetValueOrDefault(WorkingDirLabel) is { } dir && IsLocal(dir) && Directory.Exists(dir) ? dir : null;
                 var services = g.GroupBy(c => c.Service)
                     .OrderBy(s => s.Key, StringComparer.OrdinalIgnoreCase)
                     .Select(s => new ComposeService(s.Key, s.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase).ToList()))
                     .ToList();
-                return new ComposeProject(g.Key, first.Labels.GetValueOrDefault(WorkingDirLabel), files, services);
+                return new ComposeProject(g.Key, workingDir, files, services);
             })
             .ToList();
 
@@ -50,6 +52,11 @@ static class ComposeCatalog
         }
         return projects.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
     }
+
+    // Labels are whatever the image or whoever started the container wrote. Up and pull run compose with these files, so
+    // only ones on this machine count: a network path would have Windows hand the user's credentials to its server.
+    static bool IsLocal(string path) =>
+        Path.IsPathFullyQualified(path) && !path.StartsWith(@"\\", StringComparison.Ordinal) && !path.StartsWith("//", StringComparison.Ordinal);
 
     public static bool SamePath(string a, string b) => string.Equals(
         Path.GetFullPath(a), Path.GetFullPath(b), OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);

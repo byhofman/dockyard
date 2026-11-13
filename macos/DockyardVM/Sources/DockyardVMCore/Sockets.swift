@@ -228,13 +228,17 @@ public enum HostDial {
     /// because dev servers often bind only one of them. Nothing but loopback is reachable this way.
     public static func serve(_ guest: Int32, connect: @escaping (Int) -> Int32? = Sockets.connectLoopback) {
         Thread.detachNewThread {
-            guard let port = readPort(guest), let host = connect(port) else {
+            guard let port = readPort(guest), !refused.contains(port), let host = connect(port) else {
                 close(guest)
                 return
             }
             Sockets.pump(guest, host)
         }
     }
+
+    /// Docker's own TCP ports and Dockyard's, as the agent refuses them on Linux and Windows: they are for this Mac, not
+    /// for any image a container runs. 15353 answers container domains to macOS.
+    static let refused: Set<Int> = [2353, 2354, 2375, 2376, 2377, 2378, 2379, 2380, 2381, 2382, 2383, 15353]
 
     static func readPort(_ fd: Int32) -> Int? {
         var line = [UInt8]()
@@ -348,17 +352,37 @@ public final class PortForwarder {
     }
 }
 
+/// One stream to the guest per sender. Anyone who can reach a published UDP port can send from many addresses, so there
+/// are at most `limit` of them: a sender quiet for `idle`, or else the quietest, makes way for a new one.
 final class UdpSessions {
     let listener: Int32
     let port: PublishedPort
     let connector: GuestConnector
+    let limit: Int
+    let idle: TimeInterval
     let lock = NSLock()
     var streams: [Data: Int32] = [:]
+    var lastSeen: [Data: Date] = [:]
 
-    init(listener: Int32, port: PublishedPort, connector: @escaping GuestConnector) {
+    init(listener: Int32, port: PublishedPort, connector: @escaping GuestConnector, limit: Int = 256, idle: TimeInterval = 180) {
         self.listener = listener
         self.port = port
         self.connector = connector
+        self.limit = limit
+        self.idle = idle
+    }
+
+    /// The streams to end before one more starts at `now`; ending one makes its reply thread let it go.
+    func makeRoom(now: Date) -> [Int32] {
+        lock.lock(); defer { lock.unlock() }
+        var ending = lastSeen.filter { now.timeIntervalSince($0.value) > idle }.map(\.key)
+        if streams.count - ending.count >= limit, let quietest = lastSeen.filter({ !ending.contains($0.key) }).min(by: { $0.value < $1.value })?.key {
+            ending.append(quietest)
+        }
+        return ending.compactMap { client in
+            lastSeen[client] = nil
+            return streams.removeValue(forKey: client)
+        }
     }
 
     func run() {
@@ -376,14 +400,16 @@ final class UdpSessions {
             let frame = UdpFrame.encode(Data(buffer.prefix(count)))
             lock.lock()
             let existing = streams[client]
+            if existing != nil { lastSeen[client] = Date() }
             lock.unlock()
             if let existing {
                 _ = Sockets.writeAll(existing, frame)
                 continue
             }
+            for stale in makeRoom(now: Date()) { shutdown(stale, Int32(SHUT_RDWR)) }
             connector(VsockPort.forward) { [self] guest in
                 guard let guest, Sockets.writeAll(guest, Data(port.forwardHeader.utf8)), Sockets.writeAll(guest, frame) else { return }
-                lock.lock(); streams[client] = guest; lock.unlock()
+                lock.lock(); streams[client] = guest; lastSeen[client] = Date(); lock.unlock()
                 Thread.detachNewThread { self.replies(from: guest, to: client) }
             }
         }
@@ -405,7 +431,9 @@ final class UdpSessions {
                 }
             }
         }
-        lock.lock(); streams[client] = nil; lock.unlock()
+        lock.lock()
+        if streams[client] == guest { streams[client] = nil; lastSeen[client] = nil }
+        lock.unlock()
         close(guest)
     }
 }

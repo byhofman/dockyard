@@ -25,6 +25,8 @@ static class Paths
     public const string DashboardZipName = "Dockyard.Dashboard.zip";
     public static readonly string DaemonConfigDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "docker", "config");
     public static readonly string UserProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    // Where install.ps1 puts the installer, and asks Defender to allow when it blocks it.
+    public static readonly string OneLinerExe = Path.Combine(UserProfile, "Downloads", "Dockyard.exe");
     public static readonly string SettingsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Dockyard");
     public static readonly string SettingsFile = Path.Combine(SettingsDir, "settings.json");
 
@@ -34,8 +36,14 @@ static class Paths
 
     public const string WindowsPipeName = "docker_windows";
     public const string WindowsHost = "npipe:////./pipe/" + WindowsPipeName;
+    // Where dockyard-agent serves the Linux engine to Windows, to the tray's token only.
     public const int LinuxPort = 2375;
-    public static readonly string LinuxHost = $"tcp://127.0.0.1:{LinuxPort}";
+    public const string LinuxPipeName = "dockyard_linux";
+    public const string LinuxAgentPipeName = "dockyard_linux_agent";
+    public const string LinuxHost = "npipe:////./pipe/" + LinuxPipeName;
+    // What the linux context pointed at up to v0.4: an open port every Windows user and web page could reach.
+    public const string LegacyLinuxHost = "tcp://127.0.0.1:2375";
+    public static readonly string EngineTokenFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Dockyard", "engine.token");
     public const string ServiceName = "docker";
     public const string Repo = "byhofman/dockyard";
     public const string AppName = "Dockyard";
@@ -47,7 +55,6 @@ static class Paths
         (Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0").Split('+')[0];
 
     public static readonly string CredentialStoreMarker = Path.Combine(SettingsDir, "credential-store");
-    public const string CredentialHelpersRepo = "docker/docker-credential-helpers";
 
     public static readonly string WslConfigFile = Path.Combine(UserProfile, ".wslconfig");
 }
@@ -92,6 +99,12 @@ sealed record ShellResult(int ExitCode, string Output, string Error);
 
 static class Shell
 {
+    // For a value inside a POSIX shell script, whatever it holds.
+    public static string ShQuote(string value) => "'" + value.Replace("'", "'\\''") + "'";
+
+    // For a value inside a PowerShell command, whatever it holds.
+    public static string PsQuote(string value) => "'" + value.Replace("'", "''") + "'";
+
     public static string Quote(string arg)
     {
         if (arg.Length > 0 && arg.IndexOfAny([' ', '\t', '"']) < 0) return arg;

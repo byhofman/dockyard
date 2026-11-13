@@ -5,7 +5,7 @@ set -eu
 ok() { echo "  ok   $1"; }
 fail() { echo "  FAIL $1" >&2; exit 1; }
 
-"$WIZARD" --silent --no-start
+"$WIZARD" --silent --no-start --assets "$(dirname "$WIZARD")"
 docker version >/dev/null
 sleep 2
 d="$(mktemp -d)"; echo from-the-host > "$d/marker"

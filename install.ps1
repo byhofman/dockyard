@@ -29,7 +29,7 @@
     }
 
     New-Item -ItemType Directory -Force $dir | Out-Null
-    # Left by earlier one-liners. The installer prefers files next to it, and these would be old.
+    # Left by earlier one-liners, whose installer took files next to it without being asked.
     Remove-Item $exe, (Join-Path $dir 'Dockyard.Dashboard.zip'), (Join-Path $dir 'dockyard-linux-*-x86_64.tar.gz') -Force -ErrorAction SilentlyContinue
 
     if ($build) {
@@ -38,6 +38,7 @@
         if (-not $run) { throw "No successful build of $repo found." }
         foreach ($artifact in 'windows', 'image') { gh run download $run -R $repo -n $artifact -D $dir }
         Write-Host "Latest build of main (run $run)"
+        $arguments = @($arguments) + '--assets', $dir
     } else {
         if ($env:DOCKYARD_VERSION) {
             $tag = "v$env:DOCKYARD_VERSION"

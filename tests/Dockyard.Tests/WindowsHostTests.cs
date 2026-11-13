@@ -121,18 +121,4 @@ public sealed class WindowsHostTests
         Assert.False(await WslDistro.DisableLegacyEngine(runner, "Ubuntu-24.04"));
         Assert.Single(runner.Commands);
     }
-
-    [Fact]
-    public void Static_index_picks_newest_release_older_than_14_days()
-    {
-        const string html = """
-            <a href="docker-29.9.1.tgz">docker-29.9.1.tgz</a>        2026-10-14 18:57
-            <a href="docker-29.9.2.tgz">docker-29.9.2.tgz</a>        2026-10-20 20:07
-            <a href="docker-29.9.3.tgz">docker-29.9.3.tgz</a>        2026-11-03 22:08
-            <a href="docker-29.9.3.zip">docker-29.9.3.zip</a>        2026-10-01 10:00
-            """;
-        var release = Updates.PickStatic(html, Updates.LinuxStaticIndex, "tgz", new DateTime(2026, 11, 4, 12, 0, 0, DateTimeKind.Utc));
-        Assert.Equal(new Version(29, 9, 2), release.Version);
-        Assert.Equal("https://download.docker.com/linux/static/stable/x86_64/docker-29.9.2.tgz", release.DownloadUrl);
-    }
 }

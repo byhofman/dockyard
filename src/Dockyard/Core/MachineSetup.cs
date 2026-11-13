@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Security.Principal;
 using System.ServiceProcess;
 using System.Text.RegularExpressions;
+using Dockyard.Hosts;
 
 namespace Dockyard.Core;
 
@@ -10,10 +11,10 @@ namespace Dockyard.Core;
 [System.Runtime.Versioning.SupportedOSPlatform("windows")]
 static class MachineSetup
 {
-    static readonly (Component Component, string File, string Repo, string Pattern)[] Plugins =
+    static readonly (Component Component, string File, Release Release)[] Plugins =
     [
-        (Component.Compose, "docker-compose.exe", "docker/compose", "docker-compose-windows-x86_64.exe"),
-        (Component.Buildx, "docker-buildx.exe", "docker/buildx", "buildx-{tag}.windows-amd64.exe"),
+        (Component.Compose, "docker-compose.exe", Updates.WindowsCompose),
+        (Component.Buildx, "docker-buildx.exe", Updates.WindowsBuildx),
     ];
 
     // Returns true when a reboot is needed.
@@ -34,7 +35,7 @@ static class MachineSetup
         foreach (var plugin in Plugins)
         {
             if (without.Contains(plugin.Component.ToString())) RemovePlugin(log, plugin.Component);
-            else await UpdatePlugin(log, plugin.Component);
+            else if (await Updates.Installed(plugin.Component) is not { } installed || installed < plugin.Release.Version) await UpdatePlugin(log, plugin.Component);
         }
         if (without.Contains(Kind.Id)) RemoveKind(log);
         else if (await Updates.Installed(Component.Kind) != Kind.Version) await InstallKind(log);
@@ -42,7 +43,7 @@ static class MachineSetup
         if (without.Contains(nameof(Component.LinuxEngine))) await UnrouteDomains();
         else await RouteDomains(log);
         if (withWindows) await ConfigureWindowsEngine(log, userSid, userName);
-        await InstallApp(log, Paths.Self, keepPid, engineOnly);
+        await InstallApp(log, Paths.Self, keepPid, engineOnly, Updates.LocalAssets);
         RemoveLegacy(log, keepPid);
         return reboot;
     }
@@ -58,7 +59,9 @@ static class MachineSetup
             case Component.App:
                 // Defender's rule goes by path, and an update can bring the first dashboard with the new name.
                 await AddDefenderExclusions(log);
-                await InstallApp(log, source ?? throw new ArgumentException("--source is required for the app update"), keepPid, engineOnly: !File.Exists(Paths.DashboardExe) && !File.Exists(Paths.LegacyDashboardExe));
+                // Next to the new exe in the folder the tray downloaded and checked both into.
+                var exe = source ?? throw new ArgumentException("--source is required for the app update");
+                await InstallApp(log, exe, keepPid, engineOnly: !File.Exists(Paths.DashboardExe) && !File.Exists(Paths.LegacyDashboardExe), Path.GetDirectoryName(Path.GetFullPath(exe)));
                 Shell.StartUnelevated(Paths.AppExe);
                 break;
             default: throw new ArgumentException($"{component} is not a machine component");
@@ -78,9 +81,9 @@ static class MachineSetup
             RemoveEventSource();
         }
         await Shell.Run("powershell.exe", "-NoProfile", "-Command",
-            $"Remove-MpPreference -ControlledFolderAccessAllowedApplications '{Paths.DockerdExe}'");
+            $"Remove-MpPreference -ControlledFolderAccessAllowedApplications {Shell.PsQuote(Paths.DockerdExe)}");
         await Shell.Run("powershell.exe", "-NoProfile", "-Command",
-            $"Remove-MpPreference -AttackSurfaceReductionOnlyExclusions {string.Join(',', EverExcludedFromAsr.Select(p => $"'{p}'"))}");
+            $"Remove-MpPreference -AttackSurfaceReductionOnlyExclusions {string.Join(',', EverExcludedFromAsr.Select(Shell.PsQuote))}");
         await Shell.Run("net.exe", "localgroup", "docker-users", "/delete");
         RemoveFromMachinePath(Paths.DockerDir);
         RemoveLegacy(log, keepPid);
@@ -143,8 +146,8 @@ static class MachineSetup
         if (File.Exists(Paths.CredentialHelper)) return;
         try
         {
-            var release = await Updates.LatestGitHub(Paths.CredentialHelpersRepo, "docker-credential-wincred-{tag}.windows-amd64.exe");
-            await Updates.DownloadFile(release.DownloadUrl!, Paths.CredentialHelper);
+            var release = Pinned.CredentialHelper("wincred", "windows-amd64.exe");
+            await Pinned.Download(release, Paths.CredentialHelper);
             log($"Credential helper {release.Tag}");
         }
         catch (Exception e) when (e is HttpRequestException or InvalidOperationException or IOException)
@@ -168,13 +171,16 @@ static class MachineSetup
         return true;
     }
 
+    // Only files in Program Files, which only administrators can write: an exclusion goes by path and exempts whatever is
+    // there from every ASR rule. Earlier versions also excluded the installer wherever it ran, and the one-liner asks for
+    // its own download path when Defender blocks it, so uninstall takes those back too.
     static IEnumerable<string> ExcludedFromAsr => new[] { Paths.AppExe, Paths.DashboardExe };
-    static IEnumerable<string> EverExcludedFromAsr => ExcludedFromAsr.Append(Paths.LegacyDashboardExe);
+    static IEnumerable<string> EverExcludedFromAsr => ExcludedFromAsr.Append(Paths.LegacyDashboardExe).Append(Paths.OneLinerExe);
 
     // Defender's prevalence/age rule (event 1121) blocks every new build, and an exclusion goes by path because a hash changes with each build.
     static async Task AddDefenderExclusions(Action<string> log)
     {
-        var paths = ExcludedFromAsr.Append(Paths.Self).Distinct(StringComparer.OrdinalIgnoreCase).Select(p => $"'{p}'");
+        var paths = ExcludedFromAsr.Select(Shell.PsQuote);
         var r = await Shell.Run("powershell.exe", "-NoProfile", "-Command",
             $"Add-MpPreference -AttackSurfaceReductionOnlyExclusions {string.Join(',', paths)}");
         log(r.ExitCode == 0 ? "Defender: Dockyard is excluded from the prevalence rule" : "Defender exclusions were not added (managed device?); ask your administrator if Defender blocks Dockyard");
@@ -194,28 +200,29 @@ static class MachineSetup
 
     static async Task UpdateEngine(Action<string> log, bool onlyIfNewer)
     {
-        var latest = await Updates.LatestStatic();
+        var latest = Updates.WindowsDocker;
         var current = await Updates.Installed(Component.Engine);
         if (onlyIfNewer && current >= latest.Version) { log($"Docker {current} is up to date"); return; }
 
         log($"Installing Docker {latest.Version}" + (current is null ? "" : $" (was {current})"));
+        // Downloaded first, so a failed download leaves the engine running as it was.
+        var zip = await DownloadDockerZip(latest);
         var wasRunning = ServiceExists() && ServiceStatus() == ServiceControllerStatus.Running;
         await StopService();
 
-        var zip = Path.Combine(Path.GetTempPath(), $"docker-{latest.Version}.zip");
-        await Updates.DownloadFile(latest.DownloadUrl!, zip);
         var root = Path.GetDirectoryName(Paths.DockerDir)!;
-        using (var archive = ZipFile.OpenRead(zip))
+        ExtractDockerZip(zip, archive =>
         {
             foreach (var entry in archive.Entries.Where(e => e.Name.Length > 0))
             {
-                var target = Path.Combine(root, entry.FullName.Replace('/', '\\'));
+                var target = Path.GetFullPath(Path.Combine(root, entry.FullName.Replace('/', '\\')));
+                if (!target.StartsWith(Paths.DockerDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException($"The Docker archive has an entry outside {Paths.DockerDir}: {entry.FullName}");
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                 InUseFiles.MoveAside(target);
                 entry.ExtractToFile(target);
             }
-        }
-        File.Delete(zip);
+        });
 
         if (wasRunning)
         {
@@ -228,14 +235,36 @@ static class MachineSetup
     static async Task UpdatePlugin(Action<string> log, Component component)
     {
         var plugin = Plugins.Single(p => p.Component == component);
-        var release = await Updates.LatestGitHub(plugin.Repo, plugin.Pattern);
         Directory.CreateDirectory(Paths.PluginDir);
         var target = Path.Combine(Paths.PluginDir, plugin.File);
         var incoming = target + ".new";
-        await Updates.DownloadFile(release.DownloadUrl!, incoming);
+        await Pinned.Download(plugin.Release, incoming);
         InUseFiles.MoveAside(target);
         File.Move(incoming, target);
-        log($"{plugin.File} {release.Tag}");
+        log($"{plugin.File} {plugin.Release.Tag}");
+    }
+
+    // Into Program Files, which only administrators can write: in this user's temp folder a process without elevation
+    // could swap the checked zip before this elevated one extracts it.
+    static async Task<string> DownloadDockerZip(Release release)
+    {
+        Directory.CreateDirectory(Paths.DockerDir);
+        var zip = Path.Combine(Paths.DockerDir, $"docker-{release.Version}.zip");
+        await Pinned.Download(release, zip);
+        return zip;
+    }
+
+    static void ExtractDockerZip(string zip, Action<ZipArchive> extract)
+    {
+        try
+        {
+            using var archive = ZipFile.OpenRead(zip);
+            extract(archive);
+        }
+        finally
+        {
+            File.Delete(zip);
+        }
     }
 
     static async Task InstallKind(Action<string> log)
@@ -267,20 +296,16 @@ static class MachineSetup
     // The CLI on its own, for when the Windows engine that normally brings it is not wanted.
     static async Task UpdateCli(Action<string> log, bool onlyIfNewer)
     {
-        var latest = await Updates.LatestStatic();
+        var latest = Updates.WindowsDocker;
         var current = await Updates.Installed(Component.Cli);
         if (onlyIfNewer && current >= latest.Version) return;
         log($"Installing the Docker CLI {latest.Version}");
-        var zip = Path.Combine(Path.GetTempPath(), $"docker-{latest.Version}.zip");
-        await Updates.DownloadFile(latest.DownloadUrl!, zip);
-        Directory.CreateDirectory(Paths.DockerDir);
-        using (var archive = ZipFile.OpenRead(zip))
+        ExtractDockerZip(await DownloadDockerZip(latest), archive =>
         {
             var entry = archive.Entries.First(e => e.Name.Equals("docker.exe", StringComparison.OrdinalIgnoreCase));
             InUseFiles.MoveAside(Paths.DockerExe);
             entry.ExtractToFile(Paths.DockerExe);
-        }
-        File.Delete(zip);
+        });
     }
 
     // The CLI and the plugins stay, and so do the engine's images under ProgramData: adding it back finds them there.
@@ -349,7 +374,7 @@ static class MachineSetup
         // Controlled Folder Access otherwise blocks dockerd unpacking image layers ("hcsshim::ProcessBaseLayer ... Access is denied").
         // When Intune manages this list it may override the local entry; then it has to be added there.
         await Shell.Run("powershell.exe", "-NoProfile", "-Command",
-            $"Add-MpPreference -ControlledFolderAccessAllowedApplications '{Paths.DockerdExe}'");
+            $"Add-MpPreference -ControlledFolderAccessAllowedApplications {Shell.PsQuote(Paths.DockerdExe)}");
 
         Directory.CreateDirectory(Paths.DaemonConfigDir);
         var daemonJson = Path.Combine(Paths.DaemonConfigDir, "daemon.json");
@@ -397,7 +422,7 @@ static class MachineSetup
         }
     }
 
-    static async Task InstallApp(Action<string> log, string source, int keepPid, bool engineOnly)
+    static async Task InstallApp(Action<string> log, string source, int keepPid, bool engineOnly, string? dashboardDir)
     {
         var isInstalledCopy = string.Equals(Path.GetFullPath(source), Paths.AppExe, StringComparison.OrdinalIgnoreCase);
         StopApps(keepPid);
@@ -407,7 +432,7 @@ static class MachineSetup
             ReplaceAppExe(source);
             log($"Installed {Paths.AppExe}");
         }
-        if (!engineOnly) await InstallDashboard(log, Path.GetDirectoryName(Path.GetFullPath(source))!);
+        if (!engineOnly) await InstallDashboard(log, dashboardDir);
         else if (File.Exists(Paths.DashboardExe) || File.Exists(Paths.LegacyDashboardExe)) RemoveDashboard(log);
         else log("The dashboard is not installed");
     }
@@ -433,19 +458,20 @@ static class MachineSetup
     public static async Task SetDashboard(Action<string> log, bool installed, int keepPid)
     {
         StopApps(keepPid, dashboardOnly: true);
-        if (installed) await InstallDashboard(log, Path.GetDirectoryName(Paths.Self)!);
+        if (installed) await InstallDashboard(log, Updates.LocalAssets);
         else RemoveDashboard(log);
     }
 
-    // Uses Dockyard.Dashboard.zip next to the installer, or downloads the one from this release.
-    static async Task InstallDashboard(Action<string> log, string sourceDir)
+    // Dockyard.Dashboard.zip from the given folder, or the one from this release. A download goes to Program Files, which
+    // only administrators can write, so nothing can swap it between the check and the extraction.
+    static async Task InstallDashboard(Action<string> log, string? sourceDir)
     {
-        var zip = Path.Combine(sourceDir, Paths.DashboardZipName);
+        var zip = sourceDir is null ? null : Path.Combine(sourceDir, Paths.DashboardZipName);
         string? downloaded = null;
-        if (!File.Exists(zip))
+        if (zip is null || !File.Exists(zip))
         {
             log("Downloading the dashboard");
-            zip = downloaded = await Updates.DownloadReleaseAsset(Paths.DashboardZipName, Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}"));
+            zip = downloaded = await Updates.DownloadReleaseAsset(Paths.DashboardZipName, Path.Combine(Paths.AppDir, $".download-{Guid.NewGuid():N}"));
         }
         try
         {

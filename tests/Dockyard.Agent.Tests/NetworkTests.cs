@@ -155,7 +155,7 @@ public sealed class NetworkTests
     [Fact]
     public async Task A_container_cannot_reach_the_engines_port_through_the_host_address()
     {
-        var dialer = new TcpHostDialer(IPAddress.Loopback, WslHost.Refused);
+        var dialer = new TcpHostDialer(IPAddress.Loopback, GuestAddresses.RefusedOnHost);
         await Assert.ThrowsAsync<SocketException>(() => dialer.Dial(2375, TestContext.Current.CancellationToken));
     }
 
@@ -334,5 +334,14 @@ public sealed class NetworkTests
 
         await cts.CancelAsync();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => running);
+    }
+
+    [Fact]
+    public void Domains_on_the_VM_address_answer_the_Mac_alone()
+    {
+        var commands = NetworkRules.VmCommands(System.Net.IPAddress.Parse("192.168.64.1")).Select(c => string.Join(' ', c)).ToList();
+
+        Assert.Equal(2, commands.Count);
+        Assert.All(commands, c => Assert.Contains("-i eth0 -s 192.168.64.1 -p tcp", c));
     }
 }

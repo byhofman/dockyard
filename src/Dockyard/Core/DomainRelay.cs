@@ -115,6 +115,33 @@ static class TcpRelay
         }
     }
 
+    // A client done sending is passed on as a half-close, and what the engine still sends reaches it until the engine
+    // ends. Disposing both afterwards is the caller's, which also ends the client's direction.
+    public static async Task Carry(Stream client, Socket engine, CancellationToken ct)
+    {
+        var sending = Send();
+        var buffer = new byte[16 * 1024];
+        int n;
+        while ((n = await engine.ReceiveAsync(buffer, ct)) > 0)
+        {
+            await client.WriteAsync(buffer.AsMemory(0, n), ct);
+            await client.FlushAsync(ct);
+        }
+        if (sending.IsCompleted) await sending;
+
+        async Task Send()
+        {
+            var up = new byte[16 * 1024];
+            try
+            {
+                int read;
+                while ((read = await client.ReadAsync(up, ct)) > 0) await engine.SendAsync(up.AsMemory(0, read), ct);
+                engine.Shutdown(SocketShutdown.Send);
+            }
+            catch (Exception e) when (e is IOException or SocketException or ObjectDisposedException or OperationCanceledException) { }
+        }
+    }
+
     // One side finishing is passed on as a half-close, and the other direction keeps flowing until it ends too.
     static async Task Copy(Socket from, Socket to)
     {

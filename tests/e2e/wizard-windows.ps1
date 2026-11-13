@@ -24,7 +24,8 @@ function Run {
         return $global:LASTEXITCODE
     }
     $out = New-TemporaryFile; $err = New-TemporaryFile
-    $p = Start-Process (Resolve-Path $Wizard) -ArgumentList $args -Wait -PassThru -NoNewWindow -RedirectStandardOutput $out -RedirectStandardError $err
+    # The image and dashboard built next to the wizard, which a build before its release cannot download.
+    $p = Start-Process (Resolve-Path $Wizard) -ArgumentList (@($args) + '--assets', (Split-Path (Resolve-Path $Wizard))) -Wait -PassThru -NoNewWindow -RedirectStandardOutput $out -RedirectStandardError $err
     Get-Content $out, $err | Write-Host
     return $p.ExitCode
 }
@@ -32,23 +33,25 @@ function Run {
 function Window {
     param([string]$LookOnly)
     $exe = if ($OneLiner) { Join-Path $env:USERPROFILE 'Downloads\Dockyard.exe' } else { (Resolve-Path $Wizard).Path }
-    powershell.exe -NoProfile -File (Join-Path $PSScriptRoot 'wizard-window.ps1') -Exe $exe -Screenshots $Screenshots -Dashboard $dashboard $(if ($LookOnly) { '-LookOnly', $LookOnly })
+    powershell.exe -NoProfile -File (Join-Path $PSScriptRoot 'wizard-window.ps1') -Exe $exe -Assets $(if ($OneLiner) { '' } else { Split-Path $exe }) -Screenshots $Screenshots -Dashboard $dashboard $(if ($LookOnly) { '-LookOnly', $LookOnly })
     if ($LASTEXITCODE -ne 0) { throw 'FAIL the wizard window' }
 }
 
-# The way a user starts it, through the tray: with WSL's NAT networking, as on this runner, the tray is also what serves
-# 127.0.0.1:2375. Setup stops the tray, so this runs again after each one.
+# The way a user starts it, through the tray, which is also what serves the engine's pipe to Windows. Setup stops the
+# tray, so this runs again after each one.
 function Linux-Engine {
     Start-Process $appExe -ArgumentList '--start', 'linux' | Out-Null
     foreach ($i in 1..60) {
-        & $docker --context linux version *> $null
-        if ($LASTEXITCODE -eq 0) { return }
+        # Bounded: a pipe whose instances are all taken makes docker wait without end.
+        $asking = Start-Process $docker -ArgumentList '--context', 'linux', 'version' -PassThru -NoNewWindow -RedirectStandardOutput (New-TemporaryFile)
+        if (-not $asking.WaitForExit(30000)) { $asking.Kill(); Write-Host '  docker version did not return within 30 s'; break }
+        if ($asking.ExitCode -eq 0) { return }
         Start-Sleep 2
     }
     Write-Host '--- what WSL says'
     wsl.exe --version | Write-Host
-    wsl.exe -d dockyard -u root -- sh -c 'ls /sys/class/net; ip -4 addr; pidof dockerd dockyard-agent; netstat -ltn 2>/dev/null | head -20; wget -qO- -T 3 http://127.0.0.1:2375/_ping; echo; cat /etc/docker/daemon.json' | Write-Host
-    Test-NetConnection 127.0.0.1 -Port 2375 | Out-String | Write-Host
+    wsl.exe -d dockyard -u root -- sh -c 'ls /sys/class/net; ip -4 addr; pidof dockerd dockyard-agent; netstat -ltn 2>/dev/null | head -20; docker version --format "{{.Server.Version}}"; ls -l /etc/dockyard; cat /etc/docker/daemon.json' | Write-Host
+    Write-Host "pipes: $((Get-ChildItem \\.\pipe\ | Where-Object Name -like 'dockyard*' | ForEach-Object Name) -join ', ')"
     throw 'FAIL the Linux engine did not start'
 }
 
@@ -99,10 +102,8 @@ if ($Wizard) {
     if ($exec -ne 'exec-works') {
         Write-Host '--- why not'
         Write-Host "inside WSL, on the unix socket: '$((wsl.exe -d dockyard -u root -- docker exec e2e-exec cat /marker | Out-String).Trim())'"
-        Write-Host "inside WSL, on 127.0.0.1:2375: '$((wsl.exe -d dockyard -u root -- docker -H tcp://127.0.0.1:2375 exec e2e-exec cat /marker | Out-String).Trim())'"
         Write-Host "Windows, stdin held open 3 s: '$((cmd.exe /c "ping -n 4 127.0.0.1 >nul | `"$docker`" --context linux exec -i e2e-exec cat /marker" | Out-String).Trim())'"
         Write-Host "Windows, with a tty: '$((& $docker --context linux exec -t e2e-exec cat /marker | Out-String).Trim())'"
-        Write-Host "listeners on 2375: $((Get-NetTCPConnection -LocalPort 2375 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { "$($_.LocalAddress) pid $($_.OwningProcess) $((Get-Process -Id $_.OwningProcess).ProcessName)" }) -join ', ')"
     }
     Check "docker exec returns what the command printed (got '$exec')" ($exec -eq 'exec-works')
     $attached = (& $docker --context linux run --rm alpine:3.24 echo attached 2>&1 | Out-String).Trim()
@@ -110,6 +111,15 @@ if ($Wizard) {
     $piped = ('through-stdin' | & $docker --context linux exec -i e2e-exec cat | Out-String).Trim()
     Check "stdin reaches the command and its output comes back (got '$piped')" ($piped -eq 'through-stdin')
     & $docker --context linux rm -f e2e-exec | Out-Null
+
+    Section 'the engine answers no one without the tray token'
+    $gate = ((wsl.exe -d dockyard -u root -- sh -c '[ -d /sys/class/net/loopback0 ] && echo 127.0.0.1 || ip -4 -o addr show eth0 | sed -n "s/.*inet \([0-9.]*\)\/.*/\1/p"') | Out-String).Trim()
+    foreach ($target in @('127.0.0.1', $gate) | Select-Object -Unique) {
+        $open = $true
+        try { Invoke-WebRequest "http://$($target):2375/_ping" -TimeoutSec 5 -UseBasicParsing | Out-Null } catch { $open = $false }
+        Check "no docker API on $($target):2375 without the token" (-not $open)
+    }
+    Check 'dockerd itself listens on no TCP port' (-not ((wsl.exe -d dockyard -u root -- netstat -ltnp | Out-String) -match 'dockerd'))
 }
 
 if ($Wizard) {
@@ -273,6 +283,8 @@ if ($Wizard) {
     $me = [Security.Principal.WindowsIdentity]::GetCurrent()
     $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Content "$caDir\ca.pem" -Raw)))
     # A scheduled task: it runs as that account with its full administrator token, as a UAC approval does.
+    # As Elevation.Run does: the caller makes the log file, and the elevated worker only appends to that very file.
+    New-Item -ItemType File "$shared\trust.log" | Out-Null
     $line = "`"$shared\Dockyard.exe`" --machine-trust-ca $encoded --user-sid $($me.User.Value) --user-name `"$($me.Name)`" --log `"$shared\trust.log`" --keep-pid 0"
     Set-Content "$shared\trust.cmd" "$line`r`nexit /b %ERRORLEVEL%" -Encoding Ascii
     $action = New-ScheduledTaskAction -Execute cmd.exe -Argument "/c `"$shared\trust.cmd`""
@@ -287,7 +299,15 @@ if ($Wizard) {
     Remove-Item $shared -Recurse -Force
     Remove-LocalUser e2e-admin
     Linux-Engine
-    & $docker --context linux rm -f e2e-web | Out-Null
+    $removing = Start-Process $docker -ArgumentList '--context', 'linux', 'rm', '-f', 'e2e-web' -PassThru -NoNewWindow
+    if (-not $removing.WaitForExit(120000)) {
+        Write-Host '--- docker rm hangs; what is there'
+        Get-Process Dockyard* -ErrorAction SilentlyContinue | ForEach-Object { "$($_.ProcessName) pid $($_.Id) started $($_.StartTime)" } | Write-Host
+        Write-Host "pipes: $((Get-ChildItem \\.\pipe\ | Where-Object Name -like 'dockyard*' | ForEach-Object Name) -join ', ')"
+        wsl.exe -d dockyard -u root -- sh -c 'pidof dockerd dockyard-agent; ip -4 -o addr show eth0; netstat -ltn; docker ps -a' | Write-Host
+        $removing.Kill()
+        throw 'FAIL docker rm through the pipe did not return'
+    }
 
     Section 'memory of the WSL engine, for the record'
     wsl.exe -d dockyard -u root -- sh -c 'for n in dockerd containerd dockyard-agent; do for p in $(pidof $n); do echo "$n RSS $(awk "/VmRSS/{print \$2}" /proc/$p/status) kB"; done; done; grep -E "MemTotal|MemAvailable" /proc/meminfo' | Write-Host

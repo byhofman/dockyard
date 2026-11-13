@@ -91,7 +91,7 @@ control="$( (sleep 6) | nc -w 7 127.0.0.1 12377 | head -3)"
 echo "$control" | grep -q '"type":"ports".*"port":8080' && echo "control reports port 8080" || { echo "FAIL: control: $control"; exit 1; }
 echo "$control" | grep -q '"type":"memory"' && echo "control reports memory" || { echo "FAIL: no memory report"; exit 1; }
 
-# kind on the VM's kernel, which the Mac's VM shares: KIND_TAG and KIND_SHA256 are the pins in src/Dockyard/Core/Kind.cs.
+# kind on the VM's kernel, which the Mac's VM shares: KIND_TAG and KIND_SHA256 are the pins in versions.env and versions.sha256.
 if [ -n "${KIND_TAG:-}" ]; then
   wget -qO /usr/local/bin/kind "https://github.com/kubernetes-sigs/kind/releases/download/$KIND_TAG/kind-linux-amd64"
   echo "$KIND_SHA256  /usr/local/bin/kind" | sha256sum -c -s || { echo "FAIL: kind does not match its pinned checksum"; exit 1; }

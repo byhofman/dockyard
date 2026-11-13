@@ -29,15 +29,18 @@ public sealed class ResourceLogicTests
     [Fact]
     public void Compose_projects_group_services_and_merge_recents()
     {
+        var dir = Directory.CreateTempSubdirectory("dy-compose").FullName;
+        var file = Path.Combine(dir, "compose.yaml");
+        File.WriteAllText(file, "services: {}");
         var containers = new[]
         {
-            Item("1", "shop-api-1", project: "shop", service: "api", files: @"C:\src\shop\compose.yaml"),
+            Item("1", "shop-api-1", project: "shop", service: "api", files: file),
             Item("2", "shop-db-1", "exited", project: "shop", service: "db"),
             Item("3", "redis"),
         };
         var recents = new[]
         {
-            new RecentCompose { Path = @"C:\src\shop\compose.yaml", Project = "shop" },
+            new RecentCompose { Path = file, Project = "shop" },
             new RecentCompose { Path = @"C:\src\blog\compose.yaml", Project = "blog" },
         };
 
@@ -50,6 +53,20 @@ public sealed class ResourceLogicTests
         Assert.True(shop.CanUp);
         Assert.Equal("not running", projects[0].Summary);
         Assert.Equal([@"C:\src\blog\compose.yaml"], projects[0].ConfigFiles);
+        Directory.Delete(dir, recursive: true);
+    }
+
+    [Theory]
+    [InlineData(@"\\fabrikam.example\share\compose.yaml")]
+    [InlineData("//fabrikam.example/share/compose.yaml")]
+    [InlineData("compose.yaml")]
+    [InlineData("/nowhere/compose.yaml")]
+    public void Compose_files_from_labels_are_only_used_when_they_are_on_this_machine(string labelled)
+    {
+        var projects = ComposeCatalog.Build([Item("1", "x-api-1", project: "x", service: "api", files: labelled)], []);
+
+        Assert.Empty(projects[0].ConfigFiles);
+        Assert.False(projects[0].CanUp);
     }
 
     [Fact]

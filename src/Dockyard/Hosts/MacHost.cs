@@ -12,9 +12,10 @@ static class MacLayout
 {
     public const string Context = "dockyard";
     public const string LaunchAgentLabel = "com.byhofman.dockyard";
-    public const string CliIndex = "https://download.docker.com/mac/static/stable/aarch64/";
-    public const string ComposeAsset = "docker-compose-darwin-aarch64";
-    public const string BuildxAsset = "buildx-{tag}.darwin-arm64";
+    public static Release Cli => Pinned.Docker("mac", "aarch64", "tgz");
+    public static Release Compose => Pinned.Compose("docker-compose-darwin-aarch64");
+    public static Release Buildx => Pinned.Buildx("darwin-arm64");
+    public static Release CredentialHelperRelease => Pinned.CredentialHelper("osxkeychain", "darwin-arm64");
 
     public static string Home => Paths.UserProfile;
     public static string DataDir => Path.Combine(Home, ".dockyard");
@@ -31,7 +32,6 @@ static class MacLayout
     public static string EngineConfigFile => Path.Combine(DataDir, "engine", "daemon.json");
     public static string RootRelease => Path.Combine(DataDir, "root-release");
     public static string CredentialHelper => Path.Combine(BinDir, "docker-credential-osxkeychain");
-    public const string CredentialHelperAsset = "docker-credential-osxkeychain-{tag}.darwin-arm64";
     public const string SystemSocket = "/var/run/docker.sock";
     public static string LoginKeychain => Path.Combine(Home, "Library", "Keychains", "login.keychain-db");
     public const string DomainResolver = "/etc/resolver/dockyard.test";
@@ -95,7 +95,7 @@ static class MacLayout
     // macOS clears /var/run at every boot, so one link made at install would be gone after the first restart.
     public static string SocketDaemonPlist(string ourSocket)
     {
-        var link = $"[ -e {SystemSocket} ] || [ -L {SystemSocket} ] || ln -s '{ourSocket}' {SystemSocket}";
+        var link = $"[ -e {SystemSocket} ] || [ -L {SystemSocket} ] || ln -s {Shell.ShQuote(ourSocket)} {SystemSocket}";
         return $"""
             <?xml version="1.0" encoding="UTF-8"?>
             <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -117,13 +117,15 @@ static class MacLayout
             """.ReplaceLineEndings("\n");
     }
 
-    public static string InstallSocketDaemon(string plistFile) =>
-        $"cp '{plistFile}' {SocketDaemon} && chown root:wheel {SocketDaemon} && chmod 644 {SocketDaemon} && "
+    // The content goes in the script itself: a file of this user's to copy could be changed between writing it and root
+    // copying it.
+    public static string InstallSocketDaemon(string plist) =>
+        $"printf '%s' {Shell.ShQuote(plist)} > {SocketDaemon} && chown root:wheel {SocketDaemon} && chmod 644 {SocketDaemon} && "
         + $"(launchctl bootout system/{SocketDaemonLabel} 2>/dev/null; launchctl bootstrap system {SocketDaemon})";
 
     public static string RemoveSocketDaemon(string ourSocket) =>
         $"launchctl bootout system/{SocketDaemonLabel} 2>/dev/null; rm -f {SocketDaemon}; "
-        + $"if [ \"$(readlink {SystemSocket})\" = '{ourSocket}' ]; then rm -f {SystemSocket}; fi";
+        + $"if [ \"$(readlink {SystemSocket})\" = {Shell.ShQuote(ourSocket)} ]; then rm -f {SystemSocket}; fi";
 
     public static string InstallDomainResolver =>
         $"mkdir -p /etc/resolver && printf 'nameserver 127.0.0.1\\nport {DomainDnsPort}\\n' > {DomainResolver}";
@@ -132,7 +134,20 @@ static class MacLayout
     public static string[] AdminShell(string command) =>
         ["-e", $"do shell script \"{command.Replace("\\", "\\\\").Replace("\"", "\\\"")}\" with administrator privileges"];
 
-    public static string PathsEntry(string binDir) => $"echo '{binDir}' > /etc/paths.d/dockyard && chmod 644 /etc/paths.d/dockyard";
+    // /etc/paths.d is read by every account's shells, root's too, and ~/.dockyard/bin is this user's to change. So the PATH
+    // gets a folder only root can write, with a small script per command that runs this user's copy for this user alone.
+    public const string SharedBinDir = "/usr/local/dockyard/bin";
+    public static readonly string[] SharedCommands = ["docker", "kind", "docker-credential-osxkeychain"];
+
+    public static string Wrapper(string uid, string binDir, string command) =>
+        $"#!/bin/sh\n[ \"$(id -u)\" = {uid} ] || {{ echo \"{command}: this is Dockyard for another account on this Mac\" >&2; exit 127; }}\nexec {Shell.ShQuote($"{binDir}/{command}")} \"$@\"\n";
+
+    public static string PathsEntry(string uid, string binDir) =>
+        $"mkdir -p {SharedBinDir} && chown root:wheel /usr/local/dockyard {SharedBinDir} && chmod 755 /usr/local/dockyard {SharedBinDir} && "
+        + string.Concat(SharedCommands.Select(c => $"printf '%s' {Shell.ShQuote(Wrapper(uid, binDir, c))} > {SharedBinDir}/{c} && chmod 755 {SharedBinDir}/{c} && "))
+        + $"echo {SharedBinDir} > /etc/paths.d/dockyard && chmod 644 /etc/paths.d/dockyard";
+
+    public const string RemovePathsEntry = "rm -f /etc/paths.d/dockyard; rm -rf /usr/local/dockyard";
 
     public static string ZipAsset(bool engineOnly) => engineOnly ? @"^Dockyard-[\d.]+-macos-engine-only\.zip$" : @"^Dockyard-[\d.]+-macos\.zip$";
 
@@ -203,9 +218,9 @@ static class MacLayout
     public static string SwapScript(int pid, string newBundle, string bundle) => $"""
         #!/bin/sh
         while kill -0 {pid} 2>/dev/null; do sleep 0.2; done
-        rm -rf '{bundle}.old'
-        mv '{bundle}' '{bundle}.old' && mv '{newBundle}' '{bundle}' && rm -rf '{bundle}.old'
-        open '{bundle}' --args --tray
+        rm -rf {Shell.ShQuote(bundle + ".old")}
+        mv {Shell.ShQuote(bundle)} {Shell.ShQuote(bundle + ".old")} && mv {Shell.ShQuote(newBundle)} {Shell.ShQuote(bundle)} && rm -rf {Shell.ShQuote(bundle + ".old")}
+        open {Shell.ShQuote(bundle)} --args --tray
 
         """.ReplaceLineEndings("\n");
 
@@ -334,9 +349,9 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         "LinuxEngine" => File.Exists(Path.Combine(MacLayout.Assets, "dockyard-release")) && MacLayout.DockerVersion(
             await File.ReadAllTextAsync(Path.Combine(MacLayout.Assets, "dockyard-release"))) is { } bundled
             ? new Release(bundled, bundled.ToString(), null) : null,
-        "Cli" => await Updates.LatestStatic(MacLayout.CliIndex, "tgz"),
-        "Compose" => await Updates.LatestGitHub("docker/compose", MacLayout.ComposeAsset),
-        "Buildx" => await Updates.LatestGitHub("docker/buildx", MacLayout.BuildxAsset),
+        "Cli" => MacLayout.Cli,
+        "Compose" => MacLayout.Compose,
+        "Buildx" => MacLayout.Buildx,
         Kind.Id => Kind.Release,
         "App" => await Updates.LatestApp(MacLayout.ZipAsset(!HasDashboard)),
         ComponentRules.DashboardId => await Updates.LatestApp(MacLayout.ZipAsset(engineOnly: false)),
@@ -350,8 +365,8 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
     public async Task<bool> TrustCa(Action<string> log, string certificateFile, bool silent)
     {
         var r = silent
-            ? await runner.Run("sudo", "-n", "/usr/bin/security", "add-trusted-cert", "-d", "-r", "trustRoot", "-k", "/Library/Keychains/System.keychain", certificateFile)
-            : await runner.Run("/usr/bin/security", "add-trusted-cert", "-r", "trustRoot", "-k", MacLayout.LoginKeychain, certificateFile);
+            ? await runner.Run("sudo", "-n", "/usr/bin/security", "add-trusted-cert", "-d", "-r", "trustRoot", "-p", "ssl", "-k", "/Library/Keychains/System.keychain", certificateFile)
+            : await runner.Run("/usr/bin/security", "add-trusted-cert", "-r", "trustRoot", "-p", "ssl", "-k", MacLayout.LoginKeychain, certificateFile);
         if (r.ExitCode != 0) return false;
         log("This Mac trusts Dockyard's certificate, for names under dockyard.test only");
         return true;
@@ -513,11 +528,11 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
     {
         await InstallBundle(log, request.Dashboard);
 
-        await InstallCli(log, await Updates.LatestStatic(MacLayout.CliIndex, "tgz"));
-        foreach (var (component, plugin, repo, asset) in new[] { ("Compose", "docker-compose", "docker/compose", MacLayout.ComposeAsset), ("Buildx", "docker-buildx", "docker/buildx", MacLayout.BuildxAsset) })
+        await InstallCli(log, MacLayout.Cli);
+        foreach (var (component, plugin, release) in new[] { ("Compose", "docker-compose", MacLayout.Compose), ("Buildx", "docker-buildx", MacLayout.Buildx) })
         {
             if (request.Without.Contains(component)) MacLayout.RemovePlugin(Path.Combine(MacLayout.PluginDir, plugin), MacLayout.PluginLinksDir);
-            else await InstallPlugin(log, plugin, await Updates.LatestGitHub(repo, asset));
+            else await InstallPlugin(log, plugin, release);
         }
         if (request.Without.Contains(Kind.Id)) RemoveKind(log);
         else if (await Installed(Kind.Id) != Kind.Version) await InstallKind(log);
@@ -597,22 +612,19 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
             steps.Add("/usr/sbin/softwareupdate --install-rosetta --agree-to-license");
             what.Add("installing Rosetta for amd64 images");
         }
-        if (!File.Exists("/etc/paths.d/dockyard"))
+        if (!File.Exists("/etc/paths.d/dockyard") || await PathEntryIs(MacLayout.BinDir))
         {
-            steps.Add(MacLayout.PathsEntry(MacLayout.BinDir));
-            what.Add("adding ~/.dockyard/bin to the PATH");
+            steps.Add(MacLayout.PathsEntry((await runner.Check("/usr/bin/id", "-u")).Trim(), MacLayout.BinDir));
+            what.Add($"adding docker and kind to the PATH through {MacLayout.SharedBinDir}");
         }
 
         var socketUse = SystemSocketUse();
         var plist = MacLayout.SocketDaemonPlist(MacLayout.DockerSocket);
-        var plistFile = Path.Combine(MacLayout.DataDir, "socket-daemon.plist");
         if (socketUse == MacLayout.SocketUse.SomeoneElse)
             log($"{MacLayout.SystemSocket} belongs to another Docker app and stays as it is: tools that ignore docker contexts keep using that app");
         else if (!File.Exists(MacLayout.SocketDaemon) || await File.ReadAllTextAsync(MacLayout.SocketDaemon) != plist)
         {
-            Directory.CreateDirectory(MacLayout.DataDir);
-            await File.WriteAllTextAsync(plistFile, plist);
-            steps.Add(MacLayout.InstallSocketDaemon(plistFile));
+            steps.Add(MacLayout.InstallSocketDaemon(plist));
             what.Add($"making {MacLayout.SystemSocket} point at Dockyard");
         }
         if (!File.Exists(MacLayout.DomainResolver))
@@ -627,7 +639,6 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         var r = silent
             ? await runner.Run("sudo", "-n", "/bin/sh", "-c", script)
             : await runner.Run("/usr/bin/osascript", MacLayout.AdminShell(script));
-        File.Delete(plistFile);
         if (r.ExitCode != 0)
             log($"Skipped ({(silent ? "no passwordless sudo" : "approval declined")}): {string.Join(", ", what)}. Running the wizard with an administrator's approval adds them; everything else works without them.");
     }
@@ -638,10 +649,8 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         {
             if (!File.Exists(MacLayout.CredentialHelper))
             {
-                var release = await Updates.LatestGitHub(Paths.CredentialHelpersRepo, MacLayout.CredentialHelperAsset);
                 Directory.CreateDirectory(MacLayout.BinDir);
-                await Updates.DownloadFile(release.DownloadUrl!, MacLayout.CredentialHelper);
-                File.SetUnixFileMode(MacLayout.CredentialHelper, (UnixFileMode)0b111_101_101);
+                await Pinned.Download(MacLayout.CredentialHelperRelease, MacLayout.CredentialHelper);
             }
             // docker finds the helper through the PATH: a store it cannot find would break every docker login, also from other Docker apps.
             if (File.Exists("/etc/paths.d/dockyard"))
@@ -709,7 +718,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         await EngineConfig.ApplyClientProxy("unix://" + MacLayout.DockerSocket, null);
         UnlinkUserSocket();
         List<string> steps = [];
-        if (await IsOurPathEntry()) steps.Add("rm -f /etc/paths.d/dockyard");
+        if (await PathEntryIs(MacLayout.BinDir) || await PathEntryIs(MacLayout.SharedBinDir)) steps.Add(MacLayout.RemovePathsEntry);
         if (File.Exists(MacLayout.DomainResolver)) steps.Add($"rm -f {MacLayout.DomainResolver}");
         if (File.Exists(MacLayout.SocketDaemon) || SystemSocketUse() == MacLayout.SocketUse.Ours) steps.Add(MacLayout.RemoveSocketDaemon(MacLayout.DockerSocket));
         if (steps.Count > 0)
@@ -734,8 +743,8 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         else log($"Your images and containers were kept in {Path.Combine(MacLayout.DataDir, "data.img")}");
     }
 
-    static async Task<bool> IsOurPathEntry() =>
-        File.Exists("/etc/paths.d/dockyard") && (await File.ReadAllTextAsync("/etc/paths.d/dockyard")).Trim() == MacLayout.BinDir;
+    static async Task<bool> PathEntryIs(string dir) =>
+        File.Exists("/etc/paths.d/dockyard") && (await File.ReadAllTextAsync("/etc/paths.d/dockyard")).Trim() == dir;
 
     public void ReleaseResources()
     {
@@ -779,7 +788,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         try
         {
             var tgz = Path.Combine(dir, "docker.tgz");
-            await Updates.DownloadFile(release.DownloadUrl!, tgz);
+            await Pinned.Download(release, tgz);
             await runner.Check("/usr/bin/tar", "-xzf", tgz, "-C", dir, "docker/docker");
             Directory.CreateDirectory(MacLayout.BinDir);
             File.Copy(Path.Combine(dir, "docker", "docker"), MacLayout.DockerCli, overwrite: true);
@@ -811,8 +820,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         Directory.CreateDirectory(MacLayout.PluginDir);
         var target = Path.Combine(MacLayout.PluginDir, name);
         MacLayout.SetAsideLinkedPlugin(target, MacLayout.PluginLinksDir);
-        await Updates.DownloadFile(release.DownloadUrl!, target);
-        File.SetUnixFileMode(target, (UnixFileMode)0b111_101_101);
+        await Pinned.Download(release, target);
         log($"{name} {release.Tag}");
     }
 

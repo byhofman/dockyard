@@ -61,7 +61,7 @@ sealed class WslDistro(ICommandRunner runner, string name = WslDistro.DefaultNam
             if (current.ExitCode == 0 && current.Output.Trim() == hash) return;
             var path = await ToLinuxPath(temp);
             await runner.Check("wsl.exe", "-d", Name, "-u", "root", "--", "sh", "-c",
-                $"mkdir -p /etc/docker && tar -xzf '{path}' -C / && chmod 0755 {InitPath} {UpdatePath} {AgentPath} && echo {hash} > {GuestMarker}");
+                $"mkdir -p /etc/docker && tar -xzf {Shell.ShQuote(path)} -C / && chmod 0755 {InitPath} {UpdatePath} {AgentPath} && echo {hash} > {GuestMarker}");
             log("Linux engine: Dockyard's part is up to date");
         }
         finally
@@ -87,13 +87,15 @@ sealed class WslDistro(ICommandRunner runner, string name = WslDistro.DefaultNam
         return via >= 0 && via + 1 < words.Length ? words[via + 1] : null;
     }
 
-    public async Task WriteFile(string path, string content)
+    // Readable by root alone with secret, which is everyone who could run the engine anyway.
+    public async Task WriteFile(string path, string content, bool secret = false)
     {
         var temp = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
         await File.WriteAllTextAsync(temp, content);
         try
         {
-            await runner.Check("wsl.exe", "-d", Name, "-u", "root", "--", "sh", "-c", $"mkdir -p \"$(dirname '{path}')\" && cp '{await ToLinuxPath(temp)}' '{path}'");
+            var mode = secret ? "0600" : "0644";
+            await runner.Check("wsl.exe", "-d", Name, "-u", "root", "--", "sh", "-c", $"mkdir -p \"$(dirname {Shell.ShQuote(path)})\" && install -m {mode} {Shell.ShQuote(await ToLinuxPath(temp))} {Shell.ShQuote(path)}");
         }
         finally
         {

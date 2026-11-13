@@ -12,7 +12,11 @@ using var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 AppDomain.CurrentDomain.ProcessExit += (_, _) => cts.Cancel();
 
-await NetworkRules.Apply(Agent.Exit, log, vm: options.Mode is AgentMode.Vm or AgentMode.TcpTest, linuxHost: options.Mode == AgentMode.Host);
+// dockyard-vm-init has eth0 up with its lease before the agent starts.
+var vmHost = options.Mode is AgentMode.Vm or AgentMode.TcpTest
+    ? WslHost.DefaultGateway(File.ReadAllText("/proc/net/route")) ?? throw new InvalidOperationException("the VM has no gateway to the Mac yet")
+    : null;
+await NetworkRules.Apply(Agent.Exit, log, vmHost, linuxHost: options.Mode == AgentMode.Host);
 
 var table = new DomainTable(() => new DockerClient(DockerEndpoint.Parse("unix:///var/run/docker.sock")), "/var/lib/docker/dockyard/domain-ports.json", log);
 var proxy = new DomainProxy(table, log);
@@ -45,18 +49,16 @@ switch (options.Mode)
         services.Add(new Agent(transport, log, api).Run(cts.Token));
         break;
     case AgentMode.Wsl:
-        dialer = new TcpHostDialer(WslHost.Address(Directory.Exists("/sys/class/net/loopback0"), File.ReadAllText("/proc/net/route")), WslHost.Refused);
+        dialer = new TcpHostDialer(WslHost.Address(Directory.Exists("/sys/class/net/loopback0"), File.ReadAllText("/proc/net/route")), GuestAddresses.RefusedOnHost);
         // The tray on Windows relays to these: only loopback is shared with it, also in mirrored networking.
         services.Add(Optional("domains on this machine", () => new DnsServer(IPAddress.Loopback, HostView(() => GuestAddresses.HostLoopback), ReadResolvConf, log, GuestAddresses.RelayDnsPort, DomainNames.InZone).Run(cts.Token)));
         services.Add(Optional("HTTP on domains from Windows", () => proxy.Serve(DomainProxy.Listen(IPAddress.Loopback, GuestAddresses.RelayHttpPort), tls: false, guarded: false, cts.Token)));
         services.Add(Optional("HTTPS on domains from Windows", () => proxy.Serve(DomainProxy.Listen(IPAddress.Loopback, GuestAddresses.RelayHttpsPort), tls: true, guarded: false, cts.Token)));
-        services.Add(Optional("the agent API", () => AgentApiServer.Tcp(api, GuestAddresses.ApiPort, cts.Token)));
-        if (!Directory.Exists("/sys/class/net/loopback0"))
-            services.Add(ServeWindows());
+        services.Add(ServeWindows());
         services.Add(ExitWithEngine());
         break;
     default:
-        dialer = new TcpHostDialer(IPAddress.Loopback, new HashSet<int> { GuestAddresses.HostProxyPort });
+        dialer = new TcpHostDialer(IPAddress.Loopback, GuestAddresses.RefusedOnHost);
         // systemd-resolved takes a port: 53 on any loopback address could clash with a DNS server already on this machine.
         services.Add(Optional("domains on this machine", () => new DnsServer(IPAddress.Loopback, HostView(() => GuestAddresses.HostLoopback), ReadResolvConf, log, GuestAddresses.RelayDnsPort, DomainNames.InZone).Run(cts.Token)));
         services.Add(AgentApiServer.Unix(api, "/run/dockyard/agent.sock", cts.Token));
@@ -98,10 +100,16 @@ async Task Optional(string what, Func<Task> service)
 // loop in dockyard-init starts it again.
 async Task ServeWindows()
 {
+    if (Directory.Exists("/sys/class/net/loopback0"))
+    {
+        log($"the engine for Windows on 127.0.0.1:{Ports.Docker}");
+        await WindowsEngine.Serve(WindowsEngine.Listen(IPAddress.Loopback), IPAddress.IsLoopback, WindowsEngine.ReadToken, Agent.DockerSocket, api, cts.Token);
+        return;
+    }
     var address = InterfaceAddress.Of("eth0") ?? throw new InvalidOperationException("eth0 has no IPv4 address");
     var windows = WslHost.DefaultGateway(File.ReadAllText("/proc/net/route")) ?? throw new InvalidOperationException("no default gateway");
     log($"the engine for Windows on {address}:{Ports.Docker}, for {windows} only");
-    await WindowsEngine.Serve(WindowsEngine.Listen(address), windows, Agent.DockerSocket, cts.Token);
+    await WindowsEngine.Serve(WindowsEngine.Listen(address), windows.Equals, WindowsEngine.ReadToken, Agent.DockerSocket, api, cts.Token);
 }
 
 async Task ExitWithEngine()

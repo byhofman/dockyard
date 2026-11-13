@@ -204,9 +204,9 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
 
     public async Task<Release?> Latest(string component) => component switch
     {
-        "Engine" => await Updates.LatestStatic(Updates.LinuxStaticIndex, "tgz"),
-        "Compose" => await Updates.LatestGitHub("docker/compose", Updates.LinuxComposeAsset),
-        "Buildx" => await Updates.LatestGitHub("docker/buildx", Updates.LinuxBuildxAsset),
+        "Engine" => Updates.LinuxDocker,
+        "Compose" => Updates.LinuxCompose,
+        "Buildx" => Updates.LinuxBuildx,
         Core.Kind.Id => Core.Kind.Release,
         "App" or ComponentRules.DashboardId => await Updates.LatestApp(LinuxLayout.AppAsset),
         _ => null,
@@ -402,10 +402,9 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
         {
             if (!File.Exists(LinuxLayout.CredentialHelper))
             {
-                var release = await Updates.LatestGitHub(Paths.CredentialHelpersRepo, "docker-credential-secretservice-{tag}.linux-amd64");
                 Directory.CreateDirectory(dir);
                 var download = Path.Combine(dir, "helper");
-                await Updates.DownloadFile(release.DownloadUrl!, download);
+                await Pinned.Download(Pinned.CredentialHelper("secretservice", "linux-amd64"), download);
                 await RunElevated(["install", "-m", "0755", download, LinuxLayout.CredentialHelper]);
             }
             if ((await TryRun(LinuxLayout.CredentialHelper, "list")) is { ExitCode: 0 })

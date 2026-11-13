@@ -4,11 +4,19 @@ using System.Text;
 
 namespace Dockyard.Agent.Tests;
 
-/// <summary>What Windows reaches the WSL engine through with NAT networking. docker exec, attach and run without -d
-/// half-close their side once stdin is done, and the engine only then writes what the command printed.</summary>
+/// <summary>What Windows reaches the WSL engine and the agent API through. Only with the tray's token, and docker exec,
+/// attach and run without -d half-close their side once stdin is done, after which the engine writes what the command printed.</summary>
 public sealed class WindowsEngineTests : IDisposable
 {
+    const string Token = "0123456789abcdef0123456789abcdef";
     readonly string dir = Directory.CreateTempSubdirectory("dy-we").FullName;
+    readonly AgentApi api = Api();
+
+    static AgentApi Api()
+    {
+        var table = new DomainTable(() => throw new InvalidOperationException("no engine here"), Path.GetTempFileName(), _ => { });
+        return new AgentApi(table, new DomainProxy(table, _ => { }));
+    }
     string EngineSocket => Path.Combine(dir, "e.sock");
 
     public void Dispose() => Directory.Delete(dir, recursive: true);
@@ -34,11 +42,14 @@ public sealed class WindowsEngineTests : IDisposable
         return (listener, ((IPEndPoint)listener.LocalEndPoint!).Port);
     }
 
-    static async Task<string> Exchange(int port, string request, CancellationToken ct)
+    Task Serve(Socket listener, Func<IPAddress, bool> isWindows, CancellationToken ct) =>
+        WindowsEngine.Serve(listener, isWindows, () => Token, EngineSocket, api, ct);
+
+    static async Task<string> Exchange(int port, string request, CancellationToken ct, string header = $"{Token} engine\n")
     {
         using var client = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         await client.ConnectAsync(IPAddress.Loopback, port, ct);
-        await client.SendAsync(Encoding.ASCII.GetBytes(request), ct);
+        await client.SendAsync(Encoding.ASCII.GetBytes(header + request), ct);
         client.Shutdown(SocketShutdown.Send);
         var reply = new MemoryStream();
         var buffer = new byte[1024];
@@ -54,7 +65,7 @@ public sealed class WindowsEngineTests : IDisposable
         var engine = FakeEngine(ct);
         var (listener, port) = Listen();
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        var serving = WindowsEngine.Serve(listener, IPAddress.Loopback, EngineSocket, cts.Token);
+        var serving = Serve(listener, IPAddress.IsLoopback, cts.Token);
 
         Assert.Equal("output after 'POST /exec/1/start'", await Exchange(port, "POST /exec/1/start", ct));
 
@@ -69,7 +80,7 @@ public sealed class WindowsEngineTests : IDisposable
         var ct = TestContext.Current.CancellationToken;
         var (listener, port) = Listen();
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        var serving = WindowsEngine.Serve(listener, IPAddress.Parse("172.20.0.1"), EngineSocket, cts.Token);
+        var serving = Serve(listener, IPAddress.Parse("172.20.0.1").Equals, cts.Token);
 
         // Closing with the request still unread resets the connection on macOS and Windows and ends it on Linux; either
         // way nothing of the engine's comes back.
@@ -80,5 +91,57 @@ public sealed class WindowsEngineTests : IDisposable
 
         cts.Cancel();
         await serving;
+    }
+
+    [Theory]
+    [InlineData("GET /_ping")]
+    [InlineData("ffffffffffffffffffffffffffffffff engine\nGET /_ping")]
+    [InlineData("0123456789abcdef0123456789abcdef\nGET /_ping")]
+    public async Task Windows_without_the_token_gets_nothing(string request)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (listener, port) = Listen();
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var serving = Serve(listener, IPAddress.IsLoopback, cts.Token);
+
+        string reply;
+        try { reply = await Exchange(port, request, ct, header: ""); }
+        catch (SocketException e) when (e.SocketErrorCode is SocketError.ConnectionReset or SocketError.ConnectionAborted) { reply = ""; }
+        Assert.Equal("", reply);
+
+        cts.Cancel();
+        await serving;
+    }
+
+    [Fact]
+    public async Task The_token_also_opens_the_agent_API()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (listener, port) = Listen();
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var serving = Serve(listener, IPAddress.IsLoopback, cts.Token);
+
+        var reply = await Exchange(port, "{\"op\":\"nonsense\"}\n", ct, header: $"{Token} api\n");
+
+        Assert.Contains("unknown request", reply);
+        cts.Cancel();
+        await serving;
+    }
+
+    [Theory]
+    [InlineData(null, Token)]
+    [InlineData("", Token)]
+    [InlineData(Token + " engine", null)]
+    [InlineData(Token + " engine", "")]
+    [InlineData(Token + " shell", Token)]
+    [InlineData(Token + " engine extra", Token)]
+    public void A_header_without_the_right_token_and_a_known_service_is_refused(string? header, string? token) =>
+        Assert.Null(WindowsEngine.Admit(header, token));
+
+    [Fact]
+    public void The_right_token_admits_the_service_it_names()
+    {
+        Assert.Equal("engine", WindowsEngine.Admit($"{Token} engine", Token));
+        Assert.Equal("api", WindowsEngine.Admit($"{Token} api", Token));
     }
 }

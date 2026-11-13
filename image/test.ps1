@@ -33,6 +33,12 @@ try {
     if ($echo -ne 'ok') { throw "container output was '$echo'" }
     Write-Host 'container runs'
 
+    D exec -d $name /usr/local/sbin/dockyard-init
+    Start-Sleep 3
+    $again = (D exec $name docker version --format '{{.Server.Version}}' 2>&1 | Out-String).Trim()
+    if ($again -ne "$v".Trim()) { D logs --tail 20 $name; throw "a second dockyard-init took the running engine away (got '$again')" }
+    Write-Host 'a second start leaves the running engine alone'
+
     D exec $name docker buildx version
     D exec $name docker compose version
     D exec $name cat /etc/dockyard-release

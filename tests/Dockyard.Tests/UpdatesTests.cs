@@ -49,10 +49,6 @@ public sealed class UpdatesTests : IDisposable
 
     static string Sum(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
 
-    static string Atom(params (string Tag, DateTime Updated)[] entries) =>
-        $"""<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><id>tag:github.com,2008:https://github.com/x/releases</id>{string.Concat(entries.Select(e =>
-            $"<entry><id>tag:github.com,2008:Repository/1/{e.Tag}</id><updated>{e.Updated:yyyy-MM-ddTHH:mm:ssZ}</updated><title>{e.Tag}</title></entry>"))}</feed>""";
-
     void ServeRelease(string tag, string asset, string content, string? sums = null)
     {
         github.Serve($"{Base}/download/{tag}/SHA256SUMS", sums ?? $"{Sum(content)}  {asset}\n");
@@ -113,32 +109,6 @@ public sealed class UpdatesTests : IDisposable
         Assert.Equal("Release v1.2.3 has no other.zip", e.Message);
     }
 
-    [Fact]
-    public async Task Tools_come_from_the_newest_stable_release_past_the_waiting_period_without_the_api()
-    {
-        const string releases = "https://github.com/docker/buildx/releases";
-        var now = DateTime.UtcNow;
-        github.Serve($"{releases}.atom", Atom(("v0.3.0-rc1", now.AddDays(-30)), ("v0.2.0", now.AddDays(-1)), ("v0.1.1", now.AddDays(-20)), ("v0.1.0", now.AddDays(-40))));
-        github.Serve($"{releases}/download/v0.1.1/buildx-v0.1.1.linux-amd64", "");
-
-        var release = await Updates.LatestGitHub("docker/buildx", Updates.LinuxBuildxAsset);
-
-        Assert.Equal("v0.1.1", release.Tag);
-        Assert.Equal($"{releases}/download/v0.1.1/buildx-v0.1.1.linux-amd64", release.DownloadUrl);
-        Assert.DoesNotContain(github.Requested, url => url.Contains("api.github.com"));
-    }
-
-    [Fact]
-    public async Task A_tool_release_without_the_asset_is_passed_over()
-    {
-        const string releases = "https://github.com/docker/buildx/releases";
-        var now = DateTime.UtcNow;
-        github.Serve($"{releases}.atom", Atom(("v0.2.0", now.AddDays(-30)), ("v0.1.0", now.AddDays(-40))));
-        github.Serve($"{releases}/download/v0.1.0/buildx-v0.1.0.linux-amd64", "");
-
-        Assert.Equal("v0.1.0", (await Updates.LatestGitHub("docker/buildx", Updates.LinuxBuildxAsset)).Tag);
-    }
-
     [Theory]
     [InlineData(HttpStatusCode.Forbidden)]
     [InlineData(HttpStatusCode.TooManyRequests)]
@@ -160,5 +130,30 @@ public sealed class UpdatesTests : IDisposable
 
         Assert.False(Updates.IsRateLimited(e));
         Assert.Equal($"Could not get {Base}/download/v9.9.9/SHA256SUMS: github.com answered 404 (NotFound).", e.Message);
+    }
+
+    [Fact]
+    public void Nothing_local_is_used_unless_a_folder_was_named()
+    {
+        File.WriteAllText(Path.Combine(dir, "dockyard-linux-9.9.9-x86_64.tar.gz"), "planted");
+        Updates.LocalAssets = null;
+
+        Assert.Null(Updates.LocalAsset(Updates.ImageAsset));
+    }
+
+    [Fact]
+    public void A_named_folder_gives_its_newest_matching_file()
+    {
+        File.WriteAllText(Path.Combine(dir, "dockyard-linux-0.4.0-x86_64.tar.gz"), "");
+        File.WriteAllText(Path.Combine(dir, "dockyard-linux-0.10.0-x86_64.tar.gz"), "");
+        Updates.LocalAssets = dir;
+        try
+        {
+            Assert.Equal(Path.Combine(dir, "dockyard-linux-0.10.0-x86_64.tar.gz"), Updates.LocalAsset(Updates.ImageAsset));
+        }
+        finally
+        {
+            Updates.LocalAssets = null;
+        }
     }
 }

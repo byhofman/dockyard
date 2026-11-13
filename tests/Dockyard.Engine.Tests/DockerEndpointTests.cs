@@ -99,7 +99,8 @@ public sealed class DockerEndpointTests
         Assert.Equal(expected, ContainerFiles.Parent(path, root));
 
     [Theory]
-    [InlineData("tcp://127.0.0.1:2375", true)]
+    [InlineData("npipe:////./pipe/dockyard_linux", true)]
+    [InlineData("tcp://127.0.0.1:2375", false)]
     [InlineData("unix:///var/run/docker.sock", true)]
     [InlineData("unix:///Users/a/.dockyard/docker.sock", true)]
     [InlineData("unix:///Users/a/.orbstack/run/docker.sock", false)]

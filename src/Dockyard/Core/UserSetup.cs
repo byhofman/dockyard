@@ -24,6 +24,7 @@ static partial class UserSetup
             await ApplyGuest(new WslDistro(ProcessRunner.Instance), log);
         }
         await MigrateLegacyEngine(log);
+        await EngineConfig.ApplyClientProxy(Paths.LegacyLinuxHost, null);
         await CreateContexts(log, without);
         SetMirroredNetworking(log);
         if (File.Exists(Paths.CredentialHelper)) await CredentialStore.Adopt(log, "wincred", Paths.CredentialHelper, Paths.CredentialStoreMarker);
@@ -40,6 +41,7 @@ static partial class UserSetup
     {
         await using var bundle = typeof(UserSetup).Assembly.GetManifestResourceStream(GuestBundle.ResourceName);
         if (bundle is not null) await distro.ApplyGuest(bundle, log);
+        await distro.WriteFile(WslEngineGate.TokenPath, WslEngineGate.Token(Paths.EngineTokenFile), secret: true);
         await WriteEngineConfig(distro, log);
     }
 
@@ -74,7 +76,8 @@ static partial class UserSetup
     public static void ResumeAfterReboot(bool silent, Action<string> log)
     {
         using var key = Registry.CurrentUser.CreateSubKey(RunOnceKey);
-        key.SetValue(Paths.AppName, $"\"{Paths.AppExe}\" {(silent ? "--silent" : "--setup")} --resume");
+        var assets = Updates.LocalAssets is { } dir ? $" --assets {Shell.Quote(dir)}" : "";
+        key.SetValue(Paths.AppName, $"\"{Paths.AppExe}\" {(silent ? "--silent" : "--setup")} --resume{assets}");
         log("Setup carries on by itself after the restart");
     }
 
@@ -101,6 +104,7 @@ static partial class UserSetup
 
         await CredentialStore.Forget(Paths.CredentialStoreMarker, Paths.CredentialHelper, log);
         await EngineConfig.ApplyClientProxy(Paths.LinuxHost, null);
+        await EngineConfig.ApplyClientProxy(Paths.LegacyLinuxHost, null);
         if (File.Exists(Paths.DockerExe))
         {
             await Shell.Run(Paths.DockerExe, "context", "use", "default");
@@ -108,7 +112,7 @@ static partial class UserSetup
             log("Removed docker contexts");
         }
         var tc = Path.Combine(Paths.UserProfile, ".testcontainers.properties");
-        if (File.Exists(tc) && File.ReadAllText(tc).Trim() == $"docker.host={Paths.LinuxHost}") File.Delete(tc);
+        if (File.Exists(tc) && File.ReadAllText(tc).Trim() is var line && (line == $"docker.host={Paths.LinuxHost}" || line == $"docker.host={Paths.LegacyLinuxHost}")) File.Delete(tc);
 
         if (File.Exists(Paths.WslConfigFile) && WslConfig.WithoutDockyardLine(File.ReadAllText(Paths.WslConfigFile)) is { } restored)
             File.WriteAllText(Paths.WslConfigFile, restored);
@@ -128,15 +132,11 @@ static partial class UserSetup
             if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
     }
 
-    // Prefers a dockyard-linux-*.tar.gz next to the installer, then the matching release asset.
+    // --image, then a dockyard-linux-*.tar.gz given with --assets; without either the release asset is downloaded.
     public static string? FindLocalImage(string? explicitPath)
     {
         if (explicitPath is not null) return File.Exists(explicitPath) ? explicitPath : throw new FileNotFoundException("Image not found", explicitPath);
-        var dir = Path.GetDirectoryName(Paths.Self)!;
-        return Directory.EnumerateFiles(dir, "dockyard-linux-*-x86_64.tar.gz")
-            .Where(f => ImageName().IsMatch(Path.GetFileName(f)))
-            .OrderByDescending(f => Updates.ParseVersion(Path.GetFileName(f)))
-            .FirstOrDefault();
+        return Updates.LocalAsset(Updates.ImageAsset);
     }
 
     static async Task SetupDistro(Action<string> log, string? image)

@@ -20,6 +20,7 @@ static class LocalCa
     public const string Zone = "dockyard.test";
     public const string SubjectName = "Dockyard Local CA";
     const string NameConstraintsOid = "2.5.29.30";
+    const string ServerAuthOid = "1.3.6.1.5.5.7.3.1";
     static readonly TimeSpan CaLifetime = TimeSpan.FromDays(3650);
     public static readonly TimeSpan LeafLifetime = TimeSpan.FromDays(90);
 
@@ -30,19 +31,31 @@ static class LocalCa
         request.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, true, 0, true));
         request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.KeyCertSign | X509KeyUsageFlags.CrlSign, true));
         request.CertificateExtensions.Add(new X509SubjectKeyIdentifierExtension(request.PublicKey, false));
-        request.CertificateExtensions.Add(new X509Extension(NameConstraintsOid, PermittedDnsName(Zone), critical: true));
+        request.CertificateExtensions.Add(new X509Extension(NameConstraintsOid, Constraints(Zone), critical: true));
+        // Windows and NSS take a CA's extended key usage as a limit on what it may vouch for: web servers, not code or mail.
+        request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension([new Oid(ServerAuthOid)], false));
         using var certificate = request.CreateSelfSigned(now.AddDays(-1), now + CaLifetime);
         return new PemPair(certificate.ExportCertificatePem(), key.ExportPkcs8PrivateKeyPem());
     }
 
-    // NameConstraints ::= SEQUENCE { permittedSubtrees [0] { SEQUENCE { base [2] dNSName } } }
-    static byte[] PermittedDnsName(string name)
+    // A constraint only limits the name forms it lists, so a permitted DNS name alone would leave every IP address open.
+    // NameConstraints ::= SEQUENCE { permittedSubtrees [0] { SEQUENCE { base [2] dNSName } },
+    //                                excludedSubtrees [1] { SEQUENCE { base [7] 0.0.0.0/0 }, SEQUENCE { base [7] ::/0 } } }
+    static byte[] Constraints(string name)
     {
         var writer = new AsnWriter(AsnEncodingRules.DER);
         using (writer.PushSequence())
-        using (writer.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 0)))
-        using (writer.PushSequence())
-            writer.WriteCharacterString(UniversalTagNumber.IA5String, name, new Asn1Tag(TagClass.ContextSpecific, 2));
+        {
+            using (writer.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 0)))
+            using (writer.PushSequence())
+                writer.WriteCharacterString(UniversalTagNumber.IA5String, name, new Asn1Tag(TagClass.ContextSpecific, 2));
+            using (writer.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 1)))
+            {
+                foreach (var addressAndMask in new[] { new byte[8], new byte[32] })
+                    using (writer.PushSequence())
+                        writer.WriteOctetString(addressAndMask, new Asn1Tag(TagClass.ContextSpecific, 7));
+            }
+        }
         return writer.Encode();
     }
 
@@ -92,7 +105,9 @@ static class LocalCa
             using var certificate = X509Certificate2.CreateFromPem(certificatePem);
             return certificate.GetNameInfo(X509NameType.SimpleName, forIssuer: false) == SubjectName
                 && certificate.Extensions[NameConstraintsOid] is { Critical: true } constraint
-                && constraint.RawData.AsSpan().SequenceEqual(PermittedDnsName(Zone));
+                && constraint.RawData.AsSpan().SequenceEqual(Constraints(Zone))
+                && certificate.Extensions.OfType<X509EnhancedKeyUsageExtension>().SingleOrDefault() is { } usage
+                && usage.EnhancedKeyUsages.Count == 1 && usage.EnhancedKeyUsages[0].Value == ServerAuthOid;
         }
         catch (CryptographicException) { return false; }
     }
@@ -126,7 +141,16 @@ static class Https
     public static async Task Enable(IEngineHost host, Action<string> log, bool silent)
     {
         PemPair ca;
-        try { ca = await LocalCa.LoadOrCreate(host.CaDirectory, host.CaKeys); }
+        try
+        {
+            // A CA from before the IP and usage limits is replaced, which asks for trust once more.
+            if (await LocalCa.Load(host.CaDirectory, host.CaKeys) is { } earlier && !LocalCa.IsConstrainedRoot(earlier.Certificate))
+            {
+                log("Replacing Dockyard's certificate authority with one that can only vouch for web servers under dockyard.test");
+                await Disable(host, log);
+            }
+            ca = await LocalCa.LoadOrCreate(host.CaDirectory, host.CaKeys);
+        }
         catch (InvalidOperationException e)
         {
             log($"HTTPS was not turned on: {e.Message} Plain HTTP works as before.");
@@ -188,6 +212,11 @@ static class Https
                 // Only when a certificate is due: the key can be in the OS's store, which is not for asking every 10 seconds.
                 if ((!reachable || DateTime.UtcNow - given > TimeSpan.FromDays(1)) && await LocalCa.Load(host.CaDirectory, host.CaKeys) is { } ca)
                 {
+                    if (!LocalCa.IsConstrainedRoot(ca.Certificate))
+                    {
+                        await Enable(host, _ => { }, silent: false);
+                        continue;
+                    }
                     var leaf = LocalCa.Leaf(ca, DateTimeOffset.UtcNow);
                     await agent.SetCertificateAsync(leaf.Certificate, leaf.Key, ct);
                     given = DateTime.UtcNow;

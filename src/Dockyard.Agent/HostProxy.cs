@@ -11,7 +11,6 @@ static class GuestAddresses
     public static readonly IPAddress Host = IPAddress.Parse("198.19.250.254");
     public const string Subnet = "198.19.250.0/24";
     public const int HostProxyPort = 2378;
-    public const int ApiPort = 2379;
     public const int DomainHttpPort = 2380;
     public const int DomainHttpsPort = 2381;
     public const int RelayHttpPort = 2382;
@@ -26,6 +25,13 @@ static class GuestAddresses
     static readonly HashSet<string> HostNames = ["host.docker.internal", "gateway.docker.internal"];
 
     public static IPAddress? Resolve(string name) => HostNames.Contains(name) ? Host : null;
+
+    // What host.docker.internal never reaches on the host: Docker's own TCP ports and Dockyard's, whose services are for
+    // the host and the tray, not for any image a container runs.
+    public static readonly IReadOnlySet<int> RefusedOnHost = new HashSet<int>
+    {
+        2375, 2376, 2377, HostProxyPort, 2379, DomainHttpPort, DomainHttpsPort, RelayHttpPort, RelayHttpsPort, RelayDnsPort, ContainerDnsPort,
+    };
 }
 
 static class NetworkRules
@@ -76,14 +82,15 @@ static class NetworkRules
     }
 
     // Only the VM: there the Mac reaches the engine's Linux at its own address, and published ports never come in that
-    // way (they go over vsock), so ports 80 and 443 on that interface are free to mean the proxy.
-    public static IEnumerable<string[]> VmCommands()
+    // way (they go over vsock), so ports 80 and 443 on that interface are free to mean the proxy. Only from the Mac, the
+    // gateway: other VMs on the same virtual network are not for the domains to answer.
+    public static IEnumerable<string[]> VmCommands(IPAddress mac)
     {
         foreach (var (from, to) in new[] { (80, GuestAddresses.DomainHttpPort), (443, GuestAddresses.DomainHttpsPort) })
-            yield return ["iptables", "-t", "nat", "-I", "PREROUTING", "-i", "eth0", "-p", "tcp", "--dport", from.ToString(), "-j", "REDIRECT", "--to-ports", to.ToString()];
+            yield return ["iptables", "-t", "nat", "-I", "PREROUTING", "-i", "eth0", "-s", mac.ToString(), "-p", "tcp", "--dport", from.ToString(), "-j", "REDIRECT", "--to-ports", to.ToString()];
     }
 
-    public static async Task Apply(Func<string, string[], Task<int>> run, Action<string> log, bool vm = false, bool linuxHost = false)
+    public static async Task Apply(Func<string, string[], Task<int>> run, Action<string> log, IPAddress? vmHost = null, bool linuxHost = false)
     {
         foreach (var address in new[] { GuestAddresses.Dns, GuestAddresses.Host })
             await run("ip", ["addr", "replace", $"{address}/32", "dev", "lo"]);
@@ -96,7 +103,7 @@ static class NetworkRules
             await Iptables("-A", "DOCKYARD-INPUT", "-i", iface, "-j", "ACCEPT");
         await Iptables("-A", "DOCKYARD-INPUT", "-j", "DROP");
 
-        foreach (var command in Commands().Concat(vm ? VmCommands() : []).Concat(linuxHost ? HostCommands() : []))
+        foreach (var command in Commands().Concat(vmHost is not null ? VmCommands(vmHost) : []).Concat(linuxHost ? HostCommands() : []))
         {
             // -C is the same rule as -I at the same place; a restarted agent must not stack copies.
             if (await Iptables([.. command.Skip(1).Select(a => a == "-I" ? "-C" : a)]) == 0) continue;
@@ -153,9 +160,6 @@ sealed class TcpHostDialer(IPAddress host, IReadOnlySet<int>? refused = null) : 
 
 static class WslHost
 {
-    // The engine's own unauthenticated port: a container must not get root on the engine through host.docker.internal.
-    public static readonly IReadOnlySet<int> Refused = new HashSet<int> { 2375, GuestAddresses.HostProxyPort };
-
     // Mirrored networking gives WSL an interface named loopback0, and 127.0.0.1 then reaches Windows. With NAT only the
     // gateway reaches Windows, and only services that listen on more than loopback and that its firewall lets through.
     public static IPAddress Address(bool mirrored, string procNetRoute) =>

@@ -26,6 +26,7 @@ static class Program
             Console.Error.WriteLine(SetupOptions.Usage);
             return Installer.WrongArguments;
         }
+        Updates.LocalAssets = options.Assets;
         if (options.ShowVersion || options.ShowHelp)
         {
             AttachParentConsole();

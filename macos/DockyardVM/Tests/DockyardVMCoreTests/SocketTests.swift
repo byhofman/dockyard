@@ -194,8 +194,8 @@ final class HostDialTests: XCTestCase {
         close(service[0])
     }
 
-    func testHostDialClosesOnANonsenseHeaderWithoutDialing() throws {
-        for header in ["udp 53\n", "tcp 0\n", "tcp 99999\n", "tcp 80 extra\n", "/etc/passwd\n"] {
+    func testHostDialClosesOnANonsenseHeaderOrARefusedPortWithoutDialing() throws {
+        for header in ["udp 53\n", "tcp 0\n", "tcp 99999\n", "tcp 80 extra\n", "/etc/passwd\n", "tcp 2375\n", "tcp 15353\n"] {
             var guest: [Int32] = [0, 0]
             XCTAssertEqual(socketpair(AF_UNIX, streamType, 0, &guest), 0)
             HostDial.serve(guest[1]) { _ in
@@ -207,5 +207,22 @@ final class HostDialTests: XCTestCase {
             XCTAssertEqual(read(guest[0], &byte, 1), 0)
             close(guest[0])
         }
+    }
+}
+
+final class UdpSessionTests: XCTestCase {
+    func testAQuietSenderOrElseTheQuietestMakesWayForANewOne() {
+        let sessions = UdpSessions(listener: -1, port: PublishedPort(protocol: "udp", hostIp: "0.0.0.0", port: 5353),
+                                   connector: { _, _ in }, limit: 2, idle: 60)
+        let now = Date()
+        sessions.streams = [Data([1]): 11, Data([2]): 12]
+        sessions.lastSeen = [Data([1]): now.addingTimeInterval(-10), Data([2]): now.addingTimeInterval(-5)]
+        XCTAssertEqual(sessions.makeRoom(now: now), [11])
+        XCTAssertEqual(sessions.makeRoom(now: now), [])
+
+        sessions.streams[Data([3])] = 13
+        sessions.lastSeen[Data([3])] = now.addingTimeInterval(-120)
+        XCTAssertEqual(sessions.makeRoom(now: now), [13])
+        XCTAssertEqual(Array(sessions.streams.keys), [Data([2])])
     }
 }
