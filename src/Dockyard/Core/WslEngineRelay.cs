@@ -40,24 +40,8 @@ sealed class WslEngineRelay(IPAddress gate, string token) : IDisposable
         NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Message,
         PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly | (first ? PipeOptions.FirstPipeInstance : PipeOptions.None));
 
-    // The next instance exists before a connection is handled, so a client never finds the name missing.
-    async Task Serve(NamedPipeServerStream pipe, string name, string service)
-    {
-        try
-        {
-            while (true)
-            {
-                await pipe.WaitForConnectionAsync(lifetime.Token);
-                var connected = pipe;
-                pipe = Create(name, first: false);
-                _ = Relay(connected, service);
-            }
-        }
-        catch (Exception e) when (e is IOException or ObjectDisposedException or OperationCanceledException)
-        {
-            pipe.Dispose();
-        }
-    }
+    Task Serve(NamedPipeServerStream first, string name, string service) =>
+        AcceptLoop.Run(first, () => Create(name, first: false), (pipe, ct) => pipe.WaitForConnectionAsync(ct), pipe => _ = Relay(pipe, service), lifetime.Token);
 
     async Task Relay(NamedPipeServerStream pipe, string service)
     {

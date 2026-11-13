@@ -52,8 +52,10 @@ function Screen($name) {
 function Linux-Engine {
     Start-Process $appExe -ArgumentList '--start', 'linux' | Out-Null
     foreach ($i in 1..60) {
-        & $docker --context linux version *> $null
-        if ($LASTEXITCODE -eq 0) { return }
+        # Bounded: a pipe whose instances are all taken makes docker wait without end.
+        $asking = Start-Process $docker -ArgumentList '--context', 'linux', 'version' -PassThru -NoNewWindow -RedirectStandardOutput (New-TemporaryFile)
+        if (-not $asking.WaitForExit(30000)) { $asking.Kill(); Write-Host '  docker version did not return within 30 s'; break }
+        if ($asking.ExitCode -eq 0) { return }
         Start-Sleep 2
     }
     Write-Host '--- what WSL says'
@@ -307,7 +309,15 @@ if ($Wizard) {
     Remove-Item $shared -Recurse -Force
     Remove-LocalUser e2e-admin
     Linux-Engine
-    & $docker --context linux rm -f e2e-web | Out-Null
+    $removing = Start-Process $docker -ArgumentList '--context', 'linux', 'rm', '-f', 'e2e-web' -PassThru -NoNewWindow
+    if (-not $removing.WaitForExit(120000)) {
+        Write-Host '--- docker rm hangs; what is there'
+        Get-Process Dockyard* -ErrorAction SilentlyContinue | ForEach-Object { "$($_.ProcessName) pid $($_.Id) started $($_.StartTime)" } | Write-Host
+        Write-Host "pipes: $((Get-ChildItem \\.\pipe\ | Where-Object Name -like 'dockyard*' | ForEach-Object Name) -join ', ')"
+        wsl.exe -d dockyard -u root -- sh -c 'pidof dockerd dockyard-agent; ip -4 -o addr show eth0; netstat -ltn; docker ps -a' | Write-Host
+        $removing.Kill()
+        throw 'FAIL docker rm through the pipe did not return'
+    }
 
     Section 'memory of the WSL engine, for the record'
     wsl.exe -d dockyard -u root -- sh -c 'for n in dockerd containerd dockyard-agent; do for p in $(pidof $n); do echo "$n RSS $(awk "/VmRSS/{print \$2}" /proc/$p/status) kB"; done; done; grep -E "MemTotal|MemAvailable" /proc/meminfo' | Write-Host
