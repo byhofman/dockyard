@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Dockyard.Engine;
 using Dockyard.Engine.Transport;
 

@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using Avalonia.Threading;
 using Dockyard.Dashboard.Features.Clusters;
 using Dockyard.Dashboard.Features.Containers;
@@ -9,14 +8,6 @@ using Dockyard.Engine;
 using Dockyard.Shared;
 
 namespace Dockyard.Dashboard.Shell;
-
-sealed record Section(string Title, object Content, Avalonia.Media.Geometry? Icon)
-{
-    public static Avalonia.Media.Geometry? Resource(string key) =>
-        Avalonia.Application.Current?.TryGetResource(key, null, out var value) == true ? value as Avalonia.Media.Geometry : null;
-}
-
-sealed record Toast(string Message, bool IsError);
 
 sealed class ShellViewModel : Observable
 {
@@ -131,83 +122,4 @@ sealed class ShellViewModel : Observable
         if (!TrayClient.Send(command)) ShowError("The Dockyard tray app is not running and could not be started.");
         return Task.CompletedTask;
     }
-}
-
-interface ISearchable
-{
-    void ApplySearch(string text);
-}
-
-static class TrayClient
-{
-    static string TrayExe => Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "Dockyard.exe" : "Dockyard");
-
-    public static bool Send(TrayCommand command)
-    {
-        if (LocalPipe.TrySend(LocalPipe.TrayName, command.ToString())) return true;
-        if (!File.Exists(TrayExe)) return false;
-
-        string[] args = command.Kind switch
-        {
-            TrayCommandKind.Settings => ["--tray", "--settings"],
-            TrayCommandKind.Start => ["--tray", "--start", command.Engine!],
-            TrayCommandKind.Switch => ["--tray", "--switch", command.Engine!],
-            _ => ["--tray"],
-        };
-        try
-        {
-            Process.Start(new ProcessStartInfo(TrayExe, args) { UseShellExecute = false })?.Dispose();
-            return true;
-        }
-        catch (Exception)
-        {
-            return false;
-        }
-    }
-}
-
-sealed class ContextWatcher : IDisposable
-{
-    readonly FileSystemWatcher? watcher;
-    readonly Action onChange;
-    string? current;
-    bool pending;
-
-    public ContextWatcher(Action onChange)
-    {
-        this.onChange = onChange;
-        current = Read();
-        var dir = DockerContext.ConfigDir(Environment.GetEnvironmentVariable);
-        if (!Directory.Exists(dir)) return;
-        watcher = new FileSystemWatcher(dir, "config.json")
-        {
-            NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
-        };
-        watcher.Changed += (_, _) => Schedule();
-        watcher.Created += (_, _) => Schedule();
-        watcher.Renamed += (_, _) => Schedule();
-        watcher.EnableRaisingEvents = true;
-    }
-
-    static string? Read()
-    {
-        try { return DockerContext.CurrentContextName(); }
-        catch (Exception) { return null; }
-    }
-
-    void Schedule() => Dispatcher.UIThread.Post(() =>
-    {
-        if (pending) return;
-        pending = true;
-        DispatcherTimer.RunOnce(() =>
-        {
-            pending = false;
-            var next = Read();
-            if (next == current) return;
-            current = next;
-            onChange();
-        }, TimeSpan.FromMilliseconds(200));
-    });
-
-    public void Dispose() => watcher?.Dispose();
 }

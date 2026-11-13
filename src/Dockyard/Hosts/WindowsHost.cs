@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.ServiceProcess;
@@ -58,7 +57,8 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
             var config = JsonNode.Parse(File.ReadAllText(Path.Combine(Paths.UserProfile, ".docker", "config.json")));
             return config?["currentContext"]?.GetValue<string>() == "win" ? Windows : Linux;
         }
-        catch { return Linux; }
+        // No config, or one docker itself could not read either: docker then uses its default, which setup makes linux.
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException) { return Linux; }
     }
 
     public Task UseContext(string engine) => runner.Check(Paths.DockerExe, "context", "use", engine == Windows ? "win" : "linux");
@@ -384,7 +384,8 @@ sealed partial class WindowsHost(ICommandRunner runner) : IEngineHost
             using var sc = new ServiceController(Paths.ServiceName);
             return sc.Status == ServiceControllerStatus.Running;
         }
-        catch { return false; }
+        // The service does not exist without the Windows engine.
+        catch (InvalidOperationException) { return false; }
     }
 
     async Task StartLinux()

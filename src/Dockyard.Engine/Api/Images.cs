@@ -1,5 +1,4 @@
 using System.Net;
-using System.Text.Json.Serialization;
 using Dockyard.Engine.Internal;
 
 namespace Dockyard.Engine;
@@ -47,8 +46,3 @@ public sealed partial class DockerClient
         return colon > slash ? (reference[..colon], reference[(colon + 1)..]) : (reference, "latest");
     }
 }
-
-[JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
-[JsonSerializable(typeof(List<ImageSummary>))]
-[JsonSerializable(typeof(PullMessage))]
-partial class ImageJson : JsonSerializerContext;

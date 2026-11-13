@@ -5,8 +5,6 @@ using Dockyard.Hosts;
 
 namespace Dockyard.Core;
 
-enum Component { Engine, Compose, Buildx, LinuxEngine, App, Cli, Dashboard, Kind }
-
 static partial class Updates
 {
     public const string WindowsAppAsset = @"^Dockyard\.exe$";

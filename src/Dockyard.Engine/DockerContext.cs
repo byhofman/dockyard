@@ -1,12 +1,9 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Dockyard.Engine.Transport;
 
 namespace Dockyard.Engine;
-
-public sealed record ResolvedContext(string Name, DockerEndpoint Endpoint);
 
 public static class DockerContext
 {
@@ -56,23 +53,3 @@ public static class DockerContext
 
     static string Hash(string name) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(name)));
 }
-
-sealed class CliConfig
-{
-    public string? CurrentContext { get; set; }
-}
-
-sealed class ContextMeta
-{
-    public Dictionary<string, ContextEndpoint>? Endpoints { get; set; }
-}
-
-sealed class ContextEndpoint
-{
-    public string? Host { get; set; }
-}
-
-[JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
-[JsonSerializable(typeof(CliConfig))]
-[JsonSerializable(typeof(ContextMeta))]
-partial class ContextJson : JsonSerializerContext;

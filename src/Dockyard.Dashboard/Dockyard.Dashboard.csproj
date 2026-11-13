@@ -27,8 +27,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Dockyard.Dashboard.Tests" />
-    <Compile Include="..\Shared\LocalPipe.cs" Link="Shared\LocalPipe.cs" />
-    <Compile Include="..\Shared\DisplayGate.cs" Link="Shared\DisplayGate.cs" />
+    <Compile Include="..\Shared\*.cs" LinkBase="Shared" />
     <AvaloniaResource Include="..\Dockyard\Assets\dockyard.ico" Link="Assets\dockyard.ico" />
     <AvaloniaResource Include="..\Dockyard\Assets\dockyard.png" Link="Assets\dockyard.png" />
   </ItemGroup>

@@ -3,8 +3,6 @@ using Dockyard.Engine;
 
 namespace Dockyard.Dashboard.Store;
 
-enum SessionState { Connecting, Connected, Reconnecting, Unavailable }
-
 sealed class EngineSession : Observable
 {
     static readonly string[] EventTypes = ["container", "image", "volume", "network"];

@@ -1,7 +1,5 @@
 namespace Dockyard.Engine;
 
-public sealed record PublishedPort(string Protocol, string HostIp, int Port);
-
 public static class PublishedPorts
 {
     // One entry per protocol and port; a wildcard bind wins over a loopback bind.

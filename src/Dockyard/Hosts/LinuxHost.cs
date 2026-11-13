@@ -4,76 +4,6 @@ using Dockyard.Core;
 
 namespace Dockyard.Hosts;
 
-sealed record OsRelease(string Id, IReadOnlyList<string> IdLike, string? Codename)
-{
-    public static OsRelease Parse(string text)
-    {
-        var values = text.Split('\n')
-            .Select(l => l.Trim())
-            .Where(l => l.Length > 0 && !l.StartsWith('#') && l.Contains('='))
-            .Select(l => (Key: l[..l.IndexOf('=')], Value: l[(l.IndexOf('=') + 1)..].Trim('"', '\'')))
-            .GroupBy(x => x.Key)
-            .ToDictionary(g => g.Key, g => g.Last().Value);
-        return new OsRelease(
-            values.GetValueOrDefault("ID", "linux"),
-            values.GetValueOrDefault("ID_LIKE", "").Split(' ', StringSplitOptions.RemoveEmptyEntries),
-            values.GetValueOrDefault("UBUNTU_CODENAME") ?? values.GetValueOrDefault("VERSION_CODENAME"));
-    }
-
-    public bool HasPackages => PackageManager is "apt" or "dnf";
-
-    public string? PackageManager => new[] { Id }.Concat(IdLike).Select(id => id switch
-    {
-        "ubuntu" or "debian" => "apt",
-        "fedora" or "rhel" or "centos" => "dnf",
-        _ => null,
-    }).FirstOrDefault(p => p is not null);
-}
-
-// How the steps that need root get it, in order of least interruption. A silent setup without a terminal or a
-// desktop has no one to ask: then there is no way, and setup says so instead of hanging on a prompt.
-static class LinuxElevation
-{
-    public static string[]? Prefix(bool isRoot, bool passwordlessSudo, bool hasDisplay, bool hasPkexec, bool hasSudo, bool hasTerminal)
-    {
-        if (isRoot) return [];
-        if (passwordlessSudo) return ["sudo", "-n"];
-        if (hasDisplay && hasPkexec) return ["pkexec"];
-        if (hasTerminal && hasSudo) return ["sudo"];
-        if (hasTerminal && hasPkexec) return ["pkexec"];
-        return null;
-    }
-}
-
-// Where the app lives: packages put it in /usr/lib/dockyard; without apt or dnf the tarball goes in the user's home.
-static class LinuxLayout
-{
-    public const string PackageDir = "/usr/lib/dockyard";
-    public static string HomeDir => Path.Combine(Paths.UserProfile, ".local", "lib", "dockyard");
-    public static string HomeLink => Path.Combine(Paths.UserProfile, ".local", "bin", "dockyard");
-    public static string InstallDir => File.Exists(Path.Combine(PackageDir, "Dockyard")) ? PackageDir : HomeDir;
-    public static string InstalledExe => Path.Combine(InstallDir, "Dockyard");
-    public static string Dashboard => Path.Combine(InstallDir, "Dockyard Dashboard");
-    public static string LegacyDashboard => Path.Combine(InstallDir, "Dockyard.Dashboard");
-    public static string VersionFile => Path.Combine(HomeDir, "version");
-
-    public static string DashboardPackage(string? packageManager) =>
-        packageManager == "dnf" ? @"^dockyard-dashboard-[\d.]+-1\.x86_64\.rpm$" : @"^dockyard-dashboard_[\d.]+_amd64\.deb$";
-    public static string AppPackage(string? packageManager) =>
-        packageManager == "dnf" ? @"^dockyard-[\d.]+-1\.x86_64\.rpm$" : @"^dockyard_[\d.]+_amd64\.deb$";
-    public const string Tarball = @"^Dockyard-[\d.]+-linux-x64\.tar\.gz$";
-    public const string CredentialHelper = "/usr/local/bin/docker-credential-secretservice";
-    public const string Kind = "/usr/local/bin/kind";
-    // Written by setup-linux.sh next to a kind it installed; one without it is the user's own.
-    public const string KindMarker = "/etc/dockyard/kind";
-    public const string AppAsset = @"^Dockyard-linux-x64$";
-
-    public static readonly string[] DashboardFiles = ["Dockyard Dashboard", "Dockyard.Dashboard", "libSkiaSharp.so", "libHarfBuzzSharp.so"];
-
-    public static bool HasDisplay(string? display, string? waylandDisplay) =>
-        !string.IsNullOrEmpty(display) || !string.IsNullOrEmpty(waylandDisplay);
-}
-
 [SupportedOSPlatform("linux")]
 sealed class LinuxHost(ICommandRunner runner) : IEngineHost
 {
@@ -579,10 +509,4 @@ sealed class LinuxHost(ICommandRunner runner) : IEngineHost
     }
 
     static IEnumerable<string> Lines(string text) => text.Split('\n').Select(l => l.TrimEnd()).Where(l => l.Length > 0);
-}
-
-static class DesktopEntry
-{
-    public static string Autostart(string exe) =>
-        $"[Desktop Entry]\nType=Application\nName=Dockyard\nComment=Docker engine tray\nExec=\"{exe}\" --tray\nIcon=dockyard\nTerminal=false\nX-GNOME-Autostart-enabled=true\n";
 }

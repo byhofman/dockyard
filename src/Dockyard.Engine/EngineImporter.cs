@@ -2,8 +2,6 @@ using System.Text.Json.Nodes;
 
 namespace Dockyard.Engine;
 
-public sealed record ImportSummary(int Images, int Volumes, int Containers, int Networks, IReadOnlyList<string> Skipped);
-
 // Copies what another engine holds, through its API, while that engine keeps running. The source only gains what this
 // removes again: a holder per volume and a committed image per container.
 public sealed class EngineImporter(DockerClient source, DockerClient target, Action<string> log)

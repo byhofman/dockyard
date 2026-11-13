@@ -1,19 +1,9 @@
 using System.Collections.ObjectModel;
 using System.Text;
 using Dockyard.Dashboard.Shell;
-using Dockyard.Dashboard.Store;
 using Dockyard.Engine;
 
 namespace Dockyard.Dashboard.Features.Files;
-
-sealed record FileRow(FileEntry Entry, string Directory)
-{
-    public string Name => Entry.Name;
-    public bool IsDirectory => Entry.IsDirectory;
-    public string SizeText => Entry.IsDirectory ? "" : Format.Bytes(Entry.Size);
-    public string Detail => Entry.LinkTarget is { } target ? "→ " + target : Entry.Modified.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
-    public string Path => ContainerFiles.Combine(Directory, Name);
-}
 
 // One folder and at most one open file, in a container or in a volume held by a container that never runs.
 sealed class FileBrowserViewModel : Observable, IDisposable

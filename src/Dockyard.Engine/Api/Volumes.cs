@@ -1,5 +1,3 @@
-using System.Text.Json.Serialization;
-
 namespace Dockyard.Engine;
 
 public sealed partial class DockerClient
@@ -13,7 +11,3 @@ public sealed partial class DockerClient
     public Task<PruneResult> PruneVolumesAsync(CancellationToken ct = default) =>
         SendJson(HttpMethod.Post, "volumes/prune?filters=" + Filters(("all", "true")), null, CoreJson.Default.PruneResult, ct);
 }
-
-[JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
-[JsonSerializable(typeof(VolumeList))]
-partial class VolumeJson : JsonSerializerContext;

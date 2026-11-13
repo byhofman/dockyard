@@ -2,9 +2,7 @@ using System.IO.Pipes;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.Versioning;
-using System.Security.Cryptography;
 using System.Text;
-using System.Text.RegularExpressions;
 
 namespace Dockyard.Core;
 
@@ -69,68 +67,9 @@ sealed class WslEngineRelay(IPAddress gate, string token) : IDisposable
             using var client = new TcpClient(address.AddressFamily);
             return client.ConnectAsync(address, port).Wait(timeoutMs) && client.Connected;
         }
-        catch { return false; }
+        catch (AggregateException e) when (e.InnerException is SocketException) { return false; }
+        catch (SocketException) { return false; }
     }
 
     public void Dispose() => lifetime.Cancel();
-}
-
-static class AcceptLoop
-{
-    // The next instance exists before a connection is handled, so a client never finds the name missing. A client that
-    // left before its connection was taken fails only that instance: ending the loop then would leave a name whose only
-    // instances are busy, and docker waits for a free one without end.
-    public static async Task Run<T>(T first, Func<T> create, Func<T, CancellationToken, Task> waitForClient, Action<T> handle, CancellationToken ct)
-        where T : IDisposable
-    {
-        var waiting = first;
-        try
-        {
-            while (true)
-            {
-                try
-                {
-                    await waitForClient(waiting, ct);
-                }
-                catch (IOException)
-                {
-                    waiting.Dispose();
-                    waiting = create();
-                    continue;
-                }
-                var connected = waiting;
-                waiting = create();
-                handle(connected);
-            }
-        }
-        catch (Exception e) when (e is ObjectDisposedException or OperationCanceledException)
-        {
-            waiting.Dispose();
-        }
-    }
-}
-
-static partial class WslEngineGate
-{
-    public const string TokenPath = "/etc/dockyard/windows.token";
-
-    // What `[ -d /sys/class/net/loopback0 ] && echo mirrored || ip -4 -o addr show eth0` prints in the distro: with mirrored
-    // networking the agent is on the loopback Windows shares, with NAT on WSL's own address; nothing gives null.
-    public static IPAddress? AddressFromIp(string output) =>
-        output.Trim() == "mirrored" ? IPAddress.Loopback
-        : InetAddress().Match(output) is { Success: true } m && IPAddress.TryParse(m.Groups["a"].Value, out var a) ? a : null;
-
-    // In this user's local app data, which other users of the PC cannot read; made once and kept, so a tray that starts
-    // while an engine runs still gets in.
-    public static string Token(string file)
-    {
-        if (File.Exists(file) && File.ReadAllText(file).Trim() is { Length: 64 } kept && kept.All(char.IsAsciiHexDigitLower)) return kept;
-        var token = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32));
-        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
-        File.WriteAllText(file, token);
-        return token;
-    }
-
-    [GeneratedRegex(@"\binet (?<a>\d+\.\d+\.\d+\.\d+)/")]
-    private static partial Regex InetAddress();
 }

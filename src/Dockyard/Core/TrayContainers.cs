@@ -2,8 +2,6 @@ using Dockyard.Engine;
 
 namespace Dockyard.Core;
 
-sealed record TrayContainer(string Id, string Name, string? Project, bool Running, int? WebPort);
-
 // What the tray menu lists. The menu is rebuilt only when this changes, because a native menu that is replaced while it
 // is open closes under the user's pointer.
 static class TrayContainers

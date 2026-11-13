@@ -1,35 +1,8 @@
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Dockyard.Engine.Transport;
 
 namespace Dockyard.Engine;
-
-public sealed class DomainInfo
-{
-    public string ContainerId { get; set; } = "";
-    public string Domain { get; set; } = "";
-    public int? Port { get; set; }
-    public bool PortIsChosen { get; set; }
-}
-
-sealed class AgentMessage
-{
-    public string? Op { get; set; }
-    public string? Container { get; set; }
-    public int? Port { get; set; }
-    public string? Cert { get; set; }
-    public string? Key { get; set; }
-    public string? Error { get; set; }
-    public List<DomainInfo>? Domains { get; set; }
-    public bool Https { get; set; }
-}
-
-public sealed record DomainList(IReadOnlyList<DomainInfo> Domains, bool Https);
-
-[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
-[JsonSerializable(typeof(AgentMessage))]
-partial class AgentClientJson : JsonSerializerContext;
 
 // The part of Dockyard that lives next to the engine. Not every engine has one: the Windows engine does not,
 // and neither does whatever else a docker context may point at.

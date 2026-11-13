@@ -1,5 +1,3 @@
-using System.Text.Json.Serialization;
-
 namespace Dockyard.Engine;
 
 public sealed partial class DockerClient
@@ -30,12 +28,3 @@ public sealed partial class DockerClient
     public Task PruneNetworksAsync(CancellationToken ct = default) =>
         SendNoContent(HttpMethod.Post, "networks/prune", null, ct);
 }
-
-[JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
-[JsonSerializable(typeof(List<NetworkSummary>))]
-[JsonSerializable(typeof(NetworkSummary))]
-[JsonSerializable(typeof(NetworkCreateRequest))]
-[JsonSerializable(typeof(NetworkCreateResponse))]
-[JsonSerializable(typeof(NetworkConnectRequest))]
-[JsonSerializable(typeof(NetworkDisconnectRequest))]
-partial class NetworkJson : JsonSerializerContext;

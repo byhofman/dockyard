@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-using System.Text.Json.Serialization;
 using Dockyard.Engine.Internal;
 
 namespace Dockyard.Engine;
@@ -14,6 +13,3 @@ public sealed partial class DockerClient
             yield return StatsCalculator.Calculate(sample, IsWindows);
     }
 }
-
-[JsonSerializable(typeof(StatsSample))]
-partial class StatsJson : JsonSerializerContext;
