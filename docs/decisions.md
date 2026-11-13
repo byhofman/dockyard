@@ -246,3 +246,13 @@ The Linux end-to-end run failed once on "daemon.json names the agent". It was no
 - **Uninstall puts those servers back** into `daemon.json`. A reinstall over a file that already names the agent keeps the saved servers; one over a file without `dns` removes them.
 - **Rejected: leaving the setting and telling the user**, the old behaviour. It made the product's core feature depend on a file some provisioners write without the user knowing, and the message was easy to miss in a silent install.
 - **The e2e starts every run from a daemon.json naming the runner's DNS server**, and the later fresh install from none, so both kinds of runner test both paths.
+
+## 2026-11-13: Each host is a thin IEngineHost over classes that each do one thing
+
+DOK-23. `MacHost`, `LinuxHost`, `WindowsHost` and `MachineSetup` were 450 to 650 lines each, mixing install and uninstall, the running engine and the trust store. They are now classes of their own, and the host only wires `IEngineHost` to them:
+
+- **macOS:** `MacVm` (the helper process, its images, the daemon.json it boots with), `MacComponents` (CLI, plugins, kind, dashboard, self-update), `MacSetup` (bundle, administrator steps, context, sockets, login item), `MacTrust`.
+- **Linux:** `LinuxRoot` (getting root, and setup-linux.sh), `LinuxComponents` (Dockyard's packages or tarball, Docker's packages, plugins, kind), `LinuxSetup` (agent and daemon.json, autostart, credential store), `LinuxTrust`. The engine is three systemctl calls and stays in the host.
+- **Windows:** `WslEngine` (the distro's keep-alive and the pipes), `WindowsServiceEngine` (the Windows engine's service), `WindowsTrayServices` (published ports, domain relay), `WindowsSetup` (machine steps in or out of elevation). `MachineSetup` keeps only the order of install, update and uninstall, over `MachineEngine`, `MachineApps` and `MachineTrust`.
+
+Separate classes, not partial classes: a partial class keeps one set of fields that every part can touch, which is the coupling the split is meant to remove. No behaviour changed. The code moved as it was, and the unit tests and the three e2e runs are the check.
