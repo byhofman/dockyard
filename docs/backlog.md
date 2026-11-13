@@ -21,7 +21,7 @@ IDs are permanent: never renumber or reuse one.
 
 ## Quality
 
-- [ ] DOK-23 MacHost, LinuxHost, WindowsHost and MachineSetup each split by duty (install and uninstall, the running engine, trust and certificates); each is 450 to 650 lines doing all three (refactor pass, 2026-11-13)
+- [x] DOK-23 MacHost, LinuxHost, WindowsHost and MachineSetup each split by duty (install and uninstall, the running engine, trust and certificates); each is 450 to 650 lines doing all three (refactor pass, 2026-11-13)
 - [x] DOK-18 `ComponentRulesTests.Rows_say_why_something_is_required_and_only_optional_ones_can_change` no longer fails intermittently on Windows (pulled in from Later by the owner, 2026-11-07, SCOPE.md) — v0.4.2
 
 ## Later
