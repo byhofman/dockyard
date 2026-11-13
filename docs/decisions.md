@@ -233,3 +233,7 @@ The VM init formats `/dev/vdb` only if its first 64 KiB are zero, and powers off
 The owner asked which Docker-related OrbStack features Dockyard must have. No source can settle "must", so the [thesis](research/orbstack-docker-features/thesis.md) states a test: a workflow that fails, needs manual setup or is unsafe by default, or a differentiator with evidence beyond OrbStack's own marketing. `DOK-7` to `DOK-17` were added on that basis, and `DOK-2` and `DOK-5` were kept as must-haves. Backlog scope otherwise did not change.
 
 The research standard says a thesis never decides what to build. The owner's brief asked for the classification and the backlog items, so the brief wins for this run. The PR is left for the owner's review, not merged. Mechanism, naming and per-OS design stay open until the slice is prototyped and built.
+
+## 2026-11-13: Sidebar items carry their section's name for automation
+
+The Windows end-to-end run's "Clusters" and "Images" screenshots showed the containers list. The dashboard switched sections fine when clicked; the automation never clicked. A sidebar item's automation name was the `Section` record's `ToString`, so UI Automation's search for "Clusters" found the text inside the item, which has no select pattern, and the script skipped silently. Screen readers read the same record text. Items are now named after their section, a headless test selects each one through its automation peer on every CI platform, and the e2e script selects the list item and fails when it is missing or not selected.

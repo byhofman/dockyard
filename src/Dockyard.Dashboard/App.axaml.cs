@@ -19,7 +19,12 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
-        var desktop = (IClassicDesktopStyleApplicationLifetime)ApplicationLifetime!;
+        // The headless tests have no desktop lifetime: they build the window themselves.
+        if (ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            base.OnFrameworkInitializationCompleted();
+            return;
+        }
         var vm = new ShellViewModel();
         var window = new MainWindow { DataContext = vm };
         StartupTrace.Mark("main window built");

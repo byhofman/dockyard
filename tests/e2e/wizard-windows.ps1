@@ -403,15 +403,23 @@ if ($Wizard) {
         Start-Sleep 8
         Screen 'dashboard-containers'
         Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
-        $window = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Children,
-            (New-Object System.Windows.Automation.PropertyCondition ([System.Windows.Automation.AutomationElement]::ProcessIdProperty), $shown.Id))
+        $auto = [System.Windows.Automation.AutomationElement]
+        $until = (Get-Date).AddSeconds(60)
+        do {
+            $window = $auto::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Children,
+                (New-Object System.Windows.Automation.PropertyCondition ($auto::ProcessIdProperty), $shown.Id))
+            if (-not $window) { Start-Sleep 1 }
+        } until ($window -or (Get-Date) -gt $until)
+        Check 'the dashboard window is there to click through' ($null -ne $window)
+        # The sidebar's list item itself: the text inside it has the same name but cannot be selected.
         foreach ($section in 'Clusters', 'Images') {
-            $item = if ($window) { $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition ([System.Windows.Automation.AutomationElement]::NameProperty), $section)) }
-            if (-not $item) { Write-Host "  no $section item to click"; continue }
-            $pattern = $null
-            if ($item.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$pattern)) { $pattern.Select() }
-            elseif ($item.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$pattern)) { $pattern.Invoke() }
+            $item = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.AndCondition(
+                (New-Object System.Windows.Automation.PropertyCondition ($auto::ControlTypeProperty), [System.Windows.Automation.ControlType]::ListItem),
+                (New-Object System.Windows.Automation.PropertyCondition ($auto::NameProperty), $section))))
+            Check "the sidebar has a $section item" ($null -ne $item)
+            $item.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
             Start-Sleep 3
+            Check "$section is selected" $item.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Current.IsSelected
             Screen "dashboard-$($section.ToLower())"
         }
         Stop-Process -Id $shown.Id -Force -ErrorAction SilentlyContinue
