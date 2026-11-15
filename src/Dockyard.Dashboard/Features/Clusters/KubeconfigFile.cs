@@ -128,7 +128,14 @@ static class KubeconfigFile
     static void Copy(string from, string to)
     {
         File.Copy(from, to);
-        if (OperatingSystem.IsWindows()) new FileInfo(to).SetAccessControl(new FileInfo(from).GetAccessControl());
+        if (OperatingSystem.IsWindows())
+        {
+            // SetAccessControl only writes the sections marked as changed, so a FileSecurity read from another file
+            // would write nothing: the descriptor is copied into a fresh one, which marks the access rules changed.
+            var rules = new System.Security.AccessControl.FileSecurity();
+            rules.SetSecurityDescriptorBinaryForm(new FileInfo(from).GetAccessControl().GetSecurityDescriptorBinaryForm(), System.Security.AccessControl.AccessControlSections.Access);
+            new FileInfo(to).SetAccessControl(rules);
+        }
         else File.SetUnixFileMode(to, Mode(from));
     }
 
