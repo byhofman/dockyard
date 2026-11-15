@@ -12,13 +12,16 @@ sealed class ClustersViewModel : SectionViewModel
     KindCluster? selected;
     string newName = "";
     string? kind;
+    readonly HostKubeconfig kubeconfig;
 
-    public ClustersViewModel(ShellViewModel shell, EngineSession session) : base(shell, session)
+    public ClustersViewModel(ShellViewModel shell, EngineSession session, HostKubeconfig? kubeconfig = null) : base(shell, session)
     {
+        this.kubeconfig = kubeconfig ?? HostKubeconfig.FromEnvironment();
         CreateCommand = new Command(Create, () => !IsBusy && HasKind && !NeedsLinuxEngine && KindClusters.IsValidName(NewName.Trim()));
         DeleteCommand = new Command(() =>
         {
-            if (Selected is { } c) Ask($"Delete cluster {c.Name}? Its nodes and everything in it go.", "Delete", () => RunKind($"Deleting {c.Name}", KindCli.Delete(c.Name)));
+            if (Selected is { } c) Ask($"Delete cluster {c.Name}? Its nodes, everything in it and its context in the kubeconfig go.", "Delete",
+                () => RunKind($"Deleting {c.Name}", (actions, onLine) => actions.Delete(c.Name, onLine)));
             return Task.CompletedTask;
         }, () => !IsBusy && HasKind && Selected is not null);
         CopyKubeconfigCommand = new Command(CopyKubeconfig, () => HasKind && Selected is { IsRunning: true });
@@ -117,22 +120,25 @@ sealed class ClustersViewModel : SectionViewModel
     Task Create()
     {
         var name = NewName.Trim();
-        return RunKind($"Creating {name}, which pulls the node image the first time", KindCli.Create(name), () => NewName = "");
+        return RunKind($"Creating {name}, which pulls the node image the first time", async (actions, onLine) =>
+        {
+            var file = await actions.Create(name, onLine);
+            NewName = "";
+            Shell.ShowInfo($"kubectl now uses {KindKubeconfig.Key(name)}, from {file}");
+        });
     }
 
-    Task RunKind(string what, string[] args, Action? onSuccess = null) => Run(what, async () =>
+    Task RunKind(string what, Func<KindActions, Action<string>, Task> action) => Run(what, async () =>
     {
         if (kind is not { } exe) return;
         Output.Clear();
         Raise(nameof(HasOutput));
-        var result = await KindCli.Run(exe, Session.ContextName, args, line => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        await action(new KindActions(exe, Session.ContextName, kubeconfig), line => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             if (Output.Count == OutputLines) Output.RemoveAt(0);
             Output.Add(line);
             Raise(nameof(HasOutput));
         }));
-        if (result.ExitCode != 0) throw new InvalidOperationException(LastLine(result.Error) ?? $"kind exited with {result.ExitCode}");
-        onSuccess?.Invoke();
         await Reload();
     });
 
@@ -141,9 +147,7 @@ sealed class ClustersViewModel : SectionViewModel
         if (Selected is not { } c || kind is not { } exe || CopyText is not { } copy) return;
         try
         {
-            var result = await KindCli.Run(exe, Session.ContextName, KindCli.Kubeconfig(c.Name));
-            if (result.ExitCode != 0) throw new InvalidOperationException(LastLine(result.Error) ?? $"kind exited with {result.ExitCode}");
-            await copy(result.Output);
+            await copy(await new KindActions(exe, Session.ContextName, kubeconfig).Kubeconfig(c.Name));
             Shell.ShowInfo($"The kubeconfig of {c.Name} is on the clipboard");
         }
         catch (Exception ex) { Shell.ShowError(ex.Message); }
@@ -152,9 +156,10 @@ sealed class ClustersViewModel : SectionViewModel
     Task UseContext()
     {
         if (Selected is not { } c) return Task.CompletedTask;
-        return RunKind($"Making {c.Context} the current context", KindCli.UseContext(c.Name),
-            () => Shell.ShowInfo($"kubectl now uses {c.Context}, from ~/.kube/config"));
+        return RunKind($"Making {c.Context} the current context", async (actions, _) =>
+        {
+            var file = await actions.UseContext(c.Name);
+            Shell.ShowInfo($"kubectl now uses {c.Context}, from {file}");
+        });
     }
-
-    static string? LastLine(string text) => text.Split('\n').Select(l => l.Trim()).LastOrDefault(l => l.Length > 0);
 }

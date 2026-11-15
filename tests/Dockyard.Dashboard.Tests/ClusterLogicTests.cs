@@ -101,11 +101,10 @@ public sealed class ClusterLogicTests
     }
 
     [Fact]
-    public void Commands_name_the_cluster()
+    public void Commands_name_the_cluster_and_never_let_kind_write_the_user_s_kubeconfig()
     {
-        Assert.Equal(["create", "cluster", "--name", "dev"], KindCli.Create("dev"));
-        Assert.Equal(["delete", "cluster", "--name", "dev"], KindCli.Delete("dev"));
+        Assert.Equal(["create", "cluster", "--name", "dev", "--kubeconfig", "own"], KindCli.Create("dev", "own"));
+        Assert.Equal(["delete", "cluster", "--name", "dev", "--kubeconfig", "own"], KindCli.Delete("dev", "own"));
         Assert.Equal(["get", "kubeconfig", "--name", "dev"], KindCli.Kubeconfig("dev"));
-        Assert.Equal(["export", "kubeconfig", "--name", "dev"], KindCli.UseContext("dev"));
     }
 }
