@@ -2,6 +2,10 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-15: Downloads are watched from the cluster, and the app stays silent
+
+DOK-29. The download page and the release downloads are probed by Alloy's blackbox exporter in gitops, with a `DockyardDownloadDown` alert in Grafana (gitops decision 41, gitops#185): the website's Dockyard page, the `releases/latest` redirect the one-liners resolve, the three assets with fixed names by HEAD, `SHA256SUMS` listing all twelve assets of `scripts/check-release-assets.sh`, and the three installers. Dockyard itself sends nothing; no telemetry was added. DOK-29 stays open until that PR is merged and the probes report, which waits on the owner (merging gitops deploys).
+
 ## 2026-11-15: The brand hint is the logo's blue as the accent, nothing more
 
 DOK-25, "Dockyard's logo colour as a small hint in the interface". The logo already sits in the wizard's and the dashboard's header, so the hint is colour: the accent (primary buttons, the selected sidebar item, focus rings, links, Avalonia's system accent) moves from a generic `#1D63ED` to `#1B74C9`, the deep end of the gradient on the logo's container. Dark links take the light end, `#5DB7FF`; the selection fill is a dark tint of the same hue. Status colours, surfaces and text stay as they were, so the interface still reads as a quiet tool, not a branded one. White on `#1B74C9` is 4.8:1. A test ties both apps' accent to `branding/app-icon/icon.svg`, so a new logo colour cannot leave the interface behind. The design pass (DOK-27) is separate and not part of this.
