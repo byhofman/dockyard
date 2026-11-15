@@ -134,7 +134,7 @@ kind delete cluster --name dev
 
 On Windows, kind uses the `linux` context, the default; with `win` active it has no Linux engine to run on.
 
-In the dashboard, **Clusters** lists them from the engine with their Kubernetes version, nodes and API server, creates and deletes them, copies a cluster's kubeconfig and makes its context the current one. kubectl is not part of Dockyard; any kubectl reaches the cluster with `--context kind-<name>`.
+In the dashboard, **Clusters** lists them from the engine with their Kubernetes version, nodes and API server, creates and deletes them, copies a cluster's kubeconfig and makes its context the current one. Creating a cluster there adds its context to `~/.kube/config` (or the first existing file in `$KUBECONFIG`) and makes it current; deleting it takes exactly those entries out again and goes back to the context that was current before. The first time Dockyard changes that file it keeps a copy next to it, `config.dockyard-backup`. kubectl is not part of Dockyard; any kubectl reaches the cluster with `--context kind-<name>`.
 
 ## Container domains
 

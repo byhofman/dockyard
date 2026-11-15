@@ -70,10 +70,19 @@ jobs:
           name: guest
           path: guest
 
+      # The pinned kind, for the dashboard's cluster test on this runner's engine.
+      - name: kind
+        run: |
+          kind_tag="v$(sed -n 's/^KIND=//p' image/versions.env)"
+          url="https://github.com/kubernetes-sigs/kind/releases/download/$kind_tag/kind-linux-amd64"
+          curl -fsSL -o "$RUNNER_TEMP/kind" "$url"
+          echo "$(awk -v u="$url" '$2 == u { print $1 }' image/versions.sha256)  $RUNNER_TEMP/kind" | sha256sum -c
+          chmod +x "$RUNNER_TEMP/kind"
+
       - name: Test
         env:
           DOCKYARD_TEST_ENDPOINT: unix:///var/run/docker.sock
-        run: dotnet test --solution Dockyard.slnx
+        run: DOCKYARD_TEST_KIND="$RUNNER_TEMP/kind" dotnet test --solution Dockyard.slnx
 
       - name: Publish and package
         run: |
@@ -197,10 +206,15 @@ jobs:
           name: image
           path: wizard
 
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: '10.0.x'
+
       - name: Install, update, add and remove on a real Windows runner with WSL 2
         shell: pwsh
         env:
           DOCKYARD_GITHUB_TOKEN: ${{ github.token }}
+          DOCKYARD_SOURCE: ${{ github.workspace }}
         run: ./tests/e2e/wizard-windows.ps1 -Wizard wizard/Dockyard.exe
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

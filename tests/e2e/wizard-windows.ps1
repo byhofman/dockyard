@@ -429,6 +429,14 @@ if ($Wizard) {
         Check 'the API server answers on Windows loopback' ($livez -eq 'ok')
         & $kind delete cluster --name e2e
         Check 'deleting leaves no node' (-not (& $docker --context linux ps -aq --filter label=io.x-k8s.kind.cluster=e2e))
+        # The dashboard's create and delete, against a temporary kubeconfig: entries in, the API server reachable from
+        # Windows with them, and exactly those entries out again.
+        Check 'DOCKYARD_SOURCE names the checkout the dashboard test is built from' ([bool]$env:DOCKYARD_SOURCE)
+        $env:DOCKYARD_TEST_KIND = $kind
+        $env:DOCKYARD_TEST_DOCKER_CONTEXT = 'linux'
+        dotnet test --project (Join-Path $env:DOCKYARD_SOURCE 'tests/Dockyard.Dashboard.Tests') --filter-class Dockyard.Dashboard.Tests.KindKubeconfigEngineTests
+        Check 'the dashboard puts a cluster in the kubeconfig, reachable from Windows, and takes it out again' ($LASTEXITCODE -eq 0)
+        Remove-Item Env:DOCKYARD_TEST_KIND, Env:DOCKYARD_TEST_DOCKER_CONTEXT
     }
     finally { Remove-Item Env:DOCKER_CONTEXT }
     Check 'exit 0 without kind' ((Run --silent --no-start --without kind) -eq 0)

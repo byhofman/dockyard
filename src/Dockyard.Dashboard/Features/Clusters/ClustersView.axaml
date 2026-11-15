@@ -69,7 +69,7 @@
             <Button Command="{Binding CopyKubeconfigCommand}" ToolTip.Tip="kind get kubeconfig, onto the clipboard">
               <StackPanel Classes="label"><PathIcon Data="{StaticResource IconCopy}" /><TextBlock Text="Copy kubeconfig" /></StackPanel>
             </Button>
-            <Button Command="{Binding UseContextCommand}" ToolTip.Tip="kind export kubeconfig: adds it to ~/.kube/config and makes it the current context">
+            <Button Command="{Binding UseContextCommand}" ToolTip.Tip="Makes it the current context in your kubeconfig, adding it back if it went missing">
               <TextBlock Text="Use context" />
             </Button>
           </StackPanel>
