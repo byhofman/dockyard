@@ -23,13 +23,13 @@ jobs:
   scripts-only-fetch:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: sh tests/oneliners/oneliners.sh
 
   scripts-only-fetch-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - shell: pwsh
         run: ./tests/oneliners/oneliner.ps1
       - name: Windows PowerShell 5.1, which is what most people have
@@ -39,7 +39,7 @@ jobs:
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: The one-liner, on a Windows runner with WSL 2, starting from v0.1.0
         shell: pwsh
         run: ./tests/e2e/wizard-windows.ps1 -OneLiner "$env:RAW/install.ps1"
@@ -47,7 +47,7 @@ jobs:
   linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: The one-liner, with systemd and sudo
         run: ONELINER="$RAW/install.sh" sh tests/e2e/wizard-linux.sh
 
