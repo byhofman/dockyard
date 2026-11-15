@@ -35,11 +35,10 @@ static class KindCli
         };
     }
 
-    public static string[] Create(string name) => ["create", "cluster", "--name", name];
-    public static string[] Delete(string name) => ["delete", "cluster", "--name", name];
+    // kind writes to a file of its own; HostKubeconfig puts the entries in the user's kubeconfig safely.
+    public static string[] Create(string name, string kubeconfig) => ["create", "cluster", "--name", name, "--kubeconfig", kubeconfig];
+    public static string[] Delete(string name, string kubeconfig) => ["delete", "cluster", "--name", name, "--kubeconfig", kubeconfig];
     public static string[] Kubeconfig(string name) => ["get", "kubeconfig", "--name", name];
-    // Merges the cluster into ~/.kube/config and makes it the current context, as kind create does.
-    public static string[] UseContext(string name) => ["export", "kubeconfig", "--name", name];
 
     public static async Task<(int ExitCode, string Output, string Error)> Run(string kind, string context, IReadOnlyList<string> args, Action<string>? onLine = null)
     {
