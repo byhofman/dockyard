@@ -5,15 +5,15 @@
              RequestedThemeVariant="Dark">
 
   <Application.Resources>
-    <Color x:Key="SystemAccentColor">#1D63ED</Color>
+    <Color x:Key="SystemAccentColor">#1B74C9</Color>
     <SolidColorBrush x:Key="Bg" Color="#0E1117" />
     <SolidColorBrush x:Key="Surface" Color="#161B23" />
     <SolidColorBrush x:Key="SurfaceRaised" Color="#1D2330" />
     <SolidColorBrush x:Key="Line" Color="#262D3B" />
     <SolidColorBrush x:Key="Text" Color="#E7EBF3" />
     <SolidColorBrush x:Key="Muted" Color="#8A94A6" />
-    <SolidColorBrush x:Key="Accent" Color="#1D63ED" />
-    <SolidColorBrush x:Key="AccentHover" Color="#3B7BF5" />
+    <SolidColorBrush x:Key="Accent" Color="#1B74C9" />
+    <SolidColorBrush x:Key="AccentHover" Color="#2E86DA" />
     <SolidColorBrush x:Key="Ok" Color="#2FBF71" />
     <SolidColorBrush x:Key="Warn" Color="#F0A92E" />
     <SolidColorBrush x:Key="Bad" Color="#EF5350" />

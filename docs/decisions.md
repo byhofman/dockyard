@@ -2,6 +2,10 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-15: The brand hint is the logo's blue as the accent, nothing more
+
+DOK-25, "Dockyard's logo colour as a small hint in the interface". The logo already sits in the wizard's and the dashboard's header, so the hint is colour: the accent (primary buttons, the selected sidebar item, focus rings, links, Avalonia's system accent) moves from a generic `#1D63ED` to `#1B74C9`, the deep end of the gradient on the logo's container. Dark links take the light end, `#5DB7FF`; the selection fill is a dark tint of the same hue. Status colours, surfaces and text stay as they were, so the interface still reads as a quiet tool, not a branded one. White on `#1B74C9` is 4.8:1. A test ties both apps' accent to `branding/app-icon/icon.svg`, so a new logo colour cannot leave the interface behind. The design pass (DOK-27) is separate and not part of this.
+
 ## 2026-11-13: DOK-20 stays open: macOS asks a person before any trust setting goes
 
 Tried in the refactor pass: the user's setting with `security remove-trusted-cert`, the system's by exporting the admin trust settings as root, deleting our SHA-1 entry with PlistBuddy and importing them back. The macOS end-to-end run hung at uninstall and was cancelled after 12 minutes, as `remove-trusted-cert` did before: macOS waits for an authorization dialog for trust-setting changes, also as root and without a screen. So the change was taken back. What is left is removing it only where a person can answer the dialog (the tray window and the wizard window), which needs uninstall to know whether it runs silent; the entry left after a silent uninstall names a certificate and key that are already gone.
