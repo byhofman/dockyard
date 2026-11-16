@@ -45,12 +45,13 @@ public sealed partial class DockerClient
         SendTarAsync(HttpMethod.Put, $"containers/{Esc(container)}/archive?path={Esc(directory)}", tar, ct);
 
     // An image with nothing in it: enough to create a container that is never started and only holds a volume mount
-    // for the archive API, without pulling anything or depending on what images the engine has.
+    // for the archive API, without pulling anything or depending on what images the engine has. Each caller gets a tag
+    // of its own, so removing it afterwards can never pull the image from under another holder being made.
     public async Task<string> EnsureEmptyImageAsync(CancellationToken ct = default)
     {
-        const string name = "dockyard-empty:1";
-        await SendTarAsync(HttpMethod.Post, "images/create?fromSrc=-&repo=dockyard-empty&tag=1", new MemoryStream(new byte[1024]), ct);
-        return name;
+        var tag = Guid.NewGuid().ToString("N")[..12];
+        await SendTarAsync(HttpMethod.Post, $"images/create?fromSrc=-&repo=dockyard-empty&tag={tag}", new MemoryStream(new byte[1024]), ct);
+        return "dockyard-empty:" + tag;
     }
 
     public async Task<string> CreateVolumeHolderAsync(string image, string volume, string mountPoint, bool readOnly = false, CancellationToken ct = default)

@@ -12,7 +12,7 @@ DOK-30. Opening Files on an image creates a container of it that is never starte
 
 ## 2026-11-17: A volume opens read-only, and its folder is opened only where this computer can really reach it
 
-DOK-31, DOK-32. The volume's holder (an empty image, never started, `dockyard.helper`) now mounts it `:ro` with no network, so looking can never change it. DOK-17's editing stays: **Allow changes** opens it again with a writable mount. Import also reads Docker Desktop's volumes through read-only holders now. A reload of the list (any container starting or stopping rebuilds its rows) no longer closes open files, for volumes or images; only picking another one does.
+DOK-31, DOK-32. The volume's holder (an empty image, never started, `dockyard.helper`) now mounts it `:ro` with no network, so looking can never change it. DOK-17's editing stays: **Allow changes** opens it again with a writable mount. Import also reads Docker Desktop's volumes through read-only holders now. The empty image the holders use gets a tag of its own each time (`dockyard-empty:<random>`), so removing it after one holder can never take it from under another being made at the same moment (it did, between two test runs on CI). A reload of the list (any container starting or stopping rebuilds its rows) no longer closes open files, for volumes or images; only picking another one does.
 
 Where a volume's data is, per platform, and what the button does:
 
