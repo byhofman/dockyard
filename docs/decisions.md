@@ -2,6 +2,45 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-17: An image's files come from a container of it that never runs, read once into a tree
+
+DOK-30. Opening Files on an image creates a container of it that is never started: its entrypoint names a path that does not exist, its root is read-only (not on the Windows engine, which refuses that), it has no network, and it carries `dockyard.helper` so the lists hide it. Closing the files, picking another image or quitting removes it. The archive API reads it like any container's.
+
+- **Read once:** an image never changes, so the first listing reads the archive of `/` once, keeps only the tar headers as a tree (`FileTree`), and every folder after that comes from memory, with each folder's size the sum of what is under it. Reading a file or saving it to the computer asks the archive API for that one path.
+- **Cost:** the first listing streams the image's whole uncompressed filesystem through the engine's socket, with a progress line. Measured on an M1 with OrbStack: `postgres:17-alpine` (416 MB, 3,896 paths) in 2.2 s. Memory is one small record per path. Creating the container is metadata and an empty writable layer, gone with it.
+- **Rejected:** reading layers through `images/{name}/get` (the whole compressed image, plus applying whiteouts across layers ourselves: the same bytes and more code), and per-folder reads as for containers (opening `/` alone already reads everything, and again on every return to it).
+
+## 2026-11-17: A volume opens read-only, and its folder is opened only where this computer can really reach it
+
+DOK-31, DOK-32. The volume's holder (an empty image, never started, `dockyard.helper`) now mounts it `:ro` with no network, so looking can never change it. DOK-17's editing stays: **Allow changes** opens it again with a writable mount. Import also reads Docker Desktop's volumes through read-only holders now. A reload of the list (any container starting or stopping rebuilds its rows) no longer closes open files, for volumes or images; only picking another one does.
+
+Where a volume's data is, per platform, and what the button does:
+
+- **Windows, Dockyard's Linux engine (WSL):** in the `dockyard` distro's own disk at `/var/lib/docker/volumes/<name>/_data`. Windows reaches it as `\\wsl.localhost\dockyard\var\lib\docker\volumes\<name>\_data`; the distro's default user is root (`image/wsl/etc/wsl.conf`), so Explorer can read and write it. **Open in Explorer** opens that. Checked for real in the Windows end-to-end run: the path the button names exists and holds what the engine wrote.
+- **Windows, the Windows engine:** `C:\ProgramData\docker\volumes\<name>\_data` on the host's own disk, open to Administrators and SYSTEM only. Explorer would offer "Continue", which adds the user to the folder's access rules for good, so Dockyard first checks the folder can be read as the user and otherwise says it is the engine's own folder and offers Export a copy. Not run on a real machine.
+- **Linux, the local engine:** the folder is on the host, normally under `/var/lib/docker`, which belongs to root and cannot be listed by others, also not by members of the `docker` group. **Open folder** is offered, checks readability first and otherwise says the folder belongs to root and offers Export a copy. With rootless Docker the folder is under the user's home (`~/.local/share/docker/volumes`) and opens. Opening a file manager as root (pkexec, `admin://`) was rejected: a root file manager on Docker's data is a larger risk than a copy, and only some desktops have it.
+- **macOS:** the data is on the ext4 disk of Dockyard's Linux VM. Nothing of the VM is shared to the Mac (2026-11-06: no privileged file server), so there is no host path, and the panel says so in plain words. **Export a copy…** is the way to Finder.
+- **Another machine** (a TCP endpoint, a context that is not Dockyard's WSL engine) or **a driver other than `local`:** no folder; Export a copy.
+
+**Export a copy** asks for a folder, makes a new one in it named after the volume (`name (2)` when taken), writes the volume's files there from a read-only holder and opens it in Finder, Explorer or the file manager. Only plain files and folders are written, never over an existing file, and only inside the new folder; links, devices and any path with `..` are left out and counted.
+
+**No traversal:** the path handed to the OS is only built from a mountpoint of exactly the engine's shape, `<absolute root>/volumes/<name>/_data`, with a name that passes Docker's own rule (`[a-zA-Z0-9][a-zA-Z0-9_.-]*`) and no `.`, `..`, empty or `:` segment anywhere. Anything else gives no button. The folder is opened as a folder (Windows shell, `open`, `xdg-open` with the path as one argument), never through a command line.
+
+## 2026-11-17: A terminal into an image is a throwaway container, and a watcher removes it when the window closes
+
+DOK-33. **Terminal** on an image first looks for `/bin/bash`, then `/bin/sh`, through `HEAD` on the archive API of a never-started container of the image, so an image without a shell gets a message in the dashboard and no window. Windows images use `cmd.exe`, which every Windows base image has. Then it creates a container with that shell as entrypoint, a TTY, stdin, `AutoRemove` and a `dockyard.image-terminal` label (shown in the container list, not hidden: it is the user's), and opens the same terminal app as a container's Terminal button, attached with `docker start -ai`.
+
+`AutoRemove` covers typing `exit`. It does not cover closing the window: the engine keeps a TTY container running when its client goes away, and sends no event for it (checked on Docker 29.8: `create, attach, start`, nothing after the client is killed). So the terminal runs a small wrapper with a watcher that outlives the window:
+
+- **macOS and Linux:** `sh -c` starts a subshell that ignores SIGHUP and polls the terminal's process with `kill -0`, then execs `docker start -ai`. Closing the window hangs up docker; the watcher removes the container with `docker rm -f`.
+- **Windows:** PowerShell starts a hidden PowerShell of its own (its own console, so closing the window does not take it), which waits for the process that started it and then removes the container. The scripts go as `-EncodedCommand`, because Windows Terminal splits its own arguments at `;`.
+
+Tested by killing the terminal's process while the shell runs and waiting for the container to be gone: on macOS against a real engine locally, on CI's Docker on Linux, and on Dockyard's WSL engine in the Windows end-to-end run (there the PowerShell window is killed). Rejected: a dashboard-side sweep (it cannot tell an open terminal from an abandoned one) and a read-only root for this container (it is the user's shell, thrown away afterwards; the read-only rule is for the helpers).
+
+## 2026-11-17: The dashboard's prototype is its real views drawn headless over fictive data
+
+The dashboard is Avalonia and has no `yarn design` mode (2026-11-06). New screens are prototyped as `PrototypeScreens`: the real views and view models over fake file sources and fictive images and volumes, drawn by Avalonia's headless platform with Skia. Every test run draws them; with `DOCKYARD_SCREENSHOTS=<folder>` they are saved as PNGs to look at. The dashboard tests now render with Skia instead of headless drawing for that.
+
 ## 2026-11-15: Downloads are watched from the cluster, and the app stays silent
 
 DOK-29. The download page and the release downloads are probed by Alloy's blackbox exporter in gitops, with a `DockyardDownloadDown` alert in Grafana (gitops decision 41, gitops#185): the website's Dockyard page, the `releases/latest` redirect the one-liners resolve, the three assets with fixed names by HEAD, `SHA256SUMS` listing all twelve assets of `scripts/check-release-assets.sh`, and the three installers. Dockyard itself sends nothing; no telemetry was added. DOK-29 stays open until that PR is merged and the probes report, which waits on the owner (merging gitops deploys).

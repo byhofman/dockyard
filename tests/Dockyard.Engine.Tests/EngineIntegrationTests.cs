@@ -65,7 +65,7 @@ public sealed class EngineIntegrationTests
                 await ContainerFiles.WriteAsync(client, container, "/etc", "motd", edited, passwd.Entry, ct);
             Assert.Equal("changed\n", System.Text.Encoding.UTF8.GetString((await ContainerFiles.ReadAsync(client, container, "/etc/motd", 1024, ct)).Data));
 
-            holder = await client.CreateVolumeHolderAsync(image, volume, "/volume", ct);
+            holder = await client.CreateVolumeHolderAsync(image, volume, "/volume", ct: ct);
             Assert.Empty(await ContainerFiles.ListAsync(client, holder, "/volume", ct));
             using (var content = new MemoryStream("in the volume"u8.ToArray()))
                 await ContainerFiles.WriteAsync(client, holder, "/volume", "note.txt", content, ct: ct);

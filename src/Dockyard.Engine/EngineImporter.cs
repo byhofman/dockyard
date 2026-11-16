@@ -113,8 +113,8 @@ public sealed class EngineImporter(DockerClient source, DockerClient target, Act
                 }
                 log($"Copying volume {volume.Name}");
                 await target.PostNodeAsync("volumes/create", new JsonObject { ["Name"] = volume.Name, ["Labels"] = await VolumeLabels(volume.Name, ct) }, ct);
-                var from = await source.CreateVolumeHolderAsync(sourceImage, volume.Name, HolderMount, ct);
-                var to = await target.CreateVolumeHolderAsync(targetImage, volume.Name, HolderMount, ct);
+                var from = await source.CreateVolumeHolderAsync(sourceImage, volume.Name, HolderMount, readOnly: true, ct: ct);
+                var to = await target.CreateVolumeHolderAsync(targetImage, volume.Name, HolderMount, ct: ct);
                 try
                 {
                     using var archive = await source.GetArchiveAsync(from, HolderMount + "/", ct);

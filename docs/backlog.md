@@ -5,6 +5,13 @@ IDs are permanent: never renumber or reuse one.
 
 ## Next
 
+## Images and volumes
+
+- [x] DOK-30 Browse an image's files: a read-only tree with folder sizes, small text files shown, any file saved to the computer (owner 2026-11-17, v1)
+- [x] DOK-31 Browse a volume's files in the same viewer, read-only unless changes are asked for (owner 2026-11-17, v1)
+- [x] DOK-32 Open a volume's folder in the OS file manager where the host can reach it (Explorer through WSL on Windows, the folder on Linux when it is readable), and an honest explanation plus "Export a copy" where it cannot (macOS, root-owned folders, other machines) (owner 2026-11-17, v1)
+- [x] DOK-33 A terminal into an image: a temporary container of it with its shell (bash, else sh, a clear message without one), removed when the terminal closes, in the same terminal app as a container's (owner 2026-11-17, v1)
+
 ## Install and uninstall
 
 - [x] DOK-19 On a Linux host, the agent's iptables rules and `lo` addresses are gone after uninstall without a reboot (pulled in from Later by the owner, 2026-11-07, SCOPE.md) — v0.4.2

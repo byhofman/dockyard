@@ -50,7 +50,7 @@ sealed class ContainerDetailViewModel : Observable, IDisposable
 
     // Made when the tab is opened: Avalonia only sets a tab's content then, and that is what starts the first listing.
     public Features.Files.FileBrowserViewModel? Files => files ??= session.Client is { } client
-        ? new Features.Files.FileBrowserViewModel(client, Item.Id, "/", showError)
+        ? new Features.Files.FileBrowserViewModel(new Features.Files.ContainerFileSource(client, Item.Id, "/", canWrite: true), showError)
         : null;
 
     public string? Domain { get => domain; private set { if (Set(ref domain, value)) Raise(nameof(HasDomain), nameof(DomainUrl)); } }

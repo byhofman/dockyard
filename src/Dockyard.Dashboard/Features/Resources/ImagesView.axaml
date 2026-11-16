@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:res="using:Dockyard.Dashboard.Features.Resources"
+             xmlns:files="using:Dockyard.Dashboard.Features.Files"
              x:Class="Dockyard.Dashboard.Features.Resources.ImagesView"
              x:DataType="res:ImagesViewModel">
   <Grid x:Name="Layout" ColumnDefinitions="*,5,380">
@@ -43,7 +44,17 @@
 
     <Border x:Name="Panel" Grid.Column="2" Background="{DynamicResource Surface}"
             BorderBrush="{DynamicResource Line}" BorderThickness="1,0,0,0">
-      <ScrollViewer>
+      <Panel>
+      <DockPanel IsVisible="{Binding HasFiles}">
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="18,14,14,0">
+          <TextBlock Classes="title" Text="{Binding Selected.Reference}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+          <Button Grid.Column="1" Classes="iconbtn" Command="{Binding CloseFilesCommand}" ToolTip.Tip="Close the files">
+            <PathIcon Data="{StaticResource IconClose}" />
+          </Button>
+        </Grid>
+        <files:FilesView DataContext="{Binding Files}" />
+      </DockPanel>
+      <ScrollViewer IsVisible="{Binding !HasFiles}">
         <StackPanel Margin="18,14" Spacing="10" DataContext="{Binding Selected}" x:DataType="res:ImageRow">
           <TextBlock Classes="title" Text="{Binding Reference}" TextWrapping="Wrap" />
           <SelectableTextBlock Classes="mono muted" Text="{Binding Id}" TextWrapping="Wrap" />
@@ -59,12 +70,21 @@
           <ItemsControl ItemsSource="{Binding Tags}" />
           <TextBlock Classes="section" Text="CONTAINERS" Margin="0,6,0,0" IsVisible="{Binding InUse}" />
           <ItemsControl ItemsSource="{Binding UsedBy}" />
-          <Button Classes="danger" HorizontalAlignment="Left" Margin="0,8,0,0"
-                  Command="{Binding $parent[UserControl].((res:ImagesViewModel)DataContext).RemoveCommand}">
-            <StackPanel Classes="label"><PathIcon Data="{StaticResource IconDelete}" /><TextBlock Text="Remove" /></StackPanel>
-          </Button>
+          <WrapPanel ItemSpacing="6" LineSpacing="6" Margin="0,8,0,0">
+            <Button Command="{Binding $parent[UserControl].((res:ImagesViewModel)DataContext).OpenFilesCommand}"
+                    ToolTip.Tip="Look through the files in this image" Content="Files" />
+            <Button Command="{Binding $parent[UserControl].((res:ImagesViewModel)DataContext).TerminalCommand}"
+                    ToolTip.Tip="A shell in a new container of this image, removed when the terminal closes">
+              <StackPanel Classes="label"><PathIcon Data="{StaticResource IconTerminal}" /><TextBlock Text="Terminal" /></StackPanel>
+            </Button>
+            <Button Classes="danger"
+                    Command="{Binding $parent[UserControl].((res:ImagesViewModel)DataContext).RemoveCommand}">
+              <StackPanel Classes="label"><PathIcon Data="{StaticResource IconDelete}" /><TextBlock Text="Remove" /></StackPanel>
+            </Button>
+          </WrapPanel>
         </StackPanel>
       </ScrollViewer>
+      </Panel>
     </Border>
   </Grid>
 </UserControl>

@@ -5,16 +5,15 @@ using Dockyard.Engine;
 
 namespace Dockyard.Dashboard.Features.Files;
 
-// One folder and at most one open file, in a container or in a volume held by a container that never runs.
+// One folder and at most one open file, from a container, a volume or an image.
 sealed class FileBrowserViewModel : Observable, IDisposable
 {
     public const int MaxEditableBytes = 2 * 1024 * 1024;
 
-    readonly DockerClient client;
-    readonly string container;
+    readonly IFileSource source;
     readonly string root;
     readonly Action<string> showError;
-    readonly Func<Task>? release;
+    readonly Func<Task>? allowChanges;
     readonly CancellationTokenSource lifetime = new();
     CancellationTokenSource? loading;
     string directory;
@@ -23,26 +22,34 @@ sealed class FileBrowserViewModel : Observable, IDisposable
     string? text;
     string? savedText;
     string? note;
+    string? status;
     bool busy;
     bool loaded;
 
-    public FileBrowserViewModel(DockerClient client, string container, string root, Action<string> showError, Func<Task>? release = null)
+    // allowChanges is offered when the files are read-only only until asked: a volume opens read-only.
+    public FileBrowserViewModel(IFileSource source, Action<string> showError, Func<Task>? allowChanges = null)
     {
-        this.client = client;
-        this.container = container;
-        this.root = root;
+        this.source = source;
+        root = source.Root;
         this.showError = showError;
-        this.release = release;
+        this.allowChanges = source.CanWrite ? null : allowChanges;
         directory = root;
         UpCommand = new Command(() => Go(ContainerFiles.Parent(directory, root)), () => CanGoUp);
         RefreshCommand = new Command(() => Go(directory));
         SaveCommand = new Command(Save, () => HasChanges);
+        AllowChangesCommand = new Command(() => this.allowChanges?.Invoke() ?? Task.CompletedTask, () => CanAllowChanges);
     }
 
     public ObservableCollection<FileRow> Rows { get; } = [];
     public Command UpCommand { get; }
     public Command RefreshCommand { get; }
     public Command SaveCommand { get; }
+    public Command AllowChangesCommand { get; }
+    public bool CanWrite => source.CanWrite;
+    public bool IsReadOnly => !source.CanWrite;
+    public bool CanAllowChanges => allowChanges is not null;
+    public string? Status { get => status; private set { if (Set(ref status, value)) Raise(nameof(HasStatus)); } }
+    public bool HasStatus => status is not null;
     public string Directory { get => directory; private set { if (Set(ref directory, value)) { Raise(nameof(CanGoUp)); UpCommand.Refresh(); } } }
     public bool CanGoUp => directory.TrimEnd('/').Length > root.TrimEnd('/').Length;
     public bool Busy { get => busy; private set => Set(ref busy, value); }
@@ -50,6 +57,7 @@ sealed class FileBrowserViewModel : Observable, IDisposable
     public bool HasNote => note is not null;
     public bool HasOpenFile => openEntry is not null;
     public bool HasText => text is not null;
+    public bool CanSave => CanWrite && HasText;
     public string OpenName => openEntry?.Name ?? "";
     public bool HasChanges => text is not null && text != savedText;
     public FileRow? SelectedFile => selected is { IsDirectory: false } ? selected : null;
@@ -90,8 +98,9 @@ sealed class FileBrowserViewModel : Observable, IDisposable
         CloseFile();
         try
         {
-            var entries = await ContainerFiles.ListAsync(client, container, path, token);
+            var entries = await source.ListAsync(path, new Progress<string>(s => { if (!token.IsCancellationRequested) Status = s; }), token);
             if (token.IsCancellationRequested) return;
+            Status = null;
             Directory = path;
             selected = null;
             Rows.Clear();
@@ -99,7 +108,11 @@ sealed class FileBrowserViewModel : Observable, IDisposable
             Raise(nameof(Selected), nameof(SelectedFile), nameof(CanDownload));
         }
         catch (OperationCanceledException) { }
-        catch (Exception e) when (e is DockerException or IOException or InvalidDataException or EngineUnavailableException) { showError($"{path}: {e.Message}"); }
+        catch (Exception e) when (e is DockerException or IOException or InvalidDataException or EngineUnavailableException)
+        {
+            Status = null;
+            showError($"{path}: {e.Message}");
+        }
         finally { if (!token.IsCancellationRequested) Busy = false; }
     }
 
@@ -109,9 +122,9 @@ sealed class FileBrowserViewModel : Observable, IDisposable
         Busy = true;
         try
         {
-            var content = await ContainerFiles.ReadAsync(client, container, row.Path, MaxEditableBytes + 1, lifetime.Token);
+            var content = await source.ReadAsync(row.Path, MaxEditableBytes + 1, lifetime.Token);
             openEntry = content.Entry;
-            if (content.Truncated) Note = "Too large to edit here. Download it instead.";
+            if (content.Truncated) Note = CanWrite ? "Too large to edit here. Download it instead." : "Too large to show here. Download it instead.";
             else if (content.Entry.LinkTarget is { } target) Note = $"A link to {target}.";
             else if (Array.IndexOf(content.Data, (byte)0) >= 0) Note = "A binary file. Download it instead.";
             else
@@ -119,7 +132,7 @@ sealed class FileBrowserViewModel : Observable, IDisposable
                 savedText = Encoding.UTF8.GetString(content.Data);
                 text = savedText;
             }
-            Raise(nameof(Text), nameof(HasText), nameof(HasOpenFile), nameof(OpenName), nameof(HasChanges));
+            Raise(nameof(Text), nameof(HasText), nameof(CanSave), nameof(HasOpenFile), nameof(OpenName), nameof(HasChanges));
             SaveCommand.Refresh();
         }
         catch (OperationCanceledException) { }
@@ -132,18 +145,18 @@ sealed class FileBrowserViewModel : Observable, IDisposable
         openEntry = null;
         text = savedText = null;
         Note = null;
-        Raise(nameof(Text), nameof(HasText), nameof(HasOpenFile), nameof(OpenName), nameof(HasChanges));
+        Raise(nameof(Text), nameof(HasText), nameof(CanSave), nameof(HasOpenFile), nameof(OpenName), nameof(HasChanges));
         SaveCommand.Refresh();
     }
 
     async Task Save()
     {
-        if (openEntry is not { } entry || text is not { } content) return;
+        if (!CanWrite || openEntry is not { } entry || text is not { } content) return;
         Busy = true;
         try
         {
             using var data = new MemoryStream(Encoding.UTF8.GetBytes(content));
-            await ContainerFiles.WriteAsync(client, container, directory, entry.Name, data, entry, lifetime.Token);
+            await source.WriteAsync(directory, entry.Name, data, entry, lifetime.Token);
             savedText = content;
             Raise(nameof(HasChanges));
             SaveCommand.Refresh();
@@ -156,17 +169,18 @@ sealed class FileBrowserViewModel : Observable, IDisposable
     {
         if (SelectedFile is not { } row) return;
         Busy = true;
-        try { await ContainerFiles.SaveToAsync(client, container, row.Path, destination, lifetime.Token); }
+        try { await source.SaveToAsync(row.Path, destination, lifetime.Token); }
         catch (Exception e) when (e is DockerException or IOException or EngineUnavailableException) { showError($"{row.Name}: {e.Message}"); }
         finally { Busy = false; }
     }
 
     public async Task Upload(string name, Stream content)
     {
+        if (!CanWrite) return;
         Busy = true;
         try
         {
-            await ContainerFiles.WriteAsync(client, container, directory, name, content, null, lifetime.Token);
+            await source.WriteAsync(directory, name, content, null, lifetime.Token);
             await Go(directory);
         }
         catch (Exception e) when (e is DockerException or IOException or EngineUnavailableException) { showError($"{name}: {e.Message}"); }
@@ -176,6 +190,6 @@ sealed class FileBrowserViewModel : Observable, IDisposable
     public void Dispose()
     {
         lifetime.Cancel();
-        if (release is not null) _ = release();
+        _ = source.DisposeAsync().AsTask();
     }
 }
