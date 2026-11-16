@@ -3,15 +3,23 @@
              xmlns:files="using:Dockyard.Dashboard.Features.Files"
              x:Class="Dockyard.Dashboard.Features.Files.FilesView"
              x:DataType="files:FileBrowserViewModel">
-  <Grid RowDefinitions="Auto,*,Auto,2*">
+  <Grid RowDefinitions="Auto,Auto,*,Auto,2*">
     <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="10,8,14,6">
       <Button Command="{Binding UpCommand}" Content="Up" ToolTip.Tip="The folder above" />
       <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Directory}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="8,0" />
       <ProgressBar Grid.Column="2" IsIndeterminate="True" IsVisible="{Binding Busy}" Width="50" MinWidth="50" VerticalAlignment="Center" Margin="0,0,8,0" />
-      <Button Grid.Column="3" Content="Upload…" Click="UploadClicked" Margin="0,0,6,0" ToolTip.Tip="Copy a file from this computer into this folder" />
+      <Button Grid.Column="3" Content="Upload…" Click="UploadClicked" Margin="0,0,6,0" IsVisible="{Binding CanWrite}" ToolTip.Tip="Copy a file from this computer into this folder" />
       <Button Grid.Column="4" Content="Download…" Click="DownloadClicked" IsEnabled="{Binding CanDownload}" ToolTip.Tip="Copy the selected file to this computer" />
     </Grid>
-    <ListBox Grid.Row="1" Classes="rows" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" MinHeight="90">
+    <StackPanel Grid.Row="1" Margin="10,0,14,6" Spacing="4">
+      <TextBlock Classes="muted small" Text="{Binding Status}" IsVisible="{Binding HasStatus}" TextWrapping="Wrap" />
+      <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsReadOnly}">
+        <TextBlock Classes="muted small" Text="Read-only" VerticalAlignment="Center" />
+        <Button Grid.Column="1" Content="Allow changes" Command="{Binding AllowChangesCommand}" IsVisible="{Binding CanAllowChanges}"
+                ToolTip.Tip="Open these files again so they can be edited and uploaded to" />
+      </Grid>
+    </StackPanel>
+    <ListBox Grid.Row="2" Classes="rows" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" MinHeight="90">
       <ListBox.ItemTemplate>
         <DataTemplate DataType="files:FileRow">
           <Grid ColumnDefinitions="*,70,Auto">
@@ -25,12 +33,12 @@
         </DataTemplate>
       </ListBox.ItemTemplate>
     </ListBox>
-    <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="10,6,14,4" IsVisible="{Binding HasOpenFile}">
+    <Grid Grid.Row="3" ColumnDefinitions="*,Auto" Margin="10,6,14,4" IsVisible="{Binding HasOpenFile}">
       <TextBlock Classes="mono" Text="{Binding OpenName}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-      <Button Grid.Column="1" Classes="primary" Content="Save" Command="{Binding SaveCommand}" IsVisible="{Binding HasText}" />
+      <Button Grid.Column="1" Classes="primary" Content="Save" Command="{Binding SaveCommand}" IsVisible="{Binding CanSave}" />
     </Grid>
-    <Panel Grid.Row="3" Margin="10,0,14,10" IsVisible="{Binding HasOpenFile}">
-      <TextBox Classes="mono" AcceptsReturn="True" TextWrapping="NoWrap" Text="{Binding Text}" IsVisible="{Binding HasText}" />
+    <Panel Grid.Row="4" Margin="10,0,14,10" IsVisible="{Binding HasOpenFile}">
+      <TextBox Classes="mono" AcceptsReturn="True" TextWrapping="NoWrap" VerticalContentAlignment="Top" Text="{Binding Text}" IsVisible="{Binding HasText}" IsReadOnly="{Binding IsReadOnly}" />
       <TextBlock Classes="muted" Text="{Binding Note}" IsVisible="{Binding HasNote}" TextWrapping="Wrap" />
     </Panel>
   </Grid>

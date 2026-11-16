@@ -60,16 +60,21 @@
           <TextBlock Text="{Binding UsageText}" TextWrapping="Wrap" />
           <WrapPanel ItemSpacing="6" LineSpacing="6" Margin="0,8,0,0">
           <Button Command="{Binding $parent[UserControl].((res:VolumesViewModel)DataContext).OpenFilesCommand}"
-                  ToolTip.Tip="View and edit what is in this volume" Content="Files" />
-          <Button IsVisible="{Binding $parent[UserControl].((res:VolumesViewModel)DataContext).CanOpenInExplorer}"
-                  Command="{Binding $parent[UserControl].((res:VolumesViewModel)DataContext).OpenInExplorerCommand}"
-                  ToolTip.Tip="This volume's folder in File Explorer, through WSL" Content="Open in Explorer" />
+                  ToolTip.Tip="Look through what is in this volume" Content="Files" />
+          <Button IsVisible="{Binding $parent[UserControl].((res:VolumesViewModel)DataContext).CanOpenLocation}"
+                  Command="{Binding $parent[UserControl].((res:VolumesViewModel)DataContext).OpenLocationCommand}"
+                  ToolTip.Tip="This volume's folder where it is, in your file manager"
+                  Content="{Binding $parent[UserControl].((res:VolumesViewModel)DataContext).OpenLocationText}" />
+          <Button Click="ExportClicked" Content="Export a copy…"
+                  ToolTip.Tip="Copy this volume's files into a new folder on this computer and show it" />
           <Button Classes="danger" HorizontalAlignment="Left"
                   Command="{Binding $parent[UserControl].((res:VolumesViewModel)DataContext).RemoveCommand}"
                   ToolTip.Tip="Volumes in use by a container cannot be removed">
             <StackPanel Classes="label"><PathIcon Data="{StaticResource IconDelete}" /><TextBlock Text="Remove" /></StackPanel>
           </Button>
           </WrapPanel>
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="{Binding $parent[UserControl].((res:VolumesViewModel)DataContext).Location.Note}" />
         </StackPanel>
       </ScrollViewer>
       </Panel>

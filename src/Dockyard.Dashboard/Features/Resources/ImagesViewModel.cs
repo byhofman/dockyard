@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using Dockyard.Dashboard.Features.Containers;
+using Dockyard.Dashboard.Features.Files;
 using Dockyard.Dashboard.Shell;
 using Dockyard.Dashboard.Store;
 using Dockyard.Engine;
@@ -13,6 +15,7 @@ sealed class ImagesViewModel : SectionViewModel
     string pullReference = "";
     double pullPercent;
     string pullStatus = "";
+    FileBrowserViewModel? files;
 
     public ImagesViewModel(ShellViewModel shell, EngineSession session) : base(shell, session)
     {
@@ -27,6 +30,9 @@ sealed class ImagesViewModel : SectionViewModel
             }));
             return Task.CompletedTask;
         });
+        OpenFilesCommand = new Command(OpenFiles, () => Selected is not null);
+        CloseFilesCommand = new Command(() => { CloseFiles(); return Task.CompletedTask; });
+        TerminalCommand = new Command(OpenTerminal, () => Selected is not null);
         session.Connected += () => _ = Reload();
         session.ResourceChanged += r => { if (r.Kind == RouteKind.Images) ScheduleReload(); };
         session.Containers.RowsChanged += Recompute;
@@ -37,11 +43,27 @@ sealed class ImagesViewModel : SectionViewModel
     public Command PullCommand { get; }
     public Command RemoveCommand { get; }
     public Command PruneCommand { get; }
+    public Command OpenFilesCommand { get; }
+    public Command CloseFilesCommand { get; }
+    public Command TerminalCommand { get; }
+    public FileBrowserViewModel? Files { get => files; private set { if (Set(ref files, value)) Raise(nameof(HasFiles)); } }
+    public bool HasFiles => files is not null;
 
     public ImageRow? Selected
     {
         get => selected;
-        set { if (Rebuilding) return; if (Set(ref selected, value)) { Raise(nameof(HasSelection)); RemoveCommand.Refresh(); } }
+        set
+        {
+            if (Rebuilding) return;
+            var before = selected;
+            if (!Set(ref selected, value)) return;
+            Raise(nameof(HasSelection));
+            RemoveCommand.Refresh();
+            OpenFilesCommand.Refresh();
+            TerminalCommand.Refresh();
+            // A reload makes new rows for the same images; only another image closes the files.
+            if (before?.Id != value?.Id) CloseFiles();
+        }
     }
 
     public bool HasSelection => Selected is not null;
@@ -73,6 +95,51 @@ sealed class ImagesViewModel : SectionViewModel
         Replace(Rows, all.Where(r => Matches(Filter, r.Reference, r.ShortId)));
         Selected = Rows.FirstOrDefault(r => (r.Id, r.Reference) == key);
         Raise(nameof(Selected), nameof(HasSelection));
+    }
+
+    // A container of the image that never starts, read-only and without a network, is what the archive API reads from;
+    // it goes away with the view.
+    async Task OpenFiles()
+    {
+        if (Selected is not { } image || Session.Client is not { } client) return;
+        try
+        {
+            var holder = await client.CreateImageHolderAsync(image.Id);
+            CloseFiles();
+            Files = new FileBrowserViewModel(new ImageFileSource(client, holder, image.Size), Shell.ShowError);
+        }
+        catch (Exception e) when (e is DockerException or EngineUnavailableException) { Shell.ShowError($"{image.Reference}: {e.Message}"); }
+    }
+
+    void CloseFiles()
+    {
+        files?.Dispose();
+        Files = null;
+    }
+
+    Task OpenTerminal()
+    {
+        if (Selected is not { } image || Session.Client is not { } client) return Task.CompletedTask;
+        if (ExecCommand.FindTerminal() is not { } terminal)
+        {
+            Shell.ShowError("No terminal found. Set the TERMINAL environment variable to your terminal emulator.");
+            return Task.CompletedTask;
+        }
+        return Run($"Opening a terminal in {image.Reference}", async () =>
+        {
+            if (await ImageTerminal.FindShellAsync(client, image.Id) is not { } shell)
+            {
+                Shell.ShowError($"{image.Reference} has no shell (neither /bin/bash nor /bin/sh), so a terminal has nothing to run. Files still shows what is in it.");
+                return;
+            }
+            var id = await ImageTerminal.CreateAsync(client, image.Id, shell);
+            try { ExecCommand.BuildImageTerminal(Session.ContextName, id, image.Reference, terminal, DockerCli.Path()).Start(); }
+            catch
+            {
+                await client.RemoveContainerAsync(id, force: true);
+                throw;
+            }
+        });
     }
 
     void AskRemove()

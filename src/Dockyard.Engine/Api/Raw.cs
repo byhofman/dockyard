@@ -45,23 +45,56 @@ public sealed partial class DockerClient
         SendTarAsync(HttpMethod.Put, $"containers/{Esc(container)}/archive?path={Esc(directory)}", tar, ct);
 
     // An image with nothing in it: enough to create a container that is never started and only holds a volume mount
-    // for the archive API, without pulling anything or depending on what images the engine has.
+    // for the archive API, without pulling anything or depending on what images the engine has. Each caller gets a tag
+    // of its own, so removing it afterwards can never pull the image from under another holder being made.
     public async Task<string> EnsureEmptyImageAsync(CancellationToken ct = default)
     {
-        const string name = "dockyard-empty:1";
-        await SendTarAsync(HttpMethod.Post, "images/create?fromSrc=-&repo=dockyard-empty&tag=1", new MemoryStream(new byte[1024]), ct);
-        return name;
+        var tag = Guid.NewGuid().ToString("N")[..12];
+        await SendTarAsync(HttpMethod.Post, $"images/create?fromSrc=-&repo=dockyard-empty&tag={tag}", new MemoryStream(new byte[1024]), ct);
+        return "dockyard-empty:" + tag;
     }
 
-    public async Task<string> CreateVolumeHolderAsync(string image, string volume, string mountPoint, CancellationToken ct = default)
+    public async Task<string> CreateVolumeHolderAsync(string image, string volume, string mountPoint, bool readOnly = false, CancellationToken ct = default)
     {
         var body = new JsonObject
         {
             ["Image"] = image,
             ["Cmd"] = new JsonArray("/none"),
             ["Labels"] = new JsonObject { ["dockyard.helper"] = "1" },
-            ["HostConfig"] = new JsonObject { ["Binds"] = new JsonArray($"{volume}:{mountPoint}") },
+            ["HostConfig"] = new JsonObject
+            {
+                ["Binds"] = new JsonArray($"{volume}:{mountPoint}" + (readOnly ? ":ro" : "")),
+                ["NetworkMode"] = "none",
+            },
         };
         return (await PostNodeAsync("containers/create", body, ct))!["Id"]!.GetValue<string>();
+    }
+
+    // A container of the image that is never started, only so the archive API can read the image's files. Its entrypoint
+    // names nothing, so even a start by someone else fails before anything of the image runs.
+    public async Task<string> CreateImageHolderAsync(string image, CancellationToken ct = default)
+    {
+        var host = new JsonObject { ["NetworkMode"] = "none" };
+        // The Windows engine refuses a read-only root.
+        if (!IsWindows) host["ReadonlyRootfs"] = true;
+        var body = new JsonObject
+        {
+            ["Image"] = image,
+            ["Entrypoint"] = new JsonArray(IsWindows ? @"C:\dockyard-never-runs" : "/dockyard-never-runs"),
+            ["Cmd"] = new JsonArray(),
+            ["Labels"] = new JsonObject { ["dockyard.helper"] = "1" },
+            ["HostConfig"] = host,
+        };
+        return (await PostNodeAsync("containers/create", body, ct))!["Id"]!.GetValue<string>();
+    }
+
+    public async Task<bool> PathExistsAsync(string container, string path, CancellationToken ct = default)
+    {
+        try
+        {
+            using var _ = await Send(HttpMethod.Head, $"containers/{Esc(container)}/archive?path={Esc(path)}", null, stream: false, ct);
+            return true;
+        }
+        catch (NotFoundException) { return false; }
     }
 }

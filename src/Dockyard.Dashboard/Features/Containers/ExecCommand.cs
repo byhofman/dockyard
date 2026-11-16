@@ -10,11 +10,46 @@ static class ExecCommand
     {
         List<string> docker = [dockerCli, "--context", context, "exec", "-it", id];
         docker.AddRange(windowsContainer ? ["cmd", "/c", WindowsShell] : ["sh", "-c", LinuxShell]);
+        return InTerminal(docker, title, terminal);
+    }
 
+    // Attaches to a container made for this terminal alone. Closing a terminal does not end what runs in the container,
+    // so a watcher that outlives the window removes it once the terminal's process is gone, however it ended.
+    public static ProcessCommand BuildImageTerminal(string context, string id, string title, TerminalApp terminal, string dockerCli = "docker") =>
+        InTerminal(ImageTerminalCommand(context, id, terminal.Kind is TerminalKind.WindowsTerminal or TerminalKind.WindowsConsole, dockerCli), title, terminal);
+
+    public static List<string> ImageTerminalCommand(string context, string id, bool windows, string dockerCli)
+    {
+        if (!windows)
+        {
+            // $$ is this shell, which becomes docker by exec; the watcher ignores the hangup that closing the window sends.
+            const string script = "( trap '' HUP INT TERM; while kill -0 $$ 2>/dev/null; do sleep 1; done; \"$1\" --context \"$2\" rm -f \"$3\" ) >/dev/null 2>&1 </dev/null & exec \"$1\" --context \"$2\" start -ai \"$3\"";
+            return ["sh", "-c", script, "dockyard-terminal", dockerCli, context, id];
+        }
+        var docker = $"& {Quote(dockerCli)} --context {Quote(context)}";
+        // A hidden PowerShell of its own, so closing the window does not take it along; it waits for the one that started it.
+        var watcher = Encode($"""
+            $parent = (Get-CimInstance Win32_Process -Filter "ProcessId=$PID").ParentProcessId
+            Wait-Process -Id $parent -ErrorAction SilentlyContinue
+            {docker} rm -f {Quote(id)} *> $null
+            """);
+        var main = Encode($"""
+            Start-Process powershell -WindowStyle Hidden -ArgumentList '-NoProfile','-NonInteractive','-EncodedCommand','{watcher}'
+            {docker} start -ai {Quote(id)}
+            """);
+        return ["powershell", "-NoProfile", "-EncodedCommand", main];
+    }
+
+    static string Quote(string value) => "'" + value.Replace("'", "''") + "'";
+
+    static string Encode(string script) => Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(script));
+
+    static ProcessCommand InTerminal(List<string> docker, string title, TerminalApp terminal)
+    {
         return terminal.Kind switch
         {
             TerminalKind.WindowsTerminal => new ProcessCommand(terminal.Path, ["-w", "new", "--title", title, "--", .. docker]),
-            TerminalKind.WindowsConsole => new ProcessCommand("docker", docker[1..]),
+            TerminalKind.WindowsConsole => new ProcessCommand(docker[0], docker[1..]),
             TerminalKind.MacTerminal => new ProcessCommand("osascript",
                 ["-e", $"tell application \"Terminal\" to do script \"{AppleScriptEscape(ShellJoin(docker))}\"", "-e", "tell application \"Terminal\" to activate"]),
             _ => Path.GetFileName(terminal.Path) switch

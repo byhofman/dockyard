@@ -208,12 +208,7 @@ sealed class ContainersViewModel : Observable, ISearchable
             return Task.CompletedTask;
         }
         var command = Features.Containers.ExecCommand.Build(Session.ContextName, item.Id, item.Name, Session.IsWindowsEngine, terminal, DockerCli.Path());
-        try
-        {
-            var psi = new ProcessStartInfo(command.File) { UseShellExecute = false, CreateNoWindow = false };
-            foreach (var a in command.Args) psi.ArgumentList.Add(a);
-            Process.Start(psi)?.Dispose();
-        }
+        try { command.Start(); }
         catch (Exception ex)
         {
             shell.ShowError($"Could not open a terminal: {ex.Message}");

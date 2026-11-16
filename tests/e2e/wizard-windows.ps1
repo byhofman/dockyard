@@ -436,7 +436,15 @@ if ($Wizard) {
         $env:DOCKYARD_TEST_DOCKER_CONTEXT = 'linux'
         dotnet test --project (Join-Path $env:DOCKYARD_SOURCE 'tests/Dockyard.Dashboard.Tests') --filter-class Dockyard.Dashboard.Tests.KindKubeconfigEngineTests
         Check 'the dashboard puts a cluster in the kubeconfig, reachable from Windows, and takes it out again' ($LASTEXITCODE -eq 0)
-        Remove-Item Env:DOCKYARD_TEST_KIND, Env:DOCKYARD_TEST_DOCKER_CONTEXT
+        Remove-Item Env:DOCKYARD_TEST_KIND
+        # Image and volume files, the volume's folder through \\wsl.localhost, and the image terminal's container going
+        # away when its PowerShell window is killed, on the WSL engine.
+        $env:DOCKYARD_TEST_ENDPOINT = 'npipe:////./pipe/dockyard_linux'
+        dotnet test --project (Join-Path $env:DOCKYARD_SOURCE 'tests/Dockyard.Dashboard.Tests') --filter-class Dockyard.Dashboard.Tests.ImageAndVolumeEngineTests
+        Check 'image files, volume files and their folder, and the image terminal clean-up work on the WSL engine' ($LASTEXITCODE -eq 0)
+        Check 'no helper container is left' (-not (& $docker --context linux ps -aq --filter label=dockyard.helper))
+        Check 'no terminal container is left' (-not (& $docker --context linux ps -aq --filter label=dockyard.image-terminal))
+        Remove-Item Env:DOCKYARD_TEST_ENDPOINT, Env:DOCKYARD_TEST_DOCKER_CONTEXT
     }
     finally { Remove-Item Env:DOCKER_CONTEXT }
     Check 'exit 0 without kind' ((Run --silent --no-start --without kind) -eq 0)
