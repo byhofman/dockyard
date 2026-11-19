@@ -150,7 +150,7 @@ public partial class App : Application
         // The dashboard can come and go while the tray runs, from its own window or from the wizard.
         if (dashboardItem is not null) dashboardItem.IsVisible = HasDashboard;
         var activeEngine = vm.ActiveEngine;
-        var color = vm.IsBusy ? TrayIconRenderer.Busy : activeEngine.IsRunning ? TrayIconRenderer.Running : TrayIconRenderer.Stopped;
+        var color = vm.IsBusy ? TrayColors.Busy : activeEngine.IsRunning ? TrayColors.Running : TrayColors.Stopped;
         var multiple = vm.EngineCards.Count > 1;
         tray.Icon = TrayIconRenderer.Render(color, multiple ? activeEngine.Name[..1] : null);
         tray.ToolTipText = vm.IsBusy

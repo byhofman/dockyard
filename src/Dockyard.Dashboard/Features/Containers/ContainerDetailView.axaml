@@ -7,7 +7,7 @@
              x:DataType="cont:ContainerDetailViewModel">
 
   <DockPanel>
-    <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="18,14,14,10" IsVisible="{Binding !LogsExpanded}">
+    <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="16,14,16,10" IsVisible="{Binding !LogsExpanded}">
       <Grid ColumnDefinitions="*,Auto">
         <TextBlock Classes="title" Text="{Binding Item.Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
         <Button Grid.Column="1" Classes="iconbtn" Command="{Binding CloseCommand}" ToolTip.Tip="Close">
@@ -60,10 +60,10 @@
       </Border>
     </StackPanel>
 
-    <TabControl SelectedIndex="{Binding SelectedTab}" Margin="8,0,0,0">
+    <TabControl SelectedIndex="{Binding SelectedTab}" Margin="4,0,4,0">
       <TabItem Header="Logs">
         <DockPanel>
-          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="8,8,8,6">
+          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="12,8,12,6">
             <TextBox Width="190" PlaceholderText="Filter logs" Text="{Binding Logs.Search}">
               <TextBox.InnerLeftContent>
                 <PathIcon Data="{StaticResource IconSearch}" Margin="10,0,0,0" Foreground="{DynamicResource Muted}" />
@@ -92,7 +92,7 @@
 
       <TabItem Header="Inspect">
         <ScrollViewer>
-          <ItemsControl ItemsSource="{Binding Inspect.Sections}" Margin="10,8,14,14">
+          <ItemsControl ItemsSource="{Binding Inspect.Sections}" Margin="12,8,12,14">
             <ItemsControl.ItemTemplate>
               <DataTemplate DataType="cont:InspectSection">
                 <StackPanel Spacing="4" Margin="0,0,0,14">
@@ -127,12 +127,12 @@
               <TextBlock Classes="section" Text="CPU" />
               <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Item.CpuPercent, StringFormat={}{0:0.0} %}" />
             </Grid>
-            <controls:Sparkline Height="70" Values="{Binding Item.CpuHistory}" Stroke="{StaticResource Accent}" />
+            <controls:Sparkline Height="70" Values="{Binding Item.CpuHistory}" Stroke="{DynamicResource Brand}" />
           </StackPanel>
           <StackPanel Spacing="6" IsVisible="{Binding Item.IsRunning}">
             <Grid ColumnDefinitions="*,Auto">
               <TextBlock Classes="section" Text="MEMORY" />
-              <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Item.UsageText}" />
+              <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Item.MemoryText}" />
             </Grid>
             <controls:Sparkline Height="70" Values="{Binding Item.MemoryHistory}" Stroke="{DynamicResource Ok}" />
           </StackPanel>

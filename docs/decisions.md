@@ -2,6 +2,12 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-19: The logo's colours carry the accent and the selection, and the wizard follows the system theme
+
+DOK-27, the November restyle round (owner: "polish, the same as Vaultbar got"). This supersedes 2026-11-15's "the logo's blue as the accent, nothing more". The accent stays the deep end of the logo container's gradient (`#1B74C9`). The logo now also shows in four more places. The light stop (`#5DB7FF`) is the dark theme's links and brand icons. The crane's colour, `#8CCAF7` on the dark icon and `#1B5E9E` on the light one, is the selected sidebar item's text and icon. A running compose project's icon is the brand blue. The tray's running icon is `#2E86DA`, a blue on the container's gradient, in place of Docker's `#2496ED`. Selection is a brand-tinted wash with weight, never an outline. The wizard's active engine card loses its accent border for the same wash.
+
+The wizard and the tray window were dark-only (`RequestedThemeVariant="Dark"`). They now follow the system theme like the dashboard, with the same tokens, so the two apps look like one product in either theme. All colours are tokens in the two `App.axaml` files. `BrandingTests` checks four things: the logo ties, AA for every text and surface pair in both themes, 3:1 for icons, and that no view has a colour literal. `TrayIconTests` checks that the tray colours stand out at 3:1 on a light and a dark menu bar. See `docs/design/restyle-2026-11.md`.
+
 ## 2026-11-17: An image's files come from a container of it that never runs, read once into a tree
 
 DOK-30. Opening Files on an image creates a container of it that is never started: its entrypoint names a path that does not exist, its root is read-only (not on the Windows engine, which refuses that), it has no network, and it carries `dockyard.helper` so the lists hide it. Closing the files, picking another image or quitting removes it. The archive API reads it like any container's.
@@ -45,7 +51,7 @@ The dashboard is Avalonia and has no `yarn design` mode (2026-11-06). New screen
 
 DOK-29. The download page and the release downloads are probed by Alloy's blackbox exporter in gitops, with a `DockyardDownloadDown` alert in Grafana (gitops decision 41, gitops#185): the website's Dockyard page, the `releases/latest` redirect the one-liners resolve, the three assets with fixed names by HEAD, `SHA256SUMS` listing all twelve assets of `scripts/check-release-assets.sh`, and the three installers. Dockyard itself sends nothing; no telemetry was added. DOK-29 stays open until that PR is merged and the probes report, which waits on the owner (merging gitops deploys).
 
-## 2026-11-15: The brand hint is the logo's blue as the accent, nothing more
+## 2026-11-15: The brand hint is the logo's blue as the accent, nothing more (superseded 2026-11-19)
 
 DOK-25, "Dockyard's logo colour as a small hint in the interface". The logo already sits in the wizard's and the dashboard's header, so the hint is colour: the accent (primary buttons, the selected sidebar item, focus rings, links, Avalonia's system accent) moves from a generic `#1D63ED` to `#1B74C9`, the deep end of the gradient on the logo's container. Dark links take the light end, `#5DB7FF`; the selection fill is a dark tint of the same hue. Status colours, surfaces and text stay as they were, so the interface still reads as a quiet tool, not a branded one. White on `#1B74C9` is 4.8:1. A test ties both apps' accent to `branding/app-icon/icon.svg`, so a new logo colour cannot leave the interface behind. The design pass (DOK-27) is separate and not part of this.
 ## 2026-11-15: The dashboard writes the host's kubeconfig itself, and kind only its own file

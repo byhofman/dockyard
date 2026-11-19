@@ -19,9 +19,6 @@ static class TrayIconRenderer
         Matrix.CreateTranslation(-50, -47.5) * Matrix.CreateScale(Size / 54.0, Size / 54.0) * Matrix.CreateTranslation(Size / 2.0, Size / 2.0);
     static readonly Dictionary<(Color, string), WindowIcon> Cache = [];
 
-    public static readonly Color Running = Color.Parse("#2496ED");
-    public static readonly Color Stopped = Color.Parse("#8A8A8A");
-    public static readonly Color Busy = Color.Parse("#E8A317");
     static readonly IBrush BadgeBrush = new SolidColorBrush(Color.Parse("#4B5563"));
 
     public static WindowIcon Render(Color mark, string? badge)

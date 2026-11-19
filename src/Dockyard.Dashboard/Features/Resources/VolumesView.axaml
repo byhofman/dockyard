@@ -37,7 +37,7 @@
             BorderBrush="{DynamicResource Line}" BorderThickness="1,0,0,0">
       <Panel>
       <DockPanel IsVisible="{Binding HasFiles}">
-        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="18,14,14,0">
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="16,14,16,0">
           <TextBlock Classes="title" Text="{Binding Selected.DisplayName}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
           <Button Grid.Column="1" Classes="iconbtn" Command="{Binding CloseFilesCommand}" ToolTip.Tip="Close the files">
             <PathIcon Data="{StaticResource IconClose}" />
@@ -46,9 +46,9 @@
         <files:FilesView DataContext="{Binding Files}" />
       </DockPanel>
       <ScrollViewer IsVisible="{Binding !HasFiles}">
-        <StackPanel Margin="18,14" Spacing="10" DataContext="{Binding Selected}" x:DataType="res:VolumeRow">
+        <StackPanel Margin="16,14" Spacing="10" DataContext="{Binding Selected}" x:DataType="res:VolumeRow">
           <SelectableTextBlock Classes="title" Text="{Binding Name}" TextWrapping="Wrap" />
-          <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,Auto,Auto">
+          <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="4">
             <TextBlock Classes="muted small" Text="Driver" />
             <TextBlock Grid.Column="1" Text="{Binding Driver}" />
             <TextBlock Grid.Row="1" Classes="muted small" Text="Size" />
