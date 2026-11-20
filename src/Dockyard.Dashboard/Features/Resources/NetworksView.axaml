@@ -41,7 +41,7 @@
     <Border x:Name="Panel" Grid.Column="2" Background="{DynamicResource Surface}"
             BorderBrush="{DynamicResource Line}" BorderThickness="1,0,0,0">
       <ScrollViewer>
-        <StackPanel Margin="18,14" Spacing="10">
+        <StackPanel Margin="16,14" Spacing="10">
           <TextBlock Classes="title" Text="{Binding Selected.Name}" TextWrapping="Wrap" />
           <TextBlock Classes="muted" Text="{Binding Selected.Driver}" />
           <SelectableTextBlock Classes="mono muted" Text="{Binding Selected.Subnet}" />

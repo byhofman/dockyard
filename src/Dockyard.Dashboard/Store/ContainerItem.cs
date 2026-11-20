@@ -44,6 +44,7 @@ sealed class ContainerItem(string id) : Observable
     public double CpuPercent { get => cpu; private set => Set(ref cpu, value); }
     public ulong MemoryBytes { get => memory; private set => Set(ref memory, value); }
     public string UsageText => HasUsage ? $"{CpuPercent:0.0}%  {Format.Bytes(MemoryBytes)}" : "";
+    public string MemoryText => HasUsage ? Format.Bytes(MemoryBytes) : "";
     public double[] CpuHistory { get => cpuHistory; private set => Set(ref cpuHistory, value); }
     public double[] MemoryHistory { get => memoryHistory; private set => Set(ref memoryHistory, value); }
 
@@ -75,7 +76,7 @@ sealed class ContainerItem(string id) : Observable
         HasUsage = true;
         CpuHistory = Append(CpuHistory, usage.CpuPercent);
         MemoryHistory = Append(MemoryHistory, usage.MemoryBytes);
-        Raise(nameof(UsageText));
+        Raise(nameof(UsageText), nameof(MemoryText));
     }
 
     public void ClearUsage()
@@ -84,7 +85,7 @@ sealed class ContainerItem(string id) : Observable
         HasUsage = false;
         CpuHistory = [];
         MemoryHistory = [];
-        Raise(nameof(UsageText));
+        Raise(nameof(UsageText), nameof(MemoryText));
     }
 
     static double[] Append(double[] history, double value)

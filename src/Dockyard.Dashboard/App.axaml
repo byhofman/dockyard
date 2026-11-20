@@ -8,96 +8,130 @@
     <ResourceDictionary>
       <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Dark">
-          <SolidColorBrush x:Key="Bg" Color="#0E1117" />
-          <SolidColorBrush x:Key="Surface" Color="#161B23" />
-          <SolidColorBrush x:Key="SurfaceRaised" Color="#1D2330" />
-          <SolidColorBrush x:Key="Selected" Color="#15304C" />
-          <SolidColorBrush x:Key="Line" Color="#262D3B" />
+          <SolidColorBrush x:Key="Bg" Color="#0F1218" />
+          <SolidColorBrush x:Key="Surface" Color="#1C222C" />
+          <SolidColorBrush x:Key="SurfaceRaised" Color="#262D3A" />
+          <SolidColorBrush x:Key="Hover" Color="#222936" />
+          <SolidColorBrush x:Key="Selected" Color="#18375A" />
+          <SolidColorBrush x:Key="SelectedText" Color="#8CCAF7" />
+          <SolidColorBrush x:Key="Line" Color="#353F51" />
           <SolidColorBrush x:Key="Text" Color="#E7EBF3" />
-          <SolidColorBrush x:Key="Muted" Color="#8A94A6" />
+          <SolidColorBrush x:Key="Muted" Color="#98A2B3" />
           <SolidColorBrush x:Key="Ok" Color="#2FBF71" />
-          <SolidColorBrush x:Key="OkBg" Color="#1A3A2A" />
+          <SolidColorBrush x:Key="OkBg" Color="#173A28" />
           <SolidColorBrush x:Key="Warn" Color="#F0A92E" />
           <SolidColorBrush x:Key="WarnBg" Color="#3D2F14" />
-          <SolidColorBrush x:Key="Bad" Color="#EF5350" />
-          <SolidColorBrush x:Key="BadBg" Color="#3D1C1C" />
-          <SolidColorBrush x:Key="PillBg" Color="#262D3B" />
+          <SolidColorBrush x:Key="Bad" Color="#F4716E" />
+          <SolidColorBrush x:Key="BadBg" Color="#3F1D1E" />
+          <SolidColorBrush x:Key="PillBg" Color="#2C3443" />
+          <SolidColorBrush x:Key="AccentBg" Color="#16304F" />
+          <SolidColorBrush x:Key="AccentText" Color="#8CCAF7" />
           <SolidColorBrush x:Key="LinkText" Color="#5DB7FF" />
-          <SolidColorBrush x:Key="TextControlBackground" Color="#0B0E14" />
-          <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#0F131B" />
-          <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#0B0E14" />
-          <SolidColorBrush x:Key="TextControlBorderBrush" Color="#2A3243" />
-          <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#3A4559" />
-          <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#4FA3EF" />
+          <SolidColorBrush x:Key="Brand" Color="#5DB7FF" />
+          <SolidColorBrush x:Key="TextControlBackground" Color="#12161D" />
+          <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#151A22" />
+          <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#12161D" />
+          <SolidColorBrush x:Key="TextControlBorderBrush" Color="#3A4456" />
+          <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#4A566C" />
+          <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#5DB7FF" />
           <SolidColorBrush x:Key="TextControlForeground" Color="#E7EBF3" />
           <SolidColorBrush x:Key="TextControlForegroundPointerOver" Color="#E7EBF3" />
           <SolidColorBrush x:Key="TextControlForegroundFocused" Color="#E7EBF3" />
-          <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#6B7588" />
-          <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#6B7588" />
-          <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#6B7588" />
-          <SolidColorBrush x:Key="ComboBoxBackground" Color="#0B0E14" />
-          <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#0F131B" />
-          <SolidColorBrush x:Key="ComboBoxBackgroundPressed" Color="#0F131B" />
-          <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#2A3243" />
-          <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#3A4559" />
-          <SolidColorBrush x:Key="ComboBoxBorderBrushPressed" Color="#4FA3EF" />
-          <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="#161B23" />
-          <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#252C3B" />
-          <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#2C3446" />
-          <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#323B4E" />
-          <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#323B4E" />
-          <SolidColorBrush x:Key="ToggleButtonBackground" Color="#1D2330" />
-          <SolidColorBrush x:Key="ToggleButtonBorderBrush" Color="#262D3B" />
-          <SolidColorBrush x:Key="ToggleButtonBackgroundPointerOver" Color="#252C3B" />
+          <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#98A2B3" />
+          <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#98A2B3" />
+          <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#98A2B3" />
+          <SolidColorBrush x:Key="ComboBoxBackground" Color="#12161D" />
+          <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#151A22" />
+          <SolidColorBrush x:Key="ComboBoxBackgroundPressed" Color="#151A22" />
+          <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#3A4456" />
+          <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#4A566C" />
+          <SolidColorBrush x:Key="ComboBoxBorderBrushPressed" Color="#5DB7FF" />
+          <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="#1C222C" />
+          <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#2E3646" />
+          <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#353F51" />
+          <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#44506A" />
+          <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#44506A" />
+          <SolidColorBrush x:Key="ToggleButtonBackground" Color="#262D3A" />
+          <SolidColorBrush x:Key="ToggleButtonBorderBrush" Color="#353F51" />
+          <SolidColorBrush x:Key="ToggleButtonBackgroundPointerOver" Color="#2E3646" />
+          <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="#1C222C" />
+          <SolidColorBrush x:Key="ExpanderHeaderBackgroundPointerOver" Color="#262D3A" />
+          <SolidColorBrush x:Key="ExpanderHeaderBackgroundPressed" Color="#262D3A" />
+          <SolidColorBrush x:Key="ExpanderHeaderBorderBrush" Color="#353F51" />
+          <SolidColorBrush x:Key="ExpanderHeaderBorderBrushPointerOver" Color="#353F51" />
+          <SolidColorBrush x:Key="ExpanderHeaderBorderBrushPressed" Color="#353F51" />
+          <SolidColorBrush x:Key="ExpanderContentBackground" Color="#1C222C" />
+          <SolidColorBrush x:Key="ExpanderContentBorderBrush" Color="#353F51" />
+          <SolidColorBrush x:Key="FlyoutPresenterBackground" Color="#262D3A" />
+          <SolidColorBrush x:Key="FlyoutBorderThemeBrush" Color="#353F51" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Light">
-          <SolidColorBrush x:Key="Bg" Color="#F5F6F8" />
+          <SolidColorBrush x:Key="Bg" Color="#F4F6F9" />
           <SolidColorBrush x:Key="Surface" Color="#FFFFFF" />
-          <SolidColorBrush x:Key="SurfaceRaised" Color="#EEF0F4" />
-          <SolidColorBrush x:Key="Selected" Color="#DDEBF8" />
-          <SolidColorBrush x:Key="Line" Color="#DFE3EA" />
+          <SolidColorBrush x:Key="SurfaceRaised" Color="#EEF1F5" />
+          <SolidColorBrush x:Key="Hover" Color="#E9EDF2" />
+          <SolidColorBrush x:Key="Selected" Color="#E2EEFB" />
+          <SolidColorBrush x:Key="SelectedText" Color="#1B5E9E" />
+          <SolidColorBrush x:Key="Line" Color="#DCE1E8" />
           <SolidColorBrush x:Key="Text" Color="#1A1F29" />
-          <SolidColorBrush x:Key="Muted" Color="#5F6B7D" />
-          <SolidColorBrush x:Key="Ok" Color="#178A4E" />
+          <SolidColorBrush x:Key="Muted" Color="#566275" />
+          <SolidColorBrush x:Key="Ok" Color="#137A44" />
           <SolidColorBrush x:Key="OkBg" Color="#DDF3E6" />
-          <SolidColorBrush x:Key="Warn" Color="#A86D00" />
+          <SolidColorBrush x:Key="Warn" Color="#8A5A00" />
           <SolidColorBrush x:Key="WarnBg" Color="#FCEFD6" />
-          <SolidColorBrush x:Key="Bad" Color="#C9302C" />
+          <SolidColorBrush x:Key="Bad" Color="#B42A26" />
           <SolidColorBrush x:Key="BadBg" Color="#FBE1E0" />
           <SolidColorBrush x:Key="PillBg" Color="#E8EBF0" />
-          <SolidColorBrush x:Key="LinkText" Color="#1B74C9" />
+          <SolidColorBrush x:Key="AccentBg" Color="#DCEBFA" />
+          <SolidColorBrush x:Key="AccentText" Color="#1B5E9E" />
+          <SolidColorBrush x:Key="LinkText" Color="#1663B0" />
+          <SolidColorBrush x:Key="Brand" Color="#1B74C9" />
           <SolidColorBrush x:Key="TextControlBackground" Color="#FFFFFF" />
           <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#FAFBFC" />
           <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#FFFFFF" />
-          <SolidColorBrush x:Key="TextControlBorderBrush" Color="#D3D8E0" />
-          <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#B9C0CC" />
+          <SolidColorBrush x:Key="TextControlBorderBrush" Color="#CDD3DC" />
+          <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#B3BBC8" />
           <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#1B74C9" />
           <SolidColorBrush x:Key="TextControlForeground" Color="#1A1F29" />
           <SolidColorBrush x:Key="TextControlForegroundPointerOver" Color="#1A1F29" />
           <SolidColorBrush x:Key="TextControlForegroundFocused" Color="#1A1F29" />
-          <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#8A94A6" />
-          <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#8A94A6" />
-          <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#8A94A6" />
+          <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#566275" />
+          <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#566275" />
+          <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#566275" />
           <SolidColorBrush x:Key="ComboBoxBackground" Color="#FFFFFF" />
           <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#FAFBFC" />
           <SolidColorBrush x:Key="ComboBoxBackgroundPressed" Color="#F2F4F7" />
-          <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#D3D8E0" />
-          <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#B9C0CC" />
+          <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#CDD3DC" />
+          <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#B3BBC8" />
           <SolidColorBrush x:Key="ComboBoxBorderBrushPressed" Color="#1B74C9" />
           <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="#FFFFFF" />
-          <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#E4E7EC" />
-          <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#DADEE5" />
-          <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#CDD3DC" />
-          <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#CDD3DC" />
-          <SolidColorBrush x:Key="ToggleButtonBackground" Color="#EEF0F4" />
-          <SolidColorBrush x:Key="ToggleButtonBorderBrush" Color="#DFE3EA" />
-          <SolidColorBrush x:Key="ToggleButtonBackgroundPointerOver" Color="#E4E7EC" />
+          <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#E4E8EE" />
+          <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#DADFE7" />
+          <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#C9D0DA" />
+          <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#C9D0DA" />
+          <SolidColorBrush x:Key="ToggleButtonBackground" Color="#EEF1F5" />
+          <SolidColorBrush x:Key="ToggleButtonBorderBrush" Color="#DCE1E8" />
+          <SolidColorBrush x:Key="ToggleButtonBackgroundPointerOver" Color="#E4E8EE" />
+          <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="ExpanderHeaderBackgroundPointerOver" Color="#EEF1F5" />
+          <SolidColorBrush x:Key="ExpanderHeaderBackgroundPressed" Color="#EEF1F5" />
+          <SolidColorBrush x:Key="ExpanderHeaderBorderBrush" Color="#DCE1E8" />
+          <SolidColorBrush x:Key="ExpanderHeaderBorderBrushPointerOver" Color="#DCE1E8" />
+          <SolidColorBrush x:Key="ExpanderHeaderBorderBrushPressed" Color="#DCE1E8" />
+          <SolidColorBrush x:Key="ExpanderContentBackground" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="ExpanderContentBorderBrush" Color="#DCE1E8" />
+          <SolidColorBrush x:Key="FlyoutPresenterBackground" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="FlyoutBorderThemeBrush" Color="#DCE1E8" />
         </ResourceDictionary>
+
       </ResourceDictionary.ThemeDictionaries>
       <Color x:Key="SystemAccentColor">#1B74C9</Color>
       <Thickness x:Key="TextControlBorderThemeThicknessFocused">1</Thickness>
       <SolidColorBrush x:Key="Accent" Color="#1B74C9" />
-      <SolidColorBrush x:Key="AccentHover" Color="#2E86DA" />
+      <SolidColorBrush x:Key="AccentHover" Color="#1765B0" />
+      <SolidColorBrush x:Key="OnAccent" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="DangerFill" Color="#C9302C" />
+      <SolidColorBrush x:Key="DangerFillHover" Color="#B42A26" />
       <FontFamily x:Key="Mono">Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace</FontFamily>
 
       <!-- Fluent UI System Icons (MIT, Microsoft), Regular 20x20; corner dots keep every icon on the same 20x20 grid -->
@@ -144,7 +178,7 @@
       <Setter Property="FontSize" Value="16" />
       <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
-    <Style Selector="TextBlock.title">
+    <Style Selector="TextBlock.title, SelectableTextBlock.title">
       <Setter Property="FontSize" Value="16" />
       <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
@@ -157,7 +191,7 @@
     <Style Selector="TextBlock.muted, SelectableTextBlock.muted">
       <Setter Property="Foreground" Value="{DynamicResource Muted}" />
     </Style>
-    <Style Selector="TextBlock.small">
+    <Style Selector="TextBlock.small, SelectableTextBlock.small">
       <Setter Property="FontSize" Value="12" />
     </Style>
     <Style Selector="TextBlock.mono, SelectableTextBlock.mono">
@@ -174,6 +208,10 @@
       <Setter Property="Padding" Value="10,6" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
       <Setter Property="FontSize" Value="13" />
+    </Style>
+    <!-- Fluent draws the placeholder at half opacity, which takes it below AA; the token is already muted. -->
+    <Style Selector="TextBox /template/ TextBlock#PART_Placeholder">
+      <Setter Property="Opacity" Value="1" />
     </Style>
     <Style Selector="ComboBox">
       <Setter Property="CornerRadius" Value="6" />
@@ -205,19 +243,24 @@
     <Style Selector="Button.primary">
       <Setter Property="Background" Value="{StaticResource Accent}" />
       <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
-      <Setter Property="Foreground" Value="White" />
+      <Setter Property="Foreground" Value="{StaticResource OnAccent}" />
     </Style>
     <Style Selector="Button.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{StaticResource AccentHover}" />
-      <Setter Property="Foreground" Value="White" />
+      <Setter Property="Foreground" Value="{StaticResource OnAccent}" />
     </Style>
     <Style Selector="Button.danger">
       <Setter Property="Foreground" Value="{DynamicResource Bad}" />
     </Style>
     <Style Selector="Button.dangerfill">
-      <Setter Property="Background" Value="{DynamicResource Bad}" />
-      <Setter Property="BorderBrush" Value="{DynamicResource Bad}" />
-      <Setter Property="Foreground" Value="White" />
+      <Setter Property="Background" Value="{StaticResource DangerFill}" />
+      <Setter Property="BorderBrush" Value="{StaticResource DangerFill}" />
+      <Setter Property="Foreground" Value="{StaticResource OnAccent}" />
+    </Style>
+    <Style Selector="Button.dangerfill:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource DangerFillHover}" />
+      <Setter Property="BorderBrush" Value="{StaticResource DangerFillHover}" />
+      <Setter Property="Foreground" Value="{StaticResource OnAccent}" />
     </Style>
     <Style Selector="Button.link">
       <Setter Property="Background" Value="Transparent" />
@@ -242,11 +285,11 @@
     </Style>
     <Style Selector="Button.segment.selected">
       <Setter Property="Background" Value="{StaticResource Accent}" />
-      <Setter Property="Foreground" Value="White" />
+      <Setter Property="Foreground" Value="{StaticResource OnAccent}" />
     </Style>
     <Style Selector="Button.segment.selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{StaticResource AccentHover}" />
-      <Setter Property="Foreground" Value="White" />
+      <Setter Property="Foreground" Value="{StaticResource OnAccent}" />
     </Style>
 
     <Style Selector="Border.pill">
@@ -284,6 +327,9 @@
       <Setter Property="Fill" Value="{DynamicResource Ok}" />
     </Style>
 
+    <Style Selector="PathIcon.running">
+      <Setter Property="Foreground" Value="{DynamicResource Brand}" />
+    </Style>
     <Style Selector="PathIcon">
       <Setter Property="Width" Value="14" />
       <Setter Property="Height" Value="14" />
@@ -323,6 +369,12 @@
     <Style Selector="ListBox.rows ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource Selected}" />
     </Style>
+    <Style Selector="ListBox.rows ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Hover}" />
+    </Style>
+    <Style Selector="ListBox.rows ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Selected}" />
+    </Style>
     <Style Selector="ListBox.rows ListBoxItem.header">
       <Setter Property="Padding" Value="10,12,10,2" />
     </Style>
@@ -331,11 +383,20 @@
       <Setter Property="CornerRadius" Value="6" />
       <Setter Property="Margin" Value="8,1" />
     </Style>
+    <Style Selector="ListBox.sidebar ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Hover}" />
+    </Style>
+    <Style Selector="ListBox.sidebar ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Selected}" />
+      <Setter Property="Foreground" Value="{DynamicResource SelectedText}" />
+    </Style>
     <Style Selector="ListBox.sidebar ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource Selected}" />
+      <Setter Property="Foreground" Value="{DynamicResource SelectedText}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
     <Style Selector="ListBox.log ListBoxItem">
-      <Setter Property="Padding" Value="10,0" />
+      <Setter Property="Padding" Value="12,0" />
       <Setter Property="MinHeight" Value="0" />
     </Style>
     <Style Selector="ListBox.log ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">

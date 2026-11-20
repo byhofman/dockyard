@@ -10,7 +10,7 @@ sealed class Sparkline : Control
         AvaloniaProperty.Register<Sparkline, double[]?>(nameof(Values));
 
     public static readonly StyledProperty<IBrush?> StrokeProperty =
-        AvaloniaProperty.Register<Sparkline, IBrush?>(nameof(Stroke), Brushes.DodgerBlue);
+        AvaloniaProperty.Register<Sparkline, IBrush?>(nameof(Stroke));
 
     public static readonly StyledProperty<double> MaximumProperty =
         AvaloniaProperty.Register<Sparkline, double>(nameof(Maximum));

@@ -6,7 +6,7 @@
              x:DataType="cont:ComposeDetailViewModel">
   <Grid x:Name="Layout" RowDefinitions="*,5,260">
     <ScrollViewer>
-    <StackPanel Margin="18,14,14,8" Spacing="8">
+    <StackPanel Margin="16,14,16,8" Spacing="8">
       <Grid ColumnDefinitions="Auto,*,Auto">
         <PathIcon Data="{StaticResource IconCompose}" Width="18" Height="18" Margin="0,0,10,0" />
         <TextBlock Grid.Column="1" Classes="title" Text="{Binding Project.Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
