@@ -2,6 +2,10 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-21: No dotted or dashed dividers
+
+The owner's rule for every byhofman app (2026-11-20): "Dotted divider remove that applies to all apps!" Rows and sections are separated by spacing and grouping; where a line is needed it is a solid hairline in the surface tone. A sweep of the dashboard, the wizard, the tray window and the install scripts found no dotted or dashed line of any kind, so nothing changed on screen.
+
 ## 2026-11-19: The logo's colours carry the accent and the selection, and the wizard follows the system theme
 
 DOK-27, the November restyle round (owner: "polish, the same as Vaultbar got"). This supersedes 2026-11-15's "the logo's blue as the accent, nothing more". The accent stays the deep end of the logo container's gradient (`#1B74C9`). The logo now also shows in four more places. The light stop (`#5DB7FF`) is the dark theme's links and brand icons. The crane's colour, `#8CCAF7` on the dark icon and `#1B5E9E` on the light one, is the selected sidebar item's text and icon. A running compose project's icon is the brand blue. The tray's running icon is `#2E86DA`, a blue on the container's gradient, in place of Docker's `#2496ED`. Selection is a brand-tinted wash with weight, never an outline. The wizard's active engine card loses its accent border for the same wash.
