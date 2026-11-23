@@ -10,4 +10,7 @@ interface IFileSource : IAsyncDisposable
     Task<FileContent> ReadAsync(string path, int maxBytes, CancellationToken ct);
     Task SaveToAsync(string path, Stream destination, CancellationToken ct);
     Task WriteAsync(string directory, string name, Stream content, FileEntry? like, CancellationToken ct);
+
+    // Drops what was read, so the next listing asks the engine again.
+    void Forget() { }
 }

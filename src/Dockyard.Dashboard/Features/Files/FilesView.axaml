@@ -3,43 +3,129 @@
              xmlns:files="using:Dockyard.Dashboard.Features.Files"
              x:Class="Dockyard.Dashboard.Features.Files.FilesView"
              x:DataType="files:FileBrowserViewModel">
-  <Grid RowDefinitions="Auto,Auto,*,Auto,2*">
-    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="10,8,14,6">
-      <Button Command="{Binding UpCommand}" Content="Up" ToolTip.Tip="The folder above" />
-      <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Directory}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="8,0" />
-      <ProgressBar Grid.Column="2" IsIndeterminate="True" IsVisible="{Binding Busy}" Width="50" MinWidth="50" VerticalAlignment="Center" Margin="0,0,8,0" />
-      <Button Grid.Column="3" Content="Upload…" Click="UploadClicked" Margin="0,0,6,0" IsVisible="{Binding CanWrite}" ToolTip.Tip="Copy a file from this computer into this folder" />
-      <Button Grid.Column="4" Content="Download…" Click="DownloadClicked" IsEnabled="{Binding CanDownload}" ToolTip.Tip="Copy the selected file to this computer" />
+  <UserControl.Styles>
+    <Style Selector="Button.crumb">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="4,2" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+    </Style>
+    <Style Selector="Button.crumb.last">
+      <Setter Property="Foreground" Value="{DynamicResource Text}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="PathIcon.folder">
+      <Setter Property="Foreground" Value="{DynamicResource Brand}" />
+    </Style>
+    <Style Selector="ListBox.files ListBoxItem">
+      <Setter Property="Padding" Value="8,4" />
+      <Setter Property="Margin" Value="4,0" />
+    </Style>
+  </UserControl.Styles>
+
+  <Grid x:Name="Root" RowDefinitions="Auto,Auto,Auto,*,Auto,Auto">
+    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="8,8,10,4">
+      <Button Classes="iconbtn" Command="{Binding UpCommand}" ToolTip.Tip="The folder above (Backspace)">
+        <PathIcon Data="{StaticResource IconUp}" Width="14" Height="14" />
+      </Button>
+      <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" Margin="2,0" x:Name="CrumbScroll">
+        <ItemsControl ItemsSource="{Binding Crumbs}" VerticalAlignment="Center">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Orientation="Horizontal" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="files:Crumb">
+              <StackPanel Orientation="Horizontal">
+                <Button Classes="crumb mono" Classes.last="{Binding IsLast}" Content="{Binding Name}"
+                        Command="{Binding $parent[UserControl].((files:FileBrowserViewModel)DataContext).GoCommand}" CommandParameter="{Binding}" />
+                <PathIcon Data="{StaticResource IconChevronRight}" Width="9" Height="9" Foreground="{DynamicResource Muted}" IsVisible="{Binding !IsLast}" />
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+      <Button Grid.Column="2" Classes="iconbtn" Command="{Binding RefreshCommand}" ToolTip.Tip="Read this folder again">
+        <PathIcon Data="{StaticResource IconRefresh}" Width="14" Height="14" />
+      </Button>
+      <Button Grid.Column="3" Classes="iconbtn" Click="UploadClicked" IsVisible="{Binding CanWrite}" ToolTip.Tip="Copy a file from this computer into this folder">
+        <PathIcon Data="{StaticResource IconUpload}" Width="14" Height="14" />
+      </Button>
+      <Button Grid.Column="4" Classes="iconbtn" Click="DownloadClicked" IsEnabled="{Binding CanDownload}" ToolTip.Tip="Save the selected file on this computer">
+        <PathIcon Data="{StaticResource IconPull}" Width="14" Height="14" />
+      </Button>
     </Grid>
-    <StackPanel Grid.Row="1" Margin="10,0,14,6" Spacing="4">
-      <TextBlock Classes="muted small" Text="{Binding Status}" IsVisible="{Binding HasStatus}" TextWrapping="Wrap" />
-      <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsReadOnly}">
-        <TextBlock Classes="muted small" Text="Read-only" VerticalAlignment="Center" />
-        <Button Grid.Column="1" Content="Allow changes" Command="{Binding AllowChangesCommand}" IsVisible="{Binding CanAllowChanges}"
+
+    <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="12,0,12,6">
+      <TextBox Classes="small" PlaceholderText="Filter this folder" Text="{Binding Filter}" MinHeight="28" Padding="8,4">
+        <TextBox.InnerLeftContent>
+          <PathIcon Data="{StaticResource IconSearch}" Width="12" Height="12" Margin="8,0,0,0" Foreground="{DynamicResource Muted}" />
+        </TextBox.InnerLeftContent>
+      </TextBox>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="8,0,0,0" IsVisible="{Binding IsReadOnly}" VerticalAlignment="Center">
+        <Border Classes="pill"><TextBlock Text="Read-only" /></Border>
+        <Button Classes="link" Content="Allow changes" Command="{Binding AllowChangesCommand}" IsVisible="{Binding CanAllowChanges}"
                 ToolTip.Tip="Open these files again so they can be edited and uploaded to" />
-      </Grid>
-    </StackPanel>
-    <ListBox Grid.Row="2" Classes="rows" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" MinHeight="90">
-      <ListBox.ItemTemplate>
-        <DataTemplate DataType="files:FileRow">
-          <Grid ColumnDefinitions="*,70,Auto">
-            <StackPanel Orientation="Horizontal" Spacing="6">
-              <TextBlock Classes="mono muted" Text="/" IsVisible="{Binding IsDirectory}" VerticalAlignment="Center" />
-              <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-            </StackPanel>
-            <TextBlock Grid.Column="1" Classes="muted small" Text="{Binding SizeText}" TextAlignment="Right" VerticalAlignment="Center" />
-            <TextBlock Grid.Column="2" Classes="muted small" Text="{Binding Detail}" Margin="10,0,0,0" VerticalAlignment="Center" />
-          </Grid>
-        </DataTemplate>
-      </ListBox.ItemTemplate>
-    </ListBox>
-    <Grid Grid.Row="3" ColumnDefinitions="*,Auto" Margin="10,6,14,4" IsVisible="{Binding HasOpenFile}">
-      <TextBlock Classes="mono" Text="{Binding OpenName}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-      <Button Grid.Column="1" Classes="primary" Content="Save" Command="{Binding SaveCommand}" IsVisible="{Binding CanSave}" />
+      </StackPanel>
     </Grid>
-    <Panel Grid.Row="4" Margin="10,0,14,10" IsVisible="{Binding HasOpenFile}">
-      <TextBox Classes="mono" AcceptsReturn="True" TextWrapping="NoWrap" VerticalContentAlignment="Top" Text="{Binding Text}" IsVisible="{Binding HasText}" IsReadOnly="{Binding IsReadOnly}" />
-      <TextBlock Classes="muted" Text="{Binding Note}" IsVisible="{Binding HasNote}" TextWrapping="Wrap" />
+
+    <Grid Grid.Row="2" ColumnDefinitions="*,70,90" Margin="20,0,22,2">
+      <TextBlock Classes="muted small" Text="Name" />
+      <TextBlock Grid.Column="1" Classes="muted small" Text="Size" TextAlignment="Right" />
+      <TextBlock Grid.Column="2" Classes="muted small" Text="Modified" TextAlignment="Right" />
+    </Grid>
+
+    <Panel Grid.Row="3">
+      <ListBox x:Name="List" Classes="rows files" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" MinHeight="90">
+        <ListBox.ItemTemplate>
+          <DataTemplate DataType="files:FileRow">
+            <Grid ColumnDefinitions="Auto,*,70,90" ToolTip.Tip="{Binding ModifiedTip}">
+              <Panel Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center">
+                <PathIcon Classes="folder" Data="{StaticResource IconFolder}" Width="16" Height="16" IsVisible="{Binding IsDirectory}" />
+                <PathIcon Data="{StaticResource IconFile}" Width="16" Height="16" Foreground="{DynamicResource Muted}" IsVisible="{Binding IsFile}" />
+              </Panel>
+              <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Classes="muted small mono" Text="{Binding LinkText}" TextTrimming="CharacterEllipsis" IsVisible="{Binding IsLink}" />
+              </StackPanel>
+              <TextBlock Grid.Column="2" Classes="muted small" Text="{Binding SizeText}" TextAlignment="Right" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="3" Classes="muted small" Text="{Binding ModifiedText}" TextAlignment="Right" VerticalAlignment="Center" />
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+      <ProgressBar IsIndeterminate="True" IsVisible="{Binding Busy}" VerticalAlignment="Top" Margin="12,0" MinHeight="2" Height="2" />
+      <StackPanel IsVisible="{Binding IsFirstLoad}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" Margin="16">
+        <TextBlock Classes="muted" Text="{Binding Status, FallbackValue='Reading…', TargetNullValue='Reading…'}" TextWrapping="Wrap" TextAlignment="Center" />
+      </StackPanel>
+      <TextBlock Classes="muted" Text="{Binding EmptyText}" IsVisible="{Binding IsEmptyFolder}" HorizontalAlignment="Center" VerticalAlignment="Center" />
     </Panel>
+
+    <GridSplitter x:Name="Splitter" Grid.Row="4" ResizeDirection="Rows" Height="5" Background="Transparent" IsVisible="{Binding HasOpenFile}" />
+
+    <Border x:Name="Preview" Grid.Row="5" IsVisible="{Binding HasOpenFile}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Height="260">
+      <DockPanel Margin="12,8,10,10">
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="0,0,0,6">
+          <PathIcon Data="{StaticResource IconFile}" Width="14" Height="14" Foreground="{DynamicResource Muted}" Margin="0,0,8,0" />
+          <StackPanel Grid.Column="1" VerticalAlignment="Center">
+            <TextBlock Classes="mono" FontWeight="SemiBold" Text="{Binding OpenName}" TextTrimming="CharacterEllipsis" />
+            <TextBlock Classes="muted small" Text="{Binding OpenDetail}" />
+          </StackPanel>
+          <Button Grid.Column="2" Classes="primary" Content="Save" Command="{Binding SaveCommand}" IsVisible="{Binding CanSave}" Margin="0,0,4,0" />
+          <Button Grid.Column="3" Classes="iconbtn" Click="DownloadClicked" ToolTip.Tip="Save this file on this computer">
+            <PathIcon Data="{StaticResource IconPull}" Width="14" Height="14" />
+          </Button>
+          <Button Grid.Column="4" Classes="iconbtn" Command="{Binding CloseFileCommand}" ToolTip.Tip="Close the file">
+            <PathIcon Data="{StaticResource IconClose}" Width="12" Height="12" />
+          </Button>
+        </Grid>
+        <Panel>
+          <TextBox Classes="mono" AcceptsReturn="True" TextWrapping="NoWrap" VerticalContentAlignment="Top" Text="{Binding Text}" IsVisible="{Binding HasText}" IsReadOnly="{Binding IsReadOnly}" />
+          <TextBlock Classes="muted" Text="{Binding Note}" IsVisible="{Binding HasNote}" TextWrapping="Wrap" />
+        </Panel>
+      </DockPanel>
+    </Border>
   </Grid>
 </UserControl>
