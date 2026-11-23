@@ -16,7 +16,8 @@ AppDomain.CurrentDomain.ProcessExit += (_, _) => cts.Cancel();
 var vmHost = options.Mode is AgentMode.Vm or AgentMode.TcpTest
     ? WslHost.DefaultGateway(File.ReadAllText("/proc/net/route")) ?? throw new InvalidOperationException("the VM has no gateway to the Mac yet")
     : null;
-await NetworkRules.Apply(Agent.Exit, log, vmHost, linuxHost: options.Mode == AgentMode.Host);
+await NetworkRules.Apply(Agent.Exit, log, vmHost, linuxHost: options.Mode == AgentMode.Host,
+    mirroredWsl: options.Mode == AgentMode.Wsl && Directory.Exists("/sys/class/net/loopback0"));
 
 var table = new DomainTable(() => new DockerClient(DockerEndpoint.Parse("unix:///var/run/docker.sock")), "/var/lib/docker/dockyard/domain-ports.json", log);
 var proxy = new DomainProxy(table, log);

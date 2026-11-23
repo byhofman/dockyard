@@ -9,6 +9,14 @@ The owner found the wizard and the tray window slow to open. Measured on the own
 - **`PublishReadyToRun`:** 0.75 to 1.1 s to the window (1.8 s the first time, while Defender scans the new file). The Windows exe grows from 42 to 69 MB, next to the 125 MB engine image the wizard downloads anyway. Private memory with the window open is unchanged (46 → 43 MB).
 - **Rejected, native AOT as for the dashboard:** Avalonia's Skia, HarfBuzz and ANGLE libraries then sit next to the exe, and the one-liners download the wizard as one file.
 - **Rejected, `EnableCompressionInSingleFile`:** it brings the exe to 34 MB at the same speed, but decompressed assemblies cannot be mapped from the file: +21 MB private memory, past the tray's 60 MB budget.
+## 2026-11-23: With mirrored WSL, Windows' loopback is let past Docker's loopback guard
+
+The owner's kind cluster answered nothing on `https://127.0.0.1:<port>` from Windows (`kubectl get nodes` timed out), and neither did any other published port, while a plain listener in the distro did. With mirrored networking, a connection to `127.0.0.1` from Windows reaches the engine's Linux on the interface `loopback0`, not on `lo`. Docker 28 and later drop traffic for ports published on `127.0.0.1` that does not come in on `lo` (a raw-table rule per port), which is every kind API server. Ports published on all addresses are DNATed to the container instead of going to docker-proxy, with `127.0.0.1` as the source, which the bridge drops.
+
+- **dockyard-agent inserts two rules at its start, on mirrored WSL only:** `raw PREROUTING -i loopback0 -d 127.0.0.0/8 -j ACCEPT` and `nat PREROUTING -i loopback0 -d 127.0.0.0/8 -j RETURN`. Such a connection then reaches docker-proxy on `127.0.0.1:<port>`, as one from inside the distro does. Docker appends its per-port raw rules, so the inserted rule stays ahead of them, also for containers started later.
+- **Only `loopback0`:** that interface carries Windows' own loopback and nothing from the LAN, so Docker's guard keeps working on the real interfaces.
+- **NAT networking is unchanged:** there the tray relays ports itself (DOK-8).
+- **Checked on the owner's laptop** (WSL 2.7.14, Docker 29.9.2) by adding the two rules by hand: `127.0.0.1` ports, all-address ports and the kind cluster all answered from Windows, and `kubectl get nodes` listed the node.
 
 ## 2026-11-21: No dotted or dashed dividers
 

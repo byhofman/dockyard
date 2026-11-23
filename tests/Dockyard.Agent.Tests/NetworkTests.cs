@@ -259,6 +259,29 @@ public sealed class NetworkTests
     }
 
     [Fact]
+    public async Task On_mirrored_wsl_windows_loopback_reaches_published_ports_and_only_there()
+    {
+        List<string> added = [];
+        Task<int> Run(string file, string[] args)
+        {
+            var command = string.Join(' ', args);
+            if (command.Contains("-C ")) return Task.FromResult(1);
+            if (command.Contains("-I ")) added.Add(command);
+            return Task.FromResult(0);
+        }
+
+        await NetworkRules.Apply(Run, _ => { });
+        Assert.DoesNotContain(added, c => c.Contains("loopback0"));
+
+        await NetworkRules.Apply(Run, _ => { }, mirroredWsl: true);
+        Assert.Equal(
+        [
+            "-w -t raw -I PREROUTING -i loopback0 -d 127.0.0.0/8 -j ACCEPT",
+            "-w -t nat -I PREROUTING -i loopback0 -d 127.0.0.0/8 -j RETURN",
+        ], added.Where(c => c.Contains("loopback0")));
+    }
+
+    [Fact]
     public void On_a_linux_host_containers_reach_dns_without_holding_port_53()
     {
         var commands = NetworkRules.HostCommands().Select(c => string.Join(' ', c)).ToList();
