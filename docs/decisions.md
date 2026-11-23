@@ -12,6 +12,14 @@ Owner feedback round (2026-11-23): no multi-select or bulk actions; deleting fro
 - **Switching engines** asks first and says whether the other engine stops (the tray's own setting, read from its file). Then it shows progress until the dashboard is connected to the new engine. The tray reports a failure back on the dashboard's pipe (`switch-failed <engine> <reason>`), and after 5 minutes the dialog gives up and points at Engines and settings.
 - **kind clusters** can be created with 0 to 3 worker nodes, through a kind config.
 - **Rows have readable names** for UI Automation and screen readers (they read as the record's `ToString` before).
+## 2026-11-23: With mirrored WSL, Windows' loopback is let past Docker's loopback guard
+
+The owner's kind cluster answered nothing on `https://127.0.0.1:<port>` from Windows (`kubectl get nodes` timed out), and neither did any other published port, while a plain listener in the distro did. With mirrored networking, a connection to `127.0.0.1` from Windows reaches the engine's Linux on the interface `loopback0`, not on `lo`. Docker 28 and later drop traffic for ports published on `127.0.0.1` that does not come in on `lo` (a raw-table rule per port), which is every kind API server. Ports published on all addresses are DNATed to the container instead of going to docker-proxy, with `127.0.0.1` as the source, which the bridge drops.
+
+- **dockyard-agent inserts two rules at its start, on mirrored WSL only:** `raw PREROUTING -i loopback0 -d 127.0.0.0/8 -j ACCEPT` and `nat PREROUTING -i loopback0 -d 127.0.0.0/8 -j RETURN`. Such a connection then reaches docker-proxy on `127.0.0.1:<port>`, as one from inside the distro does. Docker appends its per-port raw rules, so the inserted rule stays ahead of them, also for containers started later.
+- **Only `loopback0`:** that interface carries Windows' own loopback and nothing from the LAN, so Docker's guard keeps working on the real interfaces.
+- **NAT networking is unchanged:** there the tray relays ports itself (DOK-8).
+- **Checked on the owner's laptop** (WSL 2.7.14, Docker 29.9.2) by adding the two rules by hand: `127.0.0.1` ports, all-address ports and the kind cluster all answered from Windows, and `kubectl get nodes` listed the node.
 
 ## 2026-11-21: No dotted or dashed dividers
 
