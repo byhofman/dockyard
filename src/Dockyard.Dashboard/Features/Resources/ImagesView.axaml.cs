@@ -10,6 +10,7 @@ public partial class ImagesView : UserControl
         InitializeComponent();
         var layout = new PanelLayout(Layout, Splitter, Panel, "images.detail", 380, minimum: 300);
         layout.Apply(false);
+        ListKeys.RemoveOnDelete(List, () => (DataContext as ImagesViewModel)?.RemoveCommand);
         DataContextChanged += (_, _) =>
         {
             if (DataContext is ImagesViewModel vm) layout.Watch(vm, () => vm.HasSelection, nameof(ImagesViewModel.HasSelection));

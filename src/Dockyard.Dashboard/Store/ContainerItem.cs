@@ -22,6 +22,7 @@ sealed class ContainerItem(string id) : Observable
     public IReadOnlyList<string> VolumeNames { get; private set; } = [];
     public string ShortId => Id[..Math.Min(12, Id.Length)];
     public string Name { get => name; private set => Set(ref name, value); }
+    public override string ToString() => Name;
     public string Image { get => image; private set => Set(ref image, value); }
     public string Status { get => status; private set => Set(ref status, value); }
     public string Project { get => project; private set => Set(ref project, value); }

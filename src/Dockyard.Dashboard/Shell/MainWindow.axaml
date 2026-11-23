@@ -121,5 +121,52 @@
         </DataTemplate>
       </ItemsControl.ItemTemplate>
     </ItemsControl>
+
+    <Panel x:Name="DialogLayer" IsVisible="{Binding HasDialog}">
+      <Border Background="{DynamicResource Scrim}" Opacity="0.55" />
+      <Border Classes="dialog" DataContext="{Binding Dialog}" x:DataType="shell:Dialog"
+              HorizontalAlignment="Center" VerticalAlignment="Center" Width="460" Margin="16"
+              Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="10" Padding="20,18">
+        <StackPanel Spacing="12">
+          <TextBlock Classes="title" Text="{Binding Title}" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding Message}" TextWrapping="Wrap" IsVisible="{Binding HasMessage}" />
+          <ItemsControl ItemsSource="{Binding Fields}" IsEnabled="{Binding IsIdle}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Spacing="10" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="shell:DialogField">
+                <StackPanel Spacing="4">
+                  <TextBlock Classes="muted small" Text="{Binding Label}" />
+                  <TextBox Classes="dialogfield" Text="{Binding Text}" PlaceholderText="{Binding Placeholder}" IsVisible="{Binding IsText}"
+                           AutomationProperties.Name="{Binding Label}" />
+                  <ComboBox HorizontalAlignment="Stretch" ItemsSource="{Binding Choices}" SelectedItem="{Binding Choice}" IsVisible="{Binding IsChoice}"
+                            AutomationProperties.Name="{Binding Label}" />
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <CheckBox Content="{Binding OptionText}" IsChecked="{Binding Option}" IsVisible="{Binding HasOption}" IsEnabled="{Binding IsIdle}" />
+          <StackPanel Spacing="6" IsVisible="{Binding HasProgress}">
+            <ProgressBar IsIndeterminate="{Binding IsIndeterminate}" Value="{Binding Percent}" Maximum="100" />
+            <TextBlock Classes="muted small" Text="{Binding Progress}" TextWrapping="Wrap" />
+          </StackPanel>
+          <Border Background="{DynamicResource BadBg}" CornerRadius="6" Padding="10,8" IsVisible="{Binding HasError}">
+            <ScrollViewer MaxHeight="160">
+              <SelectableTextBlock Text="{Binding Error}" TextWrapping="Wrap" />
+            </ScrollViewer>
+          </Border>
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,4,0,0">
+            <Button Content="Hide" Command="{Binding HideCommand}" IsVisible="{Binding IsWorking}"
+                    ToolTip.Tip="Close this; it goes on, and says how it ended" />
+            <Button Content="Cancel" Command="{Binding CancelCommand}" IsVisible="{Binding IsIdle}" IsCancel="True" />
+            <Button Classes="primary" Content="{Binding ConfirmText}" Command="{Binding ConfirmCommand}" IsDefault="True" IsVisible="{Binding IsPrimary}" />
+            <Button Classes="dangerfill" Content="{Binding ConfirmText}" Command="{Binding ConfirmCommand}" IsVisible="{Binding IsDanger}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </Panel>
   </Panel>
 </Window>

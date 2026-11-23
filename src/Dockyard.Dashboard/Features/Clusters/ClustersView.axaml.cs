@@ -11,6 +11,7 @@ public partial class ClustersView : UserControl
         InitializeComponent();
         var layout = new PanelLayout(Layout, Splitter, Panel, "clusters.detail", 380, minimum: 300);
         layout.Apply(false);
+        ListKeys.RemoveOnDelete(List, () => (DataContext as ClustersViewModel)?.DeleteCommand);
         DataContextChanged += (_, _) =>
         {
             if (DataContext is not ClustersViewModel vm) return;

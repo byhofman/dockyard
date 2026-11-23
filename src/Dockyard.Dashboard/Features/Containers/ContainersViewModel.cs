@@ -1,4 +1,5 @@
 using PublishedPort = Dockyard.Dashboard.Store.PublishedPort;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using Dockyard.Dashboard.Features.Resources;
@@ -16,6 +17,9 @@ sealed class ContainersViewModel : Observable, ISearchable
     object? selectedRow;
     IDisposable? detail;
     bool rebuilding;
+    bool syncing;
+    HashSet<string> pickedKeys = [];
+    string? busy;
 
     public ContainersViewModel(ShellViewModel shell, EngineSession session)
     {
@@ -25,22 +29,27 @@ sealed class ContainersViewModel : Observable, ISearchable
 
         ToggleCommand = new Command<ContainerItem>(i => Act(i, c => i.IsRunning ? c.StopContainerAsync(i.Id) : c.StartContainerAsync(i.Id)));
         RestartCommand = new Command<ContainerItem>(i => Act(i, c => c.RestartContainerAsync(i.Id)));
-        RemoveCommand = new Command<ContainerItem>(i => Act(i, c => c.RemoveContainerAsync(i.Id, force: i.IsRunning)));
-        AskRemoveCommand = new Command<ContainerItem>(i =>
-        {
-            SelectedRow = i;
-            if (Detail is ContainerDetailViewModel d) d.ConfirmRemove = true;
-            return Task.CompletedTask;
-        });
+        AskRemoveCommand = new Command<ContainerItem>(i => { AskRemove([i]); return Task.CompletedTask; });
         ExecCommand = new Command<ContainerItem>(Exec);
         OpenPortCommand = new Command<PublishedPort>(OpenPort);
         ToggleProjectCommand = new Command<ProjectRow>(p => { Store.ToggleProject(p.Name); return Task.CompletedTask; });
         ProjectStartStopCommand = new Command<ProjectRow>(p => WithProject(p, d => d.StartOrStop()));
         ProjectRestartCommand = new Command<ProjectRow>(p => WithProject(p, d => d.RestartCommand.CanExecute(null) ? Run(d.RestartCommand) : Task.CompletedTask));
-        ProjectDownCommand = new Command<ProjectRow>(p => WithProject(p, d => { d.AskDown(); return Task.CompletedTask; }));
+        ProjectDownCommand = new Command<ProjectRow>(p => { AskDown(p.Project); return Task.CompletedTask; });
 
+        StartPickedCommand = new Command(() => Bulk("Starting", PickedContainers.Where(c => !c.IsRunning).ToList(), (c, i) => c.StartContainerAsync(i.Id)), () => PickedContainers.Any(c => !c.IsRunning));
+        StopPickedCommand = new Command(() => Bulk("Stopping", PickedContainers.Where(c => c.IsRunning).ToList(), (c, i) => c.StopContainerAsync(i.Id)), () => PickedContainers.Any(c => c.IsRunning));
+        RestartPickedCommand = new Command(() => Bulk("Restarting", PickedContainers, (c, i) => c.RestartContainerAsync(i.Id)), () => PickedContainers.Count > 0);
+        RemovePickedCommand = new Command(() => { AskRemove(PickedContainers); return Task.CompletedTask; }, () => PickedContainers.Count > 0);
+        ClearSelectionCommand = new Command(() => { SelectedRow = null; return Task.CompletedTask; });
+
+        SelectedItems.CollectionChanged += (_, _) => { if (!rebuilding && !syncing) OnPicked(); };
         Store.SetRecents(settings.RecentCompose);
-        Store.RowsChanging += () => rebuilding = true;
+        Store.RowsChanging += () =>
+        {
+            rebuilding = true;
+            pickedKeys = SelectedItems.Select(RowKey).ToHashSet();
+        };
         Store.RowsChanged += () =>
         {
             rebuilding = false;
@@ -58,7 +67,6 @@ sealed class ContainersViewModel : Observable, ISearchable
 
     public Command<ContainerItem> ToggleCommand { get; }
     public Command<ContainerItem> RestartCommand { get; }
-    public Command<ContainerItem> RemoveCommand { get; }
     public Command<ContainerItem> AskRemoveCommand { get; }
     public Command<ContainerItem> ExecCommand { get; }
     public Command<PublishedPort> OpenPortCommand { get; }
@@ -66,14 +74,52 @@ sealed class ContainersViewModel : Observable, ISearchable
     public Command<ProjectRow> ProjectStartStopCommand { get; }
     public Command<ProjectRow> ProjectRestartCommand { get; }
     public Command<ProjectRow> ProjectDownCommand { get; }
+    public Command StartPickedCommand { get; }
+    public Command StopPickedCommand { get; }
+    public Command RestartPickedCommand { get; }
+    public Command RemovePickedCommand { get; }
+    public Command ClearSelectionCommand { get; }
+
+    public ObservableCollection<object> SelectedItems { get; } = [];
+    public int SelectionCount => SelectedItems.Count;
+    public bool HasMany => SelectionCount > 1;
+
+    public string SelectionText
+    {
+        get
+        {
+            var n = PickedContainers.Count;
+            return $"{SelectionCount} selected" + (SelectedItems.Any(r => r is ProjectRow) ? $" ({(n == 1 ? "1 container" : $"{n} containers")})" : "");
+        }
+    }
+
+    public bool? AllSelected
+    {
+        get => SelectionCount == 0 ? false : SelectionCount == Store.Rows.Count ? true : null;
+        set => Pick(value == true ? Store.Rows.ToList() : []);
+    }
+
+    // A picked project stands for all of its containers.
+    public IReadOnlyList<ContainerItem> PickedContainers => SelectedItems
+        .SelectMany(r => r switch
+        {
+            ContainerItem c => [c],
+            ProjectRow p => p.Project.Services.SelectMany(s => s.Containers),
+            _ => [],
+        })
+        .DistinctBy(c => c.Id)
+        .ToList();
+
+    public string? Busy { get => busy; private set { if (Set(ref busy, value)) Raise(nameof(IsBusy)); } }
+    public bool IsBusy => busy is not null;
 
     public object? SelectedRow
     {
         get => selectedRow;
         set
         {
-            if (rebuilding || !Set(ref selectedRow, value)) return;
-            ShowDetail(value);
+            if (rebuilding) return;
+            Pick(value is null ? [] : [value]);
         }
     }
 
@@ -122,6 +168,33 @@ sealed class ContainersViewModel : Observable, ISearchable
         sampler.StopAll();
     }
 
+    static string RowKey(object row) => row switch
+    {
+        ContainerItem c => "c:" + c.Id,
+        ProjectRow p => "p:" + p.Name,
+        _ => "",
+    };
+
+    void Pick(IReadOnlyList<object> rows)
+    {
+        syncing = true;
+        try
+        {
+            SelectedItems.Clear();
+            foreach (var row in rows) SelectedItems.Add(row);
+        }
+        finally { syncing = false; }
+        OnPicked();
+    }
+
+    void OnPicked()
+    {
+        selectedRow = SelectedItems.Count == 1 ? SelectedItems[0] : null;
+        Raise(nameof(SelectedRow), nameof(SelectionCount), nameof(HasMany), nameof(SelectionText), nameof(AllSelected));
+        foreach (var c in new[] { StartPickedCommand, StopPickedCommand, RestartPickedCommand, RemovePickedCommand }) c.Refresh();
+        ShowDetail(selectedRow);
+    }
+
     void ShowDetail(object? row)
     {
         switch (row)
@@ -139,28 +212,28 @@ sealed class ContainersViewModel : Observable, ISearchable
         };
     }
 
+    // The store makes new rows on every change: what was picked stays picked, and an open detail stays open while its
+    // container exists, also when the filter hides it.
     void RestoreSelection()
     {
-        object? row = Detail switch
+        var rows = Store.Rows.Where(r => pickedKeys.Contains(RowKey(r))).ToList();
+        syncing = true;
+        try
         {
-            ContainerDetailViewModel d => Store.Get(d.Item.Id),
-            ComposeDetailViewModel cd => Store.FindProject(cd.Project.Name),
-            _ => null,
-        };
-        if (row is ContainerItem item && !Store.Rows.Contains(item)) row = null;
-        if (Detail is ComposeDetailViewModel compose && row is ProjectRow p) compose.Update(p.Project);
-
-        if (row is not null)
-        {
-            selectedRow = row;
-            Raise(nameof(SelectedRow));
+            SelectedItems.Clear();
+            foreach (var row in rows) SelectedItems.Add(row);
         }
-        else if (Detail is ContainerDetailViewModel d && Store.Get(d.Item.Id) is not null)
+        finally { syncing = false; }
+
+        if (Detail is ComposeDetailViewModel compose && Store.FindProject(compose.Project.Name) is { } p) compose.Update(p.Project);
+        var keepHidden = rows.Count == 0 && Detail is ContainerDetailViewModel d && Store.Get(d.Item.Id) is not null;
+        if (keepHidden)
         {
             selectedRow = null;
-            Raise(nameof(SelectedRow));
+            Raise(nameof(SelectedRow), nameof(SelectionCount), nameof(HasMany), nameof(SelectionText), nameof(AllSelected));
+            return;
         }
-        else if (Detail is not null) SelectedRow = null;
+        OnPicked();
     }
 
     Task WithProject(ProjectRow row, Func<ComposeDetailViewModel, Task> action)
@@ -193,6 +266,47 @@ sealed class ContainersViewModel : Observable, ISearchable
         if (Session.Client is not { } client) return;
         try { await action(client); }
         catch (Exception ex) { shell.ShowError($"{item.Name}: {ex.Message}"); }
+    }
+
+    // Start, stop and restart need no question; the bar says how far it is, and failures come together in one toast.
+    async Task Bulk(string verb, IReadOnlyList<ContainerItem> items, Func<DockerClient, ContainerItem, Task> action)
+    {
+        if (Session.Client is not { } client || items.Count == 0 || IsBusy) return;
+        var failed = new List<string>();
+        try
+        {
+            for (var i = 0; i < items.Count; i++)
+            {
+                Busy = items.Count == 1 ? $"{verb} {items[i].Name}…" : $"{verb} {i + 1} of {items.Count}: {items[i].Name}…";
+                try { await action(client, items[i]); }
+                catch (Exception ex) { failed.Add($"{items[i].Name}: {ex.Message}"); }
+            }
+        }
+        finally { Busy = null; }
+        if (failed.Count > 0) shell.ShowError(string.Join("\n", failed));
+    }
+
+    public void AskRemove(IReadOnlyList<ContainerItem> items)
+    {
+        if (items.Count == 0) return;
+        var running = items.Count(i => i.IsRunning);
+        var title = items.Count == 1 ? $"Remove {items[0].Name}?" : $"Remove {items.Count} containers?";
+        var message = items.Count == 1
+            ? (items[0].IsRunning ? "It is running and is stopped first. " : "") + "Its own changes to files go with it; volumes stay."
+            : (running > 0 ? $"{(running == 1 ? "1 of them is" : $"{running} of them are")} running and stopped first. " : "") + "Their own changes to files go with them; volumes stay.";
+        shell.Open(new Dialog(title, message, "Remove", d => d.ForEach(items, "Removing", i => i.Name,
+            i => (Session.Client ?? throw new InvalidOperationException("The engine is not connected.")).RemoveContainerAsync(i.Id, force: i.IsRunning)), danger: true));
+    }
+
+    public void AskDown(ComposeProject project) => shell.Open(new Dialog($"Down {project.Name}?",
+        "Stops and removes the project's containers and networks. Volumes and images stay.", "Down", d => ComposeDown(project, d), danger: true));
+
+    async Task ComposeDown(ComposeProject project, Dialog dialog)
+    {
+        var context = Session.ContextName.Length > 0 ? Session.ContextName : "default";
+        dialog.Report($"docker compose down {project.Name}…");
+        var exit = await CliRunner.Run(ComposeCli.Args(context, project, "down"), line => { if (line.Trim().Length > 0) dialog.Report(line.Trim()); });
+        if (exit != 0) throw new InvalidOperationException($"docker compose down failed for {project.Name} (exit code {exit}). {dialog.Progress}");
     }
 
     Task Exec(ContainerItem item)

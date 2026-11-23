@@ -36,13 +36,12 @@
           <StackPanel Classes="label"><PathIcon Data="{StaticResource IconLogs}" /><TextBlock Text="Logs" /></StackPanel>
         </Button>
         <Button Classes="danger" Command="{Binding DownCommand}" ToolTip.Tip="Remove containers and networks; volumes are kept">
-          <StackPanel Classes="label"><PathIcon Data="{StaticResource IconDown}" /><TextBlock Text="Down" /></StackPanel>
+          <StackPanel Classes="label"><PathIcon Data="{StaticResource IconDown}" /><TextBlock Text="Down…" /></StackPanel>
         </Button>
         <Button Classes="link" Content="Forget" Command="{Binding ForgetCommand}" IsVisible="{Binding IsRecentOnly}"
                 ToolTip.Tip="Remove from the recent compose files" />
       </WrapPanel>
       <TextBlock Classes="muted small" Text="{Binding Busy}" IsVisible="{Binding IsBusy}" />
-      <res:ConfirmBar DataContext="{Binding Confirm}" IsVisible="{Binding $parent[UserControl].((cont:ComposeDetailViewModel)DataContext).HasConfirm}" />
 
       <TextBlock Classes="section" Text="SERVICES" Margin="0,6,0,0" />
       <ItemsControl ItemsSource="{Binding Project.Services}">

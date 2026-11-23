@@ -12,7 +12,6 @@ sealed class ComposeDetailViewModel : Observable, IDisposable
     readonly EngineSession session;
     readonly Action<string> showError;
     ComposeProject project;
-    ConfirmRequest? confirm;
     string? busy;
     bool showLogs;
 
@@ -61,9 +60,6 @@ sealed class ComposeDetailViewModel : Observable, IDisposable
     public Command<ComposeService> ServiceStopCommand { get; }
     public Command<ComposeService> ServiceRestartCommand { get; }
 
-    public ConfirmRequest? Confirm { get => confirm; private set { if (Set(ref confirm, value)) Raise(nameof(HasConfirm)); } }
-    public bool HasConfirm => Confirm is not null;
-
     public string? Busy
     {
         get => busy;
@@ -90,10 +86,7 @@ sealed class ComposeDetailViewModel : Observable, IDisposable
 
     public Task StartOrStop() => Project.IsRunning ? Cli("Stopping", "stop") : Project.CanUp ? Up() : Cli("Starting", "start");
 
-    public void AskDown() => Confirm = new ConfirmRequest(
-        $"Stop and remove the containers and networks of {Project.Name}? Volumes are kept.", "Down",
-        new Command(async () => { Confirm = null; await Cli("Removing", "down"); }),
-        new Command(() => { Confirm = null; return Task.CompletedTask; }));
+    public void AskDown() => owner.AskDown(Project);
 
     void RefreshCommands()
     {

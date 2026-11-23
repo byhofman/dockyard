@@ -17,6 +17,7 @@ sealed class MainViewModel : Observable
     readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromSeconds(10) };
     DateTime lastCheck = DateTime.MinValue;
     string? busy;
+    string? lastError;
     string status = "Ready";
     bool isSetupMode;
     bool isInstalled;
@@ -244,6 +245,15 @@ sealed class MainViewModel : Observable
             foreach (var other in EngineCards.Where(e => e.Id != engine)) await host.Stop(other.Id);
     });
 
+    // What the dashboard waits for after asking for a switch: null when it went through.
+    public async Task<string?> SwitchFor(string engine)
+    {
+        if (Busy is { } busy) return $"Dockyard is busy: {busy.ToLowerInvariant()}. Try again when it is done.";
+        lastError = null;
+        await Switch(engine);
+        return lastError;
+    }
+
     public Task StartEngine(string engine) => Run($"Starting {Name(engine)} engine", () => host.Start(engine));
 
     public void Shutdown()
@@ -436,6 +446,7 @@ sealed class MainViewModel : Observable
         {
             Log("✖ " + ex.Message);
             Status = ex.Message;
+            lastError = ex.Message;
         }
         finally
         {
