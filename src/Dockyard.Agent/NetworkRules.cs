@@ -58,7 +58,16 @@ static class NetworkRules
             yield return ["iptables", "-t", "nat", "-I", "PREROUTING", "-i", "eth0", "-s", mac.ToString(), "-p", "tcp", "--dport", from.ToString(), "-j", "REDIRECT", "--to-ports", to.ToString()];
     }
 
-    public static async Task Apply(Func<string, string[], Task<int>> run, Action<string> log, IPAddress? vmHost = null, bool linuxHost = false)
+    // Mirrored WSL: Windows' 127.0.0.1 arrives on loopback0, not lo. Docker drops that in raw for ports published on
+    // 127.0.0.1 and DNATs the others with a loopback source no bridge accepts, so neither reaches the port from Windows
+    // (kind's API server is published on 127.0.0.1). Passed on untouched, docker-proxy answers it as it does for lo.
+    public static IEnumerable<string[]> MirroredWslCommands()
+    {
+        yield return ["iptables", "-t", "raw", "-I", "PREROUTING", "-i", "loopback0", "-d", "127.0.0.0/8", "-j", "ACCEPT"];
+        yield return ["iptables", "-t", "nat", "-I", "PREROUTING", "-i", "loopback0", "-d", "127.0.0.0/8", "-j", "RETURN"];
+    }
+
+    public static async Task Apply(Func<string, string[], Task<int>> run, Action<string> log, IPAddress? vmHost = null, bool linuxHost = false, bool mirroredWsl = false)
     {
         foreach (var address in new[] { GuestAddresses.Dns, GuestAddresses.Host })
             await run("ip", ["addr", "replace", $"{address}/32", "dev", "lo"]);
@@ -71,7 +80,7 @@ static class NetworkRules
             await Iptables("-A", "DOCKYARD-INPUT", "-i", iface, "-j", "ACCEPT");
         await Iptables("-A", "DOCKYARD-INPUT", "-j", "DROP");
 
-        foreach (var command in Commands().Concat(vmHost is not null ? VmCommands(vmHost) : []).Concat(linuxHost ? HostCommands() : []))
+        foreach (var command in Commands().Concat(vmHost is not null ? VmCommands(vmHost) : []).Concat(linuxHost ? HostCommands() : []).Concat(mirroredWsl ? MirroredWslCommands() : []))
         {
             // -C is the same rule as -I at the same place; a restarted agent must not stack copies.
             if (await Iptables([.. command.Skip(1).Select(a => a == "-I" ? "-C" : a)]) == 0) continue;
