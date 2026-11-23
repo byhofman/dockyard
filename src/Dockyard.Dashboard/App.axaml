@@ -9,6 +9,7 @@
       <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Dark">
           <SolidColorBrush x:Key="Bg" Color="#0F1218" />
+          <SolidColorBrush x:Key="Scrim" Color="#05070A" />
           <SolidColorBrush x:Key="Surface" Color="#1C222C" />
           <SolidColorBrush x:Key="SurfaceRaised" Color="#262D3A" />
           <SolidColorBrush x:Key="Hover" Color="#222936" />
@@ -67,6 +68,7 @@
         </ResourceDictionary>
         <ResourceDictionary x:Key="Light">
           <SolidColorBrush x:Key="Bg" Color="#F4F6F9" />
+          <SolidColorBrush x:Key="Scrim" Color="#0B0F14" />
           <SolidColorBrush x:Key="Surface" Color="#FFFFFF" />
           <SolidColorBrush x:Key="SurfaceRaised" Color="#EEF1F5" />
           <SolidColorBrush x:Key="Hover" Color="#E9EDF2" />
@@ -360,6 +362,23 @@
     </Style>
     <Style Selector="Button.iconbtn.danger:pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Foreground" Value="{DynamicResource Bad}" />
+    </Style>
+    <Style Selector="CheckBox.pick">
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Margin" Value="0,0,12,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.selectionbar">
+      <Setter Property="Background" Value="{DynamicResource AccentBg}" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="12,6" />
+    </Style>
+    <Style Selector="Border.selectionbar TextBlock.count">
+      <Setter Property="Foreground" Value="{DynamicResource AccentText}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style Selector="ListBox.rows StackPanel.rowactions">
       <Setter Property="Opacity" Value="0" />

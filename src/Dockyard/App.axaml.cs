@@ -97,8 +97,16 @@ public partial class App : Application
             case TrayCommandKind.Show: OpenDashboardOrWindow(); break;
             case TrayCommandKind.Settings: ShowWindow(); break;
             case TrayCommandKind.Start: _ = vm.StartEngine(command.Engine!); break;
-            case TrayCommandKind.Switch: _ = vm.Switch(command.Engine!); break;
+            case TrayCommandKind.Switch: _ = SwitchAndReport(command.Engine!); break;
         }
+    }
+
+    // The dashboard shows the switch until it is connected to the new engine; a failure only the tray knows.
+    async Task SwitchAndReport(string engine)
+    {
+        var error = await vm.SwitchFor(engine);
+        var line = error is null ? $"switched {engine}" : $"switch-failed {engine} {error.ReplaceLineEndings(" ")}";
+        await Task.Run(() => LocalPipe.TrySend(LocalPipe.DashboardName, line));
     }
 
     void CreateTray()

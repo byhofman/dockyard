@@ -10,4 +10,5 @@ sealed record VolumeRow(string Name, string Driver, string Mountpoint, long? Siz
     public bool InUse => UsedBy.Count > 0;
     public bool CanRemove => !InUse;
     public string UsageText => UsedBy.Count == 0 ? "unused" : string.Join(", ", UsedBy);
+    public override string ToString() => DisplayName;
 }

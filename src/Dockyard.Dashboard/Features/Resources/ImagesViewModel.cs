@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using Dockyard.Dashboard.Features.Containers;
 using Dockyard.Dashboard.Features.Files;
 using Dockyard.Dashboard.Shell;
@@ -7,75 +6,58 @@ using Dockyard.Engine;
 
 namespace Dockyard.Dashboard.Features.Resources;
 
-sealed class ImagesViewModel : SectionViewModel
+sealed class ImagesViewModel : SelectableSection<ImageRow>
 {
     List<ImageSummary> images = [];
     List<ImageRow> all = [];
-    ImageRow? selected;
-    string pullReference = "";
-    double pullPercent;
-    string pullStatus = "";
     FileBrowserViewModel? files;
 
     public ImagesViewModel(ShellViewModel shell, EngineSession session) : base(shell, session)
     {
-        PullCommand = new Command(Pull, () => !IsBusy && PullReference.Trim().Length > 0);
-        RemoveCommand = new Command(() => { AskRemove(); return Task.CompletedTask; }, () => Selected is not null);
+        PullCommand = new Command(() => { AskPull(); return Task.CompletedTask; });
+        RemoveCommand = new Command(() => { AskRemove(Picked); return Task.CompletedTask; }, () => SelectionCount > 0);
+        RemoveRowCommand = new Command<ImageRow>(row => { AskRemove([row]); return Task.CompletedTask; });
         PruneCommand = new Command(() =>
         {
-            Ask("Remove all dangling (untagged, unused) images?", "Prune", () => Run("Pruning images", async c =>
+            var dangling = all.Count(r => r.IsDangling && !r.InUse);
+            Ask("Prune dangling images?", $"Removes the untagged images no container uses ({Count(dangling, "image", "images")} now).", "Prune", async d =>
             {
-                var r = await c.PruneImagesAsync(danglingOnly: true);
+                d.Report("Pruning images…");
+                var r = await Client.PruneImagesAsync(danglingOnly: true);
                 Shell.ShowInfo($"Reclaimed {Format.Bytes(r.SpaceReclaimed)}");
-            }));
+            });
             return Task.CompletedTask;
         });
         OpenFilesCommand = new Command(OpenFiles, () => Selected is not null);
         CloseFilesCommand = new Command(() => { CloseFiles(); return Task.CompletedTask; });
-        TerminalCommand = new Command(OpenTerminal, () => Selected is not null);
+        TerminalCommand = new Command(() => OpenTerminal(Selected), () => Selected is not null);
+        TerminalRowCommand = new Command<ImageRow>(OpenTerminal);
         session.Connected += () => _ = Reload();
         session.ResourceChanged += r => { if (r.Kind == RouteKind.Images) ScheduleReload(); };
         session.Containers.RowsChanged += Recompute;
-        PropertyChanged += (_, e) => { if (e.PropertyName == nameof(IsBusy)) PullCommand.Refresh(); };
     }
 
-    public ObservableCollection<ImageRow> Rows { get; } = [];
     public Command PullCommand { get; }
     public Command RemoveCommand { get; }
+    public Command<ImageRow> RemoveRowCommand { get; }
     public Command PruneCommand { get; }
     public Command OpenFilesCommand { get; }
     public Command CloseFilesCommand { get; }
     public Command TerminalCommand { get; }
+    public Command<ImageRow> TerminalRowCommand { get; }
     public FileBrowserViewModel? Files { get => files; private set { if (Set(ref files, value)) Raise(nameof(HasFiles)); } }
     public bool HasFiles => files is not null;
 
-    public ImageRow? Selected
+    protected override object Key(ImageRow row) => (row.Id, row.Reference);
+
+    protected override void OnSelectionChanged(ImageRow? before)
     {
-        get => selected;
-        set
-        {
-            if (Rebuilding) return;
-            var before = selected;
-            if (!Set(ref selected, value)) return;
-            Raise(nameof(HasSelection));
-            RemoveCommand.Refresh();
-            OpenFilesCommand.Refresh();
-            TerminalCommand.Refresh();
-            // A reload makes new rows for the same images; only another image closes the files.
-            if (before?.Id != value?.Id) CloseFiles();
-        }
+        RemoveCommand.Refresh();
+        OpenFilesCommand.Refresh();
+        TerminalCommand.Refresh();
+        // A reload makes new rows for the same images; only another image closes the files.
+        if (before?.Id != Selected?.Id) CloseFiles();
     }
-
-    public bool HasSelection => Selected is not null;
-
-    public string PullReference
-    {
-        get => pullReference;
-        set { if (Set(ref pullReference, value ?? "")) PullCommand.Refresh(); }
-    }
-
-    public double PullPercent { get => pullPercent; private set => Set(ref pullPercent, value); }
-    public string PullStatus { get => pullStatus; private set => Set(ref pullStatus, value); }
 
     public override Task Reload() => SafeReload(async c =>
     {
@@ -89,13 +71,7 @@ sealed class ImagesViewModel : SectionViewModel
         ApplyFilter();
     }
 
-    protected override void ApplyFilter()
-    {
-        var key = Selected is { } s ? (s.Id, s.Reference) : default;
-        Replace(Rows, all.Where(r => Matches(Filter, r.Reference, r.ShortId)));
-        Selected = Rows.FirstOrDefault(r => (r.Id, r.Reference) == key);
-        Raise(nameof(Selected), nameof(HasSelection));
-    }
+    protected override void ApplyFilter() => ReplaceRows(all.Where(r => Matches(Filter, r.Reference, r.ShortId)));
 
     // A container of the image that never starts, read-only and without a network, is what the archive API reads from;
     // it goes away with the view.
@@ -117,9 +93,9 @@ sealed class ImagesViewModel : SectionViewModel
         Files = null;
     }
 
-    Task OpenTerminal()
+    Task OpenTerminal(ImageRow? image)
     {
-        if (Selected is not { } image || Session.Client is not { } client) return Task.CompletedTask;
+        if (image is null || Session.Client is not { } client) return Task.CompletedTask;
         if (ExecCommand.FindTerminal() is not { } terminal)
         {
             Shell.ShowError("No terminal found. Set the TERMINAL environment variable to your terminal emulator.");
@@ -142,32 +118,38 @@ sealed class ImagesViewModel : SectionViewModel
         });
     }
 
-    void AskRemove()
+    // A tagged row removes that tag (and the image with its last one); an untagged row removes the image by its id.
+    public static string RemoveTarget(ImageRow image) => image.IsDangling ? image.Id : image.Reference;
+
+    void AskRemove(IReadOnlyList<ImageRow> rows)
     {
-        if (Selected is not { } image) return;
-        var target = image.IsDangling ? image.Id : image.Reference;
-        var note = image.InUse ? $" It is used by {image.UsageText}; the engine refuses if any of them still exist." : "";
-        Ask($"Remove {image.Reference} ({image.ShortId})?{note}", "Remove",
-            () => Run($"Removing {image.Reference}", c => c.RemoveImageAsync(target)));
+        if (rows.Count == 0) return;
+        var title = rows.Count == 1 ? $"Remove {rows[0].Reference}?" : $"Remove {rows.Count} images?";
+        var used = rows.Where(r => r.InUse).ToList();
+        var lines = new List<string>
+        {
+            rows.Count == 1 ? $"{rows[0].Reference} ({rows[0].ShortId}, {rows[0].SizeText})." : string.Join(", ", rows.Take(6).Select(r => r.Reference)) + (rows.Count > 6 ? $" and {rows.Count - 6} more." : "."),
+        };
+        if (used.Count > 0) lines.Add($"{Count(used.Count, "of them is", "of them are")} used by containers; the engine refuses those unless they are forced and the containers are stopped.");
+        if (Session.IsWindowsEngine) lines.Add("Windows images are large: removing one can take a minute or more.");
+        Ask(title, string.Join(" ", lines), "Remove", d => d.ForEach(rows, "Removing", r => r.Reference,
+                r => Client.RemoveImageAsync(RemoveTarget(r), force: d.Option)),
+            option: "Force: also untag it everywhere and take it from stopped containers");
     }
 
-    async Task Pull()
+    void AskPull()
     {
-        var reference = PullReference.Trim();
-        PullPercent = 0;
-        PullStatus = "Starting…";
-        await Run($"Pulling {reference}", async c =>
-        {
-            var progress = new Progress<PullProgress>(p =>
-            {
-                PullStatus = p.Status;
-                PullPercent = p.TotalBytes > 0 ? 100.0 * p.CurrentBytes / p.TotalBytes : 0;
-            });
-            await c.PullImageAsync(reference, progress);
-            PullReference = "";
-            Shell.ShowInfo($"Pulled {reference}");
-        });
-        PullStatus = "";
-        PullPercent = 0;
+        var field = new DialogField("Image", placeholder: "nginx:alpine, or registry/name:tag");
+        Shell.Open(new Dialog("Pull an image", "", "Pull", Pull, fields: [field]));
+    }
+
+    async Task Pull(Dialog dialog)
+    {
+        var reference = dialog.Field("Image").Value;
+        dialog.Report($"Pulling {reference}…");
+        var progress = new Progress<PullProgress>(p =>
+            dialog.Report($"{reference}: {p.Status}", p.TotalBytes > 0 ? 100.0 * p.CurrentBytes / p.TotalBytes : null));
+        await Client.PullImageAsync(reference, progress);
+        Shell.ShowInfo($"Pulled {reference}");
     }
 }

@@ -4,28 +4,25 @@ using Dockyard.Dashboard.Store;
 
 namespace Dockyard.Dashboard.Features.Resources;
 
-sealed class NetworksViewModel : SectionViewModel
+sealed class NetworksViewModel : SelectableSection<NetworkRow>
 {
     List<NetworkRow> all = [];
-    NetworkRow? selected;
     ContainerItem? connectCandidate;
-    string newName = "";
-    string newDriver = "";
 
     public NetworksViewModel(ShellViewModel shell, EngineSession session) : base(shell, session)
     {
-        RemoveCommand = new Command(() =>
-        {
-            if (Selected is { IsBuiltIn: false } n)
-                Ask($"Remove network {n.Name}?", "Remove", () => Run($"Removing {n.Name}", c => c.RemoveNetworkAsync(n.Id)));
-            return Task.CompletedTask;
-        }, () => Selected is { IsBuiltIn: false });
+        RemoveCommand = new Command(() => { AskRemove(Picked); return Task.CompletedTask; }, () => Picked.Any(n => !n.IsBuiltIn));
+        RemoveRowCommand = new Command<NetworkRow>(n => { AskRemove([n]); return Task.CompletedTask; });
         PruneCommand = new Command(() =>
         {
-            Ask("Remove all networks that no container uses?", "Prune", () => Run("Pruning networks", c => c.PruneNetworksAsync()));
+            Ask("Prune unused networks?", "Removes every network that no container uses. The built-in ones stay.", "Prune", async d =>
+            {
+                d.Report("Pruning networks…");
+                await Client.PruneNetworksAsync();
+            });
             return Task.CompletedTask;
         });
-        CreateCommand = new Command(Create, () => NewName.Trim().Length > 0);
+        CreateCommand = new Command(() => { AskCreate(); return Task.CompletedTask; });
         ConnectCommand = new Command(Connect, () => Selected is not null && ConnectCandidate is not null);
         DisconnectCommand = new Command<NetworkMember>(m => Selected is { } n
             ? Run($"Disconnecting {m.Name}", async c => { await c.DisconnectNetworkAsync(n.Id, m.ContainerId); await LoadMembers(n); })
@@ -39,33 +36,15 @@ sealed class NetworksViewModel : SectionViewModel
         };
     }
 
-    public ObservableCollection<NetworkRow> Rows { get; } = [];
     public ObservableCollection<NetworkMember> Members { get; } = [];
     public ObservableCollection<ContainerItem> Candidates { get; } = [];
     public IReadOnlyList<string> Drivers => NetworkDrivers.For(Session.IsWindowsEngine);
     public Command RemoveCommand { get; }
+    public Command<NetworkRow> RemoveRowCommand { get; }
     public Command PruneCommand { get; }
     public Command CreateCommand { get; }
     public Command ConnectCommand { get; }
     public Command<NetworkMember> DisconnectCommand { get; }
-
-    public NetworkRow? Selected
-    {
-        get => selected;
-        set
-        {
-            if (Rebuilding) return;
-            if (!Set(ref selected, value)) return;
-            Raise(nameof(HasSelection));
-            RemoveCommand.Refresh();
-            ConnectCommand.Refresh();
-            Members.Clear();
-            Candidates.Clear();
-            if (value is not null) _ = LoadMembers(value);
-        }
-    }
-
-    public bool HasSelection => Selected is not null;
 
     public ContainerItem? ConnectCandidate
     {
@@ -73,16 +52,16 @@ sealed class NetworksViewModel : SectionViewModel
         set { if (Set(ref connectCandidate, value)) ConnectCommand.Refresh(); }
     }
 
-    public string NewName
-    {
-        get => newName;
-        set { if (Set(ref newName, value ?? "")) CreateCommand.Refresh(); }
-    }
+    protected override object Key(NetworkRow row) => row.Id;
 
-    public string NewDriver
+    protected override void OnSelectionChanged(NetworkRow? before)
     {
-        get => newDriver.Length > 0 && Drivers.Contains(newDriver) ? newDriver : Drivers[0];
-        set => Set(ref newDriver, value ?? "");
+        RemoveCommand.Refresh();
+        ConnectCommand.Refresh();
+        if (Selected?.Id == before?.Id && Selected is not null) return;
+        Members.Clear();
+        Candidates.Clear();
+        if (Selected is { } network) _ = LoadMembers(network);
     }
 
     public override Task Reload() => SafeReload(async c =>
@@ -96,21 +75,10 @@ sealed class NetworksViewModel : SectionViewModel
             .OrderBy(n => n.IsBuiltIn).ThenBy(n => n.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
         ApplyFilter();
+        if (Selected is { } network) await LoadMembers(network);
     });
 
-    protected override void ApplyFilter()
-    {
-        var id = Selected?.Id;
-        Replace(Rows, all.Where(r => Matches(Filter, r.Name, r.Driver, r.Subnet)));
-        var keep = Rows.FirstOrDefault(r => r.Id == id);
-        if (keep is not null)
-        {
-            selected = keep;
-            Raise(nameof(Selected));
-            _ = LoadMembers(keep);
-        }
-        else Selected = null;
-    }
+    protected override void ApplyFilter() => ReplaceRows(all.Where(r => Matches(Filter, r.Name, r.Driver, r.Subnet)));
 
     async Task LoadMembers(NetworkRow network) => await SafeReload(async c =>
     {
@@ -124,15 +92,26 @@ sealed class NetworksViewModel : SectionViewModel
         ConnectCandidate = null;
     });
 
-    Task Create()
+    void AskRemove(IReadOnlyList<NetworkRow> rows)
     {
-        var name = NewName.Trim();
-        var driver = NewDriver;
-        return Run($"Creating {name}", async c =>
+        var removable = rows.Where(n => !n.IsBuiltIn).ToList();
+        if (removable.Count == 0) return;
+        var title = removable.Count == 1 ? $"Remove network {removable[0].Name}?" : $"Remove {removable.Count} networks?";
+        var connected = removable.Count(n => n.Containers > 0);
+        var message = (connected > 0 ? "The engine refuses a network while containers are connected to it. " : "")
+            + (rows.Count > removable.Count ? "Built-in networks stay." : "");
+        Ask(title, message.Trim(), "Remove", d => d.ForEach(removable, "Removing", n => n.Name, n => Client.RemoveNetworkAsync(n.Id)));
+    }
+
+    void AskCreate()
+    {
+        var name = new DialogField("Name", placeholder: "my-network");
+        var driver = new DialogField("Driver", choices: Drivers);
+        Shell.Open(new Dialog("Create a network", "", "Create", async d =>
         {
-            await c.CreateNetworkAsync(name, driver);
-            NewName = "";
-        });
+            d.Report($"Creating {name.Value}…");
+            await Client.CreateNetworkAsync(name.Value, driver.Value);
+        }, fields: [name, driver]));
     }
 
     Task Connect()

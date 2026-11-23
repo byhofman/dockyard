@@ -36,7 +36,14 @@ static class KindCli
     }
 
     // kind writes to a file of its own; HostKubeconfig puts the entries in the user's kubeconfig safely.
-    public static string[] Create(string name, string kubeconfig) => ["create", "cluster", "--name", name, "--kubeconfig", kubeconfig];
+    public static string[] Create(string name, string kubeconfig, string? config = null) =>
+        config is null
+            ? ["create", "cluster", "--name", name, "--kubeconfig", kubeconfig]
+            : ["create", "cluster", "--name", name, "--kubeconfig", kubeconfig, "--config", config];
+
+    // One control plane and this many workers; without a config kind makes the control plane alone.
+    public static string Config(int workers) =>
+        "kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nnodes:\n- role: control-plane\n" + string.Concat(Enumerable.Repeat("- role: worker\n", workers));
     public static string[] Delete(string name, string kubeconfig) => ["delete", "cluster", "--name", name, "--kubeconfig", kubeconfig];
     public static string[] Kubeconfig(string name) => ["get", "kubeconfig", "--name", name];
 
