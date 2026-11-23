@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:clu="using:Dockyard.Dashboard.Features.Clusters"
+             xmlns:store="using:Dockyard.Dashboard.Store"
              x:Class="Dockyard.Dashboard.Features.Clusters.ClustersView"
              x:DataType="clu:ClustersViewModel">
   <Grid x:Name="Layout" ColumnDefinitions="*,5,380">
@@ -9,7 +10,9 @@
         <Grid ColumnDefinitions="Auto,*,Auto">
           <CheckBox Classes="pick" IsChecked="{Binding AllSelected}" ToolTip.Tip="Select all" AutomationProperties.Name="Select all clusters" />
           <TextBlock Grid.Column="1" Classes="section" Text="CLUSTERS" VerticalAlignment="Center" />
-          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12">
+            <ToggleSwitch IsChecked="{Binding LoadBalancersEnabled}" IsVisible="{Binding HasKind}" OnContent="Load balancers" OffContent="Load balancers"
+                          VerticalAlignment="Center" ToolTip.Tip="kind's cloud provider: LoadBalancer services get an address on 127.0.0.1" />
             <Button Classes="primary" Command="{Binding CreateCommand}" IsVisible="{Binding HasKind}">
               <StackPanel Classes="label"><PathIcon Data="{StaticResource IconPlus}" /><TextBlock Text="Create cluster…" /></StackPanel>
             </Button>
@@ -102,6 +105,36 @@
           <TextBlock Classes="muted small" Text="API server" />
           <SelectableTextBlock Classes="mono" Text="{Binding Selected.ApiServer, FallbackValue=''}" />
           <SelectableTextBlock Classes="mono muted small" Text="{Binding KubectlHint}" TextWrapping="Wrap" />
+
+          <TextBlock Classes="section" Text="LOAD BALANCERS" Margin="0,8,0,0" />
+          <ItemsControl ItemsSource="{Binding LoadBalancerRows}" IsVisible="{Binding HasLoadBalancers}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="clu:LoadBalancer">
+                <StackPanel Margin="0,2">
+                  <TextBlock Text="{Binding Service}" TextTrimming="CharacterEllipsis" />
+                  <ItemsControl ItemsSource="{Binding Ports}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <WrapPanel ItemSpacing="10" />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="store:PublishedPort">
+                        <Button Classes="link" ToolTip.Tip="{Binding Text}" CommandParameter="{Binding}"
+                                Command="{Binding $parent[UserControl].((clu:ClustersViewModel)DataContext).OpenUrlCommand}">
+                          <StackPanel Classes="label" Spacing="3">
+                            <TextBlock Classes="mono" Text="{Binding Url}" />
+                            <PathIcon Data="{StaticResource IconOpenExternal}" Width="10" Height="10" />
+                          </StackPanel>
+                        </Button>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBlock Classes="muted small" Text="{Binding LoadBalancerHint}" TextWrapping="Wrap" IsVisible="{Binding !HasLoadBalancers}" />
 
           <TextBlock Classes="section" Text="NODES" Margin="0,8,0,0" />
           <ItemsControl ItemsSource="{Binding Selected.Nodes, FallbackValue={x:Null}}">

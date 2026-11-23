@@ -2,6 +2,16 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-23: kind's LoadBalancer services get an address through cloud-provider-kind in a container
+
+DOK-34, owner 2026-11-23. kind has no load balancer of its own, so a `type: LoadBalancer` service stayed pending.
+
+- **The official cloud-provider-kind, as one container per engine** (`dockyard-cloud-provider-kind`), pinned by digest (v0.12.0, 2026-10-02, past the 14 days of the pin rule), on the `kind` network with the engine's socket, `--restart unless-stopped`, labelled `dockyard.helper` so the container list leaves it out. The dashboard starts it while the engine has kind clusters and the **Load balancers** switch in Clusters is on (the default), and removes it when the last cluster goes or the switch goes off. A label carries the pinned image, so a Dockyard release with a newer pin replaces it. Clusters made with the kind CLI while the dashboard is closed get it the next time the dashboard is open.
+- **`--enable-lb-port-mapping` on every platform:** each service gets an Envoy container whose ports are published on the host, so the address is `127.0.0.1:<port>` on Windows (through 2026-11-23's loopback rule on mirrored WSL, the tray's relay with NAT), on the Mac and on Linux alike, and the dashboard shows the same thing everywhere. On a Linux host the service's own IP on the kind network works too.
+- **Published like any `docker run -p`:** cloud-provider-kind publishes on all addresses, as Docker Desktop users also get. On Windows the Hyper-V firewall keeps that to this computer; on the Mac and on Linux it is reachable from the network like any published port.
+- **Where they show:** the Envoy containers carry `io.x-k8s.cloud-provider-kind.cluster` and `…loadbalancer.name` (`<cluster>/<namespace>/<service>`). They are kept out of the container list and listed under their cluster in Clusters, with each port as a link. Deleting a cluster from the dashboard removes its proxies, which the cloud provider leaves once the cluster is gone.
+- **Checked on the owner's laptop** (Windows, mirrored WSL, kind v1.37): an nginx deployment exposed as LoadBalancer got `172.18.0.4` and answered from Windows on `127.0.0.1:<port>`; everything was removed afterwards.
+
 ## 2026-11-23: Every list picks many rows, and every question is one modal dialog
 
 Owner feedback round (2026-11-23): no multi-select or bulk actions; deleting from a row opened the detail to confirm; the always-visible name fields for creating were unexpected; switching engines asked nothing and showed nothing.

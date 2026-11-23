@@ -25,6 +25,8 @@ IDs are permanent: never renumber or reuse one.
 ## Kubernetes
 
 - [x] DOK-22 Basic kind support: kind installed or detected, versions pinned and checked; create, list and delete clusters, get a cluster's kubeconfig and context; clusters in the dashboard and the CLI, on Windows, macOS and Linux (owner, feedback round 1, 2026-11-12)
+- [x] DOK-34 LoadBalancer services in kind clusters get an address on 127.0.0.1 through cloud-provider-kind, run by Dockyard while there are clusters, with a switch to turn it off (owner 2026-11-23)
+- [ ] DOK-35 Shared storage for kind clusters with more than one node: a `shared` ReadWriteMany storage class through an NFS server container next to the cluster and the NFS CSI driver, next to kind's node-local `standard` (owner 2026-11-23)
 
 ## Quality
 
