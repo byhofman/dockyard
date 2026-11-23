@@ -2,6 +2,14 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-23: The tray and wizard are published ReadyToRun
+
+The owner found the wizard and the tray window slow to open. Measured on the owner's Windows laptop, from process start to window: the dashboard (native AOT) 0.3 s, the wizard 2.2 to 4.7 s. Trimming takes the precompiled code out of the runtime's own assemblies, so the single-file app JIT-compiled CoreLib and Avalonia on every launch.
+
+- **`PublishReadyToRun`:** 0.75 to 1.1 s to the window (1.8 s the first time, while Defender scans the new file). The Windows exe grows from 42 to 69 MB, next to the 125 MB engine image the wizard downloads anyway. Private memory with the window open is unchanged (46 → 43 MB).
+- **Rejected, native AOT as for the dashboard:** Avalonia's Skia, HarfBuzz and ANGLE libraries then sit next to the exe, and the one-liners download the wizard as one file.
+- **Rejected, `EnableCompressionInSingleFile`:** it brings the exe to 34 MB at the same speed, but decompressed assemblies cannot be mapped from the file: +21 MB private memory, past the tray's 60 MB budget.
+
 ## 2026-11-21: No dotted or dashed dividers
 
 The owner's rule for every byhofman app (2026-11-20): "Dotted divider remove that applies to all apps!" Rows and sections are separated by spacing and grouping; where a line is needed it is a solid hairline in the surface tone. A sweep of the dashboard, the wizard, the tray window and the install scripts found no dotted or dashed line of any kind, so nothing changed on screen.
