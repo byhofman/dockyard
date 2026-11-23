@@ -110,7 +110,8 @@ sealed class ContainerStore
             if (expanded) rows.AddRange(children);
             entries.Add((p.Name, rows));
         }
-        foreach (var c in list.Where(i => i.Project.Length == 0 && Matches(i, filter)))
+        // kind's load balancer proxies show under their cluster.
+        foreach (var c in list.Where(i => i.Project.Length == 0 && !Features.Clusters.LoadBalancers.IsProxy(i) && Matches(i, filter)))
             entries.Add((c.Name, [c]));
 
         return entries.OrderBy(e => e.Key, StringComparer.OrdinalIgnoreCase).SelectMany(e => e.Rows).ToList();
