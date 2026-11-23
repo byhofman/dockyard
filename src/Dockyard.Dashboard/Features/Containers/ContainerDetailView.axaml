@@ -46,18 +46,10 @@
           <StackPanel Classes="label"><PathIcon Data="{StaticResource IconTerminal}" /><TextBlock Text="Terminal" /></StackPanel>
         </Button>
         <Button Classes="danger" Command="{Binding AskRemoveCommand}" ToolTip.Tip="Remove (Del)">
-          <StackPanel Classes="label"><PathIcon Data="{StaticResource IconDelete}" /><TextBlock Text="Remove" /></StackPanel>
+          <StackPanel Classes="label"><PathIcon Data="{StaticResource IconDelete}" /><TextBlock Text="Remove…" /></StackPanel>
         </Button>
       </WrapPanel>
 
-      <Border IsVisible="{Binding ConfirmRemove}" Background="{DynamicResource BadBg}" CornerRadius="6" Padding="12,8">
-        <Grid ColumnDefinitions="*,Auto,Auto">
-          <TextBlock Text="Remove this container?" VerticalAlignment="Center" TextWrapping="Wrap" />
-          <Button Grid.Column="1" Classes="dangerfill" Content="Remove" Margin="8,0,6,0"
-                  Command="{Binding Actions.RemoveCommand}" CommandParameter="{Binding Item}" />
-          <Button Grid.Column="2" Content="Cancel" Command="{Binding CancelRemoveCommand}" />
-        </Grid>
-      </Border>
     </StackPanel>
 
     <TabControl SelectedIndex="{Binding SelectedTab}" Margin="4,0,4,0">

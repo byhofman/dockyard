@@ -14,6 +14,8 @@ sealed class ShellViewModel : Observable
     ContextWatcher? watcher;
     Section currentSection;
     string search = "";
+    Dialog? dialog;
+    TaskCompletionSource<string?>? switchResult;
 
     public ShellViewModel()
     {
@@ -30,8 +32,8 @@ sealed class ShellViewModel : Observable
         currentSection = Sections[0];
 
         HasEngineSwitch = OperatingSystem.IsWindows() && DockerContext.Exists("linux") && DockerContext.Exists("win");
-        SwitchLinuxCommand = new Command(() => SendToTray(new TrayCommand(TrayCommandKind.Switch, "linux")));
-        SwitchWindowsCommand = new Command(() => SendToTray(new TrayCommand(TrayCommandKind.Switch, "win")));
+        SwitchLinuxCommand = new Command(() => { AskSwitch("linux"); return Task.CompletedTask; });
+        SwitchWindowsCommand = new Command(() => { AskSwitch("win"); return Task.CompletedTask; });
         SettingsCommand = new Command(() => SendToTray(new TrayCommand(TrayCommandKind.Settings)));
         StartEngineCommand = new Command(StartEngine);
 
@@ -88,6 +90,63 @@ sealed class ShellViewModel : Observable
         watcher?.Dispose();
         Containers.Shutdown();
         Session.Stop();
+    }
+
+    public Dialog? Dialog { get => dialog; private set { if (Set(ref dialog, value)) Raise(nameof(HasDialog)); } }
+    public bool HasDialog => dialog is not null;
+
+    public void Open(Dialog next)
+    {
+        if (dialog is { IsWorking: true }) return;
+        next.ShowError = ShowError;
+        next.Closed += () => { if (Dialog == next) Dialog = null; };
+        Dialog = next;
+    }
+
+    public void AskSwitch(string engine)
+    {
+        if (Session.ContextName == engine) return;
+        var name = EngineSwitch.Name(engine);
+        Open(new Dialog($"Switch to {name} containers?", EngineSwitch.Message(engine, EngineSwitch.StopsOther()), "Switch",
+            d => Switch(engine, d, TimeSpan.FromMinutes(5))));
+    }
+
+    // Done when the dashboard is connected to the engine the context now names; the tray only says when it failed.
+    internal async Task Switch(string engine, Dialog dialog, TimeSpan timeout)
+    {
+        var name = EngineSwitch.Name(engine);
+        dialog.Report($"Starting the {name} engine and switching the docker context…");
+        var result = switchResult = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        void Watch(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (Session.ContextName != engine) return;
+            if (Session.IsConnected) result.TrySetResult(null);
+            else dialog.Report($"Connecting to the {name} engine…");
+        }
+        Session.PropertyChanged += Watch;
+        try
+        {
+            if (!TrayClient.Send(new TrayCommand(TrayCommandKind.Switch, engine)))
+                throw new InvalidOperationException("The Dockyard tray app is not running and could not be started.");
+            Watch(null, new(nameof(EngineSession.State)));
+            var finished = await Task.WhenAny(result.Task, Task.Delay(timeout));
+            if (finished != result.Task)
+                throw new TimeoutException($"The {name} engine did not come up within {timeout.TotalMinutes:0} minutes. Engines and settings shows what Dockyard is doing.");
+            if (await result.Task is { } error) throw new InvalidOperationException(error);
+            ShowInfo($"Switched to {name} containers");
+        }
+        finally
+        {
+            Session.PropertyChanged -= Watch;
+            if (switchResult == result) switchResult = null;
+        }
+    }
+
+    public void OnTrayMessage(string line)
+    {
+        if (EngineSwitch.ParseResult(line) is not { } r) return;
+        if (r.Error is { } error) switchResult?.TrySetResult(error);
+        else if (Session.ContextName == r.Engine && Session.IsConnected) switchResult?.TrySetResult(null);
     }
 
     public void ShowError(string message) => Show(new Toast(message, IsError: true));

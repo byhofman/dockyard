@@ -79,6 +79,13 @@ public partial class ContainersView : UserControl
     void OnListKeyDown(object? sender, KeyEventArgs e)
     {
         if (ViewModel is not { } vm || e.KeyModifiers != KeyModifiers.None) return;
+        if (vm.HasMany)
+        {
+            if (e.Key is not (Key.Delete or Key.Back)) return;
+            vm.RemovePickedCommand.Execute(null);
+            e.Handled = true;
+            return;
+        }
         if (vm.SelectedProject is { } project)
         {
             switch (e.Key)

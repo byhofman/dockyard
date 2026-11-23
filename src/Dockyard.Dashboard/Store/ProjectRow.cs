@@ -7,4 +7,5 @@ sealed record ProjectRow(Features.Resources.ComposeProject Project, bool IsExpan
     public string Location => Project.Location;
     public bool IsRunning => Project.IsRunning;
     public string Chevron => IsExpanded ? "25BE" : "25B8";
+    public override string ToString() => Name;
 }

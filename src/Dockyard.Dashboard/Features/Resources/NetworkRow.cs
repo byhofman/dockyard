@@ -4,4 +4,5 @@ sealed record NetworkRow(string Id, string Name, string Driver, string Subnet, i
 {
     public bool IsBuiltIn => NetworkDrivers.IsBuiltIn(Name);
     public string ContainersText => Containers == 1 ? "1 container" : $"{Containers} containers";
+    public override string ToString() => Name;
 }

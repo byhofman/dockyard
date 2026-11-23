@@ -10,4 +10,5 @@ sealed record ImageRow(string Id, string Reference, long Size, DateTimeOffset Cr
     public bool InUse => UsedBy.Count > 0;
     public string UsageText => UsedBy.Count == 0 ? "unused" : UsedBy.Count == 1 ? "1 container" : $"{UsedBy.Count} containers";
     public bool IsDangling => Tags.Count == 0;
+    public override string ToString() => Reference;
 }

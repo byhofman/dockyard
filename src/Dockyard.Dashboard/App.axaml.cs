@@ -31,8 +31,13 @@ public partial class App : Application
         desktop.MainWindow = window;
         desktop.Exit += (_, _) => vm.Stop();
 
-        LocalPipe.Serve(LocalPipe.DashboardName, _ => Dispatcher.UIThread.Post(() =>
+        LocalPipe.Serve(LocalPipe.DashboardName, line => Dispatcher.UIThread.Post(() =>
         {
+            if (EngineSwitch.ParseResult(line) is not null)
+            {
+                vm.OnTrayMessage(line);
+                return;
+            }
             if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
             window.Activate();
         }));

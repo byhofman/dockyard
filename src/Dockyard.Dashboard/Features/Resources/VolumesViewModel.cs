@@ -1,34 +1,29 @@
-using System.Collections.ObjectModel;
 using Dockyard.Dashboard.Shell;
 using Dockyard.Dashboard.Store;
 using Dockyard.Engine;
 
 namespace Dockyard.Dashboard.Features.Resources;
 
-sealed class VolumesViewModel : SectionViewModel
+sealed class VolumesViewModel : SelectableSection<VolumeRow>
 {
     List<Volume> volumes = [];
     Dictionary<string, long>? sizes;
     List<VolumeRow> all = [];
-    VolumeRow? selected;
     Features.Files.FileBrowserViewModel? files;
 
     public VolumesViewModel(ShellViewModel shell, EngineSession session) : base(shell, session)
     {
-        RemoveCommand = new Command(() =>
-        {
-            if (Selected is { CanRemove: true } v)
-                Ask($"Remove volume {v.DisplayName}? Its data is deleted.", "Remove", () => Run($"Removing {v.DisplayName}", c => c.RemoveVolumeAsync(v.Name)));
-            return Task.CompletedTask;
-        }, () => Selected is { CanRemove: true });
+        RemoveCommand = new Command(() => { AskRemove(Picked); return Task.CompletedTask; }, () => Picked.Any(v => v.CanRemove));
+        RemoveRowCommand = new Command<VolumeRow>(v => { AskRemove([v]); return Task.CompletedTask; });
         PruneCommand = new Command(() =>
         {
             var unused = all.Count(v => !v.InUse);
-            Ask($"Remove {unused} unused volume(s) and their data?", "Prune", () => Run("Pruning volumes", async c =>
+            Ask("Prune unused volumes?", $"Removes {Count(unused, "volume", "volumes")} that no container uses, with their data.", "Prune", async d =>
             {
-                var r = await c.PruneVolumesAsync();
+                d.Report("Pruning volumes…");
+                var r = await Client.PruneVolumesAsync();
                 Shell.ShowInfo($"Reclaimed {Format.Bytes(r.SpaceReclaimed)}");
-            }));
+            });
             return Task.CompletedTask;
         });
         OpenFilesCommand = new Command(() => OpenFiles(writable: false), () => Selected is not null);
@@ -39,8 +34,8 @@ sealed class VolumesViewModel : SectionViewModel
         session.Containers.RowsChanged += Recompute;
     }
 
-    public ObservableCollection<VolumeRow> Rows { get; } = [];
     public Command RemoveCommand { get; }
+    public Command<VolumeRow> RemoveRowCommand { get; }
     public Command PruneCommand { get; }
     public Command OpenFilesCommand { get; }
     public Command CloseFilesCommand { get; }
@@ -54,24 +49,32 @@ sealed class VolumesViewModel : SectionViewModel
     public bool CanOpenLocation => Location?.Path is not null;
     public string OpenLocationText => Host switch { HostOs.Windows => "Open in Explorer", HostOs.MacOS => "Show in Finder", _ => "Open folder" };
 
-    public VolumeRow? Selected
+    protected override object Key(VolumeRow row) => row.Name;
+
+    protected override void OnSelectionChanged(VolumeRow? before)
     {
-        get => selected;
-        set
-        {
-            if (Rebuilding) return;
-            var before = selected;
-            if (!Set(ref selected, value)) return;
-            Raise(nameof(HasSelection), nameof(Location), nameof(CanOpenLocation));
-            RemoveCommand.Refresh();
-            OpenFilesCommand.Refresh();
-            OpenLocationCommand.Refresh();
-            // A reload makes new rows for the same volumes; only another volume closes the files.
-            if (before?.Name != value?.Name) CloseFiles();
-        }
+        Raise(nameof(Location), nameof(CanOpenLocation));
+        RemoveCommand.Refresh();
+        OpenFilesCommand.Refresh();
+        OpenLocationCommand.Refresh();
+        // A reload makes new rows for the same volumes; only another volume closes the files.
+        if (before?.Name != Selected?.Name) CloseFiles();
     }
 
-    public bool HasSelection => Selected is not null;
+    void AskRemove(IReadOnlyList<VolumeRow> rows)
+    {
+        var removable = rows.Where(v => v.CanRemove).ToList();
+        if (removable.Count == 0)
+        {
+            if (rows.Count > 0) Shell.ShowError(rows.Count == 1 ? $"{rows[0].DisplayName} is in use by {rows[0].UsageText}." : "All of them are in use by a container.");
+            return;
+        }
+        var kept = rows.Count - removable.Count;
+        var title = removable.Count == 1 ? $"Remove volume {removable[0].DisplayName}?" : $"Remove {removable.Count} volumes?";
+        var message = (removable.Count == 1 ? "Its data is deleted." : "Their data is deleted.")
+            + (kept > 0 ? $" {Count(kept, "other volume is", "other volumes are")} in use by a container and stays." : "");
+        Ask(title, message, "Remove", d => d.ForEach(removable, "Removing", v => v.DisplayName, v => Client.RemoveVolumeAsync(v.Name)));
+    }
 
     const string Mount = "/volume";
 
@@ -165,11 +168,5 @@ sealed class VolumesViewModel : SectionViewModel
         ApplyFilter();
     }
 
-    protected override void ApplyFilter()
-    {
-        var name = Selected?.Name;
-        Replace(Rows, all.Where(r => Matches(Filter, r.Name, r.Driver, r.UsageText)));
-        Selected = Rows.FirstOrDefault(r => r.Name == name);
-        Raise(nameof(Selected), nameof(HasSelection));
-    }
+    protected override void ApplyFilter() => ReplaceRows(all.Where(r => Matches(Filter, r.Name, r.Driver, r.UsageText)));
 }

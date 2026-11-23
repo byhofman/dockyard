@@ -15,7 +15,6 @@ sealed class ContainerDetailViewModel : Observable, IDisposable
     bool https;
     string domainPort = "";
     string domainPortNote = "";
-    bool confirmRemove;
     bool logsExpanded;
     int selectedTab;
     bool? tty;
@@ -27,8 +26,7 @@ sealed class ContainerDetailViewModel : Observable, IDisposable
         this.session = session;
         this.showError = showError;
         Item = item;
-        AskRemoveCommand = new Command(() => { ConfirmRemove = true; return Task.CompletedTask; });
-        CancelRemoveCommand = new Command(() => { ConfirmRemove = false; return Task.CompletedTask; });
+        AskRemoveCommand = new Command(() => { actions.AskRemove([item]); return Task.CompletedTask; });
         CloseCommand = new Command(() => { actions.CloseDetail(); return Task.CompletedTask; });
         ApplyDomainPortCommand = new Command(ApplyDomainPort);
         OpenDomainCommand = new Command(() =>
@@ -45,7 +43,6 @@ sealed class ContainerDetailViewModel : Observable, IDisposable
     public ContainerItem Item { get; }
     public LogsViewModel Logs { get; } = new();
     public Command AskRemoveCommand { get; }
-    public Command CancelRemoveCommand { get; }
     public Command CloseCommand { get; }
 
     // Made when the tab is opened: Avalonia only sets a tab's content then, and that is what starts the first listing.
@@ -105,7 +102,6 @@ sealed class ContainerDetailViewModel : Observable, IDisposable
     }
 
     public InspectViewModel? Inspect { get => inspect; private set => Set(ref inspect, value); }
-    public bool ConfirmRemove { get => confirmRemove; set => Set(ref confirmRemove, value); }
     public bool LogsExpanded { get => logsExpanded; set => Set(ref logsExpanded, value); }
     public int SelectedTab { get => selectedTab; set => Set(ref selectedTab, value); }
 

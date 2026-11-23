@@ -14,26 +14,32 @@ sealed class DiskViewModel : SectionViewModel
     {
         PruneCommand = new Command<DiskCategory>(c =>
         {
-            Ask($"Remove unused {c.Name.ToLowerInvariant()} ({c.ReclaimableText})?", "Prune", () => Run($"Pruning {c.Name}", async client =>
+            Ask($"Prune unused {c.Name.ToLowerInvariant()}?", $"Frees {c.ReclaimableText}.", "Prune", async d =>
             {
-                var reclaimed = await Prune(client, c.Name);
+                d.Report($"Pruning {c.Name.ToLowerInvariant()}…");
+                var reclaimed = await Prune(Client, c.Name);
                 Shell.ShowInfo($"Reclaimed {Format.Bytes(reclaimed)}");
                 await Reload();
-            }));
+            });
             return Task.CompletedTask;
         });
         CleanAllCommand = new Command(() =>
         {
             var list = string.Join(", ", Categories.Select(c => $"{c.Name.ToLowerInvariant()} {c.ReclaimableText}"));
-            Ask($"Remove everything unused: stopped containers, unused images, unused volumes and their data, unused networks and build cache ({list})?",
-                "Clean everything", () => Run("Cleaning up", async client =>
+            Ask("Clean everything unused?", $"Removes stopped containers, unused images, unused volumes and their data, unused networks and the build cache ({list}).",
+                "Clean everything", async d =>
                 {
                     long total = 0;
-                    foreach (var name in new[] { "Containers", "Images", "Volumes", "Build cache" }) total += await Prune(client, name);
-                    await client.PruneNetworksAsync();
+                    foreach (var name in new[] { "Containers", "Images", "Volumes", "Build cache" })
+                    {
+                        d.Report($"Pruning {name.ToLowerInvariant()}…");
+                        total += await Prune(Client, name);
+                    }
+                    d.Report("Pruning networks…");
+                    await Client.PruneNetworksAsync();
                     Shell.ShowInfo($"Reclaimed {Format.Bytes(total)}");
                     await Reload();
-                }));
+                });
             return Task.CompletedTask;
         });
         RefreshCommand = new Command(Reload);

@@ -16,12 +16,11 @@
           <PathIcon Data="{StaticResource IconRefresh}" />
         </Button>
         <Button Grid.Column="2" Classes="dangerfill" Command="{Binding CleanAllCommand}" VerticalAlignment="Center">
-          <StackPanel Classes="label"><PathIcon Data="{StaticResource IconPrune}" /><TextBlock Text="Clean everything unused" /></StackPanel>
+          <StackPanel Classes="label"><PathIcon Data="{StaticResource IconPrune}" /><TextBlock Text="Clean everything unused…" /></StackPanel>
         </Button>
       </Grid>
       <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsLoading}" />
       <TextBlock Classes="muted small" Text="{Binding Busy}" IsVisible="{Binding IsBusy}" />
-      <res:ConfirmBar DataContext="{Binding Confirm}" IsVisible="{Binding $parent[UserControl].((res:DiskViewModel)DataContext).HasConfirm}" />
 
       <ItemsControl ItemsSource="{Binding Categories}">
         <ItemsControl.ItemsPanel>

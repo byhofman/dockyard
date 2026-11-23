@@ -2,6 +2,16 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-23: Every list picks many rows, and every question is one modal dialog
+
+Owner feedback round (2026-11-23): no multi-select or bulk actions; deleting from a row opened the detail to confirm; the always-visible name fields for creating were unexpected; switching engines asked nothing and showed nothing.
+
+- **Selection:** every list (containers, images, volumes, networks, clusters) picks rows the way Explorer and Finder do: click for one, Ctrl/Cmd+click to add one, Shift+click for a range, Ctrl+A for all, plus a checkbox per row and one in the header for all. One picked row shows its detail; more than one shows a selection bar with what can be done to all of them (containers: start, stop, restart, remove; elsewhere remove or delete). A picked compose project stands for its containers. Picks survive the reloads every engine event causes, by key.
+- **One dialog for every question and every create:** over the whole window, Enter confirms and Escape cancels. Confirming runs the action inside the dialog with its progress; a failure stays there to read or retry; **Hide** lets a long one go on with its result as a toast. Bulk actions go on past failures and name them together. The row's own delete button, Delete on the list and the detail's button all ask the same dialog, so nothing opens the detail to confirm. Pull, create network and create cluster are dialogs too; the inline fields are gone.
+- **Images on the Windows engine:** removing worked through the API all along (checked on the owner's laptop), but a Windows image of several GB takes a long time to remove, and the old confirm bar only showed a muted line. The dialog now says so up front, shows progress, and offers **Force** for an image that is tagged elsewhere or used by stopped containers.
+- **Switching engines** asks first and says whether the other engine stops (the tray's own setting, read from its file). Then it shows progress until the dashboard is connected to the new engine. The tray reports a failure back on the dashboard's pipe (`switch-failed <engine> <reason>`), and after 5 minutes the dialog gives up and points at Engines and settings.
+- **kind clusters** can be created with 0 to 3 worker nodes, through a kind config.
+- **Rows have readable names** for UI Automation and screen readers (they read as the record's `ToString` before).
 ## 2026-11-23: The tray and wizard are published ReadyToRun
 
 The owner found the wizard and the tray window slow to open. Measured on the owner's Windows laptop, from process start to window: the dashboard (native AOT) 0.3 s, the wizard 2.2 to 4.7 s. Trimming takes the precompiled code out of the runtime's own assemblies, so the single-file app JIT-compiled CoreLib and Avalonia on every launch.

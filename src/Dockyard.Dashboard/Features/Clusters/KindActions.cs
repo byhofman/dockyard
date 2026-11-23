@@ -4,13 +4,19 @@ namespace Dockyard.Dashboard.Features.Clusters;
 sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
 {
     // Returns the kubeconfig file the cluster's context went into.
-    public async Task<string> Create(string name, Action<string>? onLine = null)
+    public async Task<string> Create(string name, Action<string>? onLine = null, int workers = 0)
     {
         var scratch = Directory.CreateTempSubdirectory("dockyard-kind-");
         try
         {
             var own = Path.Combine(scratch.FullName, "config");
-            Check(await KindCli.Run(kind, dockerContext, KindCli.Create(name, own), onLine));
+            string? config = null;
+            if (workers > 0)
+            {
+                config = Path.Combine(scratch.FullName, "cluster.yaml");
+                await File.WriteAllTextAsync(config, KindCli.Config(workers));
+            }
+            Check(await KindCli.Run(kind, dockerContext, KindCli.Create(name, own, config), onLine));
             var text = await File.ReadAllTextAsync(own);
             return await Into(name, text, "was created");
         }
