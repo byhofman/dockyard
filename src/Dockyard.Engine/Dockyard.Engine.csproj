@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Dockyard.Engine.Tests" />
+    <InternalsVisibleTo Include="Dockyard.Dashboard.Tests" />
   </ItemGroup>
 
 </Project>

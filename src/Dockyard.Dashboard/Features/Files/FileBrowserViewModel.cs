@@ -5,6 +5,8 @@ using Dockyard.Engine;
 
 namespace Dockyard.Dashboard.Features.Files;
 
+sealed record Crumb(string Name, string Path, bool IsLast);
+
 // One folder and at most one open file, from a container, a volume or an image.
 sealed class FileBrowserViewModel : Observable, IDisposable
 {
@@ -16,7 +18,9 @@ sealed class FileBrowserViewModel : Observable, IDisposable
     readonly Func<Task>? allowChanges;
     readonly CancellationTokenSource lifetime = new();
     CancellationTokenSource? loading;
+    List<FileRow> all = [];
     string directory;
+    string filter = "";
     FileRow? selected;
     FileEntry? openEntry;
     string? text;
@@ -25,6 +29,7 @@ sealed class FileBrowserViewModel : Observable, IDisposable
     string? status;
     bool busy;
     bool loaded;
+    bool listed;
 
     // allowChanges is offered when the files are read-only only until asked: a volume opens read-only.
     public FileBrowserViewModel(IFileSource source, Action<string> showError, Func<Task>? allowChanges = null)
@@ -35,33 +40,53 @@ sealed class FileBrowserViewModel : Observable, IDisposable
         this.allowChanges = source.CanWrite ? null : allowChanges;
         directory = root;
         UpCommand = new Command(() => Go(ContainerFiles.Parent(directory, root)), () => CanGoUp);
-        RefreshCommand = new Command(() => Go(directory));
+        GoCommand = new Command<Crumb>(c => Go(c.Path));
+        RefreshCommand = new Command(() =>
+        {
+            source.Forget();
+            return Go(directory);
+        });
         SaveCommand = new Command(Save, () => HasChanges);
+        CloseFileCommand = new Command(() => { Selected = null; return Task.CompletedTask; });
         AllowChangesCommand = new Command(() => this.allowChanges?.Invoke() ?? Task.CompletedTask, () => CanAllowChanges);
+        UpdateCrumbs();
     }
 
     public ObservableCollection<FileRow> Rows { get; } = [];
+    public ObservableCollection<Crumb> Crumbs { get; } = [];
     public Command UpCommand { get; }
+    public Command<Crumb> GoCommand { get; }
     public Command RefreshCommand { get; }
     public Command SaveCommand { get; }
+    public Command CloseFileCommand { get; }
     public Command AllowChangesCommand { get; }
     public bool CanWrite => source.CanWrite;
     public bool IsReadOnly => !source.CanWrite;
     public bool CanAllowChanges => allowChanges is not null;
     public string? Status { get => status; private set { if (Set(ref status, value)) Raise(nameof(HasStatus)); } }
     public bool HasStatus => status is not null;
-    public string Directory { get => directory; private set { if (Set(ref directory, value)) { Raise(nameof(CanGoUp)); UpCommand.Refresh(); } } }
+    public string Directory { get => directory; private set { if (Set(ref directory, value)) { Raise(nameof(CanGoUp)); UpCommand.Refresh(); UpdateCrumbs(); } } }
     public bool CanGoUp => directory.TrimEnd('/').Length > root.TrimEnd('/').Length;
-    public bool Busy { get => busy; private set => Set(ref busy, value); }
+    public bool Busy { get => busy; private set { if (Set(ref busy, value)) Raise(nameof(IsFirstLoad), nameof(IsEmptyFolder)); } }
+    public bool IsFirstLoad => busy && Rows.Count == 0;
+    public bool IsEmptyFolder => listed && !busy && Rows.Count == 0;
+    public string EmptyText => all.Count == 0 ? "This folder is empty." : $"Nothing here matches \"{filter}\".";
     public string? Note { get => note; private set { if (Set(ref note, value)) Raise(nameof(HasNote)); } }
     public bool HasNote => note is not null;
     public bool HasOpenFile => openEntry is not null;
     public bool HasText => text is not null;
     public bool CanSave => CanWrite && HasText;
     public string OpenName => openEntry?.Name ?? "";
+    public string OpenDetail => openEntry is { } e ? $"{Format.Bytes(e.Size)} · {e.Modified.LocalDateTime:yyyy-MM-dd HH:mm}" : "";
     public bool HasChanges => text is not null && text != savedText;
     public FileRow? SelectedFile => selected is { IsDirectory: false } ? selected : null;
     public bool CanDownload => SelectedFile is not null;
+
+    public string Filter
+    {
+        get => filter;
+        set { if (Set(ref filter, value ?? "")) ShowRows(); }
+    }
 
     public string? Text
     {
@@ -78,15 +103,39 @@ sealed class FileBrowserViewModel : Observable, IDisposable
             Raise(nameof(SelectedFile), nameof(CanDownload));
             if (value is { IsDirectory: true }) _ = Go(value.Path);
             else if (value is not null) _ = Open(value);
+            else CloseFile();
         }
     }
 
-    // Only once the tab is looked at: listing reads the whole folder through the engine.
+    // Only once the tab is looked at: a listing can read a lot through the engine.
     public void EnsureLoaded()
     {
         if (loaded) return;
         loaded = true;
         _ = Go(root);
+    }
+
+    void UpdateCrumbs()
+    {
+        Crumbs.Clear();
+        var rootName = root.TrimEnd('/') is { Length: > 0 } r ? r[(r.LastIndexOf('/') + 1)..] : "/";
+        var parts = directory.TrimEnd('/')[root.TrimEnd('/').Length..].Split('/', StringSplitOptions.RemoveEmptyEntries);
+        Crumbs.Add(new Crumb(rootName, root, parts.Length == 0));
+        var path = root.TrimEnd('/');
+        for (var i = 0; i < parts.Length; i++)
+        {
+            path += "/" + parts[i];
+            Crumbs.Add(new Crumb(parts[i], path, i == parts.Length - 1));
+        }
+    }
+
+    void ShowRows()
+    {
+        var rows = filter.Length == 0 ? all : all.Where(r => r.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
+        selected = null;
+        Rows.Clear();
+        foreach (var row in rows) Rows.Add(row);
+        Raise(nameof(Selected), nameof(SelectedFile), nameof(CanDownload), nameof(IsEmptyFolder), nameof(EmptyText), nameof(IsFirstLoad));
     }
 
     async Task Go(string path)
@@ -102,10 +151,11 @@ sealed class FileBrowserViewModel : Observable, IDisposable
             if (token.IsCancellationRequested) return;
             Status = null;
             Directory = path;
-            selected = null;
-            Rows.Clear();
-            foreach (var entry in entries) Rows.Add(new FileRow(entry, path));
-            Raise(nameof(Selected), nameof(SelectedFile), nameof(CanDownload));
+            all = entries.Select(e => new FileRow(e, path)).ToList();
+            listed = true;
+            filter = "";
+            Raise(nameof(Filter));
+            ShowRows();
         }
         catch (OperationCanceledException) { }
         catch (Exception e) when (e is DockerException or IOException or InvalidDataException or EngineUnavailableException)
@@ -132,8 +182,7 @@ sealed class FileBrowserViewModel : Observable, IDisposable
                 savedText = Encoding.UTF8.GetString(content.Data);
                 text = savedText;
             }
-            Raise(nameof(Text), nameof(HasText), nameof(CanSave), nameof(HasOpenFile), nameof(OpenName), nameof(HasChanges));
-            SaveCommand.Refresh();
+            RaiseFile();
         }
         catch (OperationCanceledException) { }
         catch (Exception e) when (e is DockerException or IOException or InvalidDataException or EngineUnavailableException) { showError($"{row.Path}: {e.Message}"); }
@@ -145,7 +194,12 @@ sealed class FileBrowserViewModel : Observable, IDisposable
         openEntry = null;
         text = savedText = null;
         Note = null;
-        Raise(nameof(Text), nameof(HasText), nameof(CanSave), nameof(HasOpenFile), nameof(OpenName), nameof(HasChanges));
+        RaiseFile();
+    }
+
+    void RaiseFile()
+    {
+        Raise(nameof(Text), nameof(HasText), nameof(CanSave), nameof(HasOpenFile), nameof(OpenName), nameof(OpenDetail), nameof(HasChanges));
         SaveCommand.Refresh();
     }
 

@@ -1,6 +1,8 @@
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 
 namespace Dockyard.Dashboard.Features.Files;
 
@@ -9,7 +11,19 @@ public partial class FilesView : UserControl
     public FilesView()
     {
         InitializeComponent();
-        DataContextChanged += (_, _) => (DataContext as FileBrowserViewModel)?.EnsureLoaded();
+        DataContextChanged += (_, _) =>
+        {
+            if (DataContext is not FileBrowserViewModel vm) return;
+            vm.EnsureLoaded();
+            // The deepest folder is the one that matters when the path is wider than the pane.
+            vm.Crumbs.CollectionChanged += (_, _) => Dispatcher.UIThread.Post(() => CrumbScroll.ScrollToEnd(), DispatcherPriority.Loaded);
+        };
+        List.KeyDown += (_, e) =>
+        {
+            if (e.Key != Key.Back || DataContext is not FileBrowserViewModel vm || !vm.UpCommand.CanExecute(null)) return;
+            vm.UpCommand.Execute(null);
+            e.Handled = true;
+        };
     }
 
     async void DownloadClicked(object? sender, RoutedEventArgs e)

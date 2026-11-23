@@ -2,6 +2,14 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-23: A running container's folder is listed through its shell, everything else is read once
+
+The owner found browsing files slow. Listing a folder through the archive API returns its whole subtree: opening `/` in a container streamed its full filesystem (over 1 GB for an SQL Server image) on every click, and the same for every folder below.
+
+- **A running Linux container:** one `docker exec` per folder runs a fixed script with `sh`, one `stat -c` over the folder's entries, a loop of shell tests for folders and `readlink` for links. The folder goes in as an argument (`sh -c <script> sh <folder>`), never into the script. About 0.45 s per folder on the owner's laptop (the docker CLI starting included), however large the tree below it.
+- **Otherwise** (stopped containers, images without `sh` or `stat`, volumes through their holder, Windows containers): the archive of the whole tree is read once into memory, as images already were (2026-11-17), and every folder after that comes from there. A change made from the dashboard or **Refresh** reads it again. A failed shell listing switches the view to this for the rest of its life, until Refresh.
+- **The browser's look:** breadcrumbs with an up button, refresh, upload and download as icon buttons; a filter for the folder; column headers; folder and file icons; relative dates with the exact time as a tooltip; links show their target under their name; the open file gets its own header with size, Save, download and close, below a splitter. Disabled icon buttons are dimmed instead of a grey box.
+
 ## 2026-11-23: Every list picks many rows, and every question is one modal dialog
 
 Owner feedback round (2026-11-23): no multi-select or bulk actions; deleting from a row opened the detail to confirm; the always-visible name fields for creating were unexpected; switching engines asked nothing and showed nothing.
