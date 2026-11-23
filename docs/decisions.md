@@ -12,6 +12,13 @@ Owner feedback round (2026-11-23): no multi-select or bulk actions; deleting fro
 - **Switching engines** asks first and says whether the other engine stops (the tray's own setting, read from its file). Then it shows progress until the dashboard is connected to the new engine. The tray reports a failure back on the dashboard's pipe (`switch-failed <engine> <reason>`), and after 5 minutes the dialog gives up and points at Engines and settings.
 - **kind clusters** can be created with 0 to 3 worker nodes, through a kind config.
 - **Rows have readable names** for UI Automation and screen readers (they read as the record's `ToString` before).
+## 2026-11-23: The tray and wizard are published ReadyToRun
+
+The owner found the wizard and the tray window slow to open. Measured on the owner's Windows laptop, from process start to window: the dashboard (native AOT) 0.3 s, the wizard 2.2 to 4.7 s. Trimming takes the precompiled code out of the runtime's own assemblies, so the single-file app JIT-compiled CoreLib and Avalonia on every launch.
+
+- **`PublishReadyToRun`:** 0.75 to 1.1 s to the window (1.8 s the first time, while Defender scans the new file). The Windows exe grows from 42 to 69 MB, next to the 125 MB engine image the wizard downloads anyway. Private memory with the window open is unchanged (46 → 43 MB).
+- **Rejected, native AOT as for the dashboard:** Avalonia's Skia, HarfBuzz and ANGLE libraries then sit next to the exe, and the one-liners download the wizard as one file.
+- **Rejected, `EnableCompressionInSingleFile`:** it brings the exe to 34 MB at the same speed, but decompressed assemblies cannot be mapped from the file: +21 MB private memory, past the tray's 60 MB budget.
 ## 2026-11-23: With mirrored WSL, Windows' loopback is let past Docker's loopback guard
 
 The owner's kind cluster answered nothing on `https://127.0.0.1:<port>` from Windows (`kubectl get nodes` timed out), and neither did any other published port, while a plain listener in the distro did. With mirrored networking, a connection to `127.0.0.1` from Windows reaches the engine's Linux on the interface `loopback0`, not on `lo`. Docker 28 and later drop traffic for ports published on `127.0.0.1` that does not come in on `lo` (a raw-table rule per port), which is every kind API server. Ports published on all addresses are DNATed to the container instead of going to docker-proxy, with `127.0.0.1` as the source, which the bridge drops.
