@@ -2,6 +2,15 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-23: With mirrored WSL, Windows' loopback is let past Docker's loopback guard
+
+The owner's kind cluster answered nothing on `https://127.0.0.1:<port>` from Windows (`kubectl get nodes` timed out), and neither did any other published port, while a plain listener in the distro did. With mirrored networking, a connection to `127.0.0.1` from Windows reaches the engine's Linux on the interface `loopback0`, not on `lo`. Docker 28 and later drop traffic for ports published on `127.0.0.1` that does not come in on `lo` (a raw-table rule per port), which is every kind API server. Ports published on all addresses are DNATed to the container instead of going to docker-proxy, with `127.0.0.1` as the source, which the bridge drops.
+
+- **dockyard-agent inserts two rules at its start, on mirrored WSL only:** `raw PREROUTING -i loopback0 -d 127.0.0.0/8 -j ACCEPT` and `nat PREROUTING -i loopback0 -d 127.0.0.0/8 -j RETURN`. Such a connection then reaches docker-proxy on `127.0.0.1:<port>`, as one from inside the distro does. Docker appends its per-port raw rules, so the inserted rule stays ahead of them, also for containers started later.
+- **Only `loopback0`:** that interface carries Windows' own loopback and nothing from the LAN, so Docker's guard keeps working on the real interfaces.
+- **NAT networking is unchanged:** there the tray relays ports itself (DOK-8).
+- **Checked on the owner's laptop** (WSL 2.7.14, Docker 29.9.2) by adding the two rules by hand: `127.0.0.1` ports, all-address ports and the kind cluster all answered from Windows, and `kubectl get nodes` listed the node.
+
 ## 2026-11-21: No dotted or dashed dividers
 
 The owner's rule for every byhofman app (2026-11-20): "Dotted divider remove that applies to all apps!" Rows and sections are separated by spacing and grouping; where a line is needed it is a solid hairline in the surface tone. A sweep of the dashboard, the wizard, the tray window and the install scripts found no dotted or dashed line of any kind, so nothing changed on screen.
