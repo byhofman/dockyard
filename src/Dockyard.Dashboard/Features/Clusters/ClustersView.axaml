@@ -106,6 +106,11 @@
           <SelectableTextBlock Classes="mono" Text="{Binding Selected.ApiServer, FallbackValue=''}" />
           <SelectableTextBlock Classes="mono muted small" Text="{Binding KubectlHint}" TextWrapping="Wrap" />
 
+          <TextBlock Classes="section" Text="STORAGE" Margin="0,8,0,0" />
+          <TextBlock Classes="muted" Text="{Binding SharedStorageText}" TextWrapping="Wrap" />
+          <Button Content="Open the shared folder" Command="{Binding OpenSharedFolderCommand}" IsVisible="{Binding HasSharedFolder}"
+                  HorizontalAlignment="Left" ToolTip.Tip="{Binding SharedFolder}" />
+
           <TextBlock Classes="section" Text="LOAD BALANCERS" Margin="0,8,0,0" />
           <ItemsControl ItemsSource="{Binding LoadBalancerRows}" IsVisible="{Binding HasLoadBalancers}">
             <ItemsControl.ItemTemplate>

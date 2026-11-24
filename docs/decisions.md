@@ -2,6 +2,23 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-24: Shared storage for kind is a folder on the engine, chosen per cluster when it is made
+
+DOK-35, owner 2026-11-24 ("storage enablement should be per kind cluster"). The plan was an NFS server container with the NFS CSI driver; it needed NFS in the engine's kernel, unverified on the Mac VM.
+
+- **A folder every node mounts instead:** a cluster made with **Shared storage** has `/var/lib/dockyard/shared` on the engine mounted at `/var/dockyard-shared` in every node (kind `extraMounts`). Nodes are containers on one engine, so that is one filesystem for all of them, on Windows, Linux and the Mac alike, with no NFS at all.
+- **A second local-path provisioner offers it:** `dockyard-shared-provisioner` in `local-path-storage`, with kind's own provisioner and helper images (read from kind's deployment, so nothing is pulled and they follow kind's version) and `sharedFileSystemPath`, as the storage class `shared` (`ReadWriteMany`, `Immediate`). It is applied with the control plane's own kubectl, so it does not need kubectl on the host.
+- **A claim's folder is `<namespace>/<name>/files`** (the provisioner wants a folder below namespace/name), so clusters made with shared storage see the same files for the same claim. **Retain**, so deleting a claim in one cluster does not delete files another cluster may use.
+- **Only when a cluster is made:** kind cannot add a mount to a running node. The cluster's details say whether it has it; on Windows, **Open the shared folder** opens it through `\\wsl.localhost`.
+- **Load balancers stay one switch for all clusters:** cloud-provider-kind has no setting to leave a cluster out (checked in its `--help` and its controller, which serves every cluster `kind` lists, without leader election), and two of them would fight over the same services.
+- Checked on the owner's laptop: `SharedStorageEngineTests` makes a two-node cluster through Dockyard's create, and pods on both nodes write to one claim whose files are in the engine's folder.
+
+## 2026-11-24: Search finds everything, and the dashboard keeps running when closed
+
+Owner feedback (2026-11-24). Search filtered only the section on screen; it now also lists what matches in every section in a dropdown under the box (a few of each, grouped by kind in the sidebar's order), and opening one shows its section with that row picked, unfolding its Compose project. Each section offers its rows through `ISearchable.Find` and `Reveal`, with the same words its own filter matches.
+
+Closing the dashboard's window hides it; it stays connected, so opening it from the tray is instant. Quit in the tray's menu ends it too.
+
 ## 2026-11-24: Setup only installs or updates; the installed app's window manages, and the tray finds updates itself
 
 Owner feedback (2026-11-24): three UIs felt like too many, the tray should notice and install updates itself, and show what it updates to. Setup and the tray were already one exe and one window, in two modes, but both showed the full manage view, so running the downloaded exe again gave a second window managing the same install.

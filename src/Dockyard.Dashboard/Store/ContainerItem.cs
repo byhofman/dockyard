@@ -20,6 +20,7 @@ sealed class ContainerItem(string id) : Observable
     public string ImageId { get; private set; } = "";
     public IReadOnlyDictionary<string, string> Labels { get; private set; } = new Dictionary<string, string>();
     public IReadOnlyList<string> VolumeNames { get; private set; } = [];
+    public IReadOnlyList<string> BindTargets { get; private set; } = [];
     public string ShortId => Id[..Math.Min(12, Id.Length)];
     public string Name { get => name; private set => Set(ref name, value); }
     public override string ToString() => Name;
@@ -55,6 +56,7 @@ sealed class ContainerItem(string id) : Observable
         ImageId = s.ImageID;
         Labels = s.Labels ?? [];
         VolumeNames = (s.Mounts ?? []).Where(m => m.Type == "volume" && m.Name is not null).Select(m => m.Name!).ToList();
+        BindTargets = (s.Mounts ?? []).Where(m => m.Type == "bind").Select(m => m.Destination).ToList();
         Image = s.Image;
         State = s.State;
         Status = s.Status;

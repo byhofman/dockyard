@@ -22,7 +22,8 @@ static partial class KindClusters
             var port = front?.Ports.FirstOrDefault(p => p.ContainerPort == ApiServerPort)?.HostPort;
             var version = nodes.Where(c => Role(c).StartsWith("control-plane", StringComparison.Ordinal))
                 .Select(c => NodeVersion().Match(c.Image)).FirstOrDefault(m => m.Success)?.Groups["v"].Value;
-            return new KindCluster(g.Key, nodes.Select(c => new KindNode(c.Name, Role(c), c.State)).ToList(), version, port);
+            var shared = SharedStorage.On(nodes.Select(c => (Role(c), (IEnumerable<string>)c.BindTargets)));
+            return new KindCluster(g.Key, nodes.Select(c => new KindNode(c.Name, Role(c), c.State)).ToList(), version, port, shared);
         })
         .OrderBy(c => c.Name, StringComparer.Ordinal)
         .ToList();

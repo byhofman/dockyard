@@ -41,9 +41,13 @@ static class KindCli
             ? ["create", "cluster", "--name", name, "--kubeconfig", kubeconfig]
             : ["create", "cluster", "--name", name, "--kubeconfig", kubeconfig, "--config", config];
 
-    // One control plane and this many workers; without a config kind makes the control plane alone.
-    public static string Config(int workers) =>
-        "kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nnodes:\n- role: control-plane\n" + string.Concat(Enumerable.Repeat("- role: worker\n", workers));
+    // One control plane and this many workers, each mounting the shared folder when asked; without a config kind makes
+    // the control plane alone.
+    public static string Config(int workers, bool sharedStorage = false)
+    {
+        var mounts = sharedStorage ? SharedStorage.NodeMounts : "";
+        return "kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nnodes:\n- role: control-plane\n" + mounts + string.Concat(Enumerable.Repeat("- role: worker\n" + mounts, workers));
+    }
     public static string[] Delete(string name, string kubeconfig) => ["delete", "cluster", "--name", name, "--kubeconfig", kubeconfig];
     public static string[] Kubeconfig(string name) => ["get", "kubeconfig", "--name", name];
 

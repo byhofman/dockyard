@@ -1,6 +1,6 @@
 namespace Dockyard.Dashboard.Features.Clusters;
 
-sealed record KindCluster(string Name, IReadOnlyList<KindNode> Nodes, string? KubernetesVersion, int? ApiPort)
+sealed record KindCluster(string Name, IReadOnlyList<KindNode> Nodes, string? KubernetesVersion, int? ApiPort, bool HasSharedStorage = false)
 {
     public string Context => "kind-" + Name;
     public bool IsRunning => Nodes.All(n => n.IsRunning);

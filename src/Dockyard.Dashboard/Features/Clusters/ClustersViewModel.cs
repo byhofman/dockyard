@@ -32,6 +32,14 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
             return Task.CompletedTask;
         });
 
+        OpenSharedFolderCommand = new Command(() =>
+        {
+            if (SharedFolder is { } folder)
+                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{folder}\"") { UseShellExecute = false })?.Dispose(); }
+                catch (Exception ex) { Shell.ShowError($"Could not open {folder}: {ex.Message}"); }
+            return Task.CompletedTask;
+        });
+
         session.Connected += () => { controllerWanted = null; _ = Reload(); };
         session.Containers.RowsChanged += () => _ = Reload();
         session.PropertyChanged += (_, e) =>
@@ -49,6 +57,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     public Command CopyKubeconfigCommand { get; }
     public Command UseContextCommand { get; }
     public Command<PublishedPort> OpenUrlCommand { get; }
+    public Command OpenSharedFolderCommand { get; }
     public Command OpenSettingsCommand => Shell.SettingsCommand;
 
     // Set by the view, which has the clipboard.
@@ -85,11 +94,18 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     public bool HasHint => Hint.Length > 0;
     public string KubectlHint => Selected is { } c ? $"kubectl --context {c.Context} get nodes" : "";
 
+    public bool HasSharedStorage => Selected?.HasSharedStorage == true;
+    public string SharedStorageText => HasSharedStorage
+        ? $"Storage class \"{SharedStorage.ClassName}\": ReadWriteMany, so pods on every node use a claim at once. A claim's files are in {SharedStorage.HostPath}/<namespace>/<name> on the engine, the same for every cluster made with shared storage, and stay when the claim is deleted."
+        : "Made without shared storage, so only the node-local \"standard\" class. Shared storage can only be chosen when a cluster is created.";
+    public string? SharedFolder => HasSharedStorage && Session.ContextName == "linux" ? SharedStorage.WindowsFolder(OperatingSystem.IsWindows()) : null;
+    public bool HasSharedFolder => SharedFolder is not null;
+
     protected override object Key(KindCluster row) => row.Name;
 
     protected override void OnSelectionChanged(KindCluster? before)
     {
-        Raise(nameof(KubectlHint));
+        Raise(nameof(KubectlHint), nameof(HasSharedStorage), nameof(SharedStorageText), nameof(SharedFolder), nameof(HasSharedFolder));
         RefreshCommands();
         ShowLoadBalancers();
     }
@@ -157,13 +173,14 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         var workers = new DialogField("Worker nodes", choices: WorkerChoices);
         Shell.Open(new Dialog("Create a kind cluster",
             "Each node is a container on the Linux engine. The first cluster pulls kind's node image, which takes a few minutes. Its context goes into your kubeconfig and becomes the current one.",
-            "Create", d => Create(d, name.Value, Workers(workers.Value)), fields: [name, workers],
+            "Create", d => Create(d, name.Value, Workers(workers.Value), d.Option), fields: [name, workers],
+            optionText: "Shared storage: a storage class every node mounts at once (ReadWriteMany), with one folder for all clusters made with it. It can only be added now.",
             canConfirm: _ => KindClusters.IsValidName(name.Value) && all.All(c => c.Name != name.Value)));
     }
 
-    Task Create(Dialog dialog, string name, int workers) => RunKind(dialog, async (actions, onLine) =>
+    Task Create(Dialog dialog, string name, int workers, bool sharedStorage) => RunKind(dialog, async (actions, onLine) =>
     {
-        var file = await actions.Create(name, onLine, workers);
+        var file = await actions.Create(name, onLine, workers, sharedStorage);
         Shell.ShowInfo($"kubectl now uses {KindKubeconfig.Key(name)}, from {file}");
     });
 
