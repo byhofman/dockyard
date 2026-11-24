@@ -17,13 +17,14 @@ static class TrayIconRenderer
         string.Concat(new[] { 35, 43, 51, 59, 67 }.Select(x => FormattableString.Invariant($"M{x - 1.2} 56A1.2 1.2 0 0 1 {x + 1.2} 56V67A1.2 1.2 0 0 1 {x - 1.2} 67Z "))));
     static readonly Matrix MarkToIcon =
         Matrix.CreateTranslation(-50, -47.5) * Matrix.CreateScale(Size / 54.0, Size / 54.0) * Matrix.CreateTranslation(Size / 2.0, Size / 2.0);
-    static readonly Dictionary<(Color, string), WindowIcon> Cache = [];
+    static readonly Dictionary<(Color, string, bool), WindowIcon> Cache = [];
 
     static readonly IBrush BadgeBrush = new SolidColorBrush(Color.Parse("#4B5563"));
+    static readonly IBrush UpdateBrush = new SolidColorBrush(Color.Parse("#3B9EFF"));
 
-    public static WindowIcon Render(Color mark, string? badge)
+    public static WindowIcon Render(Color mark, string? badge, bool update = false)
     {
-        if (Cache.TryGetValue((mark, badge ?? ""), out var cached)) return cached;
+        if (Cache.TryGetValue((mark, badge ?? "", update), out var cached)) return cached;
 
         var bitmap = new RenderTargetBitmap(new PixelSize(Size, Size), new Vector(96, 96));
         using (var ctx = bitmap.CreateDrawingContext())
@@ -32,8 +33,12 @@ static class TrayIconRenderer
             var d = Size * 0.56;
             var badgeRect = new Rect(Size - d, Size - d, d, d);
             var cutout = badgeRect.Inflate(Size / 16.0);
+            var dot = Size * 0.36;
+            var dotRect = new Rect(Size - dot, 0, dot, dot);
 
-            Geometry clip = badge is null ? new RectangleGeometry(bounds) : new CombinedGeometry(GeometryCombineMode.Exclude, new RectangleGeometry(bounds), new EllipseGeometry(cutout));
+            Geometry clip = new RectangleGeometry(bounds);
+            if (badge is not null) clip = new CombinedGeometry(GeometryCombineMode.Exclude, clip, new EllipseGeometry(cutout));
+            if (update) clip = new CombinedGeometry(GeometryCombineMode.Exclude, clip, new EllipseGeometry(dotRect.Inflate(Size / 16.0)));
             using (ctx.PushGeometryClip(clip))
             using (ctx.PushTransform(MarkToIcon))
                 ctx.DrawGeometry(new SolidColorBrush(mark), null, Mark);
@@ -45,10 +50,11 @@ static class TrayIconRenderer
                     new Typeface("Segoe UI", FontStyle.Normal, FontWeight.Bold), d * 0.78, Brushes.White);
                 ctx.DrawText(text, new Point(badgeRect.Center.X - text.Width / 2, badgeRect.Center.Y - text.Height / 2));
             }
+            if (update) ctx.DrawEllipse(UpdateBrush, null, dotRect);
         }
 
         var icon = new WindowIcon(bitmap);
-        Cache[(mark, badge ?? "")] = icon;
+        Cache[(mark, badge ?? "", update)] = icon;
         return icon;
     }
 }

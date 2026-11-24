@@ -10,6 +10,7 @@ sealed class ComponentViewModel(ComponentInfo info) : Observable
     string? error;
     bool isPresent;
     bool include = true;
+    Release? latestRelease;
 
     public ComponentInfo Info { get; } = info;
     public string Id => Info.Id;
@@ -17,10 +18,20 @@ sealed class ComponentViewModel(ComponentInfo info) : Observable
     public required Command UpdateCommand { get; init; }
     public Command? AddCommand { get; init; }
     public Command? RemoveCommand { get; init; }
-    public Release? LatestRelease { get; set; }
+    public Release? LatestRelease { get => latestRelease; set { latestRelease = value; Raise(nameof(NotesUrl), nameof(HasNotes)); } }
 
     public string Installed { get => installed; set => Set(ref installed, value); }
-    public string Latest { get => latest; set => Set(ref latest, value); }
+    public string Latest { get => latest; set { if (Set(ref latest, value)) Raise(nameof(UpdateText)); } }
+    public string UpdateText => $"Update to {Latest}";
+    public string? NotesUrl => UpdateOffers.NotesUrl(Id, LatestRelease);
+    public bool HasNotes => NotesUrl is not null && IsAvailable;
+    public Command OpenNotesCommand => new(() =>
+    {
+        if (NotesUrl is { } url)
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true })?.Dispose(); }
+            catch (Exception) { }
+        return Task.CompletedTask;
+    });
     public string? Error { get => error; set => Set(ref error, value); }
 
     public UpdateState State
@@ -29,7 +40,7 @@ sealed class ComponentViewModel(ComponentInfo info) : Observable
         set
         {
             if (Set(ref state, value))
-                Raise(nameof(StatusText), nameof(IsAvailable), nameof(IsUpToDate), nameof(IsProblem), nameof(IsNeutral));
+                Raise(nameof(StatusText), nameof(IsAvailable), nameof(HasNotes), nameof(IsUpToDate), nameof(IsProblem), nameof(IsNeutral));
         }
     }
 
@@ -37,6 +48,7 @@ sealed class ComponentViewModel(ComponentInfo info) : Observable
     // The first install's choice for this row.
     public bool Include { get => include; set => Set(ref include, value); }
     public bool IsOptional => Info.IsOptional;
+    public bool IsDockyard => Id is nameof(Core.Component.App) or Core.ComponentRules.DashboardId;
     public string AddId => "Add-" + Id;
     public string RemoveId => "Remove-" + Id;
     public string UpdateId => "Update-" + Id;

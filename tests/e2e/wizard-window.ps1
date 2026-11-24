@@ -1,6 +1,8 @@
 <#
-  Drives the wizard's real window through UI Automation, as the owner would: opens it on an install without the
-  dashboard, sees the versions, adds the dashboard and removes it again. Windows PowerShell 5.1 has UI Automation.
+  Drives Dockyard's real window through UI Automation, as the owner would: runs the downloaded exe on an install without
+  the dashboard, sees the versions, adds the dashboard and removes it again. On an install as new as the exe, it opens
+  the installed app's window and exits; on an older one, and from releases before that, it is its own window.
+  Windows PowerShell 5.1 has UI Automation.
     wizard-window.ps1 -Exe <Dockyard.exe> -Screenshots <dir> -Dashboard <path of the dashboard, wildcards allowed> [-LookOnly <name>]
 #>
 param([Parameter(Mandatory)][string]$Exe, [Parameter(Mandatory)][string]$Screenshots, [Parameter(Mandatory)][string]$Dashboard, [string]$LookOnly, [string]$Assets)
@@ -49,17 +51,28 @@ function Click($window, $name) {
     $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
 }
 
+$appExe = Join-Path $env:ProgramFiles 'Dockyard\Dockyard.exe'
 $process = if ($Assets) { Start-Process $Exe -ArgumentList '--assets', $Assets -PassThru } else { Start-Process $Exe -PassThru }
+$handedOver = $false
 try {
-    $window = Wait-For 'the wizard window' {
+    $window = Wait-For 'a Dockyard window' {
         $process.Refresh()
-        if ($process.HasExited) { throw "FAIL the wizard exited with $($process.ExitCode)" }
-        if ($process.MainWindowHandle -ne 0) { $auto::FromHandle($process.MainWindowHandle) }
+        if (-not $process.HasExited -and $process.MainWindowHandle -ne 0) { return $auto::FromHandle($process.MainWindowHandle) }
+        if ($process.HasExited) {
+            if ($process.ExitCode -ne 0) { throw "FAIL the exe exited with $($process.ExitCode)" }
+            $tray = Get-Process Dockyard -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $appExe -and $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+            if ($tray) { $script:handedOver = $true; $auto::FromHandle($tray.MainWindowHandle) }
+        }
     }
-    Write-Host '  ok   the wizard window opens'
+    Write-Host "  ok   $(if ($handedOver) { "the installed app's window opens" } else { 'the setup window opens' })"
 
-    Wait-For 'the manage view' { Find-Named $window 'MANAGE' } | Out-Null
-    Write-Host '  ok   it shows the manage view on an existing install'
+    $view = Wait-For 'the update or manage view' { if (Find-Named $window 'COMPONENTS') { 'COMPONENTS' } elseif (Find-Named $window 'MANAGE') { 'MANAGE' } }
+    Write-Host "  ok   it shows $view on an existing install"
+    if ($LookOnly -and $view -eq 'MANAGE') {
+        Start-Sleep 4
+        Shot $LookOnly
+        return
+    }
     Wait-For 'the Dashboard row' { Find-Named $window 'Dashboard' } | Out-Null
     Write-Host '  ok   it lists the dashboard'
     Start-Sleep 8
@@ -93,4 +106,6 @@ try {
     Write-Host '  ok   Remove takes it away again'
 } finally {
     if (-not $process.HasExited) { $process.Kill() }
+    # The installed app's window only hides when closed, and the tray keeps running for the steps after this.
+    if ($handedOver -and $window) { $window.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern).Close() }
 }

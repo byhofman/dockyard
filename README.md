@@ -28,11 +28,13 @@ curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install.sh |
 
 The line only downloads the installer, checks its checksum and starts it. Your system may ask for an administrator's approval during setup, and if Windows has to restart, Dockyard carries on by itself afterwards.
 
-Run the same line again at any time. On an existing install the wizard shows what is installed and what is new, and updates it. Your images, containers and settings stay.
+Run the same line again at any time. If it brings a newer Dockyard, setup offers **Update to** that version; otherwise it opens the installed Dockyard's window. Your images, containers and settings stay.
 
 ### Choose what you want
 
-The wizard lists every component with its version, the version this Dockyard brings and **Update**, plus **Add** or **Remove** where that is possible, also in **Engines and settings…** in the tray. Each row says what it needs or why it cannot go.
+Setup asks which optional components to install. Afterwards **Engines and settings…** in the tray, or the dashboard's gear, lists every component with its version, the newest version and **Update to** it, plus **Add** or **Remove** where that is possible. Each row says what it needs or why it cannot go.
+
+The tray looks for updates by itself every six hours. A blue dot on its icon and an **Update Dockyard to …** item in its menu say one is there; **What's new** next to the version opens its release notes.
 
 Every tool Dockyard downloads from someone else (Docker, Compose, Buildx, the credential helpers and kind) has its version fixed per Dockyard release and is checked against a SHA-256 kept in Dockyard (`image/versions.env`, `image/versions.sha256`), so a replaced file upstream is refused. A new Dockyard release is what moves them.
 

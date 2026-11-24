@@ -5,7 +5,8 @@ using Dockyard.Shared;
 
 namespace Dockyard;
 
-// One exe: run from where it is installed it is the tray app; anywhere else (or with --setup) it is the wizard;
+// One exe: run from where it is installed it is the tray app; anywhere else (or with --setup) it is the wizard, which on an
+// install that is as new opens the installed app's window instead;
 // --silent is the wizard without a window; --machine-* is the elevated half of setup.
 static class Program
 {
@@ -45,6 +46,7 @@ static class Program
                 return RunSilent(options);
             }
             if (!DisplayGate.WaitUntilUsable(TimeSpan.FromMinutes(10))) return 0;
+            if (!isTray && !options.OpenSetup && HandOver(host)) return 0;
             return Build(AppMode.Setup, args).StartWithClassicDesktopLifetime(args, ShutdownMode.OnMainWindowClose);
         }
 
@@ -60,6 +62,20 @@ static class Program
         // The login item can start while the screen is locked; a tray has no reason to give up waiting for it.
         DisplayGate.WaitUntilUsable(Timeout.InfiniteTimeSpan);
         return Build(AppMode.Tray, args).StartWithClassicDesktopLifetime(args, ShutdownMode.OnExplicitShutdown);
+    }
+
+    static bool HandOver(Hosts.IEngineHost host)
+    {
+        try
+        {
+            return host.IsInstalled
+                && TrayLink.HandsOver(Updates.ParseVersion(Paths.AppVersion), host.Installed(nameof(Component.App)).GetAwaiter().GetResult())
+                && TrayLink.ShowSettings(host, TimeSpan.FromSeconds(20)).GetAwaiter().GetResult();
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     static int RunSilent(SetupOptions options)

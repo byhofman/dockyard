@@ -6,7 +6,7 @@
         xmlns:clu="using:Dockyard.Dashboard.Features.Clusters"
         x:Class="Dockyard.Dashboard.Shell.MainWindow"
         x:DataType="shell:ShellViewModel"
-        Title="Dockyard"
+        Title="Dockyard Dashboard"
         Icon="avares://Dockyard.Dashboard/Assets/dockyard.ico"
         Width="1240" Height="760" MinWidth="720" MinHeight="480"
         WindowStartupLocation="CenterScreen">

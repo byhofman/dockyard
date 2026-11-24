@@ -3,12 +3,36 @@
         xmlns:vm="using:Dockyard.ViewModels"
         x:Class="Dockyard.Views.MainWindow"
         x:DataType="vm:MainViewModel"
-        Title="Dockyard"
+        Title="{Binding WindowTitle}"
         Icon="avares://Dockyard/Assets/dockyard.ico"
         Width="860" Height="700" MinWidth="720" MinHeight="520"
         WindowStartupLocation="CenterScreen">
 
   <Window.Resources>
+    <DataTemplate x:Key="ComponentRow" x:DataType="vm:ComponentViewModel">
+      <Border BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="18,10">
+        <Grid ColumnDefinitions="*,90,90,130,220">
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,10,0" />
+            <TextBlock Classes="muted" FontSize="11" TextWrapping="Wrap" Text="{Binding Note}" IsVisible="{Binding HasNote}" Margin="0,0,10,0" />
+          </StackPanel>
+          <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Installed}" VerticalAlignment="Center" />
+          <StackPanel Grid.Column="2" VerticalAlignment="Center">
+            <TextBlock Classes="mono" Text="{Binding Latest}" />
+            <Button Classes="link" Content="What's new" Command="{Binding OpenNotesCommand}" IsVisible="{Binding HasNotes}" Padding="0,2" HorizontalAlignment="Left"
+                    ToolTip.Tip="{Binding NotesUrl}" />
+          </StackPanel>
+          <Border Grid.Column="3" Classes="pill" Classes.ok="{Binding IsUpToDate}" Classes.warn="{Binding IsAvailable}" Classes.bad="{Binding IsProblem}" ToolTip.Tip="{Binding Error}">
+            <TextBlock Text="{Binding StatusText}" />
+          </Border>
+          <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right" VerticalAlignment="Center">
+            <Button Classes="primary" Content="{Binding UpdateText}" AutomationProperties.AutomationId="{Binding UpdateId}" Command="{Binding UpdateCommand}" IsVisible="{Binding IsAvailable}" />
+            <Button Classes="primary" Content="Add" AutomationProperties.AutomationId="{Binding AddId}" Command="{Binding AddCommand}" IsVisible="{Binding CanAdd}" />
+            <Button Classes="danger" Content="Remove" AutomationProperties.AutomationId="{Binding RemoveId}" Command="{Binding RemoveCommand}" IsVisible="{Binding CanRemove}" />
+          </StackPanel>
+        </Grid>
+                    </Border>
+    </DataTemplate>
     <Flyout x:Key="ConfirmUninstall" Placement="TopEdgeAlignedRight">
       <StackPanel Spacing="12" MaxWidth="320" x:DataType="vm:MainViewModel">
         <TextBlock FontWeight="SemiBold" Text="Uninstall Dockyard?" />
@@ -71,7 +95,7 @@
               <ItemsControl ItemsSource="{Binding OptionalChoices}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:ComponentViewModel">
-                    <CheckBox IsChecked="{Binding Include}" ToolTip.Tip="You can add or remove this later, here or in the tray window.">
+                    <CheckBox IsChecked="{Binding Include}" ToolTip.Tip="You can add or remove this later, in Dockyard's window from the tray.">
                       <TextBlock Text="{Binding IncludeText}" TextWrapping="Wrap" />
                     </CheckBox>
                   </DataTemplate>
@@ -89,7 +113,7 @@
           <Border Classes="card">
             <Grid ColumnDefinitions="*,Auto">
               <TextBlock TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,16,0" Text="{Binding ManageText}" />
-              <Button Grid.Column="1" Classes="primary" Content="Update" Command="{Binding InstallCommand}" />
+              <Button Grid.Column="1" Classes="primary" Content="{Binding ReinstallText}" Command="{Binding InstallCommand}" />
             </Grid>
           </Border>
         </StackPanel>
@@ -149,36 +173,20 @@
           </Grid>
           <Border Classes="card" Padding="0">
             <StackPanel>
-              <Grid ColumnDefinitions="*,90,90,130,160" Margin="18,12">
+              <Grid ColumnDefinitions="*,90,90,130,220" Margin="18,12">
                 <TextBlock Classes="muted" FontSize="12" Text="Component" />
                 <TextBlock Grid.Column="1" Classes="muted" FontSize="12" Text="Installed" />
                 <TextBlock Grid.Column="2" Classes="muted" FontSize="12" Text="Available" />
                 <TextBlock Grid.Column="3" Classes="muted" FontSize="12" Text="Status" />
               </Grid>
-              <ItemsControl ItemsSource="{Binding Components}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="vm:ComponentViewModel">
-                    <Border BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="18,10">
-                      <Grid ColumnDefinitions="*,90,90,130,160">
-                        <StackPanel VerticalAlignment="Center">
-                          <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,10,0" />
-                          <TextBlock Classes="muted" FontSize="11" TextWrapping="Wrap" Text="{Binding Note}" IsVisible="{Binding HasNote}" Margin="0,0,10,0" />
-                        </StackPanel>
-                        <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Installed}" VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="2" Classes="mono" Text="{Binding Latest}" VerticalAlignment="Center" />
-                        <Border Grid.Column="3" Classes="pill" Classes.ok="{Binding IsUpToDate}" Classes.warn="{Binding IsAvailable}" Classes.bad="{Binding IsProblem}" ToolTip.Tip="{Binding Error}">
-                          <TextBlock Text="{Binding StatusText}" />
-                        </Border>
-                        <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right" VerticalAlignment="Center">
-                          <Button Classes="primary" Content="Update" AutomationProperties.AutomationId="{Binding UpdateId}" Command="{Binding UpdateCommand}" IsVisible="{Binding IsAvailable}" />
-                          <Button Classes="primary" Content="Add" AutomationProperties.AutomationId="{Binding AddId}" Command="{Binding AddCommand}" IsVisible="{Binding CanAdd}" />
-                          <Button Classes="danger" Content="Remove" AutomationProperties.AutomationId="{Binding RemoveId}" Command="{Binding RemoveCommand}" IsVisible="{Binding CanRemove}" />
-                        </StackPanel>
-                      </Grid>
-                    </Border>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
+              <Border BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="18,12,18,6">
+                <TextBlock Classes="h2" Text="DOCKYARD" />
+              </Border>
+              <ItemsControl ItemsSource="{Binding DockyardComponents}" ItemTemplate="{StaticResource ComponentRow}" />
+              <Border BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="18,12,18,6">
+                <TextBlock Classes="h2" Text="DOCKER" />
+              </Border>
+              <ItemsControl ItemsSource="{Binding DockerComponents}" ItemTemplate="{StaticResource ComponentRow}" />
             </StackPanel>
           </Border>
         </StackPanel>

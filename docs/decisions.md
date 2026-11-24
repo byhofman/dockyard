@@ -2,6 +2,16 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-24: Setup only installs or updates; the installed app's window manages, and the tray finds updates itself
+
+Owner feedback (2026-11-24): three UIs felt like too many, the tray should notice and install updates itself, and show what it updates to. Setup and the tray were already one exe and one window, in two modes, but both showed the full manage view, so running the downloaded exe again gave a second window managing the same install.
+
+- **Setup on an install as new as itself hands over:** it opens the installed app's window (through the tray's pipe, or by starting the tray) and exits. Only on an older install does it open, with just **Update to <version>**. A branch build is 0.0.0, which installs over any release, so it hands over only to an install of itself. `--setup` still opens it. If the installed window does not come up within 20 s, setup opens as before.
+- **After installing or updating, setup closes and the installed window opens,** unless Windows has to restart. Two processes no longer manage one install.
+- **The tray checks every six hours by itself,** not only when its window opens, without the busy state that would block its menu; after a failed check it tries again in 30 minutes. An update shows as a blue dot on the tray icon and an **Update Dockyard to <version>** item at the top of the menu, which opens the window and updates everything that has an update.
+- **Buttons name the version:** **Update to 0.7.1**, and **What's new** links Dockyard's and the dashboard's release notes. The other components are pinned per release, so their version comes with Dockyard's.
+- **Window titles differ:** "Dockyard Setup", "Dockyard" and "Dockyard Dashboard".
+
 ## 2026-11-23: kind's LoadBalancer services get an address through cloud-provider-kind in a container
 
 DOK-34, owner 2026-11-23. kind has no load balancer of its own, so a `type: LoadBalancer` service stayed pending.
