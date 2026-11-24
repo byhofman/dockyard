@@ -111,7 +111,7 @@ Dockyard sits in the tray or menu bar. The icon is the Dockyard crane and contai
 
 Its process is called `Dockyard Dashboard` in Task Manager and Activity Monitor. On Linux, `ps`, `top` and `/proc` cut process names at 15 characters, so they show `Dockyard Dashbo`; `ps -f` shows the whole path.
 
-It follows the active docker context and updates live from the engine's events. It polls nothing and exits when you close it.
+It follows the active docker context and updates live from the engine's events. Closing its window leaves it running in the background (about 50 MB of memory, next to no CPU), so it opens again at once; **Quit** in the tray menu ends it too.
 
 - **Containers**: running and stopped, with ports (click to open `http://127.0.0.1:<port>`) and live CPU and memory. Compose projects are expandable rows. Per container: logs, **Files** (read, edit, download and upload, also in stopped containers and images without a shell), inspect, graphs, and **Terminal**. A compose project has up, stop, restart, pull, down and merged logs; **Open compose file…** starts a project from a file.
 - **Images**: pull with progress, tags, size, which containers use them, remove, prune.
@@ -119,7 +119,9 @@ It follows the active docker context and updates live from the engine's events. 
 - **Networks**: subnet, connected containers, connect, disconnect, create, remove, prune.
 - **Disk**: `docker system df` per category; prune per category or **Clean everything unused**.
 
-Keys: `Ctrl+K` (`⌘K` on macOS) search, `S` start/stop, `R` restart, `E` terminal, `L` logs, `Del` remove (with confirmation), `Left`/`Right` collapse or expand a compose project.
+**Search** (`Ctrl+K`, `⌘K` on macOS) finds containers, compose projects, images, volumes, networks and clusters at once, grouped by kind; `Up`/`Down` and `Enter` open a result in its section. It also filters the section on screen.
+
+Keys: `S` start/stop, `R` restart, `E` terminal, `L` logs, `Del` remove (with confirmation), `Left`/`Right` collapse or expand a compose project.
 
 ## Kubernetes with kind
 
@@ -137,6 +139,9 @@ kind delete cluster --name dev
 On Windows, kind uses the `linux` context, the default; with `win` active it has no Linux engine to run on.
 
 In the dashboard, **Clusters** lists them from the engine with their Kubernetes version, nodes and API server, creates and deletes them, copies a cluster's kubeconfig and makes its context the current one. Creating a cluster there adds its context to `~/.kube/config` (or the first existing file in `$KUBECONFIG`) and makes it current; deleting it takes exactly those entries out again and goes back to the context that was current before. The first time Dockyard changes that file it keeps a copy next to it, `config.dockyard-backup`. kubectl is not part of Dockyard; any kubectl reaches the cluster with `--context kind-<name>`.
+
+- **Load balancers:** a `type: LoadBalancer` service gets an IP through kind's [cloud provider](https://github.com/kubernetes-sigs/cloud-provider-kind), which Dockyard runs as one container for all clusters while the **Load balancers** switch in Clusters is on (the default). Clusters shows each service's load balancer IP and its ports as `http://127.0.0.1:<port>` links that work from this computer. It installs nothing else in your clusters: no ingress controller and no Gateway API.
+- **Shared storage:** chosen per cluster when you create it in the dashboard. Every node mounts one folder, and a `shared` StorageClass (ReadWriteMany, reclaim policy Retain) puts each claim in `<namespace>/<claim>/files` there, so pods on different nodes see the same files and they survive deleting the claim. Clusters has a button that opens the folder.
 
 ## Container domains
 
