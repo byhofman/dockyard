@@ -168,5 +168,7 @@ sealed class VolumesViewModel : SelectableSection<VolumeRow>
         ApplyFilter();
     }
 
-    protected override void ApplyFilter() => ReplaceRows(all.Where(r => Matches(Filter, r.Name, r.Driver, r.UsageText)));
+    protected override IEnumerable<VolumeRow> All => all;
+    protected override string?[] Words(VolumeRow row) => [row.Name, row.Driver, row.UsageText];
+    protected override SearchResult Describe(VolumeRow row) => new(row.Name, row.UsageText, row);
 }

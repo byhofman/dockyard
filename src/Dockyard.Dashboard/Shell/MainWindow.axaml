@@ -58,6 +58,29 @@
               <PathIcon Data="{StaticResource IconSearch}" Margin="10,0,0,0" Foreground="{DynamicResource Muted}" />
             </TextBox.InnerLeftContent>
           </TextBox>
+          <Popup Grid.Column="1" PlacementTarget="{Binding #SearchBox}" Placement="BottomEdgeAlignedLeft" VerticalOffset="6"
+                 IsOpen="{Binding IsSearchOpen, Mode=TwoWay}" IsLightDismissEnabled="True" OverlayInputPassThroughElement="{Binding #SearchBox}">
+            <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="8" Padding="6"
+                    Width="{Binding #SearchBox.Bounds.Width}" MinWidth="360">
+              <StackPanel>
+                <TextBlock Classes="muted" Margin="10,8" Text="Nothing matches" IsVisible="{Binding HasNoHits}" />
+                <ListBox x:Name="SearchResults" ItemsSource="{Binding Hits}" SelectedIndex="{Binding HitIndex, Mode=TwoWay}" MaxHeight="420"
+                         Background="Transparent" Tapped="OpenSearchResult" Focusable="False">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="shell:SearchHit">
+                      <Grid ColumnDefinitions="110,*">
+                        <TextBlock Classes="muted" FontSize="11" Text="{Binding Kind}" IsVisible="{Binding StartsGroup}" VerticalAlignment="Center" />
+                        <StackPanel Grid.Column="1">
+                          <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                          <TextBlock Classes="muted" FontSize="12" Text="{Binding Detail}" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                      </Grid>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+              </StackPanel>
+            </Border>
+          </Popup>
 
           <Border Grid.Column="2" Classes="pill warn" Margin="0,0,12,0" IsVisible="{Binding Session.IsReconnecting}">
             <TextBlock Text="Reconnecting…" />

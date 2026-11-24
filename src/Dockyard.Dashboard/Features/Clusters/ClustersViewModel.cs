@@ -112,7 +112,9 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         return SyncController();
     }
 
-    protected override void ApplyFilter() => ReplaceRows(all.Where(c => Matches(Filter, c.Name, c.Context, c.KubernetesVersion)));
+    protected override IEnumerable<KindCluster> All => all;
+    protected override string?[] Words(KindCluster row) => [row.Name, row.Context, row.KubernetesVersion];
+    protected override SearchResult Describe(KindCluster row) => new(row.Name, row.Context, row);
 
     void ShowLoadBalancers()
     {
