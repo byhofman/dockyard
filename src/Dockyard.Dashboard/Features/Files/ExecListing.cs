@@ -31,6 +31,8 @@ static class ExecListing
             CreateNoWindow = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
         };
         foreach (var a in Args(context, container, directory)) psi.ArgumentList.Add(a);
         try

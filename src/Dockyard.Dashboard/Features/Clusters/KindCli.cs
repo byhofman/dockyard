@@ -59,6 +59,8 @@ static class KindCli
             CreateNoWindow = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
         };
         foreach (var a in args) psi.ArgumentList.Add(a);
         foreach (var (key, value) in Environment(context, Containers.DockerCli.Path(), System.Environment.GetEnvironmentVariable("PATH")))

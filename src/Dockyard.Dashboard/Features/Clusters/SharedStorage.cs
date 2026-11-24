@@ -64,6 +64,8 @@ static partial class SharedStorage
             CreateNoWindow = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
         };
         foreach (var a in args) psi.ArgumentList.Add(a);
         using var process = Process.Start(psi) ?? throw new InvalidOperationException("Could not start docker");
