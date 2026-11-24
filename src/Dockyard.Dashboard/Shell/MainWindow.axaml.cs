@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -31,6 +32,20 @@ public partial class MainWindow : Window
         target?.Focus(NavigationMethod.Tab);
     }
 
+    // The scrim stops the mouse, but Tab would walk on into the window behind the dialog.
+    void CycleDialogFocus(bool back)
+    {
+        var stops = DialogLayer.GetVisualDescendants().OfType<InputElement>()
+            .Where(c => c.Focusable && c.IsEffectivelyVisible && c.IsEffectivelyEnabled && KeyboardNavigation.GetIsTabStop(c))
+            .ToList();
+        stops = stops.Where(c => !stops.Any(other => other != c && other.IsVisualAncestorOf(c))).ToList();
+        if (stops.Count == 0) return;
+        var focused = FocusManager?.GetFocusedElement() as Visual;
+        var at = stops.FindIndex(c => c == focused || (focused is not null && c.IsVisualAncestorOf(focused)));
+        var next = at < 0 ? (back ? stops.Count - 1 : 0) : (at + (back ? stops.Count - 1 : 1)) % stops.Count;
+        stops[next].Focus(NavigationMethod.Tab);
+    }
+
     void OnPreviewKeyDown(object? sender, KeyEventArgs e)
     {
         if (DataContext is ShellViewModel { Dialog: { } dialog })
@@ -38,6 +53,11 @@ public partial class MainWindow : Window
             if (e.Key == Key.Escape)
             {
                 dialog.CancelCommand.Execute(null);
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Tab)
+            {
+                CycleDialogFocus(back: e.KeyModifiers.HasFlag(KeyModifiers.Shift));
                 e.Handled = true;
             }
             return;
