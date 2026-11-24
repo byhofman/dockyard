@@ -117,7 +117,12 @@ public partial class App : Application
         var settings = new NativeMenuItem("Engines and settings…");
         settings.Click += (_, _) => ShowWindow();
         var quit = new NativeMenuItem("Quit");
-        quit.Click += (_, _) => Quit();
+        quit.Click += (_, _) =>
+        {
+            // The dashboard stays running when its window closes; quitting Dockyard ends it too.
+            LocalPipe.TrySend(LocalPipe.DashboardName, "quit");
+            Quit();
+        };
 
         var menu = new NativeMenu();
         updateItem = new NativeMenuItem { IsVisible = false };
