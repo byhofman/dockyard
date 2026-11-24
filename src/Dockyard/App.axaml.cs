@@ -117,18 +117,21 @@ public partial class App : Application
         var settings = new NativeMenuItem("Engines and settings…");
         settings.Click += (_, _) => ShowWindow();
         var quit = new NativeMenuItem("Quit");
-        quit.Click += (_, _) => Quit();
+        quit.Click += (_, _) =>
+        {
+            // The dashboard stays running when its window closes; quitting Dockyard ends it too.
+            LocalPipe.TrySend(LocalPipe.DashboardName, "quit");
+            Quit();
+        };
 
         var menu = new NativeMenu();
-        updateItem = new NativeMenuItem { IsVisible = false };
+        updateItem = new NativeMenuItem();
         updateItem.Click += (_, _) =>
         {
             ShowWindow();
             vm.UpdateAllCommand.Execute(null);
         };
-        updateSeparator = new NativeMenuItemSeparator { IsVisible = false };
-        menu.Add(updateItem);
-        menu.Add(updateSeparator);
+        updateSeparator = new NativeMenuItemSeparator();
         if (vm.EngineCards.Count > 1)
         {
             foreach (var engine in vm.EngineCards)
@@ -182,7 +185,18 @@ public partial class App : Application
         if (updateItem is not null && updateSeparator is not null)
         {
             updateItem.Header = offer ?? "";
-            updateItem.IsVisible = updateSeparator.IsVisible = offer is not null;
+            // The Windows tray menu draws a hidden separator anyway, so the pair is added and removed instead.
+            var menu = tray.Menu!;
+            if (offer is not null && !menu.Items.Contains(updateItem))
+            {
+                menu.Items.Insert(0, updateItem);
+                menu.Items.Insert(1, updateSeparator);
+            }
+            else if (offer is null && menu.Items.Contains(updateItem))
+            {
+                menu.Items.Remove(updateItem);
+                menu.Items.Remove(updateSeparator);
+            }
             updateItem.IsEnabled = !vm.IsBusy;
         }
         foreach (var (engine, item) in engineItems)

@@ -68,12 +68,26 @@ public partial class MainWindow : Window
             SearchBox.SelectAll();
             e.Handled = true;
         }
+        else if (SearchBox.IsFocused && DataContext is ShellViewModel shell && shell.IsSearchOpen && e.Key is Key.Down or Key.Up or Key.Enter or Key.Escape)
+        {
+            if (e.Key == Key.Escape) shell.IsSearchOpen = false;
+            else if (e.Key == Key.Enter) shell.OpenHit();
+            else shell.MoveHit(e.Key == Key.Down ? 1 : -1);
+            SearchResults.ScrollIntoView(shell.HitIndex);
+            e.Handled = true;
+        }
         else if (e.Key == Key.Escape && SearchBox.IsFocused)
         {
             SearchBox.Text = "";
             Focus();
             e.Handled = true;
         }
+    }
+
+    void OpenSearchResult(object? sender, TappedEventArgs e)
+    {
+        if ((e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true)?.DataContext is SearchHit hit && DataContext is ShellViewModel vm)
+            vm.OpenHit(hit);
     }
 
     void DismissToast(object? sender, RoutedEventArgs e)

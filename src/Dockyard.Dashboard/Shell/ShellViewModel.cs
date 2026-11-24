@@ -14,6 +14,8 @@ sealed class ShellViewModel : Observable
     ContextWatcher? watcher;
     Section currentSection;
     string search = "";
+    bool isSearchOpen;
+    int hitIndex = -1;
     Dialog? dialog;
     TaskCompletionSource<string?>? switchResult;
 
@@ -66,7 +68,47 @@ sealed class ShellViewModel : Observable
     public string Search
     {
         get => search;
-        set { if (Set(ref search, value ?? "")) ApplySearch(); }
+        set
+        {
+            if (!Set(ref search, value ?? "")) return;
+            ApplySearch();
+            FindEverywhere();
+        }
+    }
+
+    // What the search box finds in every section, under it; the section on screen is filtered as well.
+    public ObservableCollection<SearchHit> Hits { get; } = [];
+    public bool IsSearchOpen { get => isSearchOpen; set => Set(ref isSearchOpen, value); }
+    public int HitIndex { get => hitIndex; set => Set(ref hitIndex, value); }
+    public bool HasNoHits => Hits.Count == 0 && search.Trim().Length > 0;
+
+    void FindEverywhere()
+    {
+        Hits.Clear();
+        foreach (var hit in SearchHit.From(search, Sections)) Hits.Add(hit);
+        HitIndex = Hits.ToList().FindIndex(h => h.IsSelectable);
+        IsSearchOpen = search.Trim().Length > 0;
+        Raise(nameof(HasNoHits));
+    }
+
+    // Headers are passed over.
+    public void MoveHit(int by)
+    {
+        if (!Hits.Any(h => h.IsSelectable)) return;
+        var i = Math.Max(HitIndex, 0);
+        do i = (i + by + Hits.Count) % Hits.Count;
+        while (!Hits[i].IsSelectable);
+        HitIndex = i;
+    }
+
+    public void OpenHit(SearchHit? hit = null)
+    {
+        hit ??= HitIndex >= 0 && HitIndex < Hits.Count ? Hits[HitIndex] : null;
+        if (hit is not { IsSelectable: true, Section: { } section, Row: { } row }) return;
+        IsSearchOpen = false;
+        Search = "";
+        CurrentSection = section;
+        if (section.Content is ISearchable searchable) searchable.Reveal(row);
     }
 
     public bool HasEngineSwitch { get; }

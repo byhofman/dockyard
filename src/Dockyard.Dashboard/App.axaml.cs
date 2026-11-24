@@ -31,6 +31,15 @@ public partial class App : Application
         desktop.MainWindow = window;
         desktop.Exit += (_, _) => vm.Stop();
 
+        // Closing hides it and it stays connected, so opening it again from the tray is instant; the tray's Quit ends it.
+        var quitting = false;
+        window.Closing += (_, e) =>
+        {
+            if (quitting || e.CloseReason != WindowCloseReason.WindowClosing) return;
+            e.Cancel = true;
+            window.Hide();
+        };
+
         LocalPipe.Serve(LocalPipe.DashboardName, line => Dispatcher.UIThread.Post(() =>
         {
             if (EngineSwitch.ParseResult(line) is not null)
@@ -38,6 +47,13 @@ public partial class App : Application
                 vm.OnTrayMessage(line);
                 return;
             }
+            if (line == "quit")
+            {
+                quitting = true;
+                desktop.Shutdown();
+                return;
+            }
+            window.Show();
             if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
             window.Activate();
         }));

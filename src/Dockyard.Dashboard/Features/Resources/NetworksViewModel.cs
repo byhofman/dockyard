@@ -78,7 +78,9 @@ sealed class NetworksViewModel : SelectableSection<NetworkRow>
         if (Selected is { } network) await LoadMembers(network);
     });
 
-    protected override void ApplyFilter() => ReplaceRows(all.Where(r => Matches(Filter, r.Name, r.Driver, r.Subnet)));
+    protected override IEnumerable<NetworkRow> All => all;
+    protected override string?[] Words(NetworkRow row) => [row.Name, row.Driver, row.Subnet];
+    protected override SearchResult Describe(NetworkRow row) => new(row.Name, row.Subnet.Length > 0 ? $"{row.Driver}  {row.Subnet}" : row.Driver, row);
 
     async Task LoadMembers(NetworkRow network) => await SafeReload(async c =>
     {

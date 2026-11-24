@@ -106,12 +106,21 @@
           <SelectableTextBlock Classes="mono" Text="{Binding Selected.ApiServer, FallbackValue=''}" />
           <SelectableTextBlock Classes="mono muted small" Text="{Binding KubectlHint}" TextWrapping="Wrap" />
 
+          <TextBlock Classes="section" Text="STORAGE" Margin="0,8,0,0" />
+          <TextBlock Classes="muted" Text="{Binding SharedStorageText}" TextWrapping="Wrap" />
+          <Button Content="Open the shared folder" Command="{Binding OpenSharedFolderCommand}" IsVisible="{Binding HasSharedFolder}"
+                  HorizontalAlignment="Left" ToolTip.Tip="{Binding SharedFolder}" />
+
           <TextBlock Classes="section" Text="LOAD BALANCERS" Margin="0,8,0,0" />
           <ItemsControl ItemsSource="{Binding LoadBalancerRows}" IsVisible="{Binding HasLoadBalancers}">
             <ItemsControl.ItemTemplate>
               <DataTemplate DataType="clu:LoadBalancer">
                 <StackPanel Margin="0,2">
-                  <TextBlock Text="{Binding Service}" TextTrimming="CharacterEllipsis" />
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="{Binding Service}" TextTrimming="CharacterEllipsis" />
+                    <SelectableTextBlock Classes="muted mono" Text="{Binding Address}" IsVisible="{Binding HasAddress}"
+                                         ToolTip.Tip="The service's load balancer IP on the kind network, as kubectl shows it under EXTERNAL-IP" />
+                  </StackPanel>
                   <ItemsControl ItemsSource="{Binding Ports}">
                     <ItemsControl.ItemsPanel>
                       <ItemsPanelTemplate>

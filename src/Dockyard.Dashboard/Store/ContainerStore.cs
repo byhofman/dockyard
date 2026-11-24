@@ -72,6 +72,11 @@ sealed class ContainerStore
         Rebuild();
     }
 
+    public void Expand(string name)
+    {
+        if (collapsed.Remove(name)) Rebuild();
+    }
+
     public void ToggleProject(string name)
     {
         if (!collapsed.Remove(name)) collapsed.Add(name);
@@ -117,7 +122,7 @@ sealed class ContainerStore
         return entries.OrderBy(e => e.Key, StringComparer.OrdinalIgnoreCase).SelectMany(e => e.Rows).ToList();
     }
 
-    static bool Matches(ContainerItem i, string filter) =>
+    internal static bool Matches(ContainerItem i, string filter) =>
         filter.Length == 0
         || i.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)
         || i.Image.Contains(filter, StringComparison.OrdinalIgnoreCase)

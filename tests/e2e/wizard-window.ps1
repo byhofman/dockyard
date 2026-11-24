@@ -86,11 +86,12 @@ try {
     Shot 'added'
     Write-Host '  ok   Add installs the skipped dashboard'
 
-    # A build of this branch is version 0.0.0, so the release that is out is an update for its dashboard; a tagged build is the newest there is.
+    # A dashboard from this branch's build is version 0.0.0, so the release that is out is an update for it. The installed
+    # app's window adds the release's own dashboard, which is the newest there is.
     $version = (Get-Item $Dashboard).VersionInfo.ProductVersion
     Write-Host "  the dashboard says it is version '$version', the wizard '$((Get-Item $Exe).VersionInfo.ProductVersion)'"
     if (-not $version) { throw 'FAIL the dashboard file has no version, so the wizard cannot show or update it' }
-    if ((Get-Item $Exe).VersionInfo.ProductVersion -like '0.0.0*') {
+    if ($version -like '0.0.0*') {
         Click $window 'Check for updates'
         Click $window 'Update'
         Wait-For 'the dashboard to be updated' { (Get-Item $Dashboard).VersionInfo.ProductVersion -notlike '0.0.0*' } | Out-Null

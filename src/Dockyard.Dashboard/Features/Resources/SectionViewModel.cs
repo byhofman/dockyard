@@ -90,7 +90,7 @@ abstract class SectionViewModel : Observable, ISearchable
 
 // A list where any number of rows can be picked: with Ctrl or Shift, or the row's box. One picked row shows its detail;
 // more than one shows the selection bar with what can be done to all of them.
-abstract class SelectableSection<TRow> : SectionViewModel where TRow : class
+abstract class SelectableSection<TRow> : SectionViewModel, ISearchable where TRow : class
 {
     TRow? selected;
     bool syncing;
@@ -141,6 +141,21 @@ abstract class SelectableSection<TRow> : SectionViewModel where TRow : class
         }
         finally { syncing = false; }
         OnPicked();
+    }
+
+    protected abstract IEnumerable<TRow> All { get; }
+    protected abstract string?[] Words(TRow row);
+    protected abstract SearchResult Describe(TRow row);
+
+    protected override void ApplyFilter() => ReplaceRows(All.Where(r => Matches(Filter, Words(r))));
+
+    public IEnumerable<SearchResult> Find(string text) => All.Where(r => Matches(text, Words(r))).Select(Describe);
+
+    public void Reveal(object row)
+    {
+        if (row is not TRow wanted) return;
+        var key = Key(wanted);
+        Pick(Rows.Where(r => Equals(Key(r), key)).ToList());
     }
 
     // New rows for the same things after a reload keep what was picked.

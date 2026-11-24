@@ -71,7 +71,9 @@ sealed class ImagesViewModel : SelectableSection<ImageRow>
         ApplyFilter();
     }
 
-    protected override void ApplyFilter() => ReplaceRows(all.Where(r => Matches(Filter, r.Reference, r.ShortId)));
+    protected override IEnumerable<ImageRow> All => all;
+    protected override string?[] Words(ImageRow row) => [row.Reference, row.ShortId];
+    protected override SearchResult Describe(ImageRow row) => new(row.Reference, $"{row.ShortId}  {row.SizeText}", row);
 
     // A container of the image that never starts, read-only and without a network, is what the archive API reads from;
     // it goes away with the view.

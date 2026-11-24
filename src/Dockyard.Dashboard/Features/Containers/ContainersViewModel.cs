@@ -136,6 +136,27 @@ sealed class ContainersViewModel : Observable, ISearchable
 
     public void ApplySearch(string text) => Store.Filter = text;
 
+    // The list's own rows, so hidden helpers stay hidden, but each only for what it says itself.
+    public IEnumerable<SearchResult> Find(string text) => ContainerStore.BuildRows(Store.Items, text).Select(r => r switch
+    {
+        ProjectRow p when p.Name.Contains(text, StringComparison.OrdinalIgnoreCase) => new SearchResult(p.Name, p.Summary, p, "Compose projects", "IconCompose"),
+        ContainerItem c when ContainerStore.Matches(c, text) => new SearchResult(c.Name, c.InProject ? $"{c.Project} · {c.Image}" : c.Image, c),
+        _ => null,
+    }).OfType<SearchResult>();
+
+    // A container in a folded project unfolds it, so the row is there to pick.
+    public void Reveal(object row)
+    {
+        if (row is ContainerItem { InProject: true } inProject) Store.Expand(inProject.Project);
+        object? shown = row switch
+        {
+            ContainerItem c => Store.Rows.OfType<ContainerItem>().FirstOrDefault(r => r.Id == c.Id),
+            ProjectRow p => Store.FindProject(p.Name),
+            _ => null,
+        };
+        Pick(shown is null ? [] : [shown]);
+    }
+
     public void SetVisible(string id, bool visible) => sampler.SetVisible(id, visible);
 
     public void CloseDetail() => SelectedRow = null;
