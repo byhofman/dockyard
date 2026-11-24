@@ -122,7 +122,7 @@ sealed class WindowsHost : IEngineHost
     }
 
     public Task<bool> TrustCa(Action<string> log, string certificateFile, bool silent) => WindowsSetup.TrustCa(log, certificateFile);
-    public Task UntrustCa(Action<string> log, string certificateFile) => WindowsSetup.UntrustCa(log, certificateFile);
+    public Task UntrustCa(Action<string> log, string certificateFile, bool silent) => WindowsSetup.UntrustCa(log, certificateFile);
 
     static bool LinuxEngineWanted => !Settings.Load().RemovedComponents.Contains(nameof(Component.LinuxEngine));
     public bool HasEngineConfiguration => LinuxEngineWanted;
@@ -176,7 +176,7 @@ sealed class WindowsHost : IEngineHost
 
     public void Reboot() => Shell.Spawn("shutdown.exe", "/r", "/t", "5", "/d", "p:4:1").Dispose();
 
-    public async Task Uninstall(Action<string> log, bool removeData)
+    public async Task Uninstall(Action<string> log, bool removeData, bool silent)
     {
         ReleaseResources();
         // Before the user's folder with the certificate goes; the machine step also removes it by name, to leave none behind.

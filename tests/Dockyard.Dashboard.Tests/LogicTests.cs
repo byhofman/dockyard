@@ -115,6 +115,17 @@ public sealed class LogicTests
     public void Rejects_invalid_tray_commands(string line) => Assert.Null(TrayCommand.Parse(line));
 
     [Fact]
+    public void Settings_carries_setups_assets_folder_spaces_and_all_but_only_a_full_path()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "my assets");
+        var line = new TrayCommand(TrayCommandKind.Settings, Assets: folder).ToString();
+
+        Assert.Equal($"settings {folder}", line);
+        Assert.Equal(new TrayCommand(TrayCommandKind.Settings, Assets: folder), TrayCommand.Parse(line));
+        Assert.Null(TrayCommand.Parse("settings assets"));
+    }
+
+    [Fact]
     public void Tray_command_from_args()
     {
         Assert.Equal(new TrayCommand(TrayCommandKind.Settings), TrayCommand.FromArgs(["--tray", "--settings"]));

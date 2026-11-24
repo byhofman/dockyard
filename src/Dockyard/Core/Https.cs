@@ -16,7 +16,7 @@ static class Https
             if (await LocalCa.Load(host.CaDirectory, host.CaKeys) is { } earlier && !LocalCa.IsConstrainedRoot(earlier.Certificate))
             {
                 log("Replacing Dockyard's certificate authority with one that can only vouch for web servers under dockyard.test");
-                await Disable(host, log);
+                await Disable(host, log, silent);
             }
             ca = await LocalCa.LoadOrCreate(host.CaDirectory, host.CaKeys);
         }
@@ -33,9 +33,9 @@ static class Https
         await Push(host, ca, log);
     }
 
-    public static async Task Disable(IEngineHost host, Action<string> log)
+    public static async Task Disable(IEngineHost host, Action<string> log, bool silent)
     {
-        await host.UntrustCa(log, LocalCa.CertificateFile(host.CaDirectory));
+        await host.UntrustCa(log, LocalCa.CertificateFile(host.CaDirectory), silent);
         await LocalCa.Remove(host.CaDirectory, host.CaKeys);
         var settings = Settings.Load();
         settings.HttpsEnabled = false;

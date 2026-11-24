@@ -38,7 +38,7 @@ interface IEngineHost
     Core.ICaKeyStore CaKeys => new Core.FileCaKey(CaDirectory);
     // Returns false when the user or the system declined. Silent: nothing may pop up, so only what works without a prompt.
     Task<bool> TrustCa(Action<string> log, string certificateFile, bool silent) => Task.FromResult(false);
-    Task UntrustCa(Action<string> log, string certificateFile) => Task.CompletedTask;
+    Task UntrustCa(Action<string> log, string certificateFile, bool silent) => Task.CompletedTask;
 
     // What only the tray keeps running, for as long as it runs.
     void StartTrayServices() { }
@@ -57,7 +57,7 @@ interface IEngineHost
     // Removing an engine keeps its images unless removeData says otherwise.
     Task<bool> SetComponent(Action<string> log, string component, bool installed, bool removeData = false) =>
         component == Core.ComponentRules.DashboardId ? SetDashboard(log, installed) : throw new InvalidOperationException($"{component} cannot be changed here");
-    Task Uninstall(Action<string> log, bool removeData);
+    Task Uninstall(Action<string> log, bool removeData, bool silent);
 
     void ReleaseResources();
 }

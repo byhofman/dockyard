@@ -44,11 +44,11 @@ sealed class LinuxSetup(LinuxRoot root, LinuxComponents components)
         }
     }
 
-    public async Task Uninstall(Action<string> log, bool removeData, IEngineHost host)
+    public async Task Uninstall(Action<string> log, bool removeData, bool silent, IEngineHost host)
     {
         if (File.Exists(AutostartFile)) File.Delete(AutostartFile);
         await CredentialStore.Forget(Paths.CredentialStoreMarker, LinuxLayout.CredentialHelper, log);
-        await Https.Disable(host, log);
+        await Https.Disable(host, log, silent);
         await UninstallWithConfig(log);
         if (Directory.Exists(LinuxLayout.HomeDir)) Directory.Delete(LinuxLayout.HomeDir, recursive: true);
         if (new FileInfo(LinuxLayout.HomeLink).LinkTarget is not null) File.Delete(LinuxLayout.HomeLink);

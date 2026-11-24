@@ -2,6 +2,14 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-24: On macOS the trust setting goes where a person can approve it
+
+DOK-20, owner 2026-11-24 ("you can make it fit right?"). As the 2026-11-13 entry found, changing a trust setting waits for an approval dialog, even as root and without a screen. So `UntrustCa` now knows whether it runs silent. From the window and the wizard, the administrator's setting (`security remove-trusted-cert -d`) and the user's (`remove-trusted-cert`) go before the certificate, each only when `dump-trust-settings` lists the CA, so nothing asks where there is nothing to remove, and each within two minutes. If one stays because nobody approved, nothing else is removed and the error says it can be tried again. A silent uninstall or `--trust-https` replacement leaves the setting, as before, and its log says so: it names a certificate and key that are gone. The silent macOS end-to-end run covers that path; the asking path is covered by unit tests, since it needs a person.
+
+## 2026-11-24: Setup hands its --assets folder to the installed app
+
+Since the one window, setup on an install of the same or a newer version hands over to the installed app's window. That app was not started with `--assets`, so **Add** downloaded the dashboard from the GitHub release, which a tag's end-to-end run does not have yet (it publishes after the tests), and the v0.8.0 build failed there. The Settings command on the tray's pipe now carries setup's folder (`settings <full path>`), and the tray uses it for installs and updates from then on. The pipe is for this user alone and the folder was given to setup explicitly, so nothing new is trusted.
+
 ## 2026-11-24: Shared storage for kind is a folder on the engine, chosen per cluster when it is made
 
 DOK-35, owner 2026-11-24 ("storage enablement should be per kind cluster"). The plan was an NFS server container with the NFS CSI driver; it needed NFS in the engine's kernel, unverified on the Mac VM.
@@ -86,7 +94,7 @@ The wizard and the tray window were dark-only (`RequestedThemeVariant="Dark"`). 
 
 ## 2026-11-17: An image's files come from a container of it that never runs, read once into a tree
 
-DOK-30. Opening Files on an image creates a container of it that is never started: its entrypoint names a path that does not exist, its root is read-only (not on the Windows engine, which refuses that), it has no network, and it carries `dockyard.helper` so the lists hide it. Closing the files, picking another image or quitting removes it. The archive API reads it like any container's.
+DOK-36 (numbered DOK-30 at first). Opening Files on an image creates a container of it that is never started: its entrypoint names a path that does not exist, its root is read-only (not on the Windows engine, which refuses that), it has no network, and it carries `dockyard.helper` so the lists hide it. Closing the files, picking another image or quitting removes it. The archive API reads it like any container's.
 
 - **Read once:** an image never changes, so the first listing reads the archive of `/` once, keeps only the tar headers as a tree (`FileTree`), and every folder after that comes from memory, with each folder's size the sum of what is under it. Reading a file or saving it to the computer asks the archive API for that one path.
 - **Cost:** the first listing streams the image's whole uncompressed filesystem through the engine's socket, with a progress line. Measured on an M1 with OrbStack: `postgres:17-alpine` (416 MB, 3,896 paths) in 2.2 s. Memory is one small record per path. Creating the container is metadata and an empty writable layer, gone with it.

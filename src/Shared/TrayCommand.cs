@@ -1,14 +1,18 @@
 namespace Dockyard.Shared;
 
-readonly record struct TrayCommand(TrayCommandKind Kind, string? Engine = null)
+// Assets: the folder setup was given with --assets, handed to the installed app with Settings; the rest of the line, spaces and all.
+readonly record struct TrayCommand(TrayCommandKind Kind, string? Engine = null, string? Assets = null)
 {
     public static readonly string[] Engines = ["linux", "win"];
 
     public override string ToString() =>
-        Engine is null ? Kind.ToString().ToLowerInvariant() : $"{Kind.ToString().ToLowerInvariant()} {Engine}";
+        Assets is not null ? $"settings {Assets}"
+        : Engine is null ? Kind.ToString().ToLowerInvariant() : $"{Kind.ToString().ToLowerInvariant()} {Engine}";
 
     public static TrayCommand? Parse(string line)
     {
+        if (line.StartsWith("settings ", StringComparison.Ordinal) && line[9..].Trim() is { Length: > 0 } folder && Path.IsPathFullyQualified(folder))
+            return new TrayCommand(TrayCommandKind.Settings, Assets: folder);
         var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         return parts switch
         {

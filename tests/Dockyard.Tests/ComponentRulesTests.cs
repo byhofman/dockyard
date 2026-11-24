@@ -97,7 +97,7 @@ public sealed class ComponentRulesTests
             Versions[component] = installed ? new Version(2, 0, 0) : null;
             return Task.FromResult(false);
         }
-        public Task Uninstall(Action<string> log, bool removeData) => Task.CompletedTask;
+        public Task Uninstall(Action<string> log, bool removeData, bool silent) => Task.CompletedTask;
         public void ReleaseResources() { }
     }
 
