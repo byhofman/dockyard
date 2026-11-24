@@ -1,3 +1,4 @@
+using Avalonia.Headless;
 using Dockyard.Dashboard.Shell;
 using Dockyard.Dashboard.Store;
 using Dockyard.Engine;
@@ -16,8 +17,11 @@ public sealed class GlobalSearchTests
 
     static SearchResult R(string title, string? kind = null) => new(title, "", title, kind);
 
+    static Task Ui(Action test) =>
+        HeadlessUnitTestSession.GetOrStartForAssembly(typeof(GlobalSearchTests).Assembly).Dispatch(test, TestContext.Current.CancellationToken);
+
     [Fact]
-    public void Matches_from_every_section_come_grouped_in_the_sidebars_order_with_a_few_of_each()
+    public Task Matches_from_every_section_come_grouped_in_the_sidebars_order_with_a_few_of_each() => Ui(() =>
     {
         var sections = new[]
         {
@@ -33,10 +37,10 @@ public sealed class GlobalSearchTests
         Assert.Equal("5 of 6", hits[0].TotalText);
         Assert.Equal("1", hits[^2].TotalText);
         Assert.Empty(SearchHit.From("  ", sections));
-    }
+    });
 
     [Fact]
-    public void The_keys_move_over_the_headers_and_wrap()
+    public Task The_keys_move_over_the_headers_and_wrap() => Ui(() =>
     {
         var shell = new ShellViewModel();
         var section = new Section("Images", new Fake(), null);
@@ -52,10 +56,10 @@ public sealed class GlobalSearchTests
         Assert.Equal(1, shell.HitIndex);
         shell.MoveHit(-1);
         Assert.Equal(3, shell.HitIndex);
-    }
+    });
 
     [Fact]
-    public void Opening_a_result_clears_the_search_shows_its_section_and_picks_it()
+    public Task Opening_a_result_clears_the_search_shows_its_section_and_picks_it() => Ui(() =>
     {
         var shell = new ShellViewModel();
         var images = new Fake(R("nginx"));
@@ -69,7 +73,7 @@ public sealed class GlobalSearchTests
         Assert.Equal("", shell.Search);
         Assert.False(shell.IsSearchOpen);
         Assert.Equal("nginx", images.Revealed);
-    }
+    });
 
     static ContainerSummary C(string id, string name, string? project = null) => new()
     {
@@ -82,7 +86,7 @@ public sealed class GlobalSearchTests
     };
 
     [Fact]
-    public void A_container_in_a_folded_project_is_found_and_unfolded_when_opened()
+    public Task A_container_in_a_folded_project_is_found_and_unfolded_when_opened() => Ui(() =>
     {
         var shell = new ShellViewModel();
         var containers = shell.Containers;
@@ -96,5 +100,5 @@ public sealed class GlobalSearchTests
         searchable.Reveal(found[0].Row);
         Assert.Equal("shop-api", containers.Selected?.Name);
         Assert.Contains(containers.Store.Rows, r => r is ContainerItem { Name: "shop-api" });
-    }
+    });
 }

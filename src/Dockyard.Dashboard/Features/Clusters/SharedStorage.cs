@@ -163,7 +163,7 @@ static partial class SharedStorage
         parameters:
           pathPattern: "{{ .PVC.Namespace }}/{{ .PVC.Name }}/files"
 
-        """;
+        """.ReplaceLineEndings("\n");
 
     [GeneratedRegex("\"--helper-image\",\"(?<image>[^\"]+)\"")]
     private static partial Regex HelperImage();
