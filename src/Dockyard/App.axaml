@@ -201,6 +201,11 @@
       <Setter Property="BorderBrush" Value="{DynamicResource AccentHover}" />
       <Setter Property="Foreground" Value="{DynamicResource OnAccent}" />
     </Style>
+    <Style Selector="Button.primary:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource AccentBg}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentBg}" />
+      <Setter Property="Foreground" Value="{DynamicResource AccentText}" />
+    </Style>
     <Style Selector="Button.danger">
       <Setter Property="Foreground" Value="{DynamicResource Bad}" />
       <Setter Property="Background" Value="Transparent" />
