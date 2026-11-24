@@ -442,7 +442,7 @@ if ($Wizard) {
         $env:DOCKYARD_TEST_ENDPOINT = 'npipe:////./pipe/dockyard_linux'
         dotnet test --project (Join-Path $env:DOCKYARD_SOURCE 'tests/Dockyard.Dashboard.Tests') --filter-class Dockyard.Dashboard.Tests.ImageAndVolumeEngineTests
         Check 'image files, volume files and their folder, and the image terminal clean-up work on the WSL engine' ($LASTEXITCODE -eq 0)
-        Check 'no helper container is left' (-not (& $docker --context linux ps -aq --filter label=dockyard.helper))
+        Check 'no helper container is left' (-not (& $docker --context linux ps -aq --filter label=dockyard.helper=1))
         Check 'no terminal container is left' (-not (& $docker --context linux ps -aq --filter label=dockyard.image-terminal))
         Remove-Item Env:DOCKYARD_TEST_ENDPOINT, Env:DOCKYARD_TEST_DOCKER_CONTEXT
     }

@@ -126,8 +126,8 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     // Only when what is wanted changes: every container event reloads this section.
     async Task SyncController()
     {
-        if (!HasKind || NeedsLinuxEngine || !Session.IsConnected || Session.Client is not { } client || syncing) return;
-        var wanted = LoadBalancersEnabled && all.Count > 0;
+        if (NeedsLinuxEngine || !Session.IsConnected || Session.Client is not { } client || syncing) return;
+        var wanted = HasKind && LoadBalancersEnabled && all.Count > 0;
         if (controllerWanted == wanted) return;
         syncing = true;
         try
