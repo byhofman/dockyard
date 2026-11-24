@@ -116,7 +116,11 @@
             <ItemsControl.ItemTemplate>
               <DataTemplate DataType="clu:LoadBalancer">
                 <StackPanel Margin="0,2">
-                  <TextBlock Text="{Binding Service}" TextTrimming="CharacterEllipsis" />
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="{Binding Service}" TextTrimming="CharacterEllipsis" />
+                    <SelectableTextBlock Classes="muted mono" Text="{Binding Address}" IsVisible="{Binding HasAddress}"
+                                         ToolTip.Tip="The service's load balancer IP on the kind network, as kubectl shows it under EXTERNAL-IP" />
+                  </StackPanel>
                   <ItemsControl ItemsSource="{Binding Ports}">
                     <ItemsControl.ItemsPanel>
                       <ItemsPanelTemplate>

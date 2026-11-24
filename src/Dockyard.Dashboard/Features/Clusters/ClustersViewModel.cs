@@ -247,7 +247,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     sealed class LoadBalancerComparer : IEqualityComparer<LoadBalancer>
     {
         public static readonly LoadBalancerComparer Instance = new();
-        public bool Equals(LoadBalancer? x, LoadBalancer? y) => x is not null && y is not null && x.Service == y.Service && x.Ports.SequenceEqual(y.Ports);
+        public bool Equals(LoadBalancer? x, LoadBalancer? y) => x is not null && y is not null && x.Service == y.Service && x.Address == y.Address && x.Ports.SequenceEqual(y.Ports);
         public int GetHashCode(LoadBalancer obj) => obj.Service.GetHashCode();
     }
 }

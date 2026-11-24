@@ -21,6 +21,7 @@ sealed class ContainerItem(string id) : Observable
     public IReadOnlyDictionary<string, string> Labels { get; private set; } = new Dictionary<string, string>();
     public IReadOnlyList<string> VolumeNames { get; private set; } = [];
     public IReadOnlyList<string> BindTargets { get; private set; } = [];
+    public IReadOnlyDictionary<string, string> Addresses { get; private set; } = new Dictionary<string, string>();
     public string ShortId => Id[..Math.Min(12, Id.Length)];
     public string Name { get => name; private set => Set(ref name, value); }
     public override string ToString() => Name;
@@ -57,6 +58,7 @@ sealed class ContainerItem(string id) : Observable
         Labels = s.Labels ?? [];
         VolumeNames = (s.Mounts ?? []).Where(m => m.Type == "volume" && m.Name is not null).Select(m => m.Name!).ToList();
         BindTargets = (s.Mounts ?? []).Where(m => m.Type == "bind").Select(m => m.Destination).ToList();
+        Addresses = (s.NetworkSettings?.Networks ?? []).Where(n => n.Value.IPAddress.Length > 0).ToDictionary(n => n.Key, n => n.Value.IPAddress);
         Image = s.Image;
         State = s.State;
         Status = s.Status;

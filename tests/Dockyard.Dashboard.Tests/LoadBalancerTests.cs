@@ -16,6 +16,7 @@ public sealed class LoadBalancerTests
             State = "running",
             Labels = new() { [LoadBalancers.ClusterLabel] = cluster, [LoadBalancers.NameLabel] = $"{cluster}/{service}" },
             Ports = ports.Select(p => new PortMapping { IP = "0.0.0.0", PublicPort = p.Host, PrivatePort = p.Private, Type = "tcp" }).ToList(),
+            NetworkSettings = new() { Networks = new() { ["kind"] = new() { IPAddress = "172.18.0." + (id[0] - 'a' + 10) } } },
         });
         return item;
     }
@@ -35,6 +36,7 @@ public sealed class LoadBalancerTests
         Assert.Equal(["default/api", "shop/web"], rows.Select(r => r.Service));
         Assert.Equal(["http://127.0.0.1:44620", "http://127.0.0.1:44622"], rows[1].Ports.Select(p => p.Url));
         Assert.Equal("80/tcp, 443/tcp", rows[1].PortsText);
+        Assert.Equal(["172.18.0.10", "172.18.0.11"], rows.Select(r => r.Address));
     }
 
     [Fact]
@@ -51,28 +53,28 @@ public sealed class LoadBalancerTests
         Id = "c",
         Names = ["/" + LoadBalancers.Name],
         State = state,
-        Labels = image is null ? [] : new() { ["dockyard.cloud-provider-kind.image"] = image },
+        Labels = image is null ? [] : new() { ["dockyard.cloud-provider-kind.setup"] = image },
     };
 
     [Fact]
-    public void The_controller_runs_while_wanted_is_started_when_stopped_replaced_when_older_and_removed_when_not_wanted()
+    public void The_controller_runs_while_wanted_is_started_when_stopped_replaced_when_older_or_set_up_differently_and_removed_when_not_wanted()
     {
         Assert.Equal(LoadBalancers.Step.Run, LoadBalancers.Plan(true, null));
-        Assert.Equal(LoadBalancers.Step.None, LoadBalancers.Plan(true, Controller("running", LoadBalancers.Image)));
-        Assert.Equal(LoadBalancers.Step.Start, LoadBalancers.Plan(true, Controller("exited", LoadBalancers.Image)));
-        Assert.Equal(LoadBalancers.Step.Replace, LoadBalancers.Plan(true, Controller("running", "registry.k8s.io/cloud-provider-kind/cloud-controller-manager:v0.11.1")));
-        Assert.Equal(LoadBalancers.Step.Remove, LoadBalancers.Plan(false, Controller("running", LoadBalancers.Image)));
+        Assert.Equal(LoadBalancers.Step.None, LoadBalancers.Plan(true, Controller("running", LoadBalancers.Setup)));
+        Assert.Equal(LoadBalancers.Step.Start, LoadBalancers.Plan(true, Controller("exited", LoadBalancers.Setup)));
+        Assert.Equal(LoadBalancers.Step.Replace, LoadBalancers.Plan(true, Controller("running", LoadBalancers.Image + " --enable-lb-port-mapping")));
+        Assert.Equal(LoadBalancers.Step.Remove, LoadBalancers.Plan(false, Controller("running", LoadBalancers.Setup)));
         Assert.Equal(LoadBalancers.Step.None, LoadBalancers.Plan(false, null));
     }
 
     [Fact]
-    public void The_controller_is_pinned_by_digest_hidden_as_dockyards_own_and_maps_ports_to_the_host()
+    public void The_controller_is_pinned_by_digest_hidden_as_dockyards_own_maps_ports_to_the_host_and_installs_nothing_else()
     {
         var args = LoadBalancers.RunArgs("linux");
         Assert.Matches(@"@sha256:[0-9a-f]{64}$", LoadBalancers.Image);
         Assert.Equal(["--context", "linux", "run", "-d", "--name", LoadBalancers.Name], args[..6]);
         Assert.Contains("dockyard.helper=cloud-provider-kind", args);
         Assert.Contains("/var/run/docker.sock:/var/run/docker.sock", args);
-        Assert.Equal([LoadBalancers.Image, "--enable-lb-port-mapping"], args[^2..]);
+        Assert.Equal([LoadBalancers.Image, "--enable-lb-port-mapping", "--enable-default-ingress=false", "--gateway-channel=disabled"], args[^4..]);
     }
 }

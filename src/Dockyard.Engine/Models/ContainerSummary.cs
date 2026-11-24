@@ -14,6 +14,7 @@ public sealed class ContainerSummary
     public List<PortMapping> Ports { get; set; } = [];
     public Dictionary<string, string>? Labels { get; set; }
     public List<MountPoint>? Mounts { get; set; }
+    public NetworkSettingsInfo? NetworkSettings { get; set; }
 
     public string Name => Names.Count > 0 ? Names[0].TrimStart('/') : Id[..Math.Min(12, Id.Length)];
 }
