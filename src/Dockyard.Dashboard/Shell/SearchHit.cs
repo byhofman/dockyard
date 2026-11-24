@@ -1,8 +1,15 @@
+using Avalonia.Media;
+
 namespace Dockyard.Dashboard.Shell;
 
-sealed record SearchHit(string Kind, string Title, string Detail, Section Section, object Row, bool StartsGroup)
+// A row of the search dropdown: a kind's header, or one thing that matches with its section's icon.
+sealed record SearchHit(string Kind, string Title, string Detail, Section? Section, object? Row, Geometry? Icon, bool IsHeader = false, int Total = 0)
 {
-    public override string ToString() => $"{Kind}: {Title}";
+    public override string ToString() => IsHeader ? Kind : $"{Kind}: {Title}";
+
+    public bool IsSelectable => !IsHeader;
+    public string HeaderText => Kind.ToUpperInvariant();
+    public string TotalText => Total > PerKind ? $"{PerKind} of {Total}" : Total.ToString();
 
     public const int PerKind = 5;
 
@@ -15,7 +22,12 @@ sealed record SearchHit(string Kind, string Title, string Detail, Section Sectio
         {
             if (section.Content is not ISearchable searchable) continue;
             foreach (var group in searchable.Find(text.Trim()).GroupBy(r => r.Kind ?? section.Title))
-                hits.AddRange(group.Take(PerKind).Select((r, i) => new SearchHit(group.Key, r.Title, r.Detail, section, r.Row, i == 0)));
+            {
+                var all = group.ToList();
+                hits.Add(new SearchHit(group.Key, "", "", null, null, null, IsHeader: true, Total: all.Count));
+                hits.AddRange(all.Take(PerKind).Select(r => new SearchHit(group.Key, r.Title, r.Detail, section, r.Row,
+                    r.Icon is { } key ? Section.Resource(key) ?? section.Icon : section.Icon)));
+            }
         }
         return hits;
     }

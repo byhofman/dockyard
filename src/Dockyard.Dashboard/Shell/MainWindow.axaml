@@ -33,6 +33,51 @@
   </Window.DataTemplates>
 
   <Window.Styles>
+    <Style Selector="Border.searchmenu">
+      <Setter Property="Background" Value="{DynamicResource Surface}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Line}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="BoxShadow" Value="0 10 28 0 #40000000" />
+      <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+    <Style Selector="ListBox.search">
+      <Setter Property="Padding" Value="0,6" />
+    </Style>
+    <Style Selector="ListBox.search ListBoxItem" x:DataType="shell:SearchHit">
+      <Setter Property="Padding" Value="8,6" />
+      <Setter Property="Margin" Value="6,1" />
+      <Setter Property="CornerRadius" Value="7" />
+      <Setter Property="IsEnabled" Value="{Binding IsSelectable}" />
+    </Style>
+    <Style Selector="ListBox.search ListBoxItem:disabled">
+      <Setter Property="Padding" Value="8,10,8,2" />
+    </Style>
+    <Style Selector="ListBox.search ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Hover}" />
+    </Style>
+    <Style Selector="ListBox.search ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Selected}" />
+    </Style>
+    <Style Selector="ListBox.search ListBoxItem:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.searchicon">
+      <Setter Property="Width" Value="30" />
+      <Setter Property="Height" Value="30" />
+      <Setter Property="CornerRadius" Value="7" />
+      <Setter Property="Background" Value="{DynamicResource SurfaceRaised}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.searchicon PathIcon">
+      <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+    </Style>
+    <Style Selector="ListBox.search ListBoxItem:selected Border.searchicon">
+      <Setter Property="Background" Value="{DynamicResource AccentBg}" />
+    </Style>
+    <Style Selector="ListBox.search ListBoxItem:selected Border.searchicon PathIcon">
+      <Setter Property="Foreground" Value="{DynamicResource AccentText}" />
+    </Style>
     <Style Selector="Border.toast">
       <Setter Property="Background" Value="{DynamicResource OkBg}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Ok}" />
@@ -60,25 +105,40 @@
           </TextBox>
           <Popup Grid.Column="1" PlacementTarget="{Binding #SearchBox}" Placement="BottomEdgeAlignedLeft" VerticalOffset="6"
                  IsOpen="{Binding IsSearchOpen, Mode=TwoWay}" IsLightDismissEnabled="True" OverlayInputPassThroughElement="{Binding #SearchBox}">
-            <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="8" Padding="6"
-                    Width="{Binding #SearchBox.Bounds.Width}" MinWidth="360">
-              <StackPanel>
-                <TextBlock Classes="muted" Margin="10,8" Text="Nothing matches" IsVisible="{Binding HasNoHits}" />
-                <ListBox x:Name="SearchResults" ItemsSource="{Binding Hits}" SelectedIndex="{Binding HitIndex, Mode=TwoWay}" MaxHeight="420"
-                         Background="Transparent" Tapped="OpenSearchResult" Focusable="False">
-                  <ListBox.ItemTemplate>
-                    <DataTemplate x:DataType="shell:SearchHit">
-                      <Grid ColumnDefinitions="110,*">
-                        <TextBlock Classes="muted" FontSize="11" Text="{Binding Kind}" IsVisible="{Binding StartsGroup}" VerticalAlignment="Center" />
-                        <StackPanel Grid.Column="1">
-                          <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                          <TextBlock Classes="muted" FontSize="12" Text="{Binding Detail}" TextTrimming="CharacterEllipsis" />
-                        </StackPanel>
-                      </Grid>
-                    </DataTemplate>
-                  </ListBox.ItemTemplate>
-                </ListBox>
-              </StackPanel>
+            <Border Classes="searchmenu" Width="{Binding #SearchBox.Bounds.Width}" MinWidth="380">
+              <DockPanel>
+                <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="14,8" IsVisible="{Binding !HasNoHits}">
+                  <TextBlock Classes="muted small" Text="↑ ↓  to move     Enter  to open     Esc  to close" />
+                </Border>
+                <StackPanel>
+                  <StackPanel Margin="16,18" Spacing="4" IsVisible="{Binding HasNoHits}">
+                    <TextBlock FontWeight="SemiBold" Text="Nothing matches" />
+                    <TextBlock Classes="muted small" Text="Containers, Compose projects, images, volumes, networks and clusters are searched by name." TextWrapping="Wrap" />
+                  </StackPanel>
+                  <ListBox x:Name="SearchResults" Classes="search" ItemsSource="{Binding Hits}" SelectedIndex="{Binding HitIndex, Mode=TwoWay}" MaxHeight="440"
+                           Tapped="OpenSearchResult" Focusable="False">
+                    <ListBox.ItemTemplate>
+                      <DataTemplate x:DataType="shell:SearchHit">
+                        <Panel>
+                          <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsHeader}" Margin="4,0">
+                            <TextBlock Classes="section" Text="{Binding HeaderText}" />
+                            <TextBlock Grid.Column="1" Classes="muted small" Text="{Binding TotalText}" VerticalAlignment="Center" />
+                          </Grid>
+                          <Grid ColumnDefinitions="Auto,*" IsVisible="{Binding IsSelectable}">
+                            <Border Classes="searchicon">
+                              <PathIcon Data="{Binding Icon}" Width="14" Height="14" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0">
+                              <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                              <TextBlock Classes="muted small" Text="{Binding Detail}" TextTrimming="CharacterEllipsis" IsVisible="{Binding Detail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                            </StackPanel>
+                          </Grid>
+                        </Panel>
+                      </DataTemplate>
+                    </ListBox.ItemTemplate>
+                  </ListBox>
+                </StackPanel>
+              </DockPanel>
             </Border>
           </Popup>
 

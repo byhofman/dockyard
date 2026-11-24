@@ -10,4 +10,4 @@ interface ISearchable
     void Reveal(object row) { }
 }
 
-sealed record SearchResult(string Title, string Detail, object Row, string? Kind = null);
+sealed record SearchResult(string Title, string Detail, object Row, string? Kind = null, string? Icon = null);

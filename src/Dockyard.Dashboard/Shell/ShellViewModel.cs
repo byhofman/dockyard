@@ -86,25 +86,29 @@ sealed class ShellViewModel : Observable
     {
         Hits.Clear();
         foreach (var hit in SearchHit.From(search, Sections)) Hits.Add(hit);
-        HitIndex = Hits.Count > 0 ? 0 : -1;
+        HitIndex = Hits.ToList().FindIndex(h => h.IsSelectable);
         IsSearchOpen = search.Trim().Length > 0;
         Raise(nameof(HasNoHits));
     }
 
+    // Headers are passed over.
     public void MoveHit(int by)
     {
-        if (Hits.Count == 0) return;
-        HitIndex = (Math.Max(HitIndex, 0) + by + Hits.Count) % Hits.Count;
+        if (!Hits.Any(h => h.IsSelectable)) return;
+        var i = Math.Max(HitIndex, 0);
+        do i = (i + by + Hits.Count) % Hits.Count;
+        while (!Hits[i].IsSelectable);
+        HitIndex = i;
     }
 
     public void OpenHit(SearchHit? hit = null)
     {
         hit ??= HitIndex >= 0 && HitIndex < Hits.Count ? Hits[HitIndex] : null;
-        if (hit is null) return;
+        if (hit is not { IsSelectable: true, Section: { } section, Row: { } row }) return;
         IsSearchOpen = false;
         Search = "";
-        CurrentSection = hit.Section;
-        if (hit.Section.Content is ISearchable searchable) searchable.Reveal(hit.Row);
+        CurrentSection = section;
+        if (section.Content is ISearchable searchable) searchable.Reveal(row);
     }
 
     public bool HasEngineSwitch { get; }

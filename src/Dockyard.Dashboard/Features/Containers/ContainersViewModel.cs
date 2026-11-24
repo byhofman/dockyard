@@ -139,7 +139,7 @@ sealed class ContainersViewModel : Observable, ISearchable
     // The list's own rows, so hidden helpers stay hidden, but each only for what it says itself.
     public IEnumerable<SearchResult> Find(string text) => ContainerStore.BuildRows(Store.Items, text).Select(r => r switch
     {
-        ProjectRow p when p.Name.Contains(text, StringComparison.OrdinalIgnoreCase) => new SearchResult(p.Name, p.Summary, p, "Compose projects"),
+        ProjectRow p when p.Name.Contains(text, StringComparison.OrdinalIgnoreCase) => new SearchResult(p.Name, p.Summary, p, "Compose projects", "IconCompose"),
         ContainerItem c when ContainerStore.Matches(c, text) => new SearchResult(c.Name, c.InProject ? $"{c.Project} · {c.Image}" : c.Image, c),
         _ => null,
     }).OfType<SearchResult>();

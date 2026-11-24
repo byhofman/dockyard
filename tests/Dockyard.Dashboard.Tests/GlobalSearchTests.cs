@@ -28,10 +28,30 @@ public sealed class GlobalSearchTests
 
         var hits = SearchHit.From(" web ", sections);
 
-        Assert.Equal(["Containers", "Containers", "Containers", "Containers", "Containers", "Compose projects", "Images"], hits.Select(h => h.Kind));
-        Assert.Equal([true, false, false, false, false, true, true], hits.Select(h => h.StartsGroup));
-        Assert.Equal("webapp:latest", hits[^1].Title);
+        Assert.Equal(["CONTAINERS", "web-1", "web-2", "web-3", "web-4", "web-5", "COMPOSE PROJECTS", "web", "IMAGES", "webapp:latest"],
+            hits.Select(h => h.IsHeader ? h.HeaderText : h.Title));
+        Assert.Equal("5 of 6", hits[0].TotalText);
+        Assert.Equal("1", hits[^2].TotalText);
         Assert.Empty(SearchHit.From("  ", sections));
+    }
+
+    [Fact]
+    public void The_keys_move_over_the_headers_and_wrap()
+    {
+        var shell = new ShellViewModel();
+        var section = new Section("Images", new Fake(), null);
+        shell.Hits.Add(new SearchHit("Images", "", "", null, null, null, IsHeader: true, Total: 2));
+        shell.Hits.Add(new SearchHit("Images", "a", "", section, "a", null));
+        shell.Hits.Add(new SearchHit("Volumes", "", "", null, null, null, IsHeader: true, Total: 1));
+        shell.Hits.Add(new SearchHit("Volumes", "b", "", section, "b", null));
+        shell.HitIndex = 1;
+
+        shell.MoveHit(1);
+        Assert.Equal(3, shell.HitIndex);
+        shell.MoveHit(1);
+        Assert.Equal(1, shell.HitIndex);
+        shell.MoveHit(-1);
+        Assert.Equal(3, shell.HitIndex);
     }
 
     [Fact]
@@ -43,7 +63,7 @@ public sealed class GlobalSearchTests
 
         shell.Search = "ngi";
         Assert.True(shell.IsSearchOpen);
-        shell.OpenHit(new SearchHit("Images", "nginx", "", section, "nginx", true));
+        shell.OpenHit(new SearchHit("Images", "nginx", "", section, "nginx", null));
 
         Assert.Same(section, shell.CurrentSection);
         Assert.Equal("", shell.Search);
