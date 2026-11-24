@@ -9,6 +9,7 @@ namespace Dockyard.ViewModels;
 sealed class MainViewModel : Observable
 {
     static readonly TimeSpan AutoCheckInterval = TimeSpan.FromHours(6);
+    static readonly TimeSpan RetryCheckAfter = TimeSpan.FromMinutes(30);
 
     readonly Settings settings;
     readonly IEngineHost host;
@@ -16,6 +17,8 @@ sealed class MainViewModel : Observable
     readonly StringBuilder log = new();
     readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromSeconds(10) };
     DateTime lastCheck = DateTime.MinValue;
+    bool checkingQuietly;
+    readonly Func<Task<bool>> openInTray;
     string? busy;
     string? lastError;
     string status = "Ready";
@@ -27,9 +30,10 @@ sealed class MainViewModel : Observable
     readonly SetupOptions options;
     string active;
 
-    public MainViewModel(IEngineHost host, bool setupMode, SetupOptions? options = null, Settings? userSettings = null)
+    public MainViewModel(IEngineHost host, bool setupMode, SetupOptions? options = null, Settings? userSettings = null, Func<Task<bool>>? openInTray = null)
     {
         this.host = host;
+        this.openInTray = openInTray ?? (() => TrayLink.ShowSettings(host, TimeSpan.FromSeconds(20)));
         settings = userSettings ?? Settings.Load();
         this.options = options ?? new SetupOptions();
         isSetupMode = setupMode;
@@ -90,7 +94,11 @@ sealed class MainViewModel : Observable
         insecureRegistries = settings.InsecureRegistries ?? "";
         addressPools = settings.AddressPools ?? "";
 
-        timer.Tick += async (_, _) => await RefreshState();
+        timer.Tick += async (_, _) =>
+        {
+            await RefreshState();
+            await CheckQuietly();
+        };
     }
 
     readonly CancellationTokenSource trayLifetime = new();
@@ -99,9 +107,12 @@ sealed class MainViewModel : Observable
 
     public event Action? StateChanged;
     public event Action? ShutdownRequested;
+    public event Action? HandedOver;
 
     public IReadOnlyList<EngineViewModel> EngineCards { get; }
     public ObservableCollection<ComponentViewModel> Components { get; } = [];
+    public IReadOnlyList<ComponentViewModel> DockyardComponents => Components.Where(c => c.IsDockyard).OrderBy(c => c == Dashboard).ToList();
+    public IReadOnlyList<ComponentViewModel> DockerComponents => Components.Where(c => !c.IsDockyard).ToList();
 
     public Command CheckUpdatesCommand { get; }
     public Command UpdateAllCommand { get; }
@@ -134,10 +145,12 @@ sealed class MainViewModel : Observable
     public bool RemoveData { get => removeData; set => Set(ref removeData, value); }
     public bool HasDashboard => host.HasDashboard;
     public bool NeedsReboot { get => needsReboot; private set => Set(ref needsReboot, value); }
-    public string InstalledVersion { get => installedVersion; private set { if (Set(ref installedVersion, value)) Raise(nameof(ManageText)); } }
+    public string InstalledVersion { get => installedVersion; private set { if (Set(ref installedVersion, value)) Raise(nameof(ManageText), nameof(ReinstallText)); } }
     public string ManageText => InstalledVersion == Paths.AppVersion
         ? $"Dockyard {InstalledVersion} is installed. Running the setup again keeps your images, containers and settings."
         : $"Dockyard {InstalledVersion} is installed. Update brings it to {Paths.AppVersion} and keeps your images, containers and settings.";
+    public string ReinstallText => InstalledVersion == Paths.AppVersion ? "Run the setup again" : $"Update to {Paths.AppVersion}";
+    public string WindowTitle => IsSetupMode ? "Dockyard Setup" : "Dockyard";
 
     public string Version => "v" + Paths.AppVersion;
     public string Active => active;
@@ -153,7 +166,7 @@ sealed class MainViewModel : Observable
     public bool IsSetupMode
     {
         get => isSetupMode;
-        private set { if (Set(ref isSetupMode, value)) Raise(nameof(IsDashboard), nameof(HasEngineSwitch), nameof(ShowInstall), nameof(ShowManage), nameof(ShowWizardManage), nameof(ShowEngineConfiguration), nameof(ShowImport)); }
+        private set { if (Set(ref isSetupMode, value)) Raise(nameof(IsDashboard), nameof(WindowTitle), nameof(HasEngineSwitch), nameof(ShowInstall), nameof(ShowManage), nameof(ShowWizardManage), nameof(ShowEngineConfiguration), nameof(ShowImport)); }
     }
 
     public bool IsDashboard => !IsSetupMode;
@@ -163,9 +176,9 @@ sealed class MainViewModel : Observable
         private set { if (Set(ref isInstalled, value)) Raise(nameof(ShowInstall), nameof(ShowManage), nameof(ShowWizardManage), nameof(ShowEngineConfiguration), nameof(ShowImport)); }
     }
 
-    // The wizard installs once; on an existing install it is the same manage view as the tray window.
+    // Setup installs, or brings an install to its own version; the installed app's window is where it is managed.
     public bool ShowInstall => IsSetupMode && !IsInstalled;
-    public bool ShowManage => !IsSetupMode || IsInstalled;
+    public bool ShowManage => !IsSetupMode;
     public bool ShowWizardManage => IsSetupMode && IsInstalled;
 
     public string? Busy
@@ -291,15 +304,29 @@ sealed class MainViewModel : Observable
             .ToList();
         foreach (var c in targets) c.State = UpdateState.Checking;
         await Task.WhenAll(targets.Select(Check));
-        lastCheck = DateTime.UtcNow;
+        var allChecked = !targets.Any(c => c.State is UpdateState.Error or UpdateState.CouldNotCheck);
+        lastCheck = allChecked ? DateTime.UtcNow : DateTime.UtcNow - AutoCheckInterval + RetryCheckAfter;
         UpdateAllCommand.Refresh();
+        Raise(nameof(UpdateOffer), nameof(HasUpdates));
+        StateChanged?.Invoke();
 
         var available = Components.Count(c => c.IsAvailable);
-        var allChecked = !targets.Any(c => c.State is UpdateState.Error or UpdateState.CouldNotCheck);
         Log(available > 0 ? $"{available} update(s) available"
             : allChecked ? "Everything is up to date"
             : "Not everything could be checked; try again later");
     }
+
+    // The tray looks for updates by itself, without the busy state that would block its menu.
+    async Task CheckQuietly()
+    {
+        if (IsSetupMode || Busy is not null || checkingQuietly || DateTime.UtcNow - lastCheck < AutoCheckInterval) return;
+        checkingQuietly = true;
+        try { await CheckUpdates(all: false); }
+        finally { checkingQuietly = false; }
+    }
+
+    public bool HasUpdates => Components.Any(c => c.IsAvailable);
+    public string? UpdateOffer => UpdateOffers.Text(Components.Where(c => c.IsAvailable).Select(c => (c.Id, c.Title, c.Latest)).ToList());
 
     async Task Check(ComponentViewModel c)
     {
@@ -334,6 +361,7 @@ sealed class MainViewModel : Observable
         finally
         {
             c.UpdateCommand.Refresh();
+            Raise(nameof(UpdateOffer), nameof(HasUpdates));
         }
     }
 
@@ -385,9 +413,19 @@ sealed class MainViewModel : Observable
         IsInstalled = true;
         NeedsReboot = reboot;
         RefreshDashboard();
-        if (!reboot && options.Start) host.StartApp();
+        var handedOver = false;
+        if (!reboot && options.Start)
+        {
+            if (IsSetupMode) handedOver = await openInTray();
+            else host.StartApp();
+        }
         Log(host.DoneMessage(reboot));
         Status = reboot ? "Restart to finish" : "Installed";
+        if (handedOver)
+        {
+            HandedOver?.Invoke();
+            return;
+        }
         foreach (var c in Components) await Check(c);
     }
 

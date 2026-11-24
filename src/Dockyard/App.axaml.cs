@@ -20,6 +20,8 @@ public partial class App : Application
     MainWindow? window;
     TrayIcon? tray;
     NativeMenuItem? dashboardItem;
+    NativeMenuItem? updateItem;
+    NativeMenuItemSeparator? updateSeparator;
     readonly List<(string Engine, NativeMenuItem Item)> engineItems = [];
     NativeMenuItem? containersItem;
     List<TrayContainer> shownContainers = [];
@@ -51,6 +53,7 @@ public partial class App : Application
         if (mode == AppMode.Setup)
         {
             desktop.MainWindow = window = new MainWindow { DataContext = vm };
+            vm.HandedOver += () => Dispatcher.UIThread.Post(Quit);
         }
         else
         {
@@ -117,6 +120,15 @@ public partial class App : Application
         quit.Click += (_, _) => Quit();
 
         var menu = new NativeMenu();
+        updateItem = new NativeMenuItem { IsVisible = false };
+        updateItem.Click += (_, _) =>
+        {
+            ShowWindow();
+            vm.UpdateAllCommand.Execute(null);
+        };
+        updateSeparator = new NativeMenuItemSeparator { IsVisible = false };
+        menu.Add(updateItem);
+        menu.Add(updateSeparator);
         if (vm.EngineCards.Count > 1)
         {
             foreach (var engine in vm.EngineCards)
@@ -160,11 +172,19 @@ public partial class App : Application
         var activeEngine = vm.ActiveEngine;
         var color = vm.IsBusy ? TrayColors.Busy : activeEngine.IsRunning ? TrayColors.Running : TrayColors.Stopped;
         var multiple = vm.EngineCards.Count > 1;
-        tray.Icon = TrayIconRenderer.Render(color, multiple ? activeEngine.Name[..1] : null);
+        var offer = vm.UpdateOffer;
+        tray.Icon = TrayIconRenderer.Render(color, multiple ? activeEngine.Name[..1] : null, update: offer is not null);
         tray.ToolTipText = vm.IsBusy
             ? $"Dockyard: {vm.Busy}…"
             : "Dockyard\n" + string.Join("\n", vm.EngineCards.Select(e =>
-                $"{e.Name} engine {e.StatusText.ToLowerInvariant()}{(multiple && e.IsActive ? " (active)" : "")}"));
+                $"{e.Name} engine {e.StatusText.ToLowerInvariant()}{(multiple && e.IsActive ? " (active)" : "")}"))
+                + (offer is null ? "" : "\nUpdate available, in the menu");
+        if (updateItem is not null && updateSeparator is not null)
+        {
+            updateItem.Header = offer ?? "";
+            updateItem.IsVisible = updateSeparator.IsVisible = offer is not null;
+            updateItem.IsEnabled = !vm.IsBusy;
+        }
         foreach (var (engine, item) in engineItems)
         {
             var card = vm.EngineCards.First(e => e.Id == engine);
