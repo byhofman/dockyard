@@ -27,9 +27,9 @@ sealed class ContainersViewModel : Observable, ISearchable
         Session = session;
         sampler = new StatsSampler(session);
 
-        ToggleCommand = new Command<ContainerItem>(i => Act(i, c => i.IsRunning ? c.StopContainerAsync(i.Id) : c.StartContainerAsync(i.Id)));
-        RestartCommand = new Command<ContainerItem>(i => Act(i, c => c.RestartContainerAsync(i.Id)));
-        AskRemoveCommand = new Command<ContainerItem>(i => { AskRemove([i]); return Task.CompletedTask; });
+        ToggleCommand = new Command<ContainerItem>(i => i.IsSystem ? Task.CompletedTask : Act(i, c => i.IsRunning ? c.StopContainerAsync(i.Id) : c.StartContainerAsync(i.Id)));
+        RestartCommand = new Command<ContainerItem>(i => i.IsSystem ? Task.CompletedTask : Act(i, c => c.RestartContainerAsync(i.Id)));
+        AskRemoveCommand = new Command<ContainerItem>(i => { if (!i.IsSystem) AskRemove([i]); return Task.CompletedTask; });
         ExecCommand = new Command<ContainerItem>(Exec);
         OpenPortCommand = new Command<PublishedPort>(OpenPort);
         ToggleProjectCommand = new Command<ProjectRow>(p => { Store.ToggleProject(p.Name); return Task.CompletedTask; });
@@ -37,6 +37,7 @@ sealed class ContainersViewModel : Observable, ISearchable
         ProjectRestartCommand = new Command<ProjectRow>(p => WithProject(p, d => d.RestartCommand.CanExecute(null) ? Run(d.RestartCommand) : Task.CompletedTask));
         ProjectDownCommand = new Command<ProjectRow>(p => { AskDown(p.Project); return Task.CompletedTask; });
         ToggleClusterCommand = new Command<ClusterRow>(k => { Store.ToggleProject(k.Key); return Task.CompletedTask; });
+        ToggleSystemCommand = new Command<SystemRow>(_ => { Store.ToggleProject(SystemRow.Key); return Task.CompletedTask; });
         ClusterStartStopCommand = new Command<ClusterRow>(k => shell.Clusters?.StartOrStop(k.Cluster) ?? Task.CompletedTask);
         OpenClusterCommand = new Command<ClusterRow>(k => { shell.Reveal("Clusters", k.Cluster); return Task.CompletedTask; });
 
@@ -48,6 +49,7 @@ sealed class ContainersViewModel : Observable, ISearchable
 
         SelectedItems.CollectionChanged += (_, _) => { if (!rebuilding && !syncing) OnPicked(); };
         Store.SetRecents(settings.RecentCompose);
+        Store.ShowSystem = settings.ShowSystemContainers;
         Store.RowsChanging += () =>
         {
             rebuilding = true;
@@ -78,6 +80,7 @@ sealed class ContainersViewModel : Observable, ISearchable
     public Command<ProjectRow> ProjectRestartCommand { get; }
     public Command<ProjectRow> ProjectDownCommand { get; }
     public Command<ClusterRow> ToggleClusterCommand { get; }
+    public Command<SystemRow> ToggleSystemCommand { get; }
     public Command<ClusterRow> ClusterStartStopCommand { get; }
     public Command<ClusterRow> OpenClusterCommand { get; }
     public Command StartPickedCommand { get; }
@@ -109,12 +112,25 @@ sealed class ContainersViewModel : Observable, ISearchable
     public IReadOnlyList<ContainerItem> PickedContainers => SelectedItems
         .SelectMany(r => r switch
         {
-            ContainerItem c => [c],
+            ContainerItem { IsSystem: false } c => [c],
             ProjectRow p => p.Project.Services.SelectMany(s => s.Containers),
             _ => [],
         })
         .DistinctBy(c => c.Id)
         .ToList();
+
+    public bool ShowSystem
+    {
+        get => Store.ShowSystem;
+        set
+        {
+            if (Store.ShowSystem == value) return;
+            Store.ShowSystem = value;
+            settings.ShowSystemContainers = value;
+            settings.Save();
+            Raise(nameof(ShowSystem));
+        }
+    }
 
     IReadOnlyList<KindCluster> PickedClusters => SelectedItems.OfType<ClusterRow>().Select(r => r.Cluster).ToList();
 
@@ -213,6 +229,7 @@ sealed class ContainersViewModel : Observable, ISearchable
         ContainerItem c => "c:" + c.Id,
         ProjectRow p => "p:" + p.Name,
         ClusterRow k => k.Key,
+        SystemRow => SystemRow.Key,
         _ => "",
     };
 

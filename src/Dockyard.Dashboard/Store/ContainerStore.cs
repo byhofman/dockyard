@@ -9,6 +9,7 @@ sealed class ContainerStore
     readonly HashSet<string> collapsed = [];
     List<Features.Resources.RecentCompose> recents = [];
     string filter = "";
+    bool showSystem = true;
 
     public ObservableCollection<object> Rows { get; } = [];
     public IReadOnlyCollection<ContainerItem> Items => items.Values;
@@ -22,6 +23,17 @@ sealed class ContainerStore
         {
             if (filter == (value ?? "")) return;
             filter = value ?? "";
+            Rebuild();
+        }
+    }
+
+    public bool ShowSystem
+    {
+        get => showSystem;
+        set
+        {
+            if (showSystem == value) return;
+            showSystem = value;
             Rebuild();
         }
     }
@@ -87,7 +99,7 @@ sealed class ContainerStore
 
     void Rebuild()
     {
-        var rows = BuildRows(items.Values, filter, recents, collapsed);
+        var rows = BuildRows(items.Values, filter, recents, collapsed, showSystem);
         if (rows.SequenceEqual(Rows)) return;
         RowsChanging?.Invoke();
         Rows.Clear();
@@ -96,7 +108,7 @@ sealed class ContainerStore
     }
 
     internal static List<object> BuildRows(IEnumerable<ContainerItem> all, string filter,
-        IEnumerable<Features.Resources.RecentCompose>? recents = null, IReadOnlySet<string>? collapsed = null)
+        IEnumerable<Features.Resources.RecentCompose>? recents = null, IReadOnlySet<string>? collapsed = null, bool showSystem = true)
     {
         var list = all.ToList();
         var projects = Features.Resources.ComposeCatalog.Build(list, recents ?? []);
@@ -127,10 +139,19 @@ sealed class ContainerStore
             if (row.IsExpanded) rows.AddRange(children);
             entries.Add((cluster.Name, rows));
         }
-        foreach (var c in list.Where(i => i.Project.Length == 0 && ClusterOf(i) is null && Matches(i, filter)))
+        foreach (var c in list.Where(i => i.Project.Length == 0 && ClusterOf(i) is null && !i.IsSystem && Matches(i, filter)))
             entries.Add((c.Name, [c]));
 
-        return entries.OrderBy(e => e.Key, StringComparer.OrdinalIgnoreCase).SelectMany(e => e.Rows).ToList();
+        var result = entries.OrderBy(e => e.Key, StringComparer.OrdinalIgnoreCase).SelectMany(e => e.Rows).ToList();
+        var system = list.Where(i => i.IsSystem && ClusterOf(i) is null).OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        var shown = system.Where(c => Matches(c, filter)).ToList();
+        if (showSystem && shown.Count > 0)
+        {
+            var row = new SystemRow(system.Count(c => c.IsRunning), system.Count, collapsed?.Contains(SystemRow.Key) != true);
+            result.Add(row);
+            if (row.IsExpanded) result.AddRange(shown);
+        }
+        return result;
     }
 
     // A node of a kind cluster, or a load balancer proxy for one of its services.

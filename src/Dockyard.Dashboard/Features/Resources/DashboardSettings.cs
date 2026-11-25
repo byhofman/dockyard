@@ -8,6 +8,7 @@ sealed class DashboardSettings
 
     public List<RecentCompose> RecentCompose { get; set; } = [];
     public Dictionary<string, double> PanelSizes { get; set; } = [];
+    public bool ShowSystemContainers { get; set; } = true;
 
 
     static DashboardSettings? current;

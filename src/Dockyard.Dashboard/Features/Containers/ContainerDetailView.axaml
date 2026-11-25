@@ -29,7 +29,7 @@
         <Button Grid.Column="2" Content="Set" Margin="6,0,0,0" Command="{Binding ApplyDomainPortCommand}" ToolTip.Tip="The port this name goes to" />
       </Grid>
 
-      <WrapPanel Margin="0,4,0,0" ItemSpacing="6" LineSpacing="6">
+      <WrapPanel Margin="0,4,0,0" ItemSpacing="6" LineSpacing="6" IsVisible="{Binding Item.IsManaged}">
         <Button Command="{Binding Actions.ToggleCommand}" CommandParameter="{Binding Item}" ToolTip.Tip="Start or stop (S)">
           <StackPanel Classes="label">
             <Panel>

@@ -20,13 +20,13 @@ static class LoadBalancers
     public const string NameLabel = "io.x-k8s.cloud-provider-kind.loadbalancer.name";
     const string SetupLabel = "dockyard.cloud-provider-kind.setup";
     static readonly string[] Flags = ["--enable-lb-port-mapping", "--enable-default-ingress=false", "--gateway-channel=disabled"];
-    public static readonly string Setup = $"{Image} {string.Join(' ', Flags)}";
+    public static readonly string Setup = $"{Image} {string.Join(' ', Flags)} dockyard.service";
     const int EnvoyAdminPort = 10000;
 
     public static string[] RunArgs(string context) =>
     [
         "--context", context, "run", "-d", "--name", Name, "--restart", "unless-stopped", "--network", "kind",
-        "--label", "dockyard.helper=cloud-provider-kind", "--label", $"{SetupLabel}={Setup}", "-v", "/var/run/docker.sock:/var/run/docker.sock",
+        "--label", $"{Store.SystemRow.ServiceLabel}=cloud-provider-kind", "--label", $"{SetupLabel}={Setup}", "-v", "/var/run/docker.sock:/var/run/docker.sock",
         Image, .. Flags,
     ];
 

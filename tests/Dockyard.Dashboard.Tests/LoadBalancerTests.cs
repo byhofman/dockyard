@@ -105,7 +105,7 @@ public sealed class LoadBalancerTests
         var args = LoadBalancers.RunArgs("linux");
         Assert.Matches(@"@sha256:[0-9a-f]{64}$", LoadBalancers.Image);
         Assert.Equal(["--context", "linux", "run", "-d", "--name", LoadBalancers.Name], args[..6]);
-        Assert.Contains("dockyard.helper=cloud-provider-kind", args);
+        Assert.Contains("dockyard.service=cloud-provider-kind", args);
         Assert.Contains("/var/run/docker.sock:/var/run/docker.sock", args);
         Assert.Equal([LoadBalancers.Image, "--enable-lb-port-mapping", "--enable-default-ingress=false", "--gateway-channel=disabled"], args[^4..]);
     }
