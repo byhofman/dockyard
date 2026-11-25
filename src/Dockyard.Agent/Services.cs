@@ -118,12 +118,14 @@ sealed class Services(Func<DockerClient> connect, DomainTable table, string root
         // A published name that points at a cluster's ingress goes through the proxy, which every place can reach; any
         // other address is answered as it is.
         ClusterIngress? IngressOf(ExternalRecord r) => clusters.FirstOrDefault(c => c.Cluster == r.Cluster && (r.Address.Equals(c.Http) || r.Address.Equals(c.Https)));
-        var proxied = published.Where(r => IngressOf(r) is not null).Select(r => (r.Name, IngressOf(r)!)).ToList();
+        // A cluster that is stopped or gone has no one to answer for its names.
+        var current = published.Where(r => clusters.Any(c => c.Cluster == r.Cluster)).ToList();
+        var proxied = current.Where(r => IngressOf(r) is not null).Select(r => (r.Name, IngressOf(r)!)).ToList();
         Write(Path.Combine(DnsDir, "Corefile"), ServiceConfig.Corefile(views));
         foreach (var view in views)
         {
             var zone = Path.Combine(DnsDir, ServiceConfig.ZoneFileName(view));
-            var extra = published.Select(r => (r.Name, IngressOf(r) is null ? r.Address : view.Answer)).ToList();
+            var extra = current.Select(r => (r.Name, IngressOf(r) is null ? r.Address : view.Answer)).ToList();
             var records = ServiceConfig.Zone(view.Answer, names, clusters.Select(c => c.Cluster), 0, extra);
             if (records != zoneRecords.GetValueOrDefault(view.Name))
             {

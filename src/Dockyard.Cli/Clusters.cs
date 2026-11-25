@@ -56,6 +56,7 @@ sealed class Clusters(Action<string> log)
             : null;
         ClusterDefinitions.Save(name, new ClusterDefinition(definition, storage, addons.Select(a => a.Release).ToList(), loadBalancer, ports));
         var file = await Actions().Create(name, log, storage: storage, addons: addons, helm: helm, definition: definition, publishNames: loadBalancer);
+        if (loadBalancer) await CloudProvider.EnsureRunning(Context.Length > 0 ? Context : "default", log);
         log($"kubectl now uses {KindKubeconfig.Key(name)}, from {file}");
     }
 
@@ -70,6 +71,7 @@ sealed class Clusters(Action<string> log)
         var remade = saved with { Yaml = definition, Addons = helm is null ? [] : saved.Addons };
         ClusterDefinitions.Save(name, remade);
         await actions.Create(name, log, storage: remade.Storage, addons: remade.AddonList, helm: helm, definition: remade.Yaml, publishNames: remade.LoadBalancer);
+        if (remade.LoadBalancer) await CloudProvider.EnsureRunning(Context.Length > 0 ? Context : "default", log);
         log($"{name} is made again from its definition");
     }
 

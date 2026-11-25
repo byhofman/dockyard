@@ -86,6 +86,10 @@ static class ExternalDns
                   value: {{EtcdUrl}}
         """;
 
+    // What a deleted cluster published goes with it; dockyard-etcd may not run, which leaves nothing to clean.
+    public static Task Forget(string context, string cluster) =>
+        SharedStorage.Docker(["--context", context, "exec", "dockyard-etcd", "etcdctl", "--endpoints", EtcdUrl, "del", "--prefix", $"/dockyard/{cluster}/"]);
+
     public static async Task Install(string context, string cluster, Action<string>? onLine)
     {
         onLine?.Invoke($"Adding external-dns: Ingress hosts under {Zone} resolve everywhere");

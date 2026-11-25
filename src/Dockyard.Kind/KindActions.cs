@@ -40,6 +40,7 @@ sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
         var scratch = Directory.CreateTempSubdirectory("dockyard-kind-");
         try { Check(await KindCli.Run(kind, dockerContext, KindCli.Delete(name, Path.Combine(scratch.FullName, "config")), onLine)); }
         finally { scratch.Delete(recursive: true); }
+        await ExternalDns.Forget(dockerContext.Length > 0 ? dockerContext : "default", name);
         try { await Task.Run(() => host.Remove(name)); }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
