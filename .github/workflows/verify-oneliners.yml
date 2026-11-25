@@ -40,6 +40,11 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - name: The end-to-end tests of the published release, which is what the one-liner installs
+        shell: bash
+        run: sh scripts/published-e2e.sh
       - name: The one-liner, on a Windows runner with WSL 2, starting from v0.1.0
         shell: pwsh
         run: ./tests/e2e/wizard-windows.ps1 -OneLiner "$env:RAW/install.ps1"
@@ -48,6 +53,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - name: The end-to-end tests of the published release, which is what the one-liner installs
+        run: sh scripts/published-e2e.sh
       - name: The one-liner, with systemd and sudo
         run: ONELINER="$RAW/install.sh" sh tests/e2e/wizard-linux.sh
 

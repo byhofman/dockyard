@@ -20,7 +20,7 @@ static partial class CertManager
     // What `dockyard-toolbox https cluster-issuer <cluster>` prints: the cluster's CA, its key, the root.
     public static (string Chain, string Key)? Parse(string pem)
     {
-        var blocks = PemBlock().Matches(pem).Select(m => (Kind: m.Groups["kind"].Value, Text: m.Value)).ToList();
+        var blocks = PemBlock().Matches(pem.Replace("\r\n", "\n")).Select(m => (Kind: m.Groups["kind"].Value, Text: m.Value)).ToList();
         var certificates = blocks.Where(b => b.Kind == "CERTIFICATE").Select(b => b.Text).ToList();
         var key = blocks.FirstOrDefault(b => b.Kind.EndsWith("PRIVATE KEY", StringComparison.Ordinal)).Text;
         return certificates.Count == 2 && key is not null ? (string.Join('\n', certificates) + "\n", key + "\n") : null;

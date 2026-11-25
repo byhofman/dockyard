@@ -74,7 +74,7 @@ echo "== first install, no dashboard"
 unset XDG_CONFIG_HOME
 mkdir -p "$home/.config/Dockyard"
 printf '{"UsePackageManager": false}\n' > "$home/.config/Dockyard/settings.json"
-run --silent --no-dashboard --no-start
+if [ -n "${ONELINER:-}" ]; then run --silent --no-dashboard --no-start; else run --silent --no-dashboard --no-start --no-package-manager; fi
 check "app in place" test -x "$macos/Dockyard"
 check "the VM helper too" test -x "$macos/dockyard-host"
 check "no dashboard" missing "$macos/Dockyard Dashboard"

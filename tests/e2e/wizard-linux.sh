@@ -90,7 +90,7 @@ if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
   grep -q 'http://198.19.250.254:18888' /etc/docker/daemon.json && ok "daemon.json has the proxy, through the agent" || fail "daemon.json: $(cat /etc/docker/daemon.json)"
   docker version >/dev/null; sleep 2
   docker pull -q busybox:1.37 >/dev/null || fail "pull through the proxy"
-  sudo grep -q 'CONNECT.*docker' /var/log/tinyproxy/tinyproxy.log && ok "the pull went through the proxy" || fail "not in the proxy's log: $(sudo tail -5 /var/log/tinyproxy/tinyproxy.log)"
+  sudo grep -q 'CONNECT.*docker' /var/log/tinyproxy/tinyproxy.log && ok "the pull went through the proxy" || fail "not in the proxy's log: $(sudo tail -5 /var/log/tinyproxy/tinyproxy.log); docker uses: $(docker info --format '{{.HTTPProxy}} {{.HTTPSProxy}}' 2>&1); docker.service since $(systemctl show -p ActiveEnterTimestamp --value docker.service)"
   run --silent --no-start >/dev/null
   if grep -q 18888 /etc/docker/daemon.json; then fail "the proxy stayed after the machine stopped using it"; else ok "gone once the machine stops using it"; fi
   sudo systemctl stop tinyproxy || true
