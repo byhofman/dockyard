@@ -23,7 +23,7 @@ sealed class WindowsHost : IEngineHost
     {
         this.runner = runner;
         distro = new WslDistro(runner);
-        wsl = new WslEngine(runner, distro);
+        wsl = new WslEngine(distro);
         winget = new Winget(runner);
         tools = new ToolComponents(winget, new WindowsOwnCopies(), () => Settings.Load().UsePackageManager);
     }

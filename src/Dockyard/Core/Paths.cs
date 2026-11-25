@@ -15,6 +15,8 @@ static class Paths
     public static string ToolExe(CliTool tool) => Path.Combine(DockerDir, tool.FileName);
     public static readonly string AppDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Dockyard");
     public const string AppProcess = "dockyard-toolbox";
+    public const string AdapterProcess = "dockyard-adapter";
+    public static readonly string AdapterExe = Path.Combine(AppDir, AdapterProcess + ".exe");
     public static readonly string AppExe = Path.Combine(AppDir, AppProcess + ".exe");
     public const string DashboardProcess = "dockyard-dashboard";
     public static readonly string DashboardExe = Path.Combine(AppDir, DashboardProcess + ".exe");
@@ -41,14 +43,13 @@ static class Paths
 
     public const string WindowsPipeName = "docker_windows";
     public const string WindowsHost = "npipe:////./pipe/" + WindowsPipeName;
-    // Where dockyard-agent serves the Linux engine to Windows, to the tray's token only.
-    public const int LinuxPort = 2375;
-    public const string LinuxPipeName = "dockyard_linux";
-    public const string LinuxAgentPipeName = "dockyard_linux_agent";
-    public const string LinuxHost = "npipe:////./pipe/" + LinuxPipeName;
+    public const int LinuxPort = Shared.WslPaths.LinuxPort;
+    public const string LinuxPipeName = Shared.WslPaths.LinuxPipeName;
+    public const string LinuxAgentPipeName = Shared.WslPaths.LinuxAgentPipeName;
+    public const string LinuxHost = Shared.WslPaths.LinuxHost;
     // What the linux context pointed at up to v0.4: an open port every Windows user and web page could reach.
     public const string LegacyLinuxHost = "tcp://127.0.0.1:2375";
-    public static readonly string EngineTokenFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Dockyard", "engine.token");
+    public static string EngineTokenFile => Shared.WslPaths.EngineTokenFile;
     public const string ServiceName = "docker";
     public const string Repo = "byhofman/dockyard";
     public const string AppName = "Dockyard";

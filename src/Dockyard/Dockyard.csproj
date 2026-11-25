@@ -34,6 +34,7 @@
     <EmbeddedResource Include="..\..\image\versions.env" LogicalName="versions.env" />
     <EmbeddedResource Include="..\..\image\versions.sha256" LogicalName="versions.sha256" />
     <EmbeddedResource Condition="'$(GuestBundle)' != ''" Include="$(GuestBundle)" LogicalName="guest.tar.gz" />
+    <EmbeddedResource Condition="'$(AdapterExe)' != ''" Include="$(AdapterExe)" LogicalName="dockyard-adapter.exe" />
     <Compile Include="..\Shared\*.cs" LinkBase="Shared" />
     <InternalsVisibleTo Include="Dockyard.Tests" />
   </ItemGroup>

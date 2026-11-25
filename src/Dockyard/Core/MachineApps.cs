@@ -75,7 +75,7 @@ static class MachineApps
     // Only files in Program Files, which only administrators can write: an exclusion goes by path and exempts whatever is
     // there from every ASR rule. Earlier versions also excluded the installer wherever it ran, and the one-liner asks for
     // its own download path when Defender blocks it, so uninstall takes those back too.
-    static IEnumerable<string> ExcludedFromAsr => new[] { Paths.AppExe, Paths.DashboardExe, CommandExe };
+    static IEnumerable<string> ExcludedFromAsr => new[] { Paths.AppExe, Paths.DashboardExe, Paths.AdapterExe, CommandExe };
     public static IEnumerable<string> EverExcludedFromAsr => ExcludedFromAsr.Concat(Paths.LegacyDashboardExes).Append(Paths.LegacyAppExe).Append(Paths.OneLinerExe).Concat(WingetToolFiles);
 
     // Defender's prevalence/age rule (event 1121) blocks every new build, and an exclusion goes by path because a hash changes with each build.
@@ -108,6 +108,7 @@ static class MachineApps
             ReplaceAppExe(source);
             log($"Installed {Paths.AppExe}");
         }
+        InstallAdapter(log, keepPid);
         if (File.Exists(Paths.LegacyAppExe))
         {
             InUseFiles.MoveAside(Paths.LegacyAppExe);
@@ -117,6 +118,20 @@ static class MachineApps
         else if (Paths.HasDashboard) RemoveDashboard(log);
         else log("The dashboard is not installed");
         await InstallCommand(log, dashboardDir);
+    }
+
+    // dockyard-adapter, which keeps the Linux engine running and reachable from Windows; the Toolbox carries it. A running
+    // one is stopped to be replaced: the engine keeps running, and the new one takes it on.
+    static void InstallAdapter(Action<string> log, int keepPid)
+    {
+        using var embedded = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("dockyard-adapter.exe");
+        if (embedded is null) return;
+        foreach (var p in Process.GetProcessesByName(Paths.AdapterProcess)) Kill(p, keepPid);
+        var incoming = Paths.AdapterExe + ".new";
+        using (var file = File.Create(incoming)) embedded.CopyTo(file);
+        InUseFiles.MoveAside(Paths.AdapterExe);
+        File.Move(incoming, Paths.AdapterExe);
+        log($"Installed {Paths.AdapterExe}");
     }
 
     // The dockyard command, its own component: a console program, so cmd and PowerShell wait for it and get its output.

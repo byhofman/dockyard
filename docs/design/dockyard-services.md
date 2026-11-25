@@ -33,6 +33,8 @@ proxy for `host.docker.internal`, and the iptables rules that bring container tr
 
 ## Steps
 
+Done in 0.9.0: step 1 on Windows. `dockyard-adapter.exe` (src/Dockyard.Adapter) keeps the WSL engine running, serves its pipes, relays `127.77.0.1` for container domains and forwards published ports; it starts at logon by its own entry, and the Toolbox only asks it over `dockyard-adapter-<user>`. The Toolbox carries it and installs it next to itself until it is released on its own. Still to do in step 1: macOS (the VM process and its relays) and Linux.
+
 1. **Adapter, Windows first.** A `dockyard-adapter` executable (a component of its own, released as `adapter/<semver>`)
    takes over the relays, the pipes and the keep-alive from the Toolbox; the Toolbox talks to it over a local pipe to start
    and stop engines. Started at logon by the adapter's own entry, not by the Toolbox. Then the same for macOS and Linux.
