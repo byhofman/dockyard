@@ -36,6 +36,9 @@ sealed class ContainersViewModel : Observable, ISearchable
         ProjectStartStopCommand = new Command<ProjectRow>(p => WithProject(p, d => d.StartOrStop()));
         ProjectRestartCommand = new Command<ProjectRow>(p => WithProject(p, d => d.RestartCommand.CanExecute(null) ? Run(d.RestartCommand) : Task.CompletedTask));
         ProjectDownCommand = new Command<ProjectRow>(p => { AskDown(p.Project); return Task.CompletedTask; });
+        ToggleClusterCommand = new Command<ClusterRow>(k => { Store.ToggleProject(k.Key); return Task.CompletedTask; });
+        ClusterStartStopCommand = new Command<ClusterRow>(k => shell.Clusters?.StartOrStop(k.Cluster) ?? Task.CompletedTask);
+        OpenClusterCommand = new Command<ClusterRow>(k => { shell.Reveal("Clusters", k.Cluster); return Task.CompletedTask; });
 
         StartPickedCommand = new Command(() => Bulk("Starting", PickedContainers.Where(c => !c.IsRunning).ToList(), (c, i) => c.StartContainerAsync(i.Id)), () => PickedContainers.Any(c => !c.IsRunning));
         StopPickedCommand = new Command(() => Bulk("Stopping", PickedContainers.Where(c => c.IsRunning).ToList(), (c, i) => c.StopContainerAsync(i.Id)), () => PickedContainers.Any(c => c.IsRunning));
@@ -74,6 +77,9 @@ sealed class ContainersViewModel : Observable, ISearchable
     public Command<ProjectRow> ProjectStartStopCommand { get; }
     public Command<ProjectRow> ProjectRestartCommand { get; }
     public Command<ProjectRow> ProjectDownCommand { get; }
+    public Command<ClusterRow> ToggleClusterCommand { get; }
+    public Command<ClusterRow> ClusterStartStopCommand { get; }
+    public Command<ClusterRow> OpenClusterCommand { get; }
     public Command StartPickedCommand { get; }
     public Command StopPickedCommand { get; }
     public Command RestartPickedCommand { get; }
@@ -193,6 +199,7 @@ sealed class ContainersViewModel : Observable, ISearchable
     {
         ContainerItem c => "c:" + c.Id,
         ProjectRow p => "p:" + p.Name,
+        ClusterRow k => k.Key,
         _ => "",
     };
 

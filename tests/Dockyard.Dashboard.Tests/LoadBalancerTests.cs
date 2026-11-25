@@ -48,6 +48,37 @@ public sealed class LoadBalancerTests
         Assert.Equal([web], rows);
     }
 
+    static ContainerItem Node(string cluster, string role, string state = "running")
+    {
+        var item = new ContainerItem($"{cluster}-{role}");
+        item.Update(new ContainerSummary
+        {
+            Id = $"{cluster}-{role}", Names = [$"/{cluster}-{role}"], State = state, Image = "kindest/node:v1.37.0",
+            Labels = new() { [KindClusters.ClusterLabel] = cluster, [KindClusters.RoleLabel] = role },
+        });
+        return item;
+    }
+
+    [Fact]
+    public void A_cluster_is_one_row_with_its_nodes_and_then_its_load_balancers_and_collapses_like_a_project()
+    {
+        var web = new ContainerItem("w");
+        web.Update(new ContainerSummary { Id = "w", Names = ["/web"], State = "running" });
+        var proxy = Proxy("p", "dev", "default/api", (1, 80));
+        var plane = Node("dev", "control-plane");
+        var worker = Node("dev", "worker", state: "exited");
+        List<ContainerItem> all = [web, proxy, worker, plane];
+
+        var rows = ContainerStore.BuildRows(all, "");
+
+        var cluster = Assert.IsType<ClusterRow>(rows[0]);
+        Assert.Equal(("dev", "1/2 nodes running", "kind cluster · Kubernetes v1.37.0"), (cluster.Name, cluster.Summary, cluster.Location));
+        Assert.Equal<object>([cluster, plane, worker, proxy, web], rows);
+        var collapsed = ContainerStore.BuildRows(all, "", collapsed: new HashSet<string> { "kind:dev" });
+        Assert.Equal<object>([cluster with { IsExpanded = false }, web], collapsed);
+        Assert.Equal<object>([rows[0], plane, worker, proxy], ContainerStore.BuildRows(all, "dev"));
+    }
+
     static ContainerSummary Controller(string state, string? image) => new()
     {
         Id = "c",

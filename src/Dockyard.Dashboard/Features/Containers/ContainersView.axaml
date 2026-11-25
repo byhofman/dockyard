@@ -94,6 +94,38 @@
                 </StackPanel>
               </Grid>
             </DataTemplate>
+            <DataTemplate DataType="store:ClusterRow">
+              <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto">
+                <CheckBox Classes="pick" IsChecked="{Binding $parent[ListBoxItem].IsSelected}" AutomationProperties.Name="{Binding Name}" />
+                <Button Grid.Column="1" Classes="iconbtn" Padding="2" Margin="-6,0,4,0" ToolTip.Tip="Expand or collapse"
+                        Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).ToggleClusterCommand}" CommandParameter="{Binding}">
+                  <Panel>
+                    <PathIcon Data="{StaticResource IconChevronDown}" IsVisible="{Binding IsExpanded}" />
+                    <PathIcon Data="{StaticResource IconChevronRight}" IsVisible="{Binding !IsExpanded}" />
+                  </Panel>
+                </Button>
+                <PathIcon Grid.Column="2" Data="{StaticResource IconClusters}" Width="16" Height="16" Margin="0,0,10,0"
+                          Foreground="{DynamicResource Muted}" Classes.running="{Binding IsRunning}" />
+                <StackPanel Grid.Column="3" VerticalAlignment="Center">
+                  <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Classes="muted small" Text="{Binding Location}" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <TextBlock Grid.Column="4" Classes="muted small" Text="{Binding Summary}" VerticalAlignment="Center" Margin="12,0" />
+                <StackPanel Grid.Column="5" Classes="rowactions" Orientation="Horizontal" VerticalAlignment="Center">
+                  <Button Classes="iconbtn" ToolTip.Tip="Start or stop the cluster; everything in it stays"
+                          Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).ClusterStartStopCommand}" CommandParameter="{Binding}">
+                    <Panel>
+                      <PathIcon Data="{StaticResource IconStop}" IsVisible="{Binding IsRunning}" />
+                      <PathIcon Data="{StaticResource IconPlay}" IsVisible="{Binding !IsRunning}" />
+                    </Panel>
+                  </Button>
+                  <Button Classes="iconbtn" ToolTip.Tip="Open in Clusters"
+                          Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).OpenClusterCommand}" CommandParameter="{Binding}">
+                    <PathIcon Data="{StaticResource IconOpenExternal}" />
+                  </Button>
+                </StackPanel>
+              </Grid>
+            </DataTemplate>
 
             <DataTemplate DataType="store:ContainerItem">
               <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto">

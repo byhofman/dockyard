@@ -174,6 +174,8 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     }
 
     // The nodes are containers, so a stopped cluster keeps everything in it. Its load balancer proxies stop and start with it.
+    public Task StartOrStop(KindCluster cluster) => Toggle(cluster);
+
     Task Toggle(KindCluster cluster) => Run(cluster.IsRunning ? $"Stopping {cluster.Name}" : $"Starting {cluster.Name}", async client =>
     {
         var proxies = Session.Containers.Items.Where(i => i.Labels.GetValueOrDefault(LoadBalancers.ClusterLabel) == cluster.Name).Select(i => i.Id).ToList();

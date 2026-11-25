@@ -109,6 +109,15 @@ sealed class ShellViewModel : Observable
         HitIndex = i;
     }
 
+    public Features.Clusters.ClustersViewModel? Clusters => Sections.Select(s => s.Content).OfType<Features.Clusters.ClustersViewModel>().FirstOrDefault();
+
+    public void Reveal(string sectionTitle, object row)
+    {
+        if (Sections.FirstOrDefault(s => s.Title == sectionTitle) is not { } section) return;
+        CurrentSection = section;
+        if (section.Content is ISearchable searchable) searchable.Reveal(row);
+    }
+
     public void OpenHit(SearchHit? hit = null)
     {
         hit ??= HitIndex >= 0 && HitIndex < Hits.Count ? Hits[HitIndex] : null;

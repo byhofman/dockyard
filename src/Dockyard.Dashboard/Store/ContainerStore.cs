@@ -115,12 +115,27 @@ sealed class ContainerStore
             if (expanded) rows.AddRange(children);
             entries.Add((p.Name, rows));
         }
-        // kind's load balancer proxies show under their cluster.
-        foreach (var c in list.Where(i => i.Project.Length == 0 && !Features.Clusters.LoadBalancers.IsProxy(i) && Matches(i, filter)))
+        foreach (var cluster in Features.Clusters.KindClusters.From(list))
+        {
+            var clusterMatches = filter.Length == 0 || cluster.Name.Contains(filter, StringComparison.OrdinalIgnoreCase);
+            var children = list.Where(c => ClusterOf(c) == cluster.Name && (clusterMatches || Matches(c, filter)))
+                .OrderBy(c => Features.Clusters.LoadBalancers.IsProxy(c)).ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (!clusterMatches && children.Count == 0) continue;
+            var row = new ClusterRow(cluster, collapsed?.Contains(ClusterRow.KeyPrefix + cluster.Name) != true);
+            List<object> rows = [row];
+            if (row.IsExpanded) rows.AddRange(children);
+            entries.Add((cluster.Name, rows));
+        }
+        foreach (var c in list.Where(i => i.Project.Length == 0 && ClusterOf(i) is null && Matches(i, filter)))
             entries.Add((c.Name, [c]));
 
         return entries.OrderBy(e => e.Key, StringComparer.OrdinalIgnoreCase).SelectMany(e => e.Rows).ToList();
     }
+
+    // A node of a kind cluster, or a load balancer proxy for one of its services.
+    static string? ClusterOf(ContainerItem i) =>
+        i.Labels.GetValueOrDefault(Features.Clusters.KindClusters.ClusterLabel) ?? i.Labels.GetValueOrDefault(Features.Clusters.LoadBalancers.ClusterLabel);
 
     internal static bool Matches(ContainerItem i, string filter) =>
         filter.Length == 0
