@@ -89,9 +89,6 @@
               <Button Classes="primary" Command="{Binding SaveAndApplyCommand}" ToolTip.Tip="Save, then docker compose up -d: only changed services are recreated">
                 <StackPanel Classes="label"><PathIcon Data="{StaticResource IconPlay}" /><TextBlock Text="Save and apply" /></StackPanel>
               </Button>
-              <Button Classes="danger" Command="{Binding DownCommand}" ToolTip.Tip="Remove containers and networks; volumes are kept">
-                <StackPanel Classes="label"><PathIcon Data="{StaticResource IconDown}" /><TextBlock Text="Down…" /></StackPanel>
-              </Button>
             </StackPanel>
           </Grid>
           <SelectableTextBlock DockPanel.Dock="Bottom" Classes="small" TextWrapping="Wrap" Margin="0,8,0,0" MaxHeight="120"
