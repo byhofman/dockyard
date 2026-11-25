@@ -10,6 +10,7 @@ sealed class VolumesViewModel : SelectableSection<VolumeRow>
     Dictionary<string, long>? sizes;
     List<VolumeRow> all = [];
     Features.Files.FileBrowserViewModel? files;
+    int selectedTab;
 
     public VolumesViewModel(ShellViewModel shell, EngineSession session) : base(shell, session)
     {
@@ -26,8 +27,7 @@ sealed class VolumesViewModel : SelectableSection<VolumeRow>
             });
             return Task.CompletedTask;
         });
-        OpenFilesCommand = new Command(() => OpenFiles(writable: false), () => Selected is not null);
-        CloseFilesCommand = new Command(() => { CloseFiles(); return Task.CompletedTask; });
+        OpenFilesCommand = new Command(() => { SelectedTab = FilesTab; return Task.CompletedTask; }, () => Selected is not null);
         OpenLocationCommand = new Command(() => { OpenLocation(); return Task.CompletedTask; }, () => Location?.Path is not null);
         session.Connected += () => _ = Reload();
         session.ResourceChanged += r => { if (r.Kind == RouteKind.Volumes) ScheduleReload(); };
@@ -38,10 +38,22 @@ sealed class VolumesViewModel : SelectableSection<VolumeRow>
     public Command<VolumeRow> RemoveRowCommand { get; }
     public Command PruneCommand { get; }
     public Command OpenFilesCommand { get; }
-    public Command CloseFilesCommand { get; }
     public Command OpenLocationCommand { get; }
     public Features.Files.FileBrowserViewModel? Files { get => files; private set { if (Set(ref files, value)) Raise(nameof(HasFiles)); } }
     public bool HasFiles => files is not null;
+
+    public const int FilesTab = 1;
+
+    // Details first; the files load only when their tab is picked, as holding a volume starts a container.
+    public int SelectedTab
+    {
+        get => selectedTab;
+        set
+        {
+            if (!Set(ref selectedTab, value)) return;
+            if (value == FilesTab && files is null) _ = OpenFiles(writable: false);
+        }
+    }
     public HostOs Host { get; init; } = VolumeLocation.CurrentHost;
     public VolumeLocation? Location => Selected is { } v && Session.Client is { } c
         ? VolumeLocation.For(Host, Session.ContextName, c.Endpoint.Kind, c.IsWindows, v.Name, v.Driver, v.Mountpoint)
@@ -58,7 +70,9 @@ sealed class VolumesViewModel : SelectableSection<VolumeRow>
         OpenFilesCommand.Refresh();
         OpenLocationCommand.Refresh();
         // A reload makes new rows for the same volumes; only another volume closes the files.
-        if (before?.Name != Selected?.Name) CloseFiles();
+        if (before?.Name == Selected?.Name) return;
+        CloseFiles();
+        SelectedTab = 0;
     }
 
     void AskRemove(IReadOnlyList<VolumeRow> rows)
@@ -86,6 +100,11 @@ sealed class VolumesViewModel : SelectableSection<VolumeRow>
         try
         {
             var (holder, release) = await Hold(client, volume.Name, writable);
+            if (Selected?.Name != volume.Name)
+            {
+                await release();
+                return;
+            }
             CloseFiles();
             var source = new Features.Files.ContainerFileSource(client, holder, Mount, writable, release);
             Files = new Features.Files.FileBrowserViewModel(source, Shell.ShowError, () => OpenFiles(writable: true));
@@ -112,7 +131,7 @@ sealed class VolumesViewModel : SelectableSection<VolumeRow>
     void OpenLocation()
     {
         if (Location?.Path is not { } root || Selected is not { } volume) return;
-        var path = FolderFor(root, Files?.Directory);
+        var path = FolderFor(root, SelectedTab == FilesTab ? Files?.Directory : null);
         if (!Features.Files.FileManager.CanOpen(path)) path = root;
         if (!Features.Files.FileManager.CanOpen(path))
         {

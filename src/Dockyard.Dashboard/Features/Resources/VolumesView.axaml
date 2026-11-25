@@ -57,32 +57,18 @@
 
     <Border x:Name="Panel" Grid.Column="2" Background="{DynamicResource Surface}"
             BorderBrush="{DynamicResource Line}" BorderThickness="1,0,0,0">
-      <Panel>
-      <DockPanel IsVisible="{Binding HasFiles}">
-        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto" Margin="16,14,16,0">
-          <TextBlock Classes="title" Text="{Binding Selected.DisplayName, FallbackValue=''}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-          <Button Grid.Column="1" IsVisible="{Binding CanOpenLocation}" Command="{Binding OpenLocationCommand}" Content="{Binding OpenLocationText}"
-                  Margin="8,0,6,0" ToolTip.Tip="The folder you are looking at, where it is, in your file manager" />
-          <Button Grid.Column="2" Classes="iconbtn" Command="{Binding CloseFilesCommand}" ToolTip.Tip="Close the files">
-            <PathIcon Data="{StaticResource IconClose}" />
-          </Button>
-        </Grid>
-        <files:FilesView DataContext="{Binding Files}" />
-      </DockPanel>
-      <ScrollViewer IsVisible="{Binding !HasFiles}">
-        <StackPanel Margin="16,14" Spacing="10" DataContext="{Binding Selected}" x:DataType="res:VolumeRow">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Top" Margin="16,14,16,8" Spacing="10" DataContext="{Binding Selected}" x:DataType="res:VolumeRow">
           <Grid ColumnDefinitions="*,Auto">
             <SelectableTextBlock Classes="title" Text="{Binding Name}" TextWrapping="Wrap" VerticalAlignment="Center" />
             <Button Grid.Column="1" Classes="iconbtn" Command="{Binding $parent[UserControl].((res:VolumesViewModel)DataContext).ClearSelectionCommand}" ToolTip.Tip="Close">
               <PathIcon Data="{StaticResource IconClose}" />
             </Button>
           </Grid>
-          <WrapPanel ItemSpacing="6" LineSpacing="6" Margin="0,4,0,0">
-            <Button Command="{Binding $parent[UserControl].((res:VolumesViewModel)DataContext).OpenFilesCommand}"
-                    ToolTip.Tip="Look through what is in this volume" Content="Files" />
+          <WrapPanel ItemSpacing="6" LineSpacing="6">
             <Button IsVisible="{Binding $parent[UserControl].((res:VolumesViewModel)DataContext).CanOpenLocation}"
                     Command="{Binding $parent[UserControl].((res:VolumesViewModel)DataContext).OpenLocationCommand}"
-                    ToolTip.Tip="This volume's folder where it is, in your file manager"
+                    ToolTip.Tip="This volume's folder where it is, or the one open under Files, in your file manager"
                     Content="{Binding $parent[UserControl].((res:VolumesViewModel)DataContext).OpenLocationText}" />
             <Button Click="ExportClicked" Content="Export a copy…"
                     ToolTip.Tip="Copy this volume's files into a new folder on this computer and show it" />
@@ -91,21 +77,35 @@
               <StackPanel Classes="label"><PathIcon Data="{StaticResource IconDelete}" /><TextBlock Text="Remove…" /></StackPanel>
             </Button>
           </WrapPanel>
-          <TextBlock Classes="muted small" TextWrapping="Wrap"
-                     Text="{Binding $parent[UserControl].((res:VolumesViewModel)DataContext).Location.Note, FallbackValue=''}" />
-          <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="4" Margin="0,6,0,0">
-            <TextBlock Classes="muted small" Text="Driver" />
-            <TextBlock Grid.Column="1" Text="{Binding Driver}" />
-            <TextBlock Grid.Row="1" Classes="muted small" Text="Size" />
-            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SizeText}" />
-            <TextBlock Grid.Row="2" Classes="muted small" Text="Mountpoint" />
-            <SelectableTextBlock Grid.Row="2" Grid.Column="1" Classes="mono" Text="{Binding Mountpoint}" TextWrapping="Wrap" />
-          </Grid>
-          <TextBlock Classes="section" Text="USED BY" Margin="0,6,0,0" />
-          <TextBlock Text="{Binding UsageText}" TextWrapping="Wrap" />
         </StackPanel>
-      </ScrollViewer>
-      </Panel>
+
+        <TabControl SelectedIndex="{Binding SelectedTab}" Margin="4,0,4,0">
+          <TabItem Header="Details">
+            <ScrollViewer>
+              <StackPanel Margin="12,10" Spacing="10" DataContext="{Binding Selected}" x:DataType="res:VolumeRow">
+                <TextBlock Classes="muted small" TextWrapping="Wrap"
+                           Text="{Binding $parent[UserControl].((res:VolumesViewModel)DataContext).Location.Note, FallbackValue=''}" />
+                <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="4">
+                  <TextBlock Classes="muted small" Text="Driver" />
+                  <TextBlock Grid.Column="1" Text="{Binding Driver}" />
+                  <TextBlock Grid.Row="1" Classes="muted small" Text="Size" />
+                  <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SizeText}" />
+                  <TextBlock Grid.Row="2" Classes="muted small" Text="Mountpoint" />
+                  <SelectableTextBlock Grid.Row="2" Grid.Column="1" Classes="mono" Text="{Binding Mountpoint}" TextWrapping="Wrap" />
+                </Grid>
+                <TextBlock Classes="section" Text="USED BY" Margin="0,6,0,0" />
+                <TextBlock Text="{Binding UsageText}" TextWrapping="Wrap" />
+              </StackPanel>
+            </ScrollViewer>
+          </TabItem>
+          <TabItem Header="Files">
+            <Panel>
+              <files:FilesView DataContext="{Binding Files}" IsVisible="{Binding $parent[UserControl].((res:VolumesViewModel)DataContext).HasFiles}" />
+              <TextBlock Classes="muted" Text="Opening the volume…" Margin="12,10" IsVisible="{Binding !HasFiles}" />
+            </Panel>
+          </TabItem>
+        </TabControl>
+      </DockPanel>
     </Border>
   </Grid>
 </UserControl>
