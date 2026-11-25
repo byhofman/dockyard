@@ -149,6 +149,11 @@ sealed class ContainersViewModel : Observable, ISearchable
 
     public ToolCheck Tools => shell.Tools;
 
+    public void OpenLogs(string key, string title, IReadOnlyList<LogSource> sources)
+    {
+        if (Session.Client is { } client) shell.Logs.Open(key, title, client, sources);
+    }
+
     public string? Busy { get => busy; private set { if (Set(ref busy, value)) Raise(nameof(IsBusy)); } }
     public bool IsBusy => busy is not null;
 

@@ -159,6 +159,8 @@ sealed class ShellViewModel : Observable
 
     public ActivityLog Activity { get; } = new();
     public ToolCheck Tools { get; } = new();
+    public LogPanel Logs => logs ??= new LogPanel(Activity);
+    LogPanel? logs;
 
     public Dialog? Dialog { get => dialog; private set { if (Set(ref dialog, value)) Raise(nameof(HasDialog)); } }
     public bool HasDialog => dialog is not null;

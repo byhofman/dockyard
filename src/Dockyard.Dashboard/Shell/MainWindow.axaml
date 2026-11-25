@@ -6,6 +6,7 @@
         xmlns:clu="using:Dockyard.Dashboard.Features.Clusters"
         xmlns:bld="using:Dockyard.Dashboard.Features.Builds"
         xmlns:ctl="using:Dockyard.Shared"
+        xmlns:dctl="using:Dockyard.Dashboard.Controls"
         x:Class="Dockyard.Dashboard.Shell.MainWindow"
         x:DataType="shell:ShellViewModel"
         Title="Dockyard Dashboard"
@@ -22,6 +23,36 @@
     </DataTemplate>
     <DataTemplate DataType="res:VolumesViewModel">
       <res:VolumesView />
+    </DataTemplate>
+    <DataTemplate DataType="shell:LogTab">
+      <Panel>
+        <Panel IsVisible="{Binding IsActivity}">
+          <TextBlock Classes="muted small mono" IsVisible="{Binding !Activity.HasLines, FallbackValue=False}" TextWrapping="Wrap" Margin="14,8"
+                     Text="Nothing yet. What the dashboard does, such as starting containers or making clusters, shows up here." />
+          <ListBox Classes="log activitylist" ItemsSource="{Binding Activity.Lines, FallbackValue={x:Null}}" Background="{DynamicResource Bg}" Padding="0,2,0,8">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="shell:ActivityEntry">
+                <Grid ColumnDefinitions="70,14,*" Margin="6,0,6,0" Classes.activitystep="{Binding IsStep}">
+                  <TextBlock Classes="muted mono small" Text="{Binding TimeText}" VerticalAlignment="Top" Margin="0,1,0,0" />
+                  <Ellipse Grid.Column="1" Classes="activitydot" Classes.step="{Binding IsStep}" Classes.info="{Binding IsInfo}" Classes.error="{Binding IsError}"
+                           IsVisible="{Binding !IsDetail}" VerticalAlignment="Top" Margin="0,5,0,0" />
+                  <SelectableTextBlock Grid.Column="2" Classes="activity console" Classes.step="{Binding IsStep}" Classes.detail="{Binding IsDetail}"
+                                       Classes.command="{Binding IsCommand}" Classes.error="{Binding IsError}"
+                                       Text="{Binding Text}" TextWrapping="Wrap" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </Panel>
+        <dctl:FollowingLogList Classes="log" Logs="{Binding Logs}" IsVisible="{Binding IsLogs}" Background="{DynamicResource Bg}"
+                              ScrollViewer.HorizontalScrollBarVisibility="Auto">
+          <dctl:FollowingLogList.ItemTemplate>
+            <DataTemplate DataType="cont:LogRow">
+              <dctl:AnsiTextBlock Classes="mono" Classes.err="{Binding IsError}" Line="{Binding Line}" />
+            </DataTemplate>
+          </dctl:FollowingLogList.ItemTemplate>
+        </dctl:FollowingLogList>
+      </Panel>
     </DataTemplate>
     <DataTemplate DataType="res:NetworksViewModel">
       <res:NetworksView />
@@ -183,36 +214,68 @@
         </Grid>
       </Border>
 
-      <Border DockPanel.Dock="Bottom" Height="260" IsVisible="{Binding Activity.IsOpen}" Background="{DynamicResource Bg}"
+      <Border DockPanel.Dock="Bottom" Height="300" IsVisible="{Binding Activity.IsOpen}" Background="{DynamicResource Bg}"
               BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0">
         <DockPanel>
-          <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="14,6,8,4">
-            <PathIcon Data="{StaticResource IconLogs}" Width="14" Height="14" Foreground="{DynamicResource Muted}" Margin="0,0,8,0" />
-            <TextBlock Grid.Column="1" Classes="section" Text="ACTIVITY" VerticalAlignment="Center" />
-            <Button Grid.Column="2" Classes="link" Content="Copy" Click="CopyActivity" IsEnabled="{Binding Activity.HasLines}" ToolTip.Tip="Copy the whole log" />
-            <Button Grid.Column="3" Classes="link" Content="Clear" Command="{Binding Activity.ClearCommand}" IsEnabled="{Binding Activity.HasLines}" Margin="10,0,6,0" />
-            <Button Grid.Column="4" Classes="iconbtn" Command="{Binding Activity.ToggleCommand}" ToolTip.Tip="Close">
+          <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto,Auto,Auto" Margin="8,4,8,2">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+              <ItemsControl ItemsSource="{Binding Logs.Tabs}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" Spacing="2" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="shell:LogTab">
+                    <Border Classes="logtab" Classes.selected="{Binding IsSelected}">
+                      <StackPanel Orientation="Horizontal">
+                        <Button Classes="logtab" Command="{Binding $parent[Window].((shell:ShellViewModel)DataContext).Logs.SelectCommand}" CommandParameter="{Binding}">
+                          <StackPanel Classes="label" Spacing="6">
+                            <PathIcon Data="{StaticResource IconLogs}" Width="12" Height="12" />
+                            <TextBlock Text="{Binding Title}" />
+                          </StackPanel>
+                        </Button>
+                        <Button Classes="iconbtn" Padding="4" IsVisible="{Binding CanClose}" ToolTip.Tip="Close" AutomationProperties.Name="Close tab"
+                                Command="{Binding $parent[Window].((shell:ShellViewModel)DataContext).Logs.CloseTabCommand}" CommandParameter="{Binding}">
+                          <PathIcon Data="{StaticResource IconClose}" Width="9" Height="9" />
+                        </Button>
+                      </StackPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+            <Button Grid.Column="1" Classes="iconbtn" Classes.selected="{Binding Logs.SideBySide}" Command="{Binding Logs.ToggleSideBySideCommand}"
+                    IsVisible="{Binding Logs.HasLogTabs}" ToolTip.Tip="Side by side, or one at a time" AutomationProperties.Name="Side by side" Margin="0,0,6,0">
+              <PathIcon Data="{StaticResource IconSideBySide}" Width="14" Height="14" />
+            </Button>
+            <Button Grid.Column="2" Classes="link" Content="Copy" Click="CopyActivity" ToolTip.Tip="Copy what this tab shows" />
+            <Button Grid.Column="3" Classes="link" Content="Clear" Command="{Binding Activity.ClearCommand}" IsVisible="{Binding Logs.SelectedIsActivity}"
+                    IsEnabled="{Binding Activity.HasLines}" Margin="10,0,6,0" />
+            <Button Grid.Column="4" Classes="iconbtn" Command="{Binding Activity.ToggleCommand}" ToolTip.Tip="Close" Margin="6,0,0,0">
               <PathIcon Data="{StaticResource IconClose}" Width="12" Height="12" />
             </Button>
           </Grid>
-          <TextBlock DockPanel.Dock="Top" Classes="muted small mono" IsVisible="{Binding !Activity.HasLines}" TextWrapping="Wrap" Margin="14,8"
-                     Text="Nothing yet. What the dashboard does, such as starting containers or making clusters, shows up here." />
-          <ScrollViewer x:Name="ActivityScroll" Padding="0,2,0,8">
-            <ItemsControl ItemsSource="{Binding Activity.Lines}">
+          <Panel>
+            <ContentControl Content="{Binding Logs.Selected}" IsVisible="{Binding Logs.ShowsOne}" />
+            <ItemsControl ItemsSource="{Binding Logs.Tabs}" IsVisible="{Binding Logs.SideBySide}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <UniformGrid Rows="1" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
               <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="shell:ActivityEntry">
-                  <Grid ColumnDefinitions="70,14,*" Margin="14,0,14,0" Classes.activitystep="{Binding IsStep}">
-                    <TextBlock Classes="muted mono small" Text="{Binding TimeText}" VerticalAlignment="Top" Margin="0,1,0,0" />
-                    <Ellipse Grid.Column="1" Classes="activitydot" Classes.step="{Binding IsStep}" Classes.info="{Binding IsInfo}" Classes.error="{Binding IsError}"
-                             IsVisible="{Binding !IsDetail}" VerticalAlignment="Top" Margin="0,5,0,0" />
-                    <SelectableTextBlock Grid.Column="2" Classes="activity console" Classes.step="{Binding IsStep}" Classes.detail="{Binding IsDetail}"
-                                         Classes.command="{Binding IsCommand}" Classes.error="{Binding IsError}"
-                                         Text="{Binding Text}" TextWrapping="Wrap" />
-                  </Grid>
+                <DataTemplate x:DataType="shell:LogTab">
+                  <Border BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0">
+                    <DockPanel>
+                      <TextBlock DockPanel.Dock="Top" Classes="muted small" Text="{Binding Title}" Margin="14,4,8,2" TextTrimming="CharacterEllipsis" />
+                      <ContentControl Content="{Binding}" />
+                    </DockPanel>
+                  </Border>
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
-          </ScrollViewer>
+          </Panel>
         </DockPanel>
       </Border>
 

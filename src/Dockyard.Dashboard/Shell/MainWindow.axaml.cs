@@ -29,12 +29,17 @@ public partial class MainWindow : Window
         };
     }
 
-    void ScrollActivityToEnd() => Dispatcher.UIThread.Post(() => ActivityScroll.ScrollToEnd(), DispatcherPriority.Background);
+    // The activity list is in a tab's template, in one place or side by side, so it is found rather than named.
+    void ScrollActivityToEnd() => Dispatcher.UIThread.Post(() =>
+    {
+        foreach (var list in this.GetVisualDescendants().OfType<ListBox>().Where(l => l.Classes.Contains("activitylist")))
+            if (list.ItemCount > 0) list.ScrollIntoView(list.ItemCount - 1);
+    }, DispatcherPriority.Background);
 
     async void CopyActivity(object? sender, RoutedEventArgs e)
     {
         if (DataContext is ShellViewModel shell && TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
-            await clipboard.SetTextAsync(shell.Activity.Text);
+            await clipboard.SetTextAsync(shell.Logs.Selected.Text);
     }
 
     // The first field, or else the button that confirms, so Enter and Escape work without the mouse.

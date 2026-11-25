@@ -42,6 +42,7 @@ sealed class ComposeDetailViewModel : Observable, IDisposable
         DownCommand = new Command(() => { AskDown(); return Task.CompletedTask; }, () => !IsBusy && this.tools.HasCompose && Project.Total > 0);
         ForgetCommand = new Command(() => { owner.ForgetRecent(Project.Name); return Task.CompletedTask; });
         CloseCommand = new Command(() => { owner.CloseDetail(); return Task.CompletedTask; });
+        OpenLogsCommand = new Command(OpenLogs);
         ServiceStartCommand = new Command<ComposeService>(s => ForService(s, (c, id) => c.StartContainerAsync(id)));
         ServiceStopCommand = new Command<ComposeService>(s => ForService(s, (c, id) => c.StopContainerAsync(id)));
         ServiceRestartCommand = new Command<ComposeService>(s => ForService(s, (c, id) => c.RestartContainerAsync(id)));
@@ -67,6 +68,7 @@ sealed class ComposeDetailViewModel : Observable, IDisposable
     public Command DownCommand { get; }
     public Command ForgetCommand { get; }
     public Command CloseCommand { get; }
+    public Command OpenLogsCommand { get; }
     public Command<ComposeService> ServiceStartCommand { get; }
     public Command<ComposeService> ServiceStopCommand { get; }
     public Command<ComposeService> ServiceRestartCommand { get; }
@@ -296,6 +298,12 @@ sealed class ComposeDetailViewModel : Observable, IDisposable
     {
         if (session.Client is not { } client) return;
         var name = Project.Name;
+        var sources = await Sources(client);
+        if (ShowLogs && Project.Name == name) Logs.Start(client, sources);
+    }
+
+    async Task<List<LogSource>> Sources(DockerClient client)
+    {
         var sources = new List<LogSource>();
         foreach (var service in Project.Services)
             foreach (var container in service.Containers)
@@ -307,7 +315,13 @@ sealed class ComposeDetailViewModel : Observable, IDisposable
                 }
                 catch (DockerException) { }
             }
-        if (ShowLogs && Project.Name == name) Logs.Start(client, sources);
+        return sources;
+    }
+
+    async Task OpenLogs()
+    {
+        if (session.Client is not { } client) return;
+        owner.OpenLogs($"compose:{Project.Name}", Project.Name, await Sources(client));
     }
 
     public void Dispose()
