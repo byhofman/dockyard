@@ -25,6 +25,7 @@ sealed class BuildsViewModel : SelectableSection<BuildRecord>
     List<BuildRecord> all = [];
     BuildDetails? details;
     string? error;
+    bool loadingSteps;
 
     public BuildsViewModel(ShellViewModel shell, EngineSession session) : base(shell, session)
     {
@@ -40,6 +41,8 @@ sealed class BuildsViewModel : SelectableSection<BuildRecord>
     public Command RemoveCommand { get; }
     public Command<BuildRecord> RemoveRowCommand { get; }
     public ObservableCollection<StepRow> Steps { get; } = [];
+
+    public bool LoadingSteps { get => loadingSteps; private set => Set(ref loadingSteps, value); }
 
     public string Hint =>
         Session.IsWindowsEngine ? "The Windows engine builds without BuildKit, which is what keeps a build history. Switch to Linux to see builds."
@@ -93,6 +96,7 @@ sealed class BuildsViewModel : SelectableSection<BuildRecord>
         RemoveCommand.Refresh();
         if (Selected?.Ref == before?.Ref && Selected is not null) return;
         details = null;
+        LoadingSteps = false;
         Steps.Clear();
         RaiseDetails();
         if (Selected is { } build) _ = LoadDetails(build);
@@ -102,8 +106,10 @@ sealed class BuildsViewModel : SelectableSection<BuildRecord>
     {
         try
         {
-            var inspect = await CliRunner.Output(BuildHistory.InspectArgs(Context, build.Ref));
-            var logs = await CliRunner.Output(BuildHistory.LogsArgs(Context, build.Ref));
+            if (Steps.Count == 0) LoadingSteps = true;
+            var inspecting = CliRunner.Output(BuildHistory.InspectArgs(Context, build.Ref));
+            var reading = CliRunner.Output(BuildHistory.LogsArgs(Context, build.Ref));
+            var (inspect, logs) = (await inspecting, await reading);
             if (Selected?.Ref != build.Ref) return;
             details = inspect.Exit == 0 ? BuildHistory.ParseDetails(inspect.Output) : new BuildDetails(null, null, inspect.Error.Trim());
             var steps = BuildHistory.ParseSteps(logs.Error + "\n" + logs.Output);
@@ -114,6 +120,10 @@ sealed class BuildsViewModel : SelectableSection<BuildRecord>
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
             Shell.ShowError($"Could not read build {build.Name}: {ex.Message}");
+        }
+        finally
+        {
+            if (Selected?.Ref == build.Ref) LoadingSteps = false;
         }
     }
 

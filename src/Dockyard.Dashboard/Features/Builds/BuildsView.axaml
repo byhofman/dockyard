@@ -100,6 +100,10 @@
           </Border>
 
           <TextBlock Classes="section" Text="STEPS" Margin="0,8,0,0" />
+          <StackPanel Spacing="4" IsVisible="{Binding LoadingSteps}">
+            <ProgressBar IsIndeterminate="True" />
+            <TextBlock Classes="muted small" Text="Reading the build's steps and logs…" />
+          </StackPanel>
           <ItemsControl ItemsSource="{Binding Steps}">
             <ItemsControl.ItemTemplate>
               <DataTemplate DataType="bld:StepRow">
