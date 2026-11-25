@@ -55,6 +55,13 @@ sealed class ShellViewModel : Observable
     public IReadOnlyList<Section> Sections { get; }
     public ObservableCollection<Toast> Toasts { get; } = [];
 
+    public void ShowSection(string title)
+    {
+        if (Sections.FirstOrDefault(s => s.Title.Equals(title, StringComparison.OrdinalIgnoreCase)) is { } section) CurrentSection = section;
+    }
+
+    public static string? InitialSection { get; set; }
+
     public Section CurrentSection
     {
         get => currentSection;

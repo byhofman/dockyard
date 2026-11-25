@@ -47,6 +47,7 @@ public partial class App : Application
     {
         desktop = (IClassicDesktopStyleApplicationLifetime)ApplicationLifetime!;
         vm = new MainViewModel(Hosts.HostFactory.Create(), setupMode: mode == AppMode.Setup, SetupOptions.Parse(args));
+        vm.OpenDashboardRequested += section => OpenDashboard(section);
         vm.StartPolling();
         vm.ShutdownRequested += () => Dispatcher.UIThread.Post(Quit);
 
@@ -308,12 +309,12 @@ public partial class App : Application
         else ShowWindow();
     }
 
-    void OpenDashboard()
+    void OpenDashboard(string? section = null)
     {
-        if (LocalPipe.TrySend(LocalPipe.DashboardName, "show")) return;
+        if (LocalPipe.TrySend(LocalPipe.DashboardName, section is null ? "show" : $"show {section}")) return;
         try
         {
-            Process.Start(new ProcessStartInfo(DashboardExe) { UseShellExecute = false })?.Dispose();
+            Process.Start(new ProcessStartInfo(DashboardExe, section is null ? [] : ["--section", section]) { UseShellExecute = false })?.Dispose();
         }
         catch (Exception)
         {

@@ -73,7 +73,6 @@ sealed class MainViewModel : Observable
         InstallCommand = Cmd(Install);
         UninstallCommand = Cmd(Uninstall);
         RebootCommand = Cmd(() => { host.Reboot(); return Task.CompletedTask; });
-        ApplyEngineConfigurationCommand = Cmd(ApplyEngineConfiguration);
         ImportCommand = Cmd(() => Run("Importing from Docker Desktop", async () =>
         {
             await host.Start(host.Engines[0].Id);
@@ -91,9 +90,6 @@ sealed class MainViewModel : Observable
             settings.HttpsEnabled = false;
             Raise(nameof(HttpsEnabled), nameof(HttpsDisabled));
         }));
-        registryMirrors = settings.RegistryMirrors ?? "";
-        insecureRegistries = settings.InsecureRegistries ?? "";
-        addressPools = settings.AddressPools ?? "";
 
         timer.Tick += async (_, _) =>
         {
@@ -121,7 +117,6 @@ sealed class MainViewModel : Observable
     public Command InstallCommand { get; }
     public Command UninstallCommand { get; }
     public Command RebootCommand { get; }
-    public Command ApplyEngineConfigurationCommand { get; }
     public Command ImportCommand { get; }
     public Command EnableHttpsCommand { get; }
     public Command DisableHttpsCommand { get; }
@@ -130,16 +125,12 @@ sealed class MainViewModel : Observable
     public bool ShowImport => ShowManage && DockerDesktop.IsInstalled;
     public ComponentViewModel Dashboard { get; }
 
-    string registryMirrors;
-    string insecureRegistries;
-    string addressPools;
-    string engineConfigurationProblem = "";
-    public string RegistryMirrors { get => registryMirrors; set => Set(ref registryMirrors, value); }
-    public string InsecureRegistries { get => insecureRegistries; set => Set(ref insecureRegistries, value); }
-    public string AddressPools { get => addressPools; set => Set(ref addressPools, value); }
-    public string EngineConfigurationProblem { get => engineConfigurationProblem; private set { if (Set(ref engineConfigurationProblem, value)) Raise(nameof(HasEngineConfigurationProblem)); } }
-    public bool HasEngineConfigurationProblem => engineConfigurationProblem.Length > 0;
-    public bool ShowEngineConfiguration => ShowManage && host.HasEngineConfiguration;
+    public bool ShowEngineConfiguration => ShowManage;
+    // The dashboard edits daemon.json; without it, the dockyard command does.
+    public event Action<string>? OpenDashboardRequested;
+    public Command EditEngineSettingsCommand => editEngineSettings ??= new Command(() => { OpenDashboardRequested?.Invoke("Engine"); return Task.CompletedTask; }, () => host.HasDashboard);
+    Command? editEngineSettings;
+    public bool HasDashboardForSettings => host.HasDashboard;
 
     public bool IncludeDashboard { get => Dashboard.Include; set { Dashboard.Include = value; Raise(nameof(IncludeDashboard)); } }
     public IEnumerable<ComponentViewModel> OptionalChoices => Components.Where(c => c.IsOptional);
@@ -404,18 +395,6 @@ sealed class MainViewModel : Observable
         }
         foreach (var item in items) await Check(item);
     });
-
-    Task ApplyEngineConfiguration()
-    {
-        var problems = EngineOptions.Problems(RegistryMirrors, InsecureRegistries, AddressPools);
-        EngineConfigurationProblem = string.Join('\n', problems);
-        if (problems.Count > 0) return Task.CompletedTask;
-        settings.RegistryMirrors = RegistryMirrors;
-        settings.InsecureRegistries = InsecureRegistries;
-        settings.AddressPools = AddressPools;
-        settings.Save();
-        return Run("Applying the engine configuration", () => host.ApplyEngineConfiguration(Log));
-    }
 
     Task Install() => Run("Installing", InstallCore);
 
