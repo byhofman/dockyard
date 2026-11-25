@@ -56,7 +56,7 @@ static partial class UserSetup
     public static async Task WriteEngineConfig(WslDistro distro, Action<string> log)
     {
         var proxy = await ReachableProxy(distro, HostProxy(), log);
-        await distro.WriteFile("/etc/docker/daemon.json", EngineConfig.Render(proxy, Settings.Load()));
+        await distro.WriteFile("/etc/docker/daemon.json", EngineConfig.WithDockyard(EngineSettings.Load(EngineSettings.Linux, Settings.Load()), proxy));
         await EngineConfig.ApplyClientProxy(Paths.LinuxHost, proxy);
         if (proxy is { IsEmpty: false }) log("The Linux engine and its containers use this PC's proxy");
     }

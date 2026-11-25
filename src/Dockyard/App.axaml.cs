@@ -108,6 +108,24 @@ public partial class App : Application
                 break;
             case TrayCommandKind.Start: _ = vm.StartEngine(command.Engine!); break;
             case TrayCommandKind.Switch: _ = SwitchAndReport(command.Engine!); break;
+            case TrayCommandKind.Run: _ = Task.Run(() => RunAndReply(command.Reply!, command.Args!)); break;
+        }
+    }
+
+    async Task RunAndReply(string reply, IReadOnlyList<string> args)
+    {
+        StreamWriter writer;
+        try { writer = LocalPipe.OpenReply(reply); }
+        catch (Exception e) when (e is IOException or TimeoutException or UnauthorizedAccessException) { return; }
+        using (writer)
+        {
+            void Write(string line)
+            {
+                try { lock (writer) writer.WriteLine(line); }
+                catch (IOException) { }
+            }
+            var code = await Cli.Execute(vm.Host, args, Write, Write);
+            Write(LocalPipe.ExitLine + code);
         }
     }
 

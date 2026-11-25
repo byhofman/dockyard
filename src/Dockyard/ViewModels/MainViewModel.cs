@@ -13,6 +13,7 @@ sealed class MainViewModel : Observable
 
     readonly Settings settings;
     readonly IEngineHost host;
+    public IEngineHost Host => host;
     readonly List<Command> commands = [];
     readonly StringBuilder log = new();
     readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromSeconds(10) };

@@ -149,6 +149,48 @@ sealed class WindowsHost : IEngineHost
 
     public Task ApplyEngineConfiguration(Action<string> log) => wsl.ApplyEngineConfiguration(log);
 
+    public async Task<string?> ReadEngineSettings(string engine) => engine == Linux
+        ? RenderedEngineSettings.Read()
+        : File.Exists(MachineEngine.DaemonJsonFile) ? await File.ReadAllTextAsync(MachineEngine.DaemonJsonFile) : "{}";
+
+    // dockerd checks a file without starting: the Linux one in the distro, the Windows one next to the engine.
+    public async Task<string?> ValidateEngineSettings(string engine, string json)
+    {
+        if (EngineSettings.Problem(json) is { } problem) return problem;
+        if (engine == Linux)
+        {
+            const string file = "/tmp/dockyard-validate.json";
+            await distro.WriteFile(file, EngineConfig.WithDockyard(json));
+            return Answer(await runner.Run("wsl.exe", "-d", distro.Name, "-u", "root", "--", "dockerd", "--validate", "--config-file", file));
+        }
+        if (!File.Exists(Paths.DockerdExe)) return null;
+        var temp = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}.json");
+        try
+        {
+            await File.WriteAllTextAsync(temp, DaemonJson.WithAccessFor(json, Paths.WindowsHost, null));
+            return Answer(await runner.Run(Paths.DockerdExe, "--validate", "--config-file", temp));
+        }
+        finally { File.Delete(temp); }
+    }
+
+    static string? Answer(ShellResult r) => r.ExitCode == 0 ? null : (r.Error + r.Output).Trim() is { Length: > 0 } text ? text : $"dockerd refused it ({r.ExitCode})";
+
+    public async Task ApplyEngineSettings(Action<string> log, string engine, string json)
+    {
+        if (engine == Linux)
+        {
+            await RenderedEngineSettings.Apply(log, json, wsl.ApplyEngineConfiguration);
+            return;
+        }
+        if (EngineSettings.Problem(json) is { } problem) throw new InvalidOperationException(problem);
+        if (Elevation.IsElevated)
+        {
+            var (sid, name) = Elevation.CurrentUser;
+            await MachineEngine.ApplyDaemonJson(log, json, sid, name);
+        }
+        else await Elevation.Run(log, "--machine-daemon-json", MachineTrust.EncodeCertificate(json));
+    }
+
     public bool RunsFromInstallLocation => Paths.IsInstalledCopy;
 
     public bool HasDashboard => File.Exists(Paths.DashboardExe) || File.Exists(Paths.LegacyDashboardExe);

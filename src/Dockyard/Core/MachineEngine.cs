@@ -174,6 +174,40 @@ static class MachineEngine
         }
     }
 
+    public static string DaemonJsonFile => Path.Combine(Paths.DaemonConfigDir, "daemon.json");
+
+    // The user's edit, with the pipe and its access put back. A running engine restarts with it; one that will not is given
+    // back the file it had.
+    public static async Task ApplyDaemonJson(Action<string> log, string json, string userSid, string userName)
+    {
+        if (EngineSettings.Problem(json) is { } problem) throw new InvalidOperationException(problem);
+        Directory.CreateDirectory(Paths.DaemonConfigDir);
+        var previous = File.Exists(DaemonJsonFile) ? File.ReadAllText(DaemonJsonFile) : null;
+        File.WriteAllText(DaemonJsonFile, DaemonJson.WithAccessFor(json, Paths.WindowsHost, ResolvesTo(userName, userSid) ? userName : null));
+        log($"Wrote {DaemonJsonFile}");
+        if (!ServiceExists() || ServiceStatus() != ServiceControllerStatus.Running) return;
+        try
+        {
+            await RestartService();
+            log("The Windows engine restarted with it");
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.ServiceProcess.TimeoutException)
+        {
+            if (previous is null) File.Delete(DaemonJsonFile);
+            else File.WriteAllText(DaemonJsonFile, previous);
+            await RestartService();
+            throw new InvalidOperationException($"The Windows engine did not start with these settings, so it has the previous ones again ({e.Message})");
+        }
+    }
+
+    static async Task RestartService()
+    {
+        await StopService();
+        using var sc = new ServiceController(Paths.ServiceName);
+        sc.Start();
+        await Task.Run(() => sc.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(60)));
+    }
+
     // dockerd refuses to start when it cannot resolve a name in "group", so only a name that resolves goes in.
     static bool ResolvesTo(string userName, string userSid)
     {

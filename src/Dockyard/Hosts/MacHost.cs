@@ -55,6 +55,9 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
 
     public Task ApplyEngineConfiguration(Action<string> log) => vm.ApplyEngineConfiguration(log);
 
+    public Task<string?> ReadEngineSettings(string engine) => Task.FromResult<string?>(RenderedEngineSettings.Read());
+    public Task ApplyEngineSettings(Action<string> log, string engine, string json) => RenderedEngineSettings.Apply(log, json, vm.ApplyEngineConfiguration);
+
     public async Task<bool> Update(Action<string> log, IReadOnlyList<(string Component, Release? Release)> components)
     {
         var tools = Tools;

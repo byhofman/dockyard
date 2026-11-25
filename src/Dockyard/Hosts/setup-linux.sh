@@ -1,6 +1,6 @@
 #!/bin/sh
 # Dockyard setup for Linux, run as root (pkexec): setup-linux.sh install <user> [agent] [daemon.json] [dns-upstreams] | uninstall "" [daemon.json] | packages
-#   | add-bin <tool> <file> | remove-bin <tool> | add-tool <tool> [kubernetes-minor] | remove-tool <tool>
+#   | add-bin <tool> <file> | remove-bin <tool> | add-tool <tool> [kubernetes-minor] | remove-tool <tool> | daemon-json "" <file>
 set -eu
 
 action="${1:?usage: setup-linux.sh install <user> | uninstall | packages}"
@@ -362,6 +362,33 @@ apply_daemon_json() {
   fi
 }
 
+# The user's edit from Dockyard: in place right away, and the previous file back when Docker will not start with it.
+replace_daemon_json() {
+  [ -n "$daemon_json" ] && [ -f "$daemon_json" ] || { echo "daemon-json needs the file" >&2; exit 2; }
+  install -d /etc/docker
+  previous=""
+  if [ -f /etc/docker/daemon.json ]; then
+    previous="$(mktemp)"
+    cp /etc/docker/daemon.json "$previous"
+  fi
+  install -m 0644 "$daemon_json" /etc/docker/daemon.json
+  echo "Updated /etc/docker/daemon.json"
+  if ! has_systemd || ! systemctl is-active --quiet docker.service; then
+    rm -f "$previous"
+    return 0
+  fi
+  if systemctl restart docker.service; then
+    rm -f "$previous"
+    echo "Docker restarted with it"
+    return 0
+  fi
+  if [ -n "$previous" ]; then install -m 0644 "$previous" /etc/docker/daemon.json; rm -f "$previous"; else rm -f /etc/docker/daemon.json; fi
+  systemctl reset-failed docker.service docker.socket >/dev/null 2>&1 || true
+  systemctl restart docker.service || true
+  echo "Docker did not start with these settings, so it has the previous ones again" >&2
+  exit 6
+}
+
 configure() {
   getent group docker >/dev/null || groupadd docker
   if [ -n "$user" ]; then
@@ -407,6 +434,8 @@ case "$action" in
   remove-bin) remove_bin ;;
   add-tool) add_tool ;;
   remove-tool) remove_tool ;;
+  # $3 is the new daemon.json here.
+  daemon-json) replace_daemon_json ;;
   install) install_packages; configure; grant_socket_access; install_tray_host; install_libsecret; install_agent; route_domains; keep_dns; apply_daemon_json ;;
   uninstall)
     untrust_ca

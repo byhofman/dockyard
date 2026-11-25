@@ -66,6 +66,41 @@ sealed class LinuxHost : IEngineHost
 
     public Task UseContext(string engine) => runner.Check("docker", "context", "use", "default");
 
+    const string DaemonJson = "/etc/docker/daemon.json";
+
+    public async Task<string?> ReadEngineSettings(string engine) => File.Exists(DaemonJson) ? await File.ReadAllTextAsync(DaemonJson) : "{}";
+
+    public async Task<string?> ValidateEngineSettings(string engine, string json)
+    {
+        if (EngineSettings.Problem(json) is { } problem) return problem;
+        var temp = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}.json");
+        try
+        {
+            await File.WriteAllTextAsync(temp, json);
+            var r = await runner.Run("dockerd", "--validate", "--config-file", temp);
+            return r.ExitCode == 0 ? null : (r.Error + r.Output).Trim() is { Length: > 0 } text ? text : $"dockerd refused it ({r.ExitCode})";
+        }
+        catch (System.ComponentModel.Win32Exception) { return null; }
+        finally { File.Delete(temp); }
+    }
+
+    // The agent's DNS stays in a file that names it; the rest is the system's Docker's, as the user wrote it.
+    public async Task ApplyEngineSettings(Action<string> log, string engine, string json)
+    {
+        if (EngineSettings.Problem(json) is { } problem) throw new InvalidOperationException(problem);
+        var existing = File.Exists(DaemonJson) ? await File.ReadAllTextAsync(DaemonJson) : null;
+        var content = EngineConfig.NamesTheAgent(existing) ? EngineConfig.WithDockyard(json, HostProxySettings.FromEnvironment(Environment.GetEnvironmentVariable)) : json;
+        var dir = Directory.CreateTempSubdirectory("dockyard-daemon-json").FullName;
+        try
+        {
+            var file = Path.Combine(dir, "daemon.json");
+            await File.WriteAllTextAsync(file, content);
+            File.SetUnixFileMode(dir, (UnixFileMode)0b111_101_101);
+            await new LinuxRoot(runner).RunSetup(log, "daemon-json", "", file);
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
     public Task<Version?> Installed(string component) => Tool(component) is { } tool ? tools.Installed(tool) : components.Installed(component);
     public Task<Release?> Latest(string component) => Tool(component) is { } tool ? tools.Latest(tool) : LinuxComponents.Latest(component);
 

@@ -12,7 +12,7 @@ namespace Dockyard.Core;
 static partial class Elevation
 {
     public const int RebootExitCode = 3010;
-    public static readonly string[] Modes = ["--machine-install", "--machine-update", "--machine-uninstall", "--machine-dashboard", "--machine-component", "--machine-trust-ca", "--machine-untrust-ca"];
+    public static readonly string[] Modes = ["--machine-install", "--machine-update", "--machine-uninstall", "--machine-dashboard", "--machine-component", "--machine-trust-ca", "--machine-untrust-ca", "--machine-daemon-json"];
 
     public static bool IsWorker(string[] args) => args.Any(a => Modes.Contains(a));
 
@@ -163,6 +163,11 @@ static partial class Elevation
             if (Opt("--machine-trust-ca") is { } certificate)
             {
                 MachineTrust.TrustCa(Log, MachineTrust.DecodeCertificate(certificate));
+                return 0;
+            }
+            if (Opt("--machine-daemon-json") is { } daemonJson)
+            {
+                MachineEngine.ApplyDaemonJson(Log, MachineTrust.DecodeCertificate(daemonJson), Arg("--user-sid"), Arg("--user-name")).GetAwaiter().GetResult();
                 return 0;
             }
             if (args.Contains("--machine-untrust-ca"))

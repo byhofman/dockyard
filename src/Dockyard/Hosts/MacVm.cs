@@ -117,7 +117,7 @@ sealed class MacVm(ICommandRunner runner, Func<bool>? ping = null, Func<bool>? h
     {
         var proxy = await HostProxy();
         Directory.CreateDirectory(Path.GetDirectoryName(MacLayout.EngineConfigFile)!);
-        await File.WriteAllTextAsync(MacLayout.EngineConfigFile, EngineConfig.Render(proxy, Settings.Load()));
+        await File.WriteAllTextAsync(MacLayout.EngineConfigFile, EngineConfig.WithDockyard(EngineSettings.Load(EngineSettings.Linux, Settings.Load()), proxy));
         await EngineConfig.ApplyClientProxy("unix://" + MacLayout.DockerSocket, proxy);
         if (proxy is { IsEmpty: false }) log?.Invoke("The engine and containers use this Mac's proxy");
     }
