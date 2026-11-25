@@ -152,7 +152,7 @@
             </DataTemplate>
             <DataTemplate DataType="store:ContainerItem">
               <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto" Classes.system="{Binding IsSystem}">
-                <CheckBox Grid.Column="1" Classes="pick" IsEnabled="{Binding IsManaged}" IsChecked="{Binding $parent[ListBoxItem].IsSelected}" AutomationProperties.Name="{Binding Name}" />
+                <CheckBox Grid.Column="1" Classes="pick" Classes.unpickable="{Binding IsSystem}" IsChecked="{Binding $parent[ListBoxItem].IsSelected}" AutomationProperties.Name="{Binding Name}" />
                 <Border Width="24" IsVisible="{Binding IsGrouped}" />
                 <Ellipse Grid.Column="2" Classes="dot" Classes.on="{Binding IsRunning}" />
                 <StackPanel Grid.Column="3" Margin="12,0" VerticalAlignment="Center">

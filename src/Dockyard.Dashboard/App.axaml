@@ -307,6 +307,11 @@
       <Setter Property="Foreground" Value="{StaticResource OnAccent}" />
     </Style>
 
+    <Style Selector="CheckBox.pick.unpickable">
+      <Setter Property="Opacity" Value="0" />
+      <Setter Property="IsHitTestVisible" Value="False" />
+      <Setter Property="Focusable" Value="False" />
+    </Style>
     <Style Selector="Grid.system">
       <Setter Property="Opacity" Value="0.6" />
     </Style>

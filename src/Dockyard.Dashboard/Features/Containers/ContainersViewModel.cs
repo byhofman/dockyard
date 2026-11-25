@@ -104,9 +104,11 @@ sealed class ContainersViewModel : Observable, ISearchable
 
     public bool? AllSelected
     {
-        get => SelectionCount == 0 ? false : SelectionCount == Store.Rows.Count ? true : null;
-        set => Pick(value == true ? Store.Rows.ToList() : []);
+        get => SelectionCount == 0 ? false : SelectionCount == Pickable.Count ? true : null;
+        set => Pick(value == true ? Pickable : []);
     }
+
+    List<object> Pickable => Store.Rows.Where(r => r is not SystemRow and not ContainerItem { IsSystem: true }).ToList();
 
     // A picked project stands for all of its containers.
     public IReadOnlyList<ContainerItem> PickedContainers => SelectedItems
