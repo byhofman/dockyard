@@ -10,7 +10,7 @@ namespace Dockyard.Core;
 static partial class UserSetup
 {
     const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    const string AdapterRunValue = "Dockyard Adapter";
+    const string HostRunValue = "Dockyard Host";
     const string RunOnceKey = @"Software\Microsoft\Windows\CurrentVersion\RunOnce";
     // Windows 11 22H2; older builds ignore the setting and warn at every WSL start.
     const int MirroredNetworkingBuild = 22621;
@@ -36,7 +36,7 @@ static partial class UserSetup
         using (var key = Registry.CurrentUser.CreateSubKey(RunKey))
             key.SetValue(Paths.AppName, $"\"{Paths.AppExe}\"");
         using (var key = Registry.CurrentUser.CreateSubKey(RunKey))
-            if (File.Exists(Paths.AdapterExe)) key.SetValue(AdapterRunValue, $"\"{Paths.AdapterExe}\"");
+            if (File.Exists(Paths.HostExe)) key.SetValue(HostRunValue, $"\"{Paths.HostExe}\"");
         log($"{Paths.AppName} autostarts at logon");
     }
 
@@ -103,11 +103,11 @@ static partial class UserSetup
         using (var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true))
         {
             key?.DeleteValue(Paths.AppName, throwOnMissingValue: false);
-            key?.DeleteValue(AdapterRunValue, throwOnMissingValue: false);
+            key?.DeleteValue(HostRunValue, throwOnMissingValue: false);
             key?.DeleteValue(Paths.LegacyName, throwOnMissingValue: false);
         }
-        foreach (var adapter in System.Diagnostics.Process.GetProcessesByName(Paths.AdapterProcess))
-            using (adapter) try { adapter.Kill(); } catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception) { }
+        foreach (var host in System.Diagnostics.Process.GetProcessesByName(Paths.HostProcess))
+            using (host) try { host.Kill(); } catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception) { }
 
         await CredentialStore.Forget(Paths.CredentialStoreMarker, Paths.CredentialHelper, log);
         await EngineConfig.ApplyClientProxy(Paths.LinuxHost, null);

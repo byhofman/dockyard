@@ -72,8 +72,8 @@ jobs:
         if: needs.plan.outputs.toolbox == 'true'
         shell: pwsh
         run: |
-          dotnet publish src/Dockyard.Adapter/Dockyard.Adapter.csproj -c Release -r win-x64 -o out/adapter -p:Version=${{ needs.plan.outputs.version }} -warnaserror
-          dotnet publish src/Dockyard/Dockyard.csproj -c Release -r win-x64 -o out -p:Version=${{ needs.plan.outputs.version }} -p:GuestBundle="$PWD/guest/dockyard-guest-guest-x86_64.tar.gz" -p:AdapterExe="$PWD/out/adapter/dockyard-adapter.exe" -warnaserror
+          dotnet publish src/Dockyard.Host/Dockyard.Host.csproj -c Release -r win-x64 -o out/host -p:Version=${{ needs.plan.outputs.version }} -warnaserror
+          dotnet publish src/Dockyard/Dockyard.csproj -c Release -r win-x64 -o out -p:Version=${{ needs.plan.outputs.version }} -p:GuestBundle="$PWD/guest/dockyard-guest-guest-x86_64.tar.gz" -p:HostExe="$PWD/out/host/dockyard-host.exe" -warnaserror
           Copy-Item out/dockyard-toolbox.exe out/Dockyard.exe
 
       - name: Dashboard

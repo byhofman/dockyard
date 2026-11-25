@@ -16,6 +16,7 @@ IDs are permanent: never renumber or reuse one.
 
 - [x] DOK-19 On a Linux host, the agent's iptables rules and `lo` addresses are gone after uninstall without a reboot (pulled in from Later by the owner, 2026-11-07, SCOPE.md) — v0.4.2
 - [x] DOK-20 On macOS, uninstall removes the CA trust setting along with the certificate (pulled in from Later by the owner, 2026-11-07, SCOPE.md; from the window and the wizard, where a person can approve it; a silent uninstall leaves it and says so)
+- [ ] DOK-41 A silent install of just the engine and the docker CLI, without the Toolbox, dashboard or tray, for a machine like Windows Server: one line in the README per OS (owner 2026-11-25, a version after 0.9.0)
 
 ## Networking
 

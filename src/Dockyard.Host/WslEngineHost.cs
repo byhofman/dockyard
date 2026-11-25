@@ -5,13 +5,13 @@ using Dockyard.Engine;
 using Dockyard.Engine.Transport;
 using Dockyard.Shared;
 
-namespace Dockyard.Adapter;
+namespace Dockyard.Host;
 
 // The Linux engine in WSL as Windows needs it: the process that keeps the distro up, the pipes the docker CLI reaches it
 // by, the relay for container domains on 127.77.0.1, and published ports on Windows' loopback. The Toolbox sets the engine
 // up and asks for it to start or stop; this keeps it running whether the Toolbox is open or not.
 [SupportedOSPlatform("windows")]
-sealed class WindowsAdapter(Action<string> log) : IDisposable
+sealed class WslEngineHost(Action<string> log) : IDisposable
 {
     readonly SemaphoreSlim gate = new(1, 1);
     Process? keepAlive;
@@ -26,8 +26,8 @@ sealed class WindowsAdapter(Action<string> log) : IDisposable
         {
             return request switch
             {
-                "status" => Answers() ? AdapterPipe.Running : AdapterPipe.Stopped,
-                "attach" => await Attach() ? AdapterPipe.Running : AdapterPipe.Stopped,
+                "status" => Answers() ? HostPipe.Running : HostPipe.Stopped,
+                "attach" => await Attach() ? HostPipe.Running : HostPipe.Stopped,
                 "start" => await Start(),
                 "stop" => await Stop(),
                 "domains on" => StartDomains(),
@@ -50,7 +50,7 @@ sealed class WindowsAdapter(Action<string> log) : IDisposable
         return false;
     }
 
-    // An engine that runs already, started before this adapter or by an older Toolbox, gets its pipes.
+    // An engine that runs already, started before this one or by an older Toolbox, gets its pipes.
     public async Task<bool> Attach()
     {
         if (Answers()) return true;
@@ -72,7 +72,7 @@ sealed class WindowsAdapter(Action<string> log) : IDisposable
 
     async Task<string> Start()
     {
-        if (await Attach()) return AdapterPipe.Ok;
+        if (await Attach()) return HostPipe.Ok;
         if (keepAlive is null || keepAlive.HasExited)
         {
             keepAlive?.Dispose();
@@ -86,7 +86,7 @@ sealed class WindowsAdapter(Action<string> log) : IDisposable
         while (DateTime.UtcNow < deadline)
         {
             if (keepAlive.HasExited) return $"error the {WslPaths.DistroName} distro stopped while starting (exit code {keepAlive.ExitCode})";
-            if (await Attach()) return AdapterPipe.Ok;
+            if (await Attach()) return HostPipe.Ok;
             await Task.Delay(1000);
         }
         return "error the Linux engine did not answer within 90 seconds";
@@ -101,22 +101,22 @@ sealed class WindowsAdapter(Action<string> log) : IDisposable
         if (keepAlive is { HasExited: false }) keepAlive.Kill(entireProcessTree: true);
         keepAlive?.Dispose();
         keepAlive = null;
-        return AdapterPipe.Ok;
+        return HostPipe.Ok;
     }
 
     string StartDomains()
     {
-        if (domains is not null) return AdapterPipe.Ok;
+        if (domains is not null) return HostPipe.Ok;
         domains = new DomainRelay(log);
         domains.Start();
-        return AdapterPipe.Ok;
+        return HostPipe.Ok;
     }
 
     string StopDomains()
     {
         domains?.Dispose();
         domains = null;
-        return AdapterPipe.Ok;
+        return HostPipe.Ok;
     }
 
     void Release()
@@ -168,7 +168,7 @@ sealed class WindowsAdapter(Action<string> log) : IDisposable
         return (await output).Replace("\0", "");
     }
 
-    // Leaving keeps the engine running: the adapter stops at logoff, and the next one attaches to it.
+    // Leaving keeps the engine running: dockyard-host stops at logoff, and the next one attaches to it.
     public void Dispose()
     {
         Release();

@@ -15,8 +15,8 @@ static class Paths
     public static string ToolExe(CliTool tool) => Path.Combine(DockerDir, tool.FileName);
     public static readonly string AppDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Dockyard");
     public const string AppProcess = "dockyard-toolbox";
-    public const string AdapterProcess = "dockyard-adapter";
-    public static readonly string AdapterExe = Path.Combine(AppDir, AdapterProcess + ".exe");
+    public const string HostProcess = "dockyard-host";
+    public static readonly string HostExe = Path.Combine(AppDir, HostProcess + ".exe");
     public static readonly string AppExe = Path.Combine(AppDir, AppProcess + ".exe");
     public const string DashboardProcess = "dockyard-dashboard";
     public static readonly string DashboardExe = Path.Combine(AppDir, DashboardProcess + ".exe");

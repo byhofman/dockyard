@@ -5,38 +5,38 @@ using Dockyard.Shared;
 
 namespace Dockyard.Hosts;
 
-// The Linux engine in the WSL distro. The Toolbox sets it up; dockyard-adapter keeps it running and carries Windows'
+// The Linux engine in the WSL distro. The Toolbox sets it up; dockyard-host keeps it running and carries Windows'
 // traffic to it, so the engine stays up and reachable whether the Toolbox runs or not.
 [SupportedOSPlatform("windows")]
 sealed class WslEngine(WslDistro distro)
 {
     static readonly TimeSpan Quick = TimeSpan.FromSeconds(5);
 
-    public bool IsRunning() => AdapterPipe.Ask("status", Quick).GetAwaiter().GetResult() == AdapterPipe.Running;
+    public bool IsRunning() => HostPipe.Ask("status", Quick).GetAwaiter().GetResult() == HostPipe.Running;
 
-    // Only the adapter's pipes reach the engine; an engine that already runs gets them without being started again.
-    public async Task<bool> RelayToEngine() => await EnsureAdapter() && await AdapterPipe.Ask("attach", TimeSpan.FromSeconds(30)) == AdapterPipe.Running;
+    // Only dockyard-host's pipes reach the engine; an engine that already runs gets them without being started again.
+    public async Task<bool> RelayToEngine() => await EnsureHost() && await HostPipe.Ask("attach", TimeSpan.FromSeconds(30)) == HostPipe.Running;
 
     public async Task Start()
     {
         if (await RelayToEngine()) return;
         await UserSetup.ApplyGuest(distro, _ => { });
-        if (!await EnsureAdapter()) throw new InvalidOperationException($"{Paths.AdapterExe} is not installed or does not start; run the Dockyard Toolbox's setup again");
-        var answer = await AdapterPipe.Ask("start", TimeSpan.FromSeconds(120));
-        if (answer != AdapterPipe.Ok) throw new InvalidOperationException(answer is null ? "The Dockyard adapter did not answer" : answer.StartsWith("error ", StringComparison.Ordinal) ? answer[6..] : answer);
+        if (!await EnsureHost()) throw new InvalidOperationException($"{Paths.HostExe} is not installed or does not start; run the Dockyard Toolbox's setup again");
+        var answer = await HostPipe.Ask("start", TimeSpan.FromSeconds(120));
+        if (answer != HostPipe.Ok) throw new InvalidOperationException(answer is null ? "dockyard-host did not answer" : answer.StartsWith("error ", StringComparison.Ordinal) ? answer[6..] : answer);
     }
 
-    public async Task Stop() => await AdapterPipe.Ask("stop", TimeSpan.FromSeconds(60));
+    public async Task Stop() => await HostPipe.Ask("stop", TimeSpan.FromSeconds(60));
 
     public void ReleaseResources() { }
 
-    public static async Task<bool> EnsureAdapter()
+    public static async Task<bool> EnsureHost()
     {
-        if (AdapterPipe.IsListening) return true;
-        if (!File.Exists(Paths.AdapterExe)) return false;
-        Process.Start(new ProcessStartInfo(Paths.AdapterExe) { UseShellExecute = false, CreateNoWindow = true })?.Dispose();
-        for (var i = 0; i < 50 && !AdapterPipe.IsListening; i++) await Task.Delay(100);
-        return AdapterPipe.IsListening;
+        if (HostPipe.IsListening) return true;
+        if (!File.Exists(Paths.HostExe)) return false;
+        Process.Start(new ProcessStartInfo(Paths.HostExe) { UseShellExecute = false, CreateNoWindow = true })?.Dispose();
+        for (var i = 0; i < 50 && !HostPipe.IsListening; i++) await Task.Delay(100);
+        return HostPipe.IsListening;
     }
 
     public async Task ApplyEngineConfiguration(Action<string> log)

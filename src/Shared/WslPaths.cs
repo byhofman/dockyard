@@ -1,6 +1,6 @@
 namespace Dockyard.Shared;
 
-// The Linux engine in WSL as Windows reaches it: shared by the Toolbox, which sets it up, and the adapter, which keeps it
+// The Linux engine in WSL as Windows reaches it: shared by the Toolbox, which sets it up, and dockyard-host, which keeps it
 // running and carries Windows' traffic to it.
 static class WslPaths
 {
