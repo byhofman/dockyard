@@ -147,6 +147,8 @@ sealed class ContainersViewModel : Observable, ISearchable
             await Bulk(stop ? "Stopping" : "Starting", containers, (c, i) => stop ? c.StopContainerAsync(i.Id) : c.StartContainerAsync(i.Id));
     }
 
+    public ToolCheck Tools => shell.Tools;
+
     public string? Busy { get => busy; private set { if (Set(ref busy, value)) Raise(nameof(IsBusy)); } }
     public bool IsBusy => busy is not null;
 
@@ -267,7 +269,7 @@ sealed class ContainersViewModel : Observable, ISearchable
         Detail = row switch
         {
             ContainerItem item => new ContainerDetailViewModel(this, Session, item, shell.ShowError),
-            ProjectRow p => new ComposeDetailViewModel(this, Session, p.Project, shell.ShowError, shell.Activity),
+            ProjectRow p => new ComposeDetailViewModel(this, Session, p.Project, shell.ShowError, shell.Activity, shell.Tools),
             _ => null,
         };
     }

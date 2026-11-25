@@ -25,7 +25,7 @@
             <ToggleButton IsChecked="{Binding ShowSystem}" ToolTip.Tip="Show Dockyard's own containers, such as kind's cloud provider and the NFS server">
               <StackPanel Classes="label"><PathIcon Data="{StaticResource IconLock}" /><TextBlock Text="Dockyard" /></StackPanel>
             </ToggleButton>
-            <Button Click="OpenComposeFile" ToolTip.Tip="Start a compose project from a compose file (docker compose up -d)">
+            <Button Click="OpenComposeFile" IsEnabled="{Binding Tools.HasCompose}" ToolTip.Tip="Start a compose project from a compose file (docker compose up -d)">
               <StackPanel Classes="label">
                 <PathIcon Data="{StaticResource IconOpenFile}" />
                 <TextBlock Text="Open compose file…" />

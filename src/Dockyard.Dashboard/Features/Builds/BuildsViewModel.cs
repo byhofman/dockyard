@@ -46,6 +46,7 @@ sealed class BuildsViewModel : SelectableSection<BuildRecord>
 
     public string Hint =>
         Session.IsWindowsEngine ? "The Windows engine builds without BuildKit, which is what keeps a build history. Switch to Linux to see builds."
+        : !Shell.Tools.HasBuildx ? "The build history comes from Docker Buildx, which is not installed. Add it in the Dockyard Toolbox, under Components."
         : error is not null ? error
         : all.Count == 0 ? "No builds yet. Every docker build on this engine shows up here, with its steps and logs."
         : "";
@@ -62,7 +63,8 @@ sealed class BuildsViewModel : SelectableSection<BuildRecord>
 
     public override async Task Reload()
     {
-        if (Session.IsWindowsEngine || !Session.IsConnected)
+        await Shell.Tools.Refresh();
+        if (Session.IsWindowsEngine || !Session.IsConnected || !Shell.Tools.HasBuildx)
         {
             all = [];
             error = null;

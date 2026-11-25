@@ -12,6 +12,7 @@ sealed class ComposeDetailViewModel : Observable, IDisposable
     readonly EngineSession session;
     readonly Action<string> showError;
     readonly ActivityLog activity;
+    readonly ToolCheck tools;
     ComposeProject project;
     string? busy;
     bool showLogs;
@@ -24,19 +25,21 @@ sealed class ComposeDetailViewModel : Observable, IDisposable
     IReadOnlyList<int> problemLines = [];
     CancellationTokenSource? check;
 
-    public ComposeDetailViewModel(ContainersViewModel owner, EngineSession session, ComposeProject project, Action<string> showError, ActivityLog activity)
+    public ComposeDetailViewModel(ContainersViewModel owner, EngineSession session, ComposeProject project, Action<string> showError, ActivityLog activity, ToolCheck? tools = null)
     {
         this.owner = owner;
         this.session = session;
         this.project = project;
         this.showError = showError;
         this.activity = activity;
+        this.tools = tools ?? new ToolCheck();
+        this.tools.PropertyChanged += (_, _) => RefreshCommands();
 
-        UpCommand = new Command(Up, () => !IsBusy && Project.CanUp);
-        StopCommand = new Command(() => Cli("Stopping", "stop"), () => !IsBusy && Project.Total > 0);
-        RestartCommand = new Command(() => Cli("Restarting", "restart"), () => !IsBusy && Project.Total > 0);
-        PullCommand = new Command(() => Cli("Pulling", "pull"), () => !IsBusy && Project.CanUp);
-        DownCommand = new Command(() => { AskDown(); return Task.CompletedTask; }, () => !IsBusy && Project.Total > 0);
+        UpCommand = new Command(Up, () => !IsBusy && this.tools.HasCompose && Project.CanUp);
+        StopCommand = new Command(() => Cli("Stopping", "stop"), () => !IsBusy && this.tools.HasCompose && Project.Total > 0);
+        RestartCommand = new Command(() => Cli("Restarting", "restart"), () => !IsBusy && this.tools.HasCompose && Project.Total > 0);
+        PullCommand = new Command(() => Cli("Pulling", "pull"), () => !IsBusy && this.tools.HasCompose && Project.CanUp);
+        DownCommand = new Command(() => { AskDown(); return Task.CompletedTask; }, () => !IsBusy && this.tools.HasCompose && Project.Total > 0);
         ForgetCommand = new Command(() => { owner.ForgetRecent(Project.Name); return Task.CompletedTask; });
         CloseCommand = new Command(() => { owner.CloseDetail(); return Task.CompletedTask; });
         ServiceStartCommand = new Command<ComposeService>(s => ForService(s, (c, id) => c.StartContainerAsync(id)));

@@ -37,6 +37,7 @@ sealed class ShellViewModel : Observable
             new Section("Disk", new DiskViewModel(this, Session), Section.Resource("IconDisk")),
         ];
         currentSection = Sections[0];
+        _ = Tools.Refresh();
 
         HasEngineSwitch = OperatingSystem.IsWindows() && DockerContext.Exists("linux") && DockerContext.Exists("win");
         SwitchLinuxCommand = new Command(() => { AskSwitch("linux"); return Task.CompletedTask; });
@@ -74,6 +75,7 @@ sealed class ShellViewModel : Observable
             if (value is null || !Set(ref currentSection, value)) return;
             ApplySearch();
             (value.Content as SectionViewModel)?.OnShown();
+            _ = Tools.Refresh();
         }
     }
 
@@ -156,6 +158,7 @@ sealed class ShellViewModel : Observable
     }
 
     public ActivityLog Activity { get; } = new();
+    public ToolCheck Tools { get; } = new();
 
     public Dialog? Dialog { get => dialog; private set { if (Set(ref dialog, value)) Raise(nameof(HasDialog)); } }
     public bool HasDialog => dialog is not null;
