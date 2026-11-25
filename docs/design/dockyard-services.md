@@ -35,6 +35,15 @@ proxy for `host.docker.internal`, and the iptables rules that bring container tr
 
 Done in 0.9.0: step 1 on Windows. `dockyard-host.exe` (src/Dockyard.Host) keeps the WSL engine running, serves its pipes, relays `127.77.0.1` for container domains and forwards published ports; it starts at logon by its own entry, and the Toolbox only asks it over `dockyard-host-<user>`. The Toolbox carries it and installs it next to itself until it is released on its own. Still to do in step 1: macOS (the VM process and its relays) and Linux.
 
+Done in 0.9.0: step 2. The agent runs `dockyard-dns` (CoreDNS 1.13.1) and `dockyard-proxy` (Traefik v3.6), pinned by digest, on the engine's own network, labelled `dockyard.service` so they show in the Dockyard group. It writes their configuration to `/var/lib/docker/dockyard/services`, which they reload by themselves:
+
+- **DNS:** an authoritative zone file per view. Containers get `198.19.250.1`, and the host gets `127.77.0.1` (or the VM's address on the Mac). A wildcard per kind cluster covers its ingress hosts. Any other name is NXDOMAIN, and the containers' view forwards the rest upstream.
+- **Proxy:** Traefik has a router per container name and a passthrough TCP router per cluster on 443. A catch-all sends what has no route to the agent on port 2384, which says why in plain words.
+- **Ports:** iptables now DNATs ports 80 and 443 to `198.19.250.1`, so Traefik listens there and not on every interface.
+- **Fallback:** when the images cannot be had, the agent serves names itself as before.
+
+Verified on Windows (WSL); the Mac VM and Linux host run through CI. Note: etcd and external-dns (step 4) are not in yet.
+
 1. **dockyard-host, Windows first.** A `dockyard-host` executable (a component of its own, released as `host/<semver>`)
    takes over the relays, the pipes and the keep-alive from the Toolbox; the Toolbox talks to it over a local pipe to start
    and stop engines. Started at logon by dockyard-host's own entry, not by the Toolbox. Then the same for macOS and Linux.

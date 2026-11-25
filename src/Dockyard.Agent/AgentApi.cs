@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace Dockyard.Agent;
 
-sealed class AgentApi(DomainTable table, DomainProxy proxy)
+sealed class AgentApi(DomainTable table, DomainProxy proxy, Services? services = null)
 {
     public async Task Handle(Stream stream, CancellationToken ct)
     {
@@ -26,6 +26,7 @@ sealed class AgentApi(DomainTable table, DomainProxy proxy)
                     return new AgentReply { Domains = table.List(), Https = proxy.HasCertificate };
                 case "tls" when request is { Cert: { } cert, Key: { } key }:
                     proxy.SetCertificate(cert, key);
+                    services?.SetCertificate(cert, key);
                     return new AgentReply();
                 default: return new AgentReply { Error = "unknown request" };
             }

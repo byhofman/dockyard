@@ -15,12 +15,14 @@ static class GuestAddresses
     public const int RelayHttpsPort = 2383;
     public const int RelayDnsPort = 2353;
     public const int ContainerDnsPort = 2354;
+    // Where dockyard-proxy sends what it has no route for, so the agent can say why.
+    public const int ExplainPort = 2384;
 
     // Where the host's browser finds domains where it cannot use the engine's own address: all of 127/8 is loopback,
     // and an address nothing else uses cannot clash with a server on 127.0.0.1:80, such as another Docker app's.
     public static readonly IPAddress HostLoopback = IPAddress.Parse("127.77.0.1");
 
-    static readonly HashSet<string> HostNames = ["host.docker.internal", "gateway.docker.internal"];
+    public static readonly HashSet<string> HostNames = ["host.docker.internal", "gateway.docker.internal"];
 
     public static IPAddress? Resolve(string name) => HostNames.Contains(name) ? Host : null;
 
@@ -28,6 +30,6 @@ static class GuestAddresses
     // the host and the tray, not for any image a container runs.
     public static readonly IReadOnlySet<int> RefusedOnHost = new HashSet<int>
     {
-        2375, 2376, 2377, HostProxyPort, 2379, DomainHttpPort, DomainHttpsPort, RelayHttpPort, RelayHttpsPort, RelayDnsPort, ContainerDnsPort,
+        2375, 2376, 2377, HostProxyPort, 2379, DomainHttpPort, DomainHttpsPort, RelayHttpPort, RelayHttpsPort, RelayDnsPort, ContainerDnsPort, ExplainPort,
     };
 }

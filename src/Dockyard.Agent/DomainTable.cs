@@ -64,6 +64,29 @@ sealed class DomainTable(Func<DockerClient> connect, string choicesFile, Action<
         }).OrderBy(d => d.Domain).ToList();
     }
 
+    public List<string> Names()
+    {
+        lock (gate) return byDomain.Keys.ToList();
+    }
+
+    public List<ClusterIngress> Clusters()
+    {
+        lock (gate) return clusters.Values.ToList();
+    }
+
+    public List<ProxyRoute> Routes()
+    {
+        List<DomainTarget> targets;
+        lock (gate) targets = byDomain.Values.ToList();
+        List<ProxyRoute> routes = [];
+        foreach (var target in targets)
+        {
+            var address = target.IsHostNetwork ? IPAddress.Loopback : target.Address;
+            if (address is not null && Port(target) is { } port) routes.Add(new ProxyRoute(target.Domain, $"http://{address}:{port}"));
+        }
+        return routes;
+    }
+
     public void Choose(string containerId, int? port)
     {
         lock (gate)
