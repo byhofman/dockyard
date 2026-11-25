@@ -114,5 +114,5 @@ echo "== asset names match what a release must have"
 for script_asset in Dockyard-linux-x64 Dockyard.exe SHA256SUMS; do
   grep -q "$script_asset" "$root/scripts/check-release-assets.sh" && pass "$script_asset is checked" || fail "$script_asset is not in check-release-assets.sh"
 done
-grep -q 'Dockyard-$version-macos.zip' "$root/scripts/check-release-assets.sh" && pass "the macOS zip is checked" || fail "macOS zip not in check-release-assets.sh"
+grep -qE 'Dockyard-\$[a-z0-9]+-macos\.zip' "$root/scripts/check-release-assets.sh" && pass "the macOS zip is checked" || fail "macOS zip not in check-release-assets.sh"
 echo "All good."
