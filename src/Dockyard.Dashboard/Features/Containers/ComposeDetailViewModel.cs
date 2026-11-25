@@ -11,6 +11,7 @@ sealed class ComposeDetailViewModel : Observable, IDisposable
     readonly ContainersViewModel owner;
     readonly EngineSession session;
     readonly Action<string> showError;
+    readonly ActivityLog activity;
     ComposeProject project;
     string? busy;
     bool showLogs;
@@ -23,12 +24,13 @@ sealed class ComposeDetailViewModel : Observable, IDisposable
     IReadOnlyList<int> problemLines = [];
     CancellationTokenSource? check;
 
-    public ComposeDetailViewModel(ContainersViewModel owner, EngineSession session, ComposeProject project, Action<string> showError)
+    public ComposeDetailViewModel(ContainersViewModel owner, EngineSession session, ComposeProject project, Action<string> showError, ActivityLog activity)
     {
         this.owner = owner;
         this.session = session;
         this.project = project;
         this.showError = showError;
+        this.activity = activity;
 
         UpCommand = new Command(Up, () => !IsBusy && Project.CanUp);
         StopCommand = new Command(() => Cli("Stopping", "stop"), () => !IsBusy && Project.Total > 0);
@@ -36,7 +38,6 @@ sealed class ComposeDetailViewModel : Observable, IDisposable
         PullCommand = new Command(() => Cli("Pulling", "pull"), () => !IsBusy && Project.CanUp);
         DownCommand = new Command(() => { AskDown(); return Task.CompletedTask; }, () => !IsBusy && Project.Total > 0);
         ForgetCommand = new Command(() => { owner.ForgetRecent(Project.Name); return Task.CompletedTask; });
-        ToggleLogsCommand = new Command(() => { ShowLogs = !ShowLogs; return Task.CompletedTask; });
         CloseCommand = new Command(() => { owner.CloseDetail(); return Task.CompletedTask; });
         ServiceStartCommand = new Command<ComposeService>(s => ForService(s, (c, id) => c.StartContainerAsync(id)));
         ServiceStopCommand = new Command<ComposeService>(s => ForService(s, (c, id) => c.StopContainerAsync(id)));
@@ -54,10 +55,6 @@ sealed class ComposeDetailViewModel : Observable, IDisposable
     }
 
     public bool IsRecentOnly => Project.Total == 0 && owner.IsRecent(Project.Name);
-    public ObservableCollection<string> Output { get; } = [];
-    public bool HasOutput => Output.Count > 0;
-    public bool ShowOutput => HasOutput && !ShowLogs;
-    public bool HasBottom => HasOutput || ShowLogs;
     public LogsViewModel Logs { get; } = new();
 
     public Command UpCommand { get; }
@@ -66,7 +63,6 @@ sealed class ComposeDetailViewModel : Observable, IDisposable
     public Command PullCommand { get; }
     public Command DownCommand { get; }
     public Command ForgetCommand { get; }
-    public Command ToggleLogsCommand { get; }
     public Command CloseCommand { get; }
     public Command<ComposeService> ServiceStartCommand { get; }
     public Command<ComposeService> ServiceStopCommand { get; }
@@ -87,7 +83,12 @@ sealed class ComposeDetailViewModel : Observable, IDisposable
     public int SelectedTab
     {
         get => selectedTab;
-        set { if (Set(ref selectedTab, value) && value == 1 && !IsDirty) LoadFile(); }
+        set
+        {
+            if (!Set(ref selectedTab, value)) return;
+            if (value == 1 && !IsDirty) LoadFile();
+            ShowLogs = value == 2;
+        }
     }
 
     public IReadOnlyList<string> Files => Project.ConfigFiles;
@@ -145,7 +146,6 @@ sealed class ComposeDetailViewModel : Observable, IDisposable
         set
         {
             if (!Set(ref showLogs, value)) return;
-            Raise(nameof(ShowOutput), nameof(HasBottom));
             if (value) StartLogs();
             else Logs.Dispose();
         }
@@ -235,7 +235,7 @@ sealed class ComposeDetailViewModel : Observable, IDisposable
             await Task.Delay(800, cancel);
             FileStatus = "Checking with docker compose…";
             var context = session.ContextName.Length > 0 ? session.ContextName : "default";
-            var (exit, output) = await CliRunner.Capture(ComposeFile.ConfigArgs(context, Project, path), text, cancel);
+            var (exit, output) = await CliRunner.Capture(ComposeFile.ConfigArgs(context, Project, path), text, cancel, session.IsWindowsEngine);
             if (cancel.IsCancellationRequested) return;
             FileOk = exit == 0;
             FileStatus = exit == 0 ? "docker compose accepts this file" : output.Length > 0 ? output : $"docker compose config failed (exit code {exit})";
@@ -253,13 +253,18 @@ sealed class ComposeDetailViewModel : Observable, IDisposable
         if (IsBusy) return;
         var context = session.ContextName.Length > 0 ? session.ContextName : "default";
         var args = ComposeCli.Args(context, Project, verb);
-        Output.Clear();
-        AddOutput($"> docker {string.Join(' ', args)}");
         Busy = $"{what} {Project.Name}…";
+        using var working = activity.Working(Busy);
+        activity.Note($"> docker {string.Join(' ', args)}");
+        var last = "";
         try
         {
-            var exit = await CliRunner.Run(args, AddOutput);
-            if (exit != 0) showError($"docker compose {verb[0]} failed for {Project.Name} (exit code {exit})");
+            var exit = await CliRunner.Run(args, line =>
+            {
+                activity.Note(line);
+                if (line.Trim().Length > 0) last = line.Trim();
+            }, session.IsWindowsEngine);
+            if (exit != 0) showError($"docker compose {verb[0]} failed for {Project.Name}: {(last.Length > 0 ? last : $"exit code {exit}")}");
         }
         catch (Exception ex)
         {
@@ -269,13 +274,6 @@ sealed class ComposeDetailViewModel : Observable, IDisposable
         {
             Busy = null;
         }
-    }
-
-    void AddOutput(string line)
-    {
-        Output.Add(line);
-        if (Output.Count > 500) Output.RemoveAt(0);
-        Raise(nameof(HasOutput), nameof(ShowOutput), nameof(HasBottom));
     }
 
     async Task ForService(ComposeService service, Func<DockerClient, string, Task> action)

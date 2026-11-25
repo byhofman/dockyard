@@ -6,8 +6,7 @@
              xmlns:sh="using:Dockyard.Shared"
              x:Class="Dockyard.Dashboard.Features.Containers.ComposeDetailView"
              x:DataType="cont:ComposeDetailViewModel">
-  <Grid x:Name="Layout" RowDefinitions="*,5,260">
-    <DockPanel>
+  <DockPanel>
     <StackPanel DockPanel.Dock="Top" Margin="16,14,16,8" Spacing="8">
       <Grid ColumnDefinitions="Auto,*,Auto">
         <PathIcon Data="{StaticResource IconCompose}" Width="18" Height="18" Margin="0,0,10,0" />
@@ -33,9 +32,6 @@
         </Button>
         <Button Command="{Binding PullCommand}">
           <StackPanel Classes="label"><PathIcon Data="{StaticResource IconPull}" /><TextBlock Text="Pull" /></StackPanel>
-        </Button>
-        <Button Command="{Binding ToggleLogsCommand}">
-          <StackPanel Classes="label"><PathIcon Data="{StaticResource IconLogs}" /><TextBlock Text="Logs" /></StackPanel>
         </Button>
         <Button Classes="danger" Command="{Binding DownCommand}" ToolTip.Tip="Remove containers and networks; volumes are kept">
           <StackPanel Classes="label"><PathIcon Data="{StaticResource IconDown}" /><TextBlock Text="Down…" /></StackPanel>
@@ -107,32 +103,17 @@
           <sh:CodeEditor Language="Yaml" Text="{Binding FileText}" ProblemLines="{Binding ProblemLines}" IsVisible="{Binding IsFileLoaded}" />
         </DockPanel>
       </TabItem>
-    </TabControl>
-    </DockPanel>
 
-    <GridSplitter x:Name="Splitter" Grid.Row="1" ResizeDirection="Rows" Background="{DynamicResource Line}" />
-
-    <Panel x:Name="Bottom" Grid.Row="2" Background="{DynamicResource Bg}">
-    <Border IsVisible="{Binding ShowOutput}">
-      <ScrollViewer>
-        <ItemsControl ItemsSource="{Binding Output}" Margin="12,8">
-          <ItemsControl.ItemTemplate>
-            <DataTemplate x:DataType="x:String">
-              <SelectableTextBlock Classes="mono" Text="{Binding}" TextWrapping="Wrap" />
+      <TabItem Header="Logs">
+        <ListBox Classes="log" ItemsSource="{Binding Logs.Rows}" Background="{DynamicResource Bg}"
+                 ScrollViewer.HorizontalScrollBarVisibility="Auto">
+          <ListBox.ItemTemplate>
+            <DataTemplate DataType="cont:LogRow">
+              <ctl:AnsiTextBlock Classes="mono" Classes.err="{Binding IsError}" Line="{Binding Line}" />
             </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
-      </ScrollViewer>
-    </Border>
-
-    <ListBox Classes="log" IsVisible="{Binding ShowLogs}" ItemsSource="{Binding Logs.Rows}" Background="{DynamicResource Bg}"
-             ScrollViewer.HorizontalScrollBarVisibility="Auto">
-      <ListBox.ItemTemplate>
-        <DataTemplate DataType="cont:LogRow">
-          <ctl:AnsiTextBlock Classes="mono" Classes.err="{Binding IsError}" Line="{Binding Line}" />
-        </DataTemplate>
-      </ListBox.ItemTemplate>
-    </ListBox>
-    </Panel>
-  </Grid>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </TabItem>
+    </TabControl>
+  </DockPanel>
 </UserControl>

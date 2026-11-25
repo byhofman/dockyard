@@ -348,7 +348,7 @@
       <Setter Property="Width" Value="14" />
       <Setter Property="Height" Value="14" />
     </Style>
-    <Style Selector="Button > StackPanel.label">
+    <Style Selector="Button StackPanel.label">
       <Setter Property="Orientation" Value="Horizontal" />
       <Setter Property="Spacing" Value="6" />
     </Style>

@@ -5,7 +5,7 @@ namespace Dockyard.Dashboard.Features.Resources;
 
 static class CliRunner
 {
-    public static async Task<int> Run(IReadOnlyList<string> args, Action<string> onLine)
+    public static async Task<int> Run(IReadOnlyList<string> args, Action<string> onLine, bool windowsEngine = false)
     {
         var psi = new ProcessStartInfo(DockerCli.Path())
         {
@@ -18,6 +18,7 @@ static class CliRunner
         };
         foreach (var a in args) psi.ArgumentList.Add(a);
         psi.Environment["COMPOSE_ANSI"] = "never";
+        if (OperatingSystem.IsWindows() && !windowsEngine) psi.Environment["COMPOSE_CONVERT_WINDOWS_PATHS"] = "1";
         psi.Environment["COMPOSE_PROGRESS"] = "plain";
 
         using var process = Process.Start(psi) ?? throw new InvalidOperationException("Could not start docker");
@@ -33,7 +34,7 @@ static class CliRunner
         return process.ExitCode;
     }
 
-    public static async Task<(int Exit, string Output)> Capture(IReadOnlyList<string> args, string stdin, CancellationToken cancel)
+    public static async Task<(int Exit, string Output)> Capture(IReadOnlyList<string> args, string stdin, CancellationToken cancel, bool windowsEngine = false)
     {
         var psi = new ProcessStartInfo(DockerCli.Path())
         {
@@ -48,6 +49,7 @@ static class CliRunner
         };
         foreach (var a in args) psi.ArgumentList.Add(a);
         psi.Environment["COMPOSE_ANSI"] = "never";
+        if (OperatingSystem.IsWindows() && !windowsEngine) psi.Environment["COMPOSE_CONVERT_WINDOWS_PATHS"] = "1";
 
         using var process = Process.Start(psi) ?? throw new InvalidOperationException("Could not start docker");
         var output = process.StandardOutput.ReadToEndAsync(cancel);

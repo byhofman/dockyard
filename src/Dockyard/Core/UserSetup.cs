@@ -42,6 +42,7 @@ static partial class UserSetup
         await using var bundle = typeof(UserSetup).Assembly.GetManifestResourceStream(GuestBundle.ResourceName);
         if (bundle is not null) await distro.ApplyGuest(bundle, log);
         await distro.WriteFile(WslEngineGate.TokenPath, WslEngineGate.Token(Paths.EngineTokenFile), secret: true);
+        await distro.LinkDrives();
         await WriteEngineConfig(distro, log);
     }
 

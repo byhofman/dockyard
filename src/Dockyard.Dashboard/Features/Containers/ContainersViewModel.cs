@@ -248,7 +248,7 @@ sealed class ContainersViewModel : Observable, ISearchable
         Detail = row switch
         {
             ContainerItem item => new ContainerDetailViewModel(this, Session, item, shell.ShowError),
-            ProjectRow p => new ComposeDetailViewModel(this, Session, p.Project, shell.ShowError),
+            ProjectRow p => new ComposeDetailViewModel(this, Session, p.Project, shell.ShowError, shell.Activity),
             _ => null,
         };
     }
@@ -346,7 +346,7 @@ sealed class ContainersViewModel : Observable, ISearchable
     {
         var context = Session.ContextName.Length > 0 ? Session.ContextName : "default";
         dialog.Report($"docker compose down {project.Name}…");
-        var exit = await CliRunner.Run(ComposeCli.Args(context, project, "down"), line => { if (line.Trim().Length > 0) dialog.Report(line.Trim()); });
+        var exit = await CliRunner.Run(ComposeCli.Args(context, project, "down"), line => { if (line.Trim().Length > 0) dialog.Report(line.Trim()); }, Session.IsWindowsEngine);
         if (exit != 0) throw new InvalidOperationException($"docker compose down failed for {project.Name} (exit code {exit}). {dialog.Progress}");
     }
 
