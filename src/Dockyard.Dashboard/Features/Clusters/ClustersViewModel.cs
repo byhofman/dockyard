@@ -212,7 +212,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         ports.IsShown = on.IsChecked;
         on.Changed += () => ports.IsShown = on.IsChecked;
         Shell.Open(new Dialog($"{cluster.Name}: load balancer",
-            "LoadBalancer services get an address from kind's cloud provider. The ports below go to the service that has them, on this computer's 127.0.0.1; its other ports keep the one Docker picks.",
+            $"LoadBalancer services get an address from kind's cloud provider, and an ingress controller's hosts are reachable by name as <host>.{cluster.Name}.dockyard.test on 80 and 443. Fixed ports go to the service that has them on this computer's 127.0.0.1; its other ports keep the one Docker picks.",
             "Save", _ =>
             {
                 ClusterDefinitions.Save(cluster.Name, current with { LoadBalancer = on.IsChecked, Ports = ClusterDefinitions.ParsePorts(ports.Text) ?? current.Ports });
@@ -223,9 +223,9 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
             fields: [on, ports], canConfirm: _ => !on.IsChecked || ports.Problem is null));
     }
 
-    DialogField PortsField(IReadOnlyList<int> ports, string? cluster) => new("Ports on 127.0.0.1", string.Join(", ", ports), "80, 443")
+    DialogField PortsField(IReadOnlyList<int> ports, string? cluster) => new("Fixed ports on 127.0.0.1, if any", string.Join(", ", ports), "none, or such as 8080, 8443")
     {
-        Validate = text => ClusterDefinitions.ParsePorts(text) is null ? "A list of ports, such as 80, 443" : null,
+        Validate = text => ClusterDefinitions.ParsePorts(text) is null ? "A list of ports, such as 8080, 8443, or nothing" : null,
         Warn = text => ClusterDefinitions.ParsePorts(text) is not { } list ? null
             : all.Where(c => c.Name != cluster).Select(c => (c.Name, Ports: DefinitionFor(c.Name)?.LoadBalancerPorts ?? []))
                 .SelectMany(o => o.Ports.Intersect(list).Select(p => $"Port {p} is also cluster {o.Name}'s: while both have a service on it, the first by name gets it and the other keeps the port Docker picks"))
@@ -296,7 +296,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         {
             Choice = StorageChoices[from?.Storage switch { ClusterStorage.HostFolder => 1, ClusterStorage.Nfs when helm is not null => 2, _ => 0 }],
         };
-        var balancer = DialogField.Check("Load balancer: LoadBalancer services get an address, and these ports on 127.0.0.1", from?.LoadBalancer ?? true);
+        var balancer = DialogField.Check("Load balancer: LoadBalancer services get an address, and an ingress controller's hosts are reachable as <host>.<name>.dockyard.test", from?.LoadBalancer ?? true);
         var ports = PortsField(from?.Ports ?? ClusterDefinition.DefaultPorts, null);
         ports.IsShown = balancer.IsChecked;
         balancer.Changed += () => ports.IsShown = balancer.IsChecked;

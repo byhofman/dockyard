@@ -9,7 +9,8 @@ enum ClusterStorage { None, HostFolder, Nfs }
 // The load balancer gives LoadBalancer services an address; Ports are the host ports on 127.0.0.1 its services get.
 sealed record ClusterDefinition(string Yaml, ClusterStorage Storage, IReadOnlyList<string> Addons, bool LoadBalancer = true, IReadOnlyList<int>? Ports = null)
 {
-    public static readonly IReadOnlyList<int> DefaultPorts = [80, 443];
+    // None: <host>.<cluster>.dockyard.test reaches a cluster's ingress by name on 80 and 443, which fixed ports would take.
+    public static readonly IReadOnlyList<int> DefaultPorts = [];
 
     public bool SharedStorage => Storage == ClusterStorage.HostFolder;
     public IReadOnlyList<int> LoadBalancerPorts => LoadBalancer ? Ports ?? DefaultPorts : [];
@@ -64,7 +65,7 @@ static class ClusterDefinitions
         _ => "none",
     };
 
-    // "80, 443" as ports; null when it is not a list of distinct ports.
+    // "80, 443" as ports, nothing as none; null when it is not a list of distinct ports.
     public static IReadOnlyList<int>? ParsePorts(string text)
     {
         var parts = text.Split([',', ' '], StringSplitOptions.RemoveEmptyEntries);
@@ -74,7 +75,7 @@ static class ClusterDefinitions
             if (!int.TryParse(part, out var port) || port is < 1 or > 65535 || ports.Contains(port)) return null;
             ports.Add(port);
         }
-        return ports.Count > 0 ? ports : null;
+        return ports;
     }
 
     public static void Remove(string name, string? folder = null)

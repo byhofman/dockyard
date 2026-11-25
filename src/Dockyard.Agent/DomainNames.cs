@@ -19,6 +19,15 @@ static class DomainNames
 
     public static bool InZone(string name) => name == Zone || name.EndsWith("." + Zone, StringComparison.Ordinal);
 
+    // <host>.<cluster>.dockyard.test is for a kind cluster's ingress: the cluster's own Ingress rules pick the service.
+    // A container's name has one label, so the two never meet.
+    public static string? ClusterOf(string name)
+    {
+        if (!name.EndsWith("." + Zone, StringComparison.Ordinal)) return null;
+        var labels = name[..^(Zone.Length + 1)].Split('.');
+        return labels.Length >= 2 && labels.All(l => l.Length > 0) ? labels[^1] : null;
+    }
+
     // A flat name on purpose: a certificate's wildcard covers exactly one label, so web.shop.dockyard.test would need a
     // new certificate per project and the app holding the CA to answer for each.
     public static IEnumerable<string> For(string containerName, string? project, string? service)

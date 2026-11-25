@@ -59,7 +59,7 @@ static class WindowsEngine
                         {
                             switch (Admit(await ReadHeader(connection.Stream, ct), token()))
                             {
-                                case EngineService: await Agent.ProxyDocker(connection, dockerSocket, ct); break;
+                                case EngineService: await Agent.ProxyDocker(connection, dockerSocket, ct, windowsPaths: true); break;
                                 case ApiService: await api.Handle(connection.Stream, ct); break;
                             }
                         }

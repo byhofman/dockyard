@@ -9,6 +9,8 @@ sealed class DomainTable(Func<DockerClient> connect, string choicesFile, Action<
 {
     readonly object gate = new();
     Dictionary<string, DomainTarget> byDomain = [];
+    Dictionary<string, ClusterIngress> clusters = [];
+    const string ClusterLabel = "io.x-k8s.cloud-provider-kind.cluster";
     Dictionary<string, int> chosen = LoadChoices(choicesFile);
 
     static Dictionary<string, int> LoadChoices(string file)
@@ -22,7 +24,13 @@ sealed class DomainTable(Func<DockerClient> connect, string choicesFile, Action<
         lock (gate) return byDomain.GetValueOrDefault(domain);
     }
 
-    public bool Contains(string domain) => Find(domain) is not null;
+    public ClusterIngress? Ingress(string domain)
+    {
+        if (DomainNames.ClusterOf(domain) is not { } cluster) return null;
+        lock (gate) return clusters.GetValueOrDefault(cluster);
+    }
+
+    public bool Contains(string domain) => Find(domain) is not null || Ingress(domain) is not null;
 
     // Chosen by name, so it outlives the container: Compose replaces containers whenever their configuration changes.
     public int? Port(DomainTarget target)
@@ -95,6 +103,7 @@ sealed class DomainTable(Func<DockerClient> connect, string choicesFile, Action<
     async Task Refresh(DockerClient docker, CancellationToken ct)
     {
         Dictionary<string, DomainTarget> next = [];
+        Dictionary<string, ClusterIngress> ingress = [];
         foreach (var summary in (await docker.ListContainersAsync(all: false, ct)).Where(c => c.State == "running"))
         {
             var inspect = await docker.GetNodeAsync($"containers/{Uri.EscapeDataString(summary.Id)}/json", ct);
@@ -107,11 +116,26 @@ sealed class DomainTable(Func<DockerClient> connect, string choicesFile, Action<
                 .Select(p => int.Parse(p[0])).ToList() ?? [];
             var hostNetwork = summary.HostConfig?.NetworkMode == "host";
             var labels = summary.Labels;
+            if (labels?.GetValueOrDefault(ClusterLabel) is { Length: > 0 } cluster)
+            {
+                var onKind = inspect["NetworkSettings"]?["Networks"]?["kind"]?["IPAddress"]?.GetValue<string>() is { Length: > 0 } ip ? IPAddress.Parse(ip) : null;
+                var known = ingress.GetValueOrDefault(cluster) ?? new ClusterIngress(cluster, null, null);
+                ingress[cluster] = known with
+                {
+                    Http = known.Http ?? (exposed.Contains(80) ? onKind : null),
+                    Https = known.Https ?? (exposed.Contains(443) ? onKind : null),
+                };
+                continue;
+            }
             foreach (var domain in DomainNames.For(summary.Name, labels?.GetValueOrDefault("com.docker.compose.project"), labels?.GetValueOrDefault("com.docker.compose.service")))
                 // The first running replica answers for a Compose service's shared name.
                 next.TryAdd(domain, new DomainTarget(summary.Id, summary.Name, domain, address is null ? null : IPAddress.Parse(address),
                     inspect["State"]?["Pid"]?.GetValue<int>(), exposed, DomainNames.LabelPort(labels), hostNetwork));
         }
-        lock (gate) byDomain = next;
+        lock (gate)
+        {
+            byDomain = next;
+            clusters = ingress;
+        }
     }
 }

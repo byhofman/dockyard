@@ -89,7 +89,7 @@ sealed class CreateSettings : CommandSettings
     public bool NoLoadBalancer { get; init; }
 
     [CommandOption("--ports <ports>")]
-    [Description("Its load balancer's ports on 127.0.0.1; 80,443 when not given")]
+    [Description("Fixed ports on 127.0.0.1 for its load balancer; none when not given")]
     public string? Ports { get; init; }
 
     [CommandOption("--file <definition>")]
