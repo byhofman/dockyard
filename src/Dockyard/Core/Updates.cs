@@ -52,7 +52,7 @@ static partial class Updates
     public static async Task<Release?> Latest(Component c) => c switch
     {
         Component.Engine or Component.Cli => WindowsDocker,
-        Component.Dashboard => await LatestApp(@"^Dockyard\.Dashboard\.zip$"),
+        Component.Dashboard => await LatestComponentAsset(DashboardComponent, @"^Dockyard\.Dashboard\.zip$"),
         Component.Compose => WindowsCompose,
         Component.Buildx => WindowsBuildx,
         Component.LinuxEngine => LinuxDocker,
@@ -117,7 +117,7 @@ static partial class Updates
 
     // A repository without releases redirects to its release list instead.
     internal static string? TagOfLatestRedirect(Uri target) =>
-        ReleaseTagPath().Match(target.AbsolutePath) is { Success: true } m ? m.Groups["tag"].Value : null;
+        ReleaseTagPath().Match(target.AbsolutePath) is { Success: true } m ? Uri.UnescapeDataString(m.Groups["tag"].Value) : null;
 
     [SupportedOSPlatform("windows")]
     static async Task<Version?> OwnToolVersion(CliTool tool) =>
@@ -143,15 +143,82 @@ static partial class Updates
         var dir = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
         Directory.CreateDirectory(dir);
         var exe = await DownloadReleaseAsset(Path.GetFileName(new Uri(release.DownloadUrl!).LocalPath), dir, tag: release.Tag);
-        if (File.Exists(Paths.DashboardExe) || File.Exists(Paths.LegacyDashboardExe)) await DownloadReleaseAsset(Paths.DashboardZipName, dir, tag: release.Tag);
+        if (File.Exists(Paths.DashboardExe) || File.Exists(Paths.LegacyDashboardExe)) await DownloadComponentAsset(DashboardComponent, DashboardZipPattern, dir);
+        await DownloadComponentAsset(CliComponent, CliAssetPattern, dir);
         return exe;
     }
 
-    public static Task<string> DownloadImage(string targetDir) => DownloadReleaseAsset(ImageAsset, targetDir, isPattern: true);
+    public static Task<string> DownloadImage(string targetDir) => DownloadComponentAsset(EngineComponent, ImageAsset, targetDir);
+
+    // Components are released on their own, tagged <component>/<version>; components.json on the release tagged index
+    // names each one's latest. See docs/design/components-and-releases.md.
+    public const string DashboardZipPattern = @"^Dockyard\.Dashboard\.zip$";
+    public const string CliAssetPattern = @"^dockyard-windows-x64\.exe$";
+    public const string ToolboxComponent = "toolbox";
+    public const string DashboardComponent = "dashboard";
+    public const string CliComponent = "cli";
+    public const string EngineComponent = "engine";
+
+    public static string ComponentTag(string component, string version) => $"{component}/{version}";
+
+    internal sealed record ComponentEntry(string Tag, Version Version, IReadOnlyDictionary<string, Version> Requires);
+
+    internal static Dictionary<string, ComponentEntry> ParseIndex(string json)
+    {
+        var entries = new Dictionary<string, ComponentEntry>();
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            foreach (var p in doc.RootElement.EnumerateObject())
+            {
+                if (p.Value.ValueKind != System.Text.Json.JsonValueKind.Object) continue;
+                var tag = p.Value.TryGetProperty("tag", out var t) ? t.GetString() : null;
+                var version = ParseVersion(p.Value.TryGetProperty("version", out var v) ? v.GetString() : null);
+                if (tag is null || version is null) continue;
+                var requires = new Dictionary<string, Version>();
+                if (p.Value.TryGetProperty("requires", out var r) && r.ValueKind == System.Text.Json.JsonValueKind.Object)
+                    foreach (var q in r.EnumerateObject())
+                        if (ParseVersion(q.Value.GetString()) is { } min) requires[q.Name] = min;
+                entries[p.Name] = new ComponentEntry(tag, version, requires);
+            }
+        }
+        catch (System.Text.Json.JsonException) { }
+        return entries;
+    }
+
+    static async Task<Dictionary<string, ComponentEntry>> Index() =>
+        await GetTextIfFound(AssetUrl(Paths.Repo, "index", "components.json")) is { } json ? ParseIndex(json) : [];
+
+    // A component's latest release, or null when the index does not name it (a release from before the split).
+    internal static async Task<ComponentEntry?> LatestComponent(string component) =>
+        (await Index()).GetValueOrDefault(component);
+
+    public static async Task<Release?> LatestComponentAsset(string component, string assetPattern)
+    {
+        if (await LatestComponent(component) is not { } entry) return await LatestApp(assetPattern);
+        if (await GetTextIfFound(AssetUrl(Paths.Repo, entry.Tag, "SHA256SUMS")) is not { } sums) return null;
+        return Checksums.Names(sums).FirstOrDefault(n => Regex.IsMatch(n, assetPattern)) is { } asset
+            ? new Release(entry.Version, entry.Tag, AssetUrl(Paths.Repo, entry.Tag, asset))
+            : null;
+    }
+
+    // --assets wins; then the component's own latest release; then, before the split, the Toolbox's release.
+    public static async Task<string> DownloadComponentAsset(string component, string assetPattern, string targetDir)
+    {
+        if (LocalAsset(assetPattern) is { } local)
+        {
+            Directory.CreateDirectory(targetDir);
+            var copy = Path.Combine(targetDir, Path.GetFileName(local));
+            File.Copy(local, copy, overwrite: true);
+            return copy;
+        }
+        var entry = await LatestComponent(component);
+        return await DownloadReleaseAsset(assetPattern, targetDir, isPattern: true, tag: entry?.Tag);
+    }
 
     // From the given release; without one, the release of this build, or the latest for development builds.
     internal static string? ReleaseTag(string appVersion, string? tag) =>
-        tag ?? (appVersion == "0.0.0" ? null : $"v{appVersion}");
+        tag ?? (appVersion == "0.0.0" ? null : ComponentTag(ToolboxComponent, appVersion));
 
     // --assets: Dockyard's own files from a folder the user named, for offline installs and for testing a build before its
     // release. Never the installer's own folder by itself: that is usually Downloads, where any web page can leave a file.
@@ -239,6 +306,6 @@ static partial class Updates
     [GeneratedRegex(@"\d+\.\d+\.\d+")]
     private static partial Regex VersionNumber();
 
-    [GeneratedRegex(@"/releases/tag/(?<tag>[^/]+)$")]
+    [GeneratedRegex(@"/releases/tag/(?<tag>.+)$")]
     private static partial Regex ReleaseTagPath();
 }

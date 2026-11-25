@@ -43,12 +43,6 @@
     <ProjectReference Include="..\Dockyard.Kind\Dockyard.Kind.csproj" />
   </ItemGroup>
 
-  <!-- The console program behind "dockyard" in a Windows terminal, which setup writes next to the app. -->
-  <ItemGroup Condition="$(RuntimeIdentifier.StartsWith('win'))">
-    <ProjectReference Include="..\Dockyard.Command\Dockyard.Command.csproj" ReferenceOutputAssembly="false"
-                      SetTargetFramework="TargetFramework=net48" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishSingleFile;PublishTrimmed;PublishReadyToRun" />
-    <EmbeddedResource Include="..\Dockyard.Command\bin\$(Configuration)\net48\dockyard.exe" LogicalName="dockyard-command.exe" />
-  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.5" />

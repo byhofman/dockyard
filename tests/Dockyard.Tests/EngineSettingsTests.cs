@@ -162,7 +162,8 @@ public sealed class EngineSettingsTests : IDisposable
     [Fact]
     public async Task The_new_commands_are_commands_and_https_takes_on_or_off()
     {
-        foreach (var command in new[] { "engine", "cluster", "https", "update", "config" }) Assert.True(Cli.IsCommand([command, "x"]));
+        foreach (var command in new[] { "engine", "https", "update", "config" }) Assert.True(Cli.IsCommand([command, "x"]));
+        Assert.False(Cli.IsCommand(["cluster", "ls"]));
         Assert.Equal(2, await Run(new SettingsHost(), "https", "maybe"));
     }
 

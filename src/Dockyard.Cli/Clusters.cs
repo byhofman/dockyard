@@ -1,20 +1,22 @@
 using System.Diagnostics;
-using Dockyard.Hosts;
 using Dockyard.Kind;
 
-namespace Dockyard.Core;
+namespace Dockyard.Cli;
 
 // dockyard cluster: kind clusters as the dashboard makes them, with the kubeconfig following along, their definitions
-// kept, and the add-ons and shared storage it offers.
-static class CliClusters
+// kept, and the add-ons, storage and load balancer it offers.
+static class Clusters
 {
-    public static async Task<int> Run(IEngineHost host, string verb, IReadOnlyList<string> args, Action<string> log, Action<string> error)
+    // The docker context of the Linux engine Dockyard set up: its own on Windows and macOS, the system's on Linux.
+    public static string Context => OperatingSystem.IsWindows() ? "linux" : OperatingSystem.IsMacOS() ? "dockyard" : "default";
+
+    public static async Task<int> Run(string verb, IReadOnlyList<string> args, Action<string> log, Action<string> error)
     {
-        var context = host.Engines.FirstOrDefault(e => e.Id == "linux")?.Context ?? throw new InvalidOperationException("kind needs the Linux engine, which is not here");
-        var kind = CliLocator.Locate("kind") ?? throw new InvalidOperationException("kind is not installed: dockyard --silent --with kind adds it");
+        var context = Context;
+        var kind = CliLocator.Locate("kind") ?? throw new InvalidOperationException("kind is not installed: add it in the Dockyard Toolbox, or run dockyard --silent --with kind");
         var actions = new KindActions(kind, context, HostKubeconfig.FromEnvironment());
         string Name() => args.FirstOrDefault(a => !a.StartsWith("--", StringComparison.Ordinal)) is { } name && KindNames.IsValid(name)
-            ? name : throw new Cli.UsageException("A cluster name is needed: lower case letters, digits, . and -");
+            ? name : throw new UsageException("A cluster name is needed: lower case letters, digits, . and -");
 
         switch (verb)
         {
@@ -32,17 +34,17 @@ static class CliClusters
             case "create":
             {
                 var name = Name();
-                var addons = Addons(Cli.Option(args, "--addons"));
-                var storage = (Cli.Option(args, "--storage") ?? (args.Contains("--shared-storage") ? "host-folder" : "none")) switch
+                var addons = Addons(Arguments.Option(args, "--addons"));
+                var storage = (Arguments.Option(args, "--storage") ?? (args.Contains("--shared-storage") ? "host-folder" : "none")) switch
                 {
                     "none" => ClusterStorage.None,
                     "host-folder" => ClusterStorage.HostFolder,
                     "nfs" => ClusterStorage.Nfs,
-                    var other => throw new Cli.UsageException($"Unknown storage: {other}. Storage: none, host-folder, nfs"),
+                    var other => throw new UsageException($"Unknown storage: {other}. Storage: none, host-folder, nfs"),
                 };
-                var ports = Cli.Option(args, "--ports") is { } p ? ClusterDefinitions.ParsePorts(p) ?? throw new Cli.UsageException("--ports takes a list of ports, such as 80,443") : ClusterDefinition.DefaultPorts;
-                var workers = Cli.Option(args, "--workers") is { } w ? int.TryParse(w, out var n) && n is >= 0 and <= 10 ? n : throw new Cli.UsageException("--workers takes 0 to 10") : 0;
-                var definition = Cli.Option(args, "--file") is not null ? Cli.Content(args) : KindCli.Config(workers, storage == ClusterStorage.HostFolder);
+                var ports = Arguments.Option(args, "--ports") is { } p ? ClusterDefinitions.ParsePorts(p) ?? throw new UsageException("--ports takes a list of ports, such as 80,443") : ClusterDefinition.DefaultPorts;
+                var workers = Arguments.Option(args, "--workers") is { } w ? int.TryParse(w, out var n) && n is >= 0 and <= 10 ? n : throw new UsageException("--workers takes 0 to 10") : 0;
+                var definition = Arguments.Option(args, "--file") is not null ? Arguments.Content(args) : KindCli.Config(workers, storage == ClusterStorage.HostFolder);
                 if (ClusterDefinitions.Problem(definition) is { } problem) { error(problem); return 1; }
                 var helm = addons.Count > 0 || storage == ClusterStorage.Nfs ? CliLocator.Locate("helm") ?? throw new InvalidOperationException("The add-ons go in with Helm, which is not installed: dockyard --silent --with helm adds it") : null;
                 ClusterDefinitions.Save(name, new ClusterDefinition(definition, storage, addons.Select(a => a.Release).ToList(), !args.Contains("--no-load-balancer"), ports));
@@ -54,7 +56,7 @@ static class CliClusters
             {
                 var name = Name();
                 var saved = ClusterDefinitions.Load(name) ?? throw new InvalidOperationException($"Dockyard has no definition of {name}: the dashboard puts one together from its nodes, under Definition");
-                var definition = Cli.Option(args, "--file") is not null ? Cli.Content(args) : saved.Yaml;
+                var definition = Arguments.Option(args, "--file") is not null ? Arguments.Content(args) : saved.Yaml;
                 if (ClusterDefinitions.Problem(definition) is { } problem) { error(problem); return 1; }
                 var helm = saved.Addons.Count > 0 || saved.Storage == ClusterStorage.Nfs ? CliLocator.Locate("helm") : null;
                 await Delete(actions, context, name, log);
@@ -86,18 +88,19 @@ static class CliClusters
                 log((ClusterDefinitions.Load(name) ?? throw new InvalidOperationException($"Dockyard has no definition of {name}")).Yaml.TrimEnd());
                 return 0;
             }
-            default: throw new Cli.UsageException($"Unknown cluster command: {verb}");
+            default: throw new UsageException($"Unknown cluster command: {verb}");
         }
     }
 
     static string Describe(ClusterDefinition d) =>
         string.Join(", ", new[] { d.Storage switch { ClusterStorage.HostFolder => "shared host folder", ClusterStorage.Nfs => "NFS storage", _ => null }, d.LoadBalancer ? $"ports {string.Join(',', d.LoadBalancerPorts)}" : null }.Concat(d.AddonList.Select(a => a.Title)).OfType<string>()) is { Length: > 0 } extras ? extras : "-";
 
+
     static IReadOnlyList<ClusterAddon> Addons(string? names)
     {
         var wanted = (names ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var unknown = wanted.Where(w => ClusterAddons.All.All(a => a.Release != w)).ToList();
-        if (unknown.Count > 0) throw new Cli.UsageException($"Unknown add-on: {string.Join(", ", unknown)}. Add-ons: {string.Join(", ", ClusterAddons.All.Select(a => a.Release))}");
+        if (unknown.Count > 0) throw new UsageException($"Unknown add-on: {string.Join(", ", unknown)}. Add-ons: {string.Join(", ", ClusterAddons.All.Select(a => a.Release))}");
         return ClusterAddons.All.Where(a => wanted.Contains(a.Release)).ToList();
     }
 

@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 using Dockyard.Hosts;
 
 namespace Dockyard.Core;
@@ -110,23 +111,39 @@ static class MachineApps
         if (!engineOnly) await InstallDashboard(log, dashboardDir);
         else if (File.Exists(Paths.DashboardExe) || File.Exists(Paths.LegacyDashboardExe)) RemoveDashboard(log);
         else log("The dashboard is not installed");
-        InstallCommand();
+        await InstallCommand(log, dashboardDir);
     }
 
-    // The dockyard command, a console program that starts Dockyard.exe with the terminal's own handles: cmd and PowerShell
-    // neither wait for a windowed program nor give it their output. In a folder of its own, where it is the only dockyard.
+    // The dockyard command, its own component: a console program, so cmd and PowerShell wait for it and get its output.
+    // In a folder of its own, where it is the only dockyard on the PATH.
     public static string CommandDir => Path.Combine(Paths.AppDir, "bin");
     public static string CommandExe => Path.Combine(CommandDir, "dockyard.exe");
 
-    static void InstallCommand()
+    // From the given folder, or the CLI's own release. Without it Dockyard works, so a failed download is said, not fatal.
+    public static async Task InstallCommand(Action<string> log, string? sourceDir)
     {
-        using var embedded = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("dockyard-command.exe");
-        if (embedded is null) return;
+        var local = sourceDir is null ? null : Directory.EnumerateFiles(sourceDir).FirstOrDefault(f => Regex.IsMatch(Path.GetFileName(f), Updates.CliAssetPattern));
+        string? downloaded = null;
+        try
+        {
+            if (local is null)
+            {
+                log("Downloading the dockyard command");
+                local = downloaded = await Updates.DownloadComponentAsset(Updates.CliComponent, Updates.CliAssetPattern, Path.Combine(Paths.AppDir, $".download-{Guid.NewGuid():N}"));
+            }
+        }
+        catch (Exception e) when (e is HttpRequestException or InvalidOperationException or IOException)
+        {
+            log($"The dockyard command was not installed: {e.Message}");
+            return;
+        }
         Directory.CreateDirectory(CommandDir);
         var incoming = CommandExe + ".new";
-        using (var file = File.Create(incoming)) embedded.CopyTo(file);
+        File.Copy(local, incoming, overwrite: true);
+        if (downloaded is not null) Directory.Delete(Path.GetDirectoryName(downloaded)!, recursive: true);
         InUseFiles.MoveAside(CommandExe);
         File.Move(incoming, CommandExe);
+        log($"Installed {CommandExe}");
         File.Delete(Path.Combine(CommandDir, "dockyard.cmd"));
         File.Delete(Path.Combine(Paths.AppDir, "dockyard.cmd"));
         RemoveFromMachinePath(Paths.AppDir);
@@ -160,7 +177,7 @@ static class MachineApps
         if (zip is null || !File.Exists(zip))
         {
             log("Downloading the dashboard");
-            zip = downloaded = await Updates.DownloadReleaseAsset(Paths.DashboardZipName, Path.Combine(Paths.AppDir, $".download-{Guid.NewGuid():N}"));
+            zip = downloaded = await Updates.DownloadComponentAsset(Updates.DashboardComponent, Updates.DashboardZipPattern, Path.Combine(Paths.AppDir, $".download-{Guid.NewGuid():N}"));
         }
         try
         {

@@ -8,34 +8,9 @@ namespace Dockyard.Core;
 // runs in the tray when it runs, since on Windows the tray holds the Linux engine's processes.
 static class Cli
 {
-    public const string Usage = """
-        Usage: dockyard engine ls | start <engine> | stop <engine> | use <engine>
-               dockyard config show | validate --file <file> | apply --file <file> | edit   [--engine <engine>]
-               dockyard cluster ls
-               dockyard cluster create <name> [--workers <n>] [--addons <names>] [--storage none|host-folder|nfs]
-                                              [--no-load-balancer | --ports <ports>] [--file <definition>]
-               dockyard cluster recreate <name> [--file <definition>]
-               dockyard cluster delete | use | kubeconfig | definition <name>
-               dockyard https on | off
-               dockyard update [--check]
+    public const string Usage = "Usage: dockyard engine | config | https | update ... (dockyard --help lists them all)";
 
-          engine     The engines: linux, and win on Windows. use makes it the docker context.
-          config     An engine's daemon.json: what you set in it, without the keys Dockyard adds (dns; hosts on Windows).
-                     apply checks it, restarts the engine if it runs, and puts the previous one back if it will not start.
-                     edit opens it in your editor (VISUAL or EDITOR; Notepad, TextEdit or nano otherwise) and applies it.
-          cluster    kind clusters as the dashboard makes them: the context in your kubeconfig, the definition kept.
-                     --addons: metrics-server, traefik (with Helm). --storage: shared storage every node uses at once,
-                     a folder on the engine or NFS (with Helm). --ports: its load balancer's ports on 127.0.0.1, 80,443 when
-                     not given. recreate deletes it, with everything in it, and makes it again from its definition.
-          https      Trusted HTTPS for container domains, with Dockyard's own certificate authority.
-          update     Brings the components up to date; --check only lists them. Dockyard itself updates from the tray.
-          --engine   linux or win (Windows); the active engine without it.
-          --file     A file, or - for standard input.
-
-        Exit code: 0 done, 1 failed, 2 wrong arguments.
-        """;
-
-    static readonly string[] Commands = ["config", "engine", "cluster", "https", "update"];
+    static readonly string[] Commands = ["config", "engine", "https", "update"];
 
     public static bool IsCommand(string[] args) => args.Length > 0 && Commands.Contains(args[0]);
 
@@ -46,7 +21,6 @@ static class Cli
     {
         try
         {
-            if (args is ["config", "edit", ..]) return Edit(args);
             return RunInTrayOrHere(args);
         }
         catch (UsageException e)
@@ -85,7 +59,6 @@ static class Cli
             {
                 { Count: >= 2 } when args[0] == "config" => await Config(host, args[1], args.Skip(2).ToList(), log, error),
                 { Count: >= 2 } when args[0] == "engine" => await Engines(host, args[1], args.Skip(2).ToList(), log),
-                { Count: >= 2 } when args[0] == "cluster" => await CliClusters.Run(host, args[1], args.Skip(2).ToList(), log, error),
                 { Count: 2 } when args[0] == "https" => await HttpsCommand(host, args[1], log),
                 { Count: >= 1 } when args[0] == "update" => await Update(host, args.Contains("--check"), log, error),
                 _ => throw new UsageException($"Unknown command: {string.Join(' ', args)}"),
@@ -226,49 +199,4 @@ static class Cli
         return 0;
     }
 
-    // The file goes to the editor until it is valid or left unchanged.
-    static int Edit(string[] args)
-    {
-        var host = HostFactory.Create();
-        var engine = Engine(host, args);
-        var current = host.ReadEngineSettings(engine).GetAwaiter().GetResult()
-            ?? throw new InvalidOperationException($"The {engine} engine's settings are not Dockyard's to edit");
-        var file = Path.Combine(Path.GetTempPath(), $"dockyard-{engine}-daemon.json");
-        File.WriteAllText(file, current);
-        try
-        {
-            while (true)
-            {
-                OpenEditor(file);
-                var edited = File.ReadAllText(file);
-                if (edited == current)
-                {
-                    Console.WriteLine("No changes");
-                    return 0;
-                }
-                if (host.ValidateEngineSettings(engine, edited).GetAwaiter().GetResult() is not { } problem)
-                    return RunInTrayOrHere(["config", "apply", "--engine", engine, "--file", file]);
-                Console.Error.WriteLine(problem);
-                Console.Error.Write("Edit it again? [Y/n] ");
-                if (Console.ReadLine()?.Trim().ToLowerInvariant() is "n" or "no") return 1;
-            }
-        }
-        finally { File.Delete(file); }
-    }
-
-    static void OpenEditor(string file)
-    {
-        var editor = Environment.GetEnvironmentVariable("VISUAL") is { Length: > 0 } visual ? visual
-            : Environment.GetEnvironmentVariable("EDITOR") is { Length: > 0 } set ? set
-            : null;
-        (string exe, string[] args) = editor is not null ? (editor, new[] { file })
-            : OperatingSystem.IsWindows() ? ("notepad.exe", [file])
-            : OperatingSystem.IsMacOS() ? ("/usr/bin/open", ["-W", "-t", file])
-            : ("nano", [file]);
-        // An editor given with options, as "code --wait", is run by the shell.
-        if (editor is not null && editor.Contains(' '))
-            (exe, args) = OperatingSystem.IsWindows() ? ("cmd.exe", new[] { "/c", $"{editor} \"{file}\"" }) : ("/bin/sh", new[] { "-c", $"{editor} {Shell.ShQuote(file)}" });
-        using var process = Process.Start(new ProcessStartInfo(exe, args) { UseShellExecute = false }) ?? throw new InvalidOperationException($"Could not start {exe}");
-        process.WaitForExit();
-    }
 }
