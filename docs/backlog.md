@@ -27,6 +27,9 @@ IDs are permanent: never renumber or reuse one.
 - [x] DOK-22 Basic kind support: kind installed or detected, versions pinned and checked; create, list and delete clusters, get a cluster's kubeconfig and context; clusters in the dashboard and the CLI, on Windows, macOS and Linux (owner, feedback round 1, 2026-11-12)
 - [x] DOK-34 LoadBalancer services in kind clusters get an address on 127.0.0.1 through cloud-provider-kind, run by Dockyard while there are clusters, with a switch to turn it off (owner 2026-11-23)
 - [x] DOK-35 Shared storage for kind clusters: a `shared` ReadWriteMany storage class over one folder on the engine that every node mounts, chosen per cluster when it is made (owner 2026-11-23, per cluster 2026-11-24)
+- [ ] DOK-37 A basic look into a cluster from the dashboard: deployments, pods, services, ingresses, persistent volume claims and persistent volumes, listed per namespace with their state (owner 2026-11-25, a version after 0.9.0)
+- [ ] DOK-38 A pod's logs and a terminal into it from the dashboard, the same way as for a Docker container (owner 2026-11-25, a version after 0.9.0)
+- [ ] DOK-39 The Helm releases installed in a cluster, with their chart, version and status (owner 2026-11-25, a version after 0.9.0)
 
 ## Quality
 
@@ -40,7 +43,7 @@ IDs are permanent: never renumber or reuse one.
 - [ ] DOK-3 Embedded terminal in the dashboard
 - [ ] DOK-4 Compose editor
 - [x] DOK-5 File browser inside containers — v0.4.0
-- [ ] DOK-6 Registry login UI (`docker login` on the CLI keeps working)
+- [ ] DOK-6 Registry login UI: manage registries from the dashboard, logging in and out with `docker login`, which keeps working on the CLI (owner asked again 2026-11-25, a version after 0.9.0)
 - [x] DOK-7 `host.docker.internal` reaches the host from Linux containers — v0.4.0
 - [x] DOK-8 `localhost` reaches published Linux container ports on Windows — v0.4.0
 - [x] DOK-9 Tools that ignore docker contexts find the engine on macOS without manual setup (`/var/run/docker.sock`, Testcontainers) — v0.4.0
