@@ -212,6 +212,8 @@
             <TextBlock Classes="h2" Text="COMPONENTS" VerticalAlignment="Bottom" />
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
               <Button Content="Check for updates" Command="{Binding CheckUpdatesCommand}" />
+              <ComboBox ItemsSource="{x:Static vm:MainViewModel.ToolSources}" SelectedIndex="{Binding ToolSource}" MinWidth="160"
+                        ToolTip.Tip="Where docker, kind, kubectl and helm come from. Applies the next time one is added or updated." AutomationProperties.Name="Download source" />
               <Button Classes="primary" Content="Update all" Command="{Binding UpdateAllCommand}" />
             </StackPanel>
           </Grid>
@@ -243,19 +245,14 @@
         <StackPanel Spacing="10" IsVisible="{Binding ShowManage}">
           <TextBlock Classes="h2" Text="SETTINGS" />
           <Border Classes="card">
-            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
-              <ToggleSwitch Grid.Row="4" IsChecked="{Binding HttpsSwitch}"
+            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto">
+              <ToggleSwitch Grid.Row="3" IsChecked="{Binding HttpsSwitch}"
                             ToolTip.Tip="Every running container answers at http://name.dockyard.test without a published port. Trusted HTTPS adds a certificate authority of Dockyard's own, made on this computer and valid only for names under dockyard.test; your system asks to trust it. Off takes it out of the trust store again."
                             OnContent="Trusted HTTPS for container domains" OffContent="Trusted HTTPS for container domains" />
               <ToggleSwitch IsChecked="{Binding StopOtherOnSwitch}" IsVisible="{Binding HasEngineSwitch}"
                             OnContent="Stop the other engine when switching" OffContent="Stop the other engine when switching" />
               <ToggleSwitch Grid.Row="1" IsChecked="{Binding StartActiveAtLogon}" OnContent="Start the active engine at logon" OffContent="Start the active engine at logon" />
-              <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="0,4"
-                    ToolTip.Tip="Applies the next time a tool is added or updated, or when the wizard runs again.">
-                <TextBlock Text="Install docker, kind, kubectl and helm with" VerticalAlignment="Center" />
-                <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:MainViewModel.ToolSources}" SelectedIndex="{Binding ToolSource}" MinWidth="160" />
-              </Grid>
-              <ToggleSwitch Grid.Row="3" IsChecked="{Binding KubectlShell}" ToolTip.Tip="{x:Static vm:MainViewModel.ShellProfilesText}"
+              <ToggleSwitch Grid.Row="2" IsChecked="{Binding KubectlShell}" ToolTip.Tip="{x:Static vm:MainViewModel.ShellProfilesText}"
                             OnContent="Set up kubectl in my shell" OffContent="Set up kubectl in my shell" />
             </Grid>
           </Border>

@@ -101,6 +101,10 @@ static class ShellSetup
     public static void TryApply(bool enabled, Action<string> log)
     {
         try { Apply(enabled, log); }
+        catch (UnauthorizedAccessException e) when (OperatingSystem.IsWindows() && enabled)
+        {
+            log($"The shell setup for kubectl was not written ({e.Message}). When Controlled Folder Access is on, allow {Path.GetFileName(Environment.ProcessPath)} under Windows Security > Ransomware protection and switch the setting again, or paste this into your profile yourself:\n{Block(Kind.PowerShell)}");
+        }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { log($"The shell setup for kubectl was left as it is ({e.Message})"); }
     }
 
