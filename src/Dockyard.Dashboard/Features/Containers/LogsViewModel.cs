@@ -60,7 +60,8 @@ sealed class LogsViewModel : Observable, IDisposable
         {
             await foreach (var line in client.LogsAsync(source.Id, new LogOptions(Follow: true, Tail: 1000, Tty: source.Tty), ct).ConfigureAwait(false))
             {
-                var entry = source.Prefix is null ? line : line with { Text = $"{source.Prefix} | {line.Text}" };
+                var text = TerminalText.Plain(line.Text);
+                var entry = line with { Text = source.Prefix is null ? text : $"{source.Prefix} | {text}" };
                 lock (incoming) incoming.Add(entry);
             }
         }
