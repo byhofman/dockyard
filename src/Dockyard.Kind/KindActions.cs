@@ -6,7 +6,8 @@ sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
     // Returns the kubeconfig file the cluster's context went into.
     // Add-ons go in with helm once the cluster is in the kubeconfig, so a chart that fails leaves a cluster kubectl can reach.
     public async Task<string> Create(string name, Action<string>? onLine = null, int workers = 0, ClusterStorage storage = ClusterStorage.None,
-        IReadOnlyList<ClusterAddon>? addons = null, string? helm = null, string? definition = null, bool publishNames = false)
+        IReadOnlyList<ClusterAddon>? addons = null, string? helm = null, string? definition = null, bool publishNames = false,
+        Func<string, Task<string>>? clusterCa = null)
     {
         var scratch = Directory.CreateTempSubdirectory("dockyard-kind-");
         try
@@ -30,6 +31,11 @@ sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
             }
             foreach (var addon in addons ?? [])
                 await ClusterAddons.Install(helm ?? throw new InvalidOperationException("Helm is not installed."), addon, own, name, Path.Combine(scratch.FullName, "helm"), onLine);
+            if (addons?.Contains(CertManager.Addon) == true && clusterCa is not null)
+            {
+                try { await CertManager.AddIssuer(dockerContext.Length > 0 ? dockerContext : "default", name, await clusterCa(name), onLine); }
+                catch (InvalidOperationException e) { onLine?.Invoke($"cert-manager runs, without the {CertManager.IssuerName} ClusterIssuer: {e.Message}"); }
+            }
             return file;
         }
         finally { scratch.Delete(recursive: true); }

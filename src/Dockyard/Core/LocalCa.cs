@@ -23,7 +23,8 @@ static class LocalCa
     {
         using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         var request = new CertificateRequest($"CN={SubjectName}, O=Dockyard on this device", key, HashAlgorithmName.SHA256);
-        request.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, true, 0, true));
+        // One level below it: the intermediate a cluster's cert-manager signs with.
+        request.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, true, 1, true));
         request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.KeyCertSign | X509KeyUsageFlags.CrlSign, true));
         request.CertificateExtensions.Add(new X509SubjectKeyIdentifierExtension(request.PublicKey, false));
         request.CertificateExtensions.Add(new X509Extension(NameConstraintsOid, Constraints(Zone), critical: true));
@@ -72,6 +73,28 @@ static class LocalCa
         return new PemPair(issued.ExportCertificatePem(), key.ExportPkcs8PrivateKeyPem());
     }
 
+    public static readonly TimeSpan ClusterCaLifetime = TimeSpan.FromDays(365);
+
+    // For one kind cluster's cert-manager: a CA that can only vouch for names under <cluster>.dockyard.internal, so its key
+    // in the cluster cannot sign for another cluster or for a container's name, and no CA below it.
+    public static PemPair ClusterIntermediate(PemPair ca, string cluster, DateTimeOffset now)
+    {
+        using var authority = X509Certificate2.CreateFromPem(ca.Certificate, ca.Key);
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var name = $"{cluster}.{Zone}";
+        var request = new CertificateRequest($"CN=Dockyard {cluster} cluster CA, O=Dockyard on this device", key, HashAlgorithmName.SHA256);
+        request.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, true, 0, true));
+        request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.KeyCertSign | X509KeyUsageFlags.CrlSign | X509KeyUsageFlags.DigitalSignature, true));
+        request.CertificateExtensions.Add(new X509SubjectKeyIdentifierExtension(request.PublicKey, false));
+        request.CertificateExtensions.Add(X509AuthorityKeyIdentifierExtension.CreateFromCertificate(authority, includeKeyIdentifier: true, includeIssuerAndSerial: false));
+        request.CertificateExtensions.Add(new X509Extension(NameConstraintsOid, Constraints(name), critical: true));
+        request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension([new Oid(ServerAuthOid)], false));
+        var serial = RandomNumberGenerator.GetBytes(16);
+        serial[0] &= 0x7F;
+        using var issued = request.Create(authority, now.AddDays(-1), now + ClusterCaLifetime, serial);
+        return new PemPair(issued.ExportCertificatePem(), key.ExportPkcs8PrivateKeyPem());
+    }
+
     public static string CertificateFile(string directory) => Path.Combine(directory, "ca.pem");
 
     public static async Task<PemPair?> Load(string directory, ICaKeyStore keys) =>
@@ -101,6 +124,7 @@ static class LocalCa
             return certificate.GetNameInfo(X509NameType.SimpleName, forIssuer: false) == SubjectName
                 && certificate.Extensions[NameConstraintsOid] is { Critical: true } constraint
                 && constraint.RawData.AsSpan().SequenceEqual(Constraints(Zone))
+                && certificate.Extensions.OfType<X509BasicConstraintsExtension>().SingleOrDefault() is { CertificateAuthority: true, HasPathLengthConstraint: true, PathLengthConstraint: 1 }
                 && certificate.Extensions.OfType<X509EnhancedKeyUsageExtension>().SingleOrDefault() is { } usage
                 && usage.EnhancedKeyUsages.Count == 1 && usage.EnhancedKeyUsages[0].Value == ServerAuthOid;
         }

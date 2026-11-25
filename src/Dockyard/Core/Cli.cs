@@ -59,6 +59,7 @@ static class Cli
             {
                 { Count: >= 2 } when args[0] == "config" => await Config(host, args[1], args.Skip(2).ToList(), log, error),
                 { Count: >= 2 } when args[0] == "engine" => await Engines(host, args[1], args.Skip(2).ToList(), log),
+                { Count: 3 } when args[0] == "https" && args[1] == "cluster-issuer" => await ClusterIssuer(host, args[2], log),
                 { Count: 2 } when args[0] == "https" => await HttpsCommand(host, args[1], log),
                 { Count: >= 1 } when args[0] == "update" => await Update(host, args.Contains("--check"), log, error),
                 _ => throw new UsageException($"Unknown command: {string.Join(' ', args)}"),
@@ -168,6 +169,19 @@ static class Cli
             case "off": await Https.Disable(host, log, silent: false); break;
             default: throw new UsageException("https takes on or off");
         }
+        return 0;
+    }
+
+    // For a kind cluster's cert-manager: its CA certificate and key, then the root, as PEM. Asked for by the dashboard and the
+    // command when they make a cluster with cert-manager; the root's key never leaves this machine.
+    static async Task<int> ClusterIssuer(IEngineHost host, string cluster, Action<string> log)
+    {
+        if (!System.Text.RegularExpressions.Regex.IsMatch(cluster, "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"))
+            throw new UsageException($"{cluster} is not a cluster name");
+        if (!Settings.Load().HttpsEnabled || await LocalCa.Load(host.CaDirectory, host.CaKeys) is not { } ca || !LocalCa.IsConstrainedRoot(ca.Certificate))
+            throw new InvalidOperationException("Trusted HTTPS is off, so there is no certificate authority to issue from: dockyard https on");
+        var issued = LocalCa.ClusterIntermediate(ca, cluster, DateTimeOffset.UtcNow);
+        foreach (var line in (issued.Certificate.TrimEnd() + "\n" + issued.Key.TrimEnd() + "\n" + ca.Certificate.TrimEnd()).Split('\n')) log(line);
         return 0;
     }
 

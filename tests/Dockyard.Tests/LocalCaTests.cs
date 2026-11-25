@@ -47,7 +47,7 @@ public sealed class LocalCaTests : IDisposable
     }
 
     [Fact]
-    public void The_ca_says_so_itself_and_nobody_can_chain_another_ca_under_it()
+    public void The_ca_says_so_itself_and_allows_one_cluster_ca_below_it()
     {
         using var root = X509Certificate2.CreateFromPem(LocalCa.Create(Now).Certificate);
         var constraints = root.Extensions.First(e => e.Oid?.Value == "2.5.29.30");
@@ -56,7 +56,37 @@ public sealed class LocalCaTests : IDisposable
         var basic = root.Extensions.OfType<X509BasicConstraintsExtension>().Single();
         Assert.True(basic.CertificateAuthority);
         Assert.True(basic.HasPathLengthConstraint);
-        Assert.Equal(0, basic.PathLengthConstraint);
+        Assert.Equal(1, basic.PathLengthConstraint);
+    }
+
+    [Fact]
+    public void A_cluster_ca_vouches_for_its_own_cluster_only()
+    {
+        var ca = LocalCa.Create(Now);
+        var clusterCa = LocalCa.ClusterIntermediate(ca, "dev", Now);
+        using var root = X509Certificate2.CreateFromPem(ca.Certificate);
+        using var intermediate = X509Certificate2.CreateFromPem(clusterCa.Certificate);
+
+        bool Validates(string name)
+        {
+            var leaf = LocalCa.Leaf(clusterCa, Now, [name]);
+            using var certificate = X509Certificate2.CreateFromPem(leaf.Certificate, leaf.Key);
+            using var chain = ChainTrusting(root);
+            chain.ChainPolicy.ExtraStore.Add(intermediate);
+            return chain.Build(certificate);
+        }
+
+        Assert.True(Validates("shop.dev.dockyard.internal"));
+        Assert.False(Validates("shop.qa.dockyard.internal"));
+        Assert.False(Validates("web.dockyard.internal"));
+        Assert.False(Validates("www.example.com"));
+        Assert.Equal(0, intermediate.Extensions.OfType<X509BasicConstraintsExtension>().Single().PathLengthConstraint);
+    }
+
+    [Fact]
+    public void A_new_root_is_current()
+    {
+        Assert.True(LocalCa.IsConstrainedRoot(LocalCa.Create(Now).Certificate));
     }
 
     [Fact]

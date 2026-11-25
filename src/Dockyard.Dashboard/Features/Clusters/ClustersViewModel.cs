@@ -302,6 +302,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         balancer.Changed += () => ports.IsShown = balancer.IsChecked;
         var metrics = DialogField.Check($"metrics-server {ClusterAddons.MetricsServer.Version}: kubectl top and pod autoscaling", isChecked: from?.Addons.Contains(ClusterAddons.MetricsServer.Release) ?? true);
         var traefik = DialogField.Check($"Traefik {ClusterAddons.Traefik.Version}: an ingress controller, reachable through the load balancer", isChecked: from?.Addons.Contains(ClusterAddons.Traefik.Release) ?? false);
+        var certManager = DialogField.Check($"cert-manager {CertManager.Addon.Version}: certificates for <host>.<name>.dockyard.internal from the ClusterIssuer dockyard, trusted on this computer when trusted HTTPS is on", isChecked: from?.Addons.Contains(CertManager.Addon.Release) ?? false);
         string? generated = from is null ? KindCli.Config(0) : null;
         var definition = DialogField.Code("Definition: kind's cluster config, from the choices above until you change it", from?.Yaml ?? generated!, Shared.CodeLanguage.Yaml, ClusterDefinitions.Problem);
         var message = (fromName is null ? "Each node is a container on the Linux engine. The first cluster pulls kind's node image, which takes a few minutes. " : $"From {fromName}'s definition. ")
@@ -310,7 +311,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         List<DialogField> fields =
         [
             name, .. from is null ? [workers] : Array.Empty<DialogField>(), storage, balancer, ports,
-            .. helm is null ? Array.Empty<DialogField>() : [metrics, traefik], definition,
+            .. helm is null ? Array.Empty<DialogField>() : [metrics, traefik, certManager], definition,
         ];
         void Regenerate()
         {
@@ -321,20 +322,24 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         workers.Changed += Regenerate;
         storage.Changed += Regenerate;
         Shell.Open(new Dialog(fromName is null ? "Create a kind cluster" : $"Duplicate {fromName}", message, "Create",
-            d => Create(d, name.Value, new ClusterDefinition(definition.Text, StorageOf(storage.Value), Addons(metrics, traefik, helm).Select(a => a.Release).ToList(),
+            d => Create(d, name.Value, new ClusterDefinition(definition.Text, StorageOf(storage.Value), Addons(metrics, traefik, certManager, helm).Select(a => a.Release).ToList(),
                 balancer.IsChecked, ClusterDefinitions.ParsePorts(ports.Text) ?? ClusterDefinition.DefaultPorts), helm),
             fields: fields,
             canConfirm: _ => KindClusters.IsValidName(name.Value) && all.All(c => c.Name != name.Value) && definition.Problem is null && (!balancer.IsChecked || ports.Problem is null)));
     }
 
-    static List<ClusterAddon> Addons(DialogField metrics, DialogField traefik, string? helm) => helm is null ? [] :
-        [.. metrics.IsChecked ? [ClusterAddons.MetricsServer] : Array.Empty<ClusterAddon>(), .. traefik.IsChecked ? [ClusterAddons.Traefik] : Array.Empty<ClusterAddon>()];
+    static List<ClusterAddon> Addons(DialogField metrics, DialogField traefik, DialogField certManager, string? helm) => helm is null ? [] :
+        [
+            .. metrics.IsChecked ? [ClusterAddons.MetricsServer] : Array.Empty<ClusterAddon>(), .. traefik.IsChecked ? [ClusterAddons.Traefik] : Array.Empty<ClusterAddon>(),
+            .. certManager.IsChecked ? [CertManager.Addon] : Array.Empty<ClusterAddon>(),
+        ];
 
     Task Create(Dialog dialog, string name, ClusterDefinition definition, string? helm) => RunKind(dialog, async (actions, onLine) =>
     {
         ClusterDefinitions.Save(name, definition);
         appliedPlan = null;
-        var file = await actions.Create(name, onLine, storage: definition.Storage, addons: definition.AddonList, helm: helm, definition: definition.Yaml, publishNames: definition.LoadBalancer);
+        var file = await actions.Create(name, onLine, storage: definition.Storage, addons: definition.AddonList, helm: helm, definition: definition.Yaml, publishNames: definition.LoadBalancer,
+            clusterCa: c => CertManager.FromToolbox(Dashboard.Shell.TrayClient.TrayExe, c));
         Shell.ShowInfo($"kubectl now uses {KindKubeconfig.Key(name)}, from {file}");
     });
 
@@ -360,7 +365,8 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
             await RemoveProxies(cluster.Name);
             var remade = current with { Yaml = definition.Text, Addons = helm is null ? [] : current.Addons };
             ClusterDefinitions.Save(cluster.Name, remade);
-            await actions.Create(cluster.Name, onLine, storage: remade.Storage, addons: remade.AddonList, helm: helm, definition: remade.Yaml, publishNames: remade.LoadBalancer);
+            await actions.Create(cluster.Name, onLine, storage: remade.Storage, addons: remade.AddonList, helm: helm, definition: remade.Yaml, publishNames: remade.LoadBalancer,
+                clusterCa: c => CertManager.FromToolbox(Dashboard.Shell.TrayClient.TrayExe, c));
             Shell.ShowInfo($"{cluster.Name} is made again from its definition");
         }), danger: true, fields: [definition], canConfirm: _ => definition.Problem is null));
     }

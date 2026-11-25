@@ -55,10 +55,13 @@ sealed class Clusters(Action<string> log)
             ? CliLocator.Locate("helm") ?? throw new InvalidOperationException("The add-ons and NFS storage go in with Helm, which is not installed: dockyard --silent --with helm adds it")
             : null;
         ClusterDefinitions.Save(name, new ClusterDefinition(definition, storage, addons.Select(a => a.Release).ToList(), loadBalancer, ports));
-        var file = await Actions().Create(name, log, storage: storage, addons: addons, helm: helm, definition: definition, publishNames: loadBalancer);
+        var file = await Actions().Create(name, log, storage: storage, addons: addons, helm: helm, definition: definition, publishNames: loadBalancer, clusterCa: ClusterCa);
         if (loadBalancer) await CloudProvider.EnsureRunning(Context.Length > 0 ? Context : "default", log);
         log($"kubectl now uses {KindKubeconfig.Key(name)}, from {file}");
     }
+
+    static Task<string> ClusterCa(string cluster) =>
+        CertManager.FromToolbox(Toolbox.Locate() ?? throw new InvalidOperationException("The Dockyard Toolbox is not installed next to this command"), cluster);
 
     public async Task Recreate(string name, string? definition)
     {
@@ -70,7 +73,7 @@ sealed class Clusters(Action<string> log)
         await DeleteWithProxies(actions, name);
         var remade = saved with { Yaml = definition, Addons = helm is null ? [] : saved.Addons };
         ClusterDefinitions.Save(name, remade);
-        await actions.Create(name, log, storage: remade.Storage, addons: remade.AddonList, helm: helm, definition: remade.Yaml, publishNames: remade.LoadBalancer);
+        await actions.Create(name, log, storage: remade.Storage, addons: remade.AddonList, helm: helm, definition: remade.Yaml, publishNames: remade.LoadBalancer, clusterCa: ClusterCa);
         if (remade.LoadBalancer) await CloudProvider.EnsureRunning(Context.Length > 0 ? Context : "default", log);
         log($"{name} is made again from its definition");
     }
