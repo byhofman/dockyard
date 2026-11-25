@@ -168,47 +168,52 @@
       </Border>
 
       <Border DockPanel.Dock="Bottom" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="14,4">
-        <Grid ColumnDefinitions="Auto,*,Auto">
-          <ProgressBar IsIndeterminate="True" IsVisible="{Binding Activity.IsWorking}" Width="60" MinWidth="60" Margin="0,0,10,0" VerticalAlignment="Center" />
-          <Button x:Name="ActivityButton" Grid.Column="1" Padding="0" Background="Transparent" BorderThickness="0" HorizontalAlignment="Left"
+        <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+          <Button Classes="iconbtn" Command="{Binding Activity.ToggleCommand}" Margin="-6,0,6,0" ToolTip.Tip="The activity log" AutomationProperties.Name="Activity log">
+            <PathIcon Data="{StaticResource IconLogs}" Width="14" Height="14" />
+          </Button>
+          <ProgressBar Grid.Column="1" IsIndeterminate="True" IsVisible="{Binding Activity.IsWorking}" Width="60" MinWidth="60" Margin="0,0,10,0" VerticalAlignment="Center" />
+          <Button x:Name="ActivityButton" Grid.Column="2" Padding="0" Background="Transparent" BorderThickness="0" HorizontalAlignment="Left"
                   Command="{Binding Activity.ToggleCommand}" ToolTip.Tip="Show or hide what the dashboard did" AutomationProperties.Name="Activity">
             <TextBlock Classes="muted small" Classes.activityerror="{Binding Activity.CurrentIsError}" Text="{Binding Activity.Current}" TextTrimming="CharacterEllipsis" />
           </Button>
-          <Popup Grid.Column="1" PlacementTarget="{Binding #ActivityButton}" Placement="TopEdgeAlignedLeft" VerticalOffset="-6"
-                 IsOpen="{Binding Activity.IsOpen, Mode=TwoWay}" IsLightDismissEnabled="True">
-            <Border Classes="searchmenu" Width="680" MaxHeight="420" Padding="0">
-              <DockPanel>
-                <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto" Margin="14,10,10,6">
-                  <TextBlock Classes="section" Text="ACTIVITY" VerticalAlignment="Center" />
-                  <Button Grid.Column="1" Classes="link" Content="Copy" Click="CopyActivity" IsEnabled="{Binding Activity.HasLines}"
-                          ToolTip.Tip="Copy the whole log" />
-                  <Button Grid.Column="2" Classes="link" Content="Clear" Command="{Binding Activity.ClearCommand}" IsEnabled="{Binding Activity.HasLines}" Margin="10,0,0,0" />
-                </Grid>
-                <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource Line}" />
-                <TextBlock DockPanel.Dock="Top" Classes="muted small" IsVisible="{Binding !Activity.HasLines}" TextWrapping="Wrap" Margin="14,12"
-                           Text="Nothing yet. What the dashboard does, such as starting containers or making clusters, shows up here." />
-                <ScrollViewer x:Name="ActivityScroll" Padding="0,6">
-                  <ItemsControl ItemsSource="{Binding Activity.Lines}">
-                    <ItemsControl.ItemTemplate>
-                      <DataTemplate x:DataType="shell:ActivityEntry">
-                        <Grid ColumnDefinitions="64,14,*" Margin="14,1,14,1" Classes.activitystep="{Binding IsStep}">
-                          <TextBlock Classes="muted small" Text="{Binding TimeText}" VerticalAlignment="Top" Margin="0,1,0,0" />
-                          <Ellipse Grid.Column="1" Classes="activitydot" Classes.step="{Binding IsStep}" Classes.info="{Binding IsInfo}" Classes.error="{Binding IsError}"
-                                   IsVisible="{Binding !IsDetail}" VerticalAlignment="Top" Margin="0,5,0,0" />
-                          <SelectableTextBlock Grid.Column="2" Classes="activity" Classes.step="{Binding IsStep}" Classes.detail="{Binding IsDetail}"
-                                               Classes.command="{Binding IsCommand}" Classes.error="{Binding IsError}"
-                                               Text="{Binding Text}" TextWrapping="Wrap" />
-                        </Grid>
-                      </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                  </ItemsControl>
-                </ScrollViewer>
-              </DockPanel>
-            </Border>
-          </Popup>
-          <TextBlock Grid.Column="2" Classes="muted small" Text="{x:Static shell:ShellViewModel.Version}" VerticalAlignment="Center" Margin="12,0,0,0"
+
+          <TextBlock Grid.Column="3" Classes="muted small" Text="{x:Static shell:ShellViewModel.Version}" VerticalAlignment="Center" Margin="12,0,0,0"
                      ToolTip.Tip="Dockyard's version" />
         </Grid>
+      </Border>
+
+      <Border DockPanel.Dock="Bottom" Height="260" IsVisible="{Binding Activity.IsOpen}" Background="{DynamicResource Bg}"
+              BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0">
+        <DockPanel>
+          <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="14,6,8,4">
+            <PathIcon Data="{StaticResource IconLogs}" Width="14" Height="14" Foreground="{DynamicResource Muted}" Margin="0,0,8,0" />
+            <TextBlock Grid.Column="1" Classes="section" Text="ACTIVITY" VerticalAlignment="Center" />
+            <Button Grid.Column="2" Classes="link" Content="Copy" Click="CopyActivity" IsEnabled="{Binding Activity.HasLines}" ToolTip.Tip="Copy the whole log" />
+            <Button Grid.Column="3" Classes="link" Content="Clear" Command="{Binding Activity.ClearCommand}" IsEnabled="{Binding Activity.HasLines}" Margin="10,0,6,0" />
+            <Button Grid.Column="4" Classes="iconbtn" Command="{Binding Activity.ToggleCommand}" ToolTip.Tip="Close">
+              <PathIcon Data="{StaticResource IconClose}" Width="12" Height="12" />
+            </Button>
+          </Grid>
+          <TextBlock DockPanel.Dock="Top" Classes="muted small mono" IsVisible="{Binding !Activity.HasLines}" TextWrapping="Wrap" Margin="14,8"
+                     Text="Nothing yet. What the dashboard does, such as starting containers or making clusters, shows up here." />
+          <ScrollViewer x:Name="ActivityScroll" Padding="0,2,0,8">
+            <ItemsControl ItemsSource="{Binding Activity.Lines}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="shell:ActivityEntry">
+                  <Grid ColumnDefinitions="70,14,*" Margin="14,0,14,0" Classes.activitystep="{Binding IsStep}">
+                    <TextBlock Classes="muted mono small" Text="{Binding TimeText}" VerticalAlignment="Top" Margin="0,1,0,0" />
+                    <Ellipse Grid.Column="1" Classes="activitydot" Classes.step="{Binding IsStep}" Classes.info="{Binding IsInfo}" Classes.error="{Binding IsError}"
+                             IsVisible="{Binding !IsDetail}" VerticalAlignment="Top" Margin="0,5,0,0" />
+                    <SelectableTextBlock Grid.Column="2" Classes="activity console" Classes.step="{Binding IsStep}" Classes.detail="{Binding IsDetail}"
+                                         Classes.command="{Binding IsCommand}" Classes.error="{Binding IsError}"
+                                         Text="{Binding Text}" TextWrapping="Wrap" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </DockPanel>
       </Border>
 
       <Grid ColumnDefinitions="170,*">

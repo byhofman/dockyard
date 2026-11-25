@@ -84,27 +84,36 @@
     </Border>
 
     <Border DockPanel.Dock="Bottom" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="20,8">
-      <Grid ColumnDefinitions="Auto,*,Auto">
-        <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" Width="80" MinWidth="80" VerticalAlignment="Center" Margin="0,0,12,0" />
-        <Button x:Name="StatusButton" Grid.Column="1" Classes="link" Padding="0" Background="Transparent" BorderThickness="0" HorizontalAlignment="Left"
+      <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+        <Button Classes="link" Padding="2" Margin="-4,0,8,0" Command="{Binding ToggleLogCommand}" ToolTip.Tip="The activity log" AutomationProperties.Name="Activity log">
+          <PathIcon Data="{StaticResource IconLogs}" Width="14" Height="14" />
+        </Button>
+        <ProgressBar Grid.Column="1" IsIndeterminate="True" IsVisible="{Binding IsBusy}" Width="80" MinWidth="80" VerticalAlignment="Center" Margin="0,0,12,0" />
+        <Button x:Name="StatusButton" Grid.Column="2" Classes="link" Padding="0" Background="Transparent" BorderThickness="0" HorizontalAlignment="Left"
                 Command="{Binding ToggleLogCommand}" ToolTip.Tip="Show or hide what Dockyard did" AutomationProperties.Name="Activity">
           <TextBlock Classes="muted" Text="{Binding Status}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
         </Button>
-        <Popup Grid.Column="1" PlacementTarget="{Binding #StatusButton}" Placement="TopEdgeAlignedLeft" VerticalOffset="-8"
-               IsOpen="{Binding ShowLog, Mode=TwoWay}" IsLightDismissEnabled="True">
-          <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="10"
-                  Width="620" MaxHeight="360" Padding="12,10">
-            <ScrollViewer x:Name="LogScroll">
-              <Panel>
-                <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" IsVisible="{Binding !HasLog}"
-                           Text="Nothing yet. What Dockyard does, such as installing, updating or starting an engine, shows up here." />
-                <SelectableTextBlock x:Name="LogBox" Classes="mono" FontSize="12" Text="{Binding LogText}" TextWrapping="Wrap" IsVisible="{Binding HasLog}" />
-              </Panel>
-            </ScrollViewer>
-          </Border>
-        </Popup>
-        <TextBlock Grid.Column="2" Classes="muted mono" Text="{Binding Version}" VerticalAlignment="Center" />
+
+        <TextBlock Grid.Column="3" Classes="muted mono" Text="{Binding Version}" VerticalAlignment="Center" />
       </Grid>
+    </Border>
+
+    <Border DockPanel.Dock="Bottom" Height="240" IsVisible="{Binding ShowLog}" Background="{DynamicResource Bg}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0">
+      <DockPanel>
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto,Auto" Margin="20,6,14,4">
+          <PathIcon Data="{StaticResource IconLogs}" Width="14" Height="14" Foreground="{DynamicResource Muted}" Margin="0,0,8,0" />
+          <TextBlock Grid.Column="1" Classes="muted" FontSize="11" FontWeight="SemiBold" Text="ACTIVITY" VerticalAlignment="Center" />
+          <Button Grid.Column="2" Classes="link" Content="Copy" Click="CopyLog" IsEnabled="{Binding HasLog}" ToolTip.Tip="Copy the whole log" Margin="0,0,10,0" />
+          <Button Grid.Column="3" Classes="link" Content="Close" Command="{Binding ToggleLogCommand}" />
+        </Grid>
+        <ScrollViewer x:Name="LogScroll" Padding="20,2,20,8">
+          <Panel>
+            <TextBlock Classes="muted mono" FontSize="12" TextWrapping="Wrap" IsVisible="{Binding !HasLog}"
+                       Text="Nothing yet. What Dockyard does, such as installing, updating or starting an engine, shows up here." />
+            <SelectableTextBlock x:Name="LogBox" Classes="mono" FontSize="12" Text="{Binding LogText}" TextWrapping="Wrap" IsVisible="{Binding HasLog}" />
+          </Panel>
+        </ScrollViewer>
+      </DockPanel>
     </Border>
 
     <ScrollViewer>
