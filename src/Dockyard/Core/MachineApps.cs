@@ -75,7 +75,7 @@ static class MachineApps
     // there from every ASR rule. Earlier versions also excluded the installer wherever it ran, and the one-liner asks for
     // its own download path when Defender blocks it, so uninstall takes those back too.
     static IEnumerable<string> ExcludedFromAsr => new[] { Paths.AppExe, Paths.DashboardExe };
-    public static IEnumerable<string> EverExcludedFromAsr => ExcludedFromAsr.Append(Paths.LegacyDashboardExe).Append(Paths.OneLinerExe);
+    public static IEnumerable<string> EverExcludedFromAsr => ExcludedFromAsr.Append(Paths.LegacyDashboardExe).Append(Paths.OneLinerExe).Concat(WingetToolFiles);
 
     // Defender's prevalence/age rule (event 1121) blocks every new build, and an exclusion goes by path because a hash changes with each build.
     public static async Task AddDefenderExclusions(Action<string> log)
@@ -85,6 +85,17 @@ static class MachineApps
             $"Add-MpPreference -AttackSurfaceReductionOnlyExclusions {string.Join(',', paths)}");
         log(r.ExitCode == 0 ? "Defender: Dockyard is excluded from the prevalence rule" : "Defender exclusions were not added (managed device?); ask your administrator if Defender blocks Dockyard");
     }
+
+    // winget's tools in Program Files: a new release would not run until Defender found it common.
+    public static void ExcludeFromAsr(IReadOnlyList<string> files)
+    {
+        var inProgramFiles = files.Where(f => Path.GetFullPath(f).StartsWith(Hosts.Winget.MachinePackages + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (inProgramFiles.Count == 0) return;
+        Shell.Run("powershell.exe", "-NoProfile", "-Command",
+            $"Add-MpPreference -AttackSurfaceReductionOnlyExclusions {string.Join(',', inProgramFiles.Select(Shell.PsQuote))}").GetAwaiter().GetResult();
+    }
+
+    public static IEnumerable<string> WingetToolFiles => Tools.All.SelectMany(Hosts.Winget.MachineFiles);
 
     public static async Task InstallApp(Action<string> log, string source, int keepPid, bool engineOnly, string? dashboardDir)
     {

@@ -18,8 +18,10 @@ interface IPackageManager
     Task Remove(Action<string> log, CliTool tool);
 }
 
-// winget's portable packages, in the user's scope: no administrator needed, and `winget upgrade` keeps them current.
-sealed class Winget(ICommandRunner runner) : IPackageManager
+// winget's portable packages for the whole machine, in Program Files where only administrators write: Dockyard runs it in
+// its administrator step, and excludes exactly those files from Defender's rule against files too new to be common, as it
+// does for its own. A tool Windows still will not run counts as not installed, and Dockyard's own copy takes its place.
+sealed class Winget(ICommandRunner runner, Action<IReadOnlyList<string>>? exclude = null) : IPackageManager
 {
     // Success as winget reports it: nothing newer to install, already installed, or not installed at all.
     const int NoApplicableUpgrade = unchecked((int)0x8A15002B);
@@ -28,24 +30,32 @@ sealed class Winget(ICommandRunner runner) : IPackageManager
 
     static string LocalAppData => Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
     static string ProgramFiles => Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-    static readonly string[] LinkDirs = [Path.Combine(LocalAppData, "Microsoft", "WinGet", "Links"), Path.Combine(ProgramFiles, "WinGet", "Links")];
-    static readonly string[] PackageDirs = [Path.Combine(LocalAppData, "Microsoft", "WinGet", "Packages"), Path.Combine(ProgramFiles, "WinGet", "Packages")];
+    static readonly string[] LinkDirs = [Path.Combine(ProgramFiles, "WinGet", "Links")];
+    public static readonly string MachinePackages = Path.Combine(ProgramFiles, "WinGet", "Packages");
+    static readonly string[] UserLinkDirs = [Path.Combine(LocalAppData, "Microsoft", "WinGet", "Links")];
+    static readonly string[] UserPackageDirs = [Path.Combine(LocalAppData, "Microsoft", "WinGet", "Packages")];
 
     // The App Installer alias: an elevated process does not always have WindowsApps on its PATH.
     static string Exe => Path.Combine(LocalAppData, "Microsoft", "WindowsApps", "winget.exe") is var alias && File.Exists(alias) ? alias : "winget";
 
     public string Name => "winget";
 
-    // A link where winget could make one. Without Developer Mode an unelevated winget cannot, and puts the package's own
-    // folder on the PATH instead; the file there has the command's name too.
-    public static string? Command(CliTool tool) => Command(tool, LinkDirs, PackageDirs);
+    public static string? Command(CliTool tool) => Command(tool, LinkDirs, [MachinePackages]);
 
+    // One an earlier Dockyard installed for the user, or the user did: it takes over once the machine's is in place.
+    public static string? UserCommand(CliTool tool) => Command(tool, UserLinkDirs, UserPackageDirs);
+
+    // A link where winget could make one; the file in the package's own folder, which has the command's name too, otherwise.
     internal static string? Command(CliTool tool, IEnumerable<string> linkDirs, IEnumerable<string> packageDirs) =>
         linkDirs.Select(d => Path.Combine(d, tool.Command + ".exe")).FirstOrDefault(File.Exists)
-        ?? packageDirs.Where(Directory.Exists)
-            .SelectMany(d => Directory.EnumerateDirectories(d, tool.Winget + "_*"))
-            .SelectMany(d => Directory.EnumerateFiles(d, tool.Command + ".exe", SearchOption.AllDirectories))
-            .FirstOrDefault();
+        ?? Files(tool, packageDirs).FirstOrDefault();
+
+    static IEnumerable<string> Files(CliTool tool, IEnumerable<string> packageDirs) => packageDirs.Where(Directory.Exists)
+        .SelectMany(d => Directory.EnumerateDirectories(d, tool.Winget + "_*"))
+        .SelectMany(d => Directory.EnumerateFiles(d, tool.Command + ".exe", SearchOption.AllDirectories));
+
+    // What Defender has to let run: the files themselves, which the links point at.
+    public static IReadOnlyList<string> MachineFiles(CliTool tool) => Files(tool, [MachinePackages]).ToList();
 
     public async Task<bool> IsAvailable()
     {
@@ -53,11 +63,11 @@ sealed class Winget(ICommandRunner runner) : IPackageManager
         catch (System.ComponentModel.Win32Exception) { return false; }
     }
 
-    // A copy that cannot run counts as none: Defender's prevalence rule (attack surface reduction, event 1121), which
-    // organisations turn on, blocks a release too new to be common, and then Dockyard's own copy has to do.
-    public async Task<Version?> Installed(CliTool tool)
+    public Task<Version?> Installed(CliTool tool) => VersionOf(Command(tool), tool);
+
+    async Task<Version?> VersionOf(string? command, CliTool tool)
     {
-        if (Command(tool) is not { } command) return null;
+        if (command is null) return null;
         try { return Updates.ParseVersion((await runner.Run(command, tool.VersionArgs)).Output); }
         catch (System.ComponentModel.Win32Exception) { return null; }
     }
@@ -65,36 +75,40 @@ sealed class Winget(ICommandRunner runner) : IPackageManager
     public async Task<Version?> Available(CliTool tool) =>
         VersionAfterId((await runner.Run(Exe, "search", "--id", tool.Winget, "--exact", "--source", "winget", "--accept-source-agreements", "--disable-interactivity")).Output, tool.Winget);
 
-    // An administrator's winget cannot change a package it installed for the user: an upgrade loses the command and still
-    // reports success, and an uninstall is refused. So an elevated Dockyard only adds what is missing.
-    static bool Elevated => OperatingSystem.IsWindows() && Elevation.IsElevated;
-
     public async Task Install(Action<string> log, CliTool tool)
     {
-        if (Elevated && Command(tool) is not null)
-        {
-            if (await Installed(tool) is null)
-                throw new InvalidOperationException($"Windows does not let winget's {tool.Command} run, likely Defender's rule against files too new to be common");
-            log($"{tool.Title} came from winget; `winget upgrade {tool.Winget}` in a terminal without administrator rights updates it");
-            return;
-        }
-        log($"{tool.Title}: winget install {tool.Winget}");
-        var r = await runner.Run(Exe, "install", "--id", tool.Winget, "--exact", "--source", "winget", "--silent",
+        log($"{tool.Title}: winget install --scope machine {tool.Winget}");
+        var r = await runner.Run(Exe, "install", "--id", tool.Winget, "--exact", "--source", "winget", "--scope", "machine", "--silent",
             "--accept-package-agreements", "--accept-source-agreements", "--disable-interactivity");
         if (r.ExitCode is not (0 or NoApplicableUpgrade or AlreadyInstalled))
             throw new InvalidOperationException($"winget could not install {tool.Winget} ({r.ExitCode:X8}): {LastLine(r)}");
         if (Command(tool) is null) throw new InvalidOperationException($"winget installed {tool.Winget} but left no {tool.Command} command");
-        if (await Installed(tool) is null)
-            throw new InvalidOperationException($"Windows does not let winget's {tool.Command} run, likely Defender's rule against files too new to be common");
+        exclude?.Invoke(MachineFiles(tool));
+        // Defender takes a moment to apply a new exclusion.
+        for (var attempt = 0; await Installed(tool) is null; attempt++)
+        {
+            if (attempt == 5) throw new InvalidOperationException($"Windows does not let winget's {tool.Command} run, likely Defender's rule against files too new to be common");
+            await Task.Delay(TimeSpan.FromSeconds(2));
+        }
     }
 
     public async Task Remove(Action<string> log, CliTool tool)
     {
-        if (Elevated) throw new InvalidOperationException($"winget does not remove {tool.Winget} from a process with administrator rights: `winget uninstall {tool.Winget}` in a normal terminal does");
-        var r = await runner.Run(Exe, "uninstall", "--id", tool.Winget, "--exact", "--source", "winget", "--silent", "--accept-source-agreements", "--disable-interactivity");
+        var r = await runner.Run(Exe, "uninstall", "--id", tool.Winget, "--exact", "--source", "winget", "--scope", "machine", "--silent",
+            "--accept-source-agreements", "--disable-interactivity");
         if (r.ExitCode is not (0 or NotInstalled))
             throw new InvalidOperationException($"winget could not remove {tool.Winget} ({r.ExitCode:X8}): {LastLine(r)}");
         log($"Removed {tool.Title} (winget {tool.Winget})");
+    }
+
+    // The user's copy, from a process without administrator rights, which is the only kind winget lets remove it.
+    public async Task RemoveUserCopy(Action<string> log, CliTool tool)
+    {
+        if (UserCommand(tool) is null) return;
+        var r = await runner.Run(Exe, "uninstall", "--id", tool.Winget, "--exact", "--source", "winget", "--scope", "user", "--silent",
+            "--accept-source-agreements", "--disable-interactivity");
+        if (r.ExitCode is 0 or NotInstalled) log($"{tool.Title}: the copy winget installed for you makes way for the machine's");
+        else log($"{tool.Title}: winget could not remove the copy it installed for you ({r.ExitCode:X8}); the machine's comes first on the PATH");
     }
 
     // winget's tables are in the display language, so the version is taken from what follows the id on its row.

@@ -6,9 +6,8 @@ namespace Dockyard.Core;
 static class MachineSetup
 {
     // Returns true when a reboot is needed.
-    // packageManaged: the tools winget brought, whose copies in Program Files go.
     public static async Task<bool> Install(Action<string> log, string userSid, string userName, int keepPid, bool engineOnly, IReadOnlyCollection<string> without,
-        IReadOnlyCollection<string> packageManaged)
+        bool usePackageManager)
     {
         InUseFiles.CleanUp(Paths.DockerDir);
         var withWindows = !without.Contains(nameof(Component.Engine));
@@ -17,20 +16,8 @@ static class MachineSetup
         await MachineApps.AddDefenderExclusions(log);
         if (withWindows) await MachineEngine.Update(log, onlyIfNewer: true);
         else await MachineEngine.Remove(log);
-        if (packageManaged.Contains(nameof(Component.Cli))) MachineEngine.RemoveCli(log);
-        else await MachineEngine.UpdateCli(log, onlyIfNewer: true);
         MachineApps.AddToMachinePath(Paths.DockerDir);
-        foreach (var plugin in MachineApps.Plugins)
-        {
-            var id = plugin.Component.ToString();
-            if (without.Contains(id) || packageManaged.Contains(id)) MachineApps.RemovePlugin(log, plugin.Component);
-            else if (await Updates.Installed(plugin.Component) is not { } installed || installed < plugin.Release.Version) await MachineApps.UpdatePlugin(log, plugin.Component);
-        }
-        foreach (var tool in Tools.Standalone)
-        {
-            if (without.Contains(tool.Id) || packageManaged.Contains(tool.Id)) MachineApps.RemoveTool(log, tool);
-            else if (await Updates.Installed(Enum.Parse<Component>(tool.Id)) != Tools.Pinned(tool).Version) await MachineApps.InstallTool(log, tool);
-        }
+        await InstallTools(log, without, usePackageManager);
         await MachineApps.InstallCredentialHelper(log);
         if (without.Contains(nameof(Component.LinuxEngine))) await UnrouteDomains();
         else await RouteDomains(log);
@@ -40,14 +27,37 @@ static class MachineSetup
         return reboot;
     }
 
-    public static async Task Update(Action<string> log, Component component, string? source, int keepPid)
+    // A tool left out loses only Dockyard's own copy: winget's may be the user's. One that will not install is no reason to
+    // fail the rest, but docker is.
+    static async Task InstallTools(Action<string> log, IReadOnlyCollection<string> without, bool usePackageManager)
     {
+        var tools = MachineTools.For(usePackageManager);
+        if (tools.Packages is { } winget && !await winget.IsAvailable()) log("winget is not available, so the tools are Dockyard's own copies, in Program Files");
+        foreach (var tool in Tools.All)
+        {
+            if (without.Contains(tool.Id))
+            {
+                await tools.RemoveOwn(log, tool);
+                continue;
+            }
+            try { await tools.Ensure(log, tool); }
+            catch (Exception e) when (tool != Tools.Docker && e is InvalidOperationException or HttpRequestException or IOException)
+            {
+                log($"{tool.Title} was not installed ({e.Message}); running the wizard again retries it");
+            }
+        }
+    }
+
+    public static async Task Update(Action<string> log, Component component, string? source, int keepPid, bool usePackageManager)
+    {
+        if (Tools.Find(component.ToString()) is { } tool)
+        {
+            await MachineTools.For(usePackageManager).Install(log, tool);
+            return;
+        }
         switch (component)
         {
             case Component.Engine: await MachineEngine.Update(log, onlyIfNewer: false); break;
-            case Component.Cli: await MachineEngine.UpdateCli(log, onlyIfNewer: false); break;
-            case Component.Compose or Component.Buildx: await MachineApps.UpdatePlugin(log, component); break;
-            case Component.Kind or Component.Kubectl or Component.Helm: await MachineApps.InstallTool(log, Tools.Find(component.ToString())!); break;
             case Component.App:
                 // Defender's rule goes by path, and an update can bring the first dashboard with the new name.
                 await MachineApps.AddDefenderExclusions(log);
@@ -87,22 +97,17 @@ static class MachineSetup
         log($"Windows images and containers under {Path.GetDirectoryName(Paths.DaemonConfigDir)} were left in place");
     }
 
-    public static async Task SetComponent(Action<string> log, Component component, bool installed, string userSid, string userName)
+    public static async Task SetComponent(Action<string> log, Component component, bool installed, string userSid, string userName, bool usePackageManager)
     {
+        if (Tools.Find(component.ToString()) is { } tool)
+        {
+            var tools = MachineTools.For(usePackageManager);
+            if (installed) await tools.Install(log, tool);
+            else await tools.Remove(log, tool);
+            return;
+        }
         switch (component)
         {
-            case Component.Compose or Component.Buildx:
-                if (installed) await MachineApps.UpdatePlugin(log, component);
-                else MachineApps.RemovePlugin(log, component);
-                break;
-            case Component.Kind or Component.Kubectl or Component.Helm:
-                if (installed) await MachineApps.InstallTool(log, Tools.Find(component.ToString())!);
-                else MachineApps.RemoveTool(log, Tools.Find(component.ToString())!);
-                break;
-            case Component.Cli:
-                if (installed) await MachineEngine.UpdateCli(log, onlyIfNewer: false);
-                else MachineEngine.RemoveCli(log);
-                break;
             // The distro and its images are the user's half, in UserSetup. Only the engine answers those names.
             case Component.LinuxEngine:
                 if (installed) await RouteDomains(log);

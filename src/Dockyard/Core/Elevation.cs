@@ -146,13 +146,13 @@ static partial class Elevation
             if (args.Contains("--machine-update"))
             {
                 foreach (var name in Arg("--machine-update").Split(','))
-                    MachineSetup.Update(Log, Enum.Parse<Component>(name), Opt("--source"), keepPid).GetAwaiter().GetResult();
+                    MachineSetup.Update(Log, Enum.Parse<Component>(name), Opt("--source"), keepPid, Opt("--package-manager") != "off").GetAwaiter().GetResult();
                 return 0;
             }
             if (Opt("--machine-component") is { } component)
             {
                 var change = args.SkipWhile(a => a != "--machine-component").Skip(2).First();
-                MachineSetup.SetComponent(Log, Enum.Parse<Component>(component), change == "add", Arg("--user-sid"), Arg("--user-name")).GetAwaiter().GetResult();
+                MachineSetup.SetComponent(Log, Enum.Parse<Component>(component), change == "add", Arg("--user-sid"), Arg("--user-name"), Opt("--package-manager") != "off").GetAwaiter().GetResult();
                 return 0;
             }
             if (Opt("--machine-dashboard") == "update")
@@ -180,7 +180,7 @@ static partial class Elevation
                 MachineSetup.SetDashboard(Log, dashboard == "add", keepPid).GetAwaiter().GetResult();
                 return 0;
             }
-            var reboot = MachineSetup.Install(Log, Arg("--user-sid"), Arg("--user-name"), keepPid, args.Contains("--engine-only"), Opt("--without")?.Split(',') ?? [], Opt("--package-managed")?.Split(',') ?? []).GetAwaiter().GetResult();
+            var reboot = MachineSetup.Install(Log, Arg("--user-sid"), Arg("--user-name"), keepPid, args.Contains("--engine-only"), Opt("--without")?.Split(',') ?? [], Opt("--package-manager") != "off").GetAwaiter().GetResult();
             return reboot ? RebootExitCode : 0;
         }
         catch (Exception ex)

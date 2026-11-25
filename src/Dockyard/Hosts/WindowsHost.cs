@@ -81,15 +81,12 @@ sealed class WindowsHost : IEngineHost
     {
         var parsed = components.Select(c => (Component: Enum.Parse<Component>(c.Component), c.Release)).ToList();
 
-        List<Component> machine = [];
-        foreach (var (component, _) in parsed)
-        {
-            if (Tools.Find(component.ToString()) is { } tool && await tools.IsManaged(tool)) await winget.Install(log, tool);
-            else if (component is Component.Engine or Component.Cli or Component.Compose or Component.Buildx or Component.Kind or Component.Kubectl or Component.Helm)
-                machine.Add(component);
-        }
+        var machine = parsed.Select(c => c.Component).Where(c => c == Component.Engine || Tools.Find(c.ToString()) is not null).ToList();
         if (machine.Count > 0)
-            await Elevation.Run(log, "--machine-update", string.Join(',', machine));
+        {
+            await WindowsSetup.MachineUpdate(log, machine);
+            await FindWingetPlugins(log);
+        }
 
         if (parsed.FirstOrDefault(c => c.Component == Component.LinuxEngine) is { Release: { } linux })
             await wsl.Update(log, linux);
@@ -133,8 +130,9 @@ sealed class WindowsHost : IEngineHost
         }
         if (Tools.Find(component) is { } tool)
         {
-            if (!installed) await tools.Remove(log, tool);
-            else if (await tools.Install(log, tool)) await FindWingetPlugins(log);
+            if (installed) await RemoveUserCopy(log, tool);
+            await WindowsSetup.MachineComponent(log, component, installed);
+            if (installed) await FindWingetPlugins(log);
             return false;
         }
         await WindowsSetup.MachineComponent(log, component, installed);
@@ -204,9 +202,9 @@ sealed class WindowsHost : IEngineHost
 
     public async Task<bool> Install(Action<string> log, InstallRequest request)
     {
-        var packageManaged = await InstallWithWinget(log, request.Without);
+        foreach (var tool in Tools.All.Where(t => !request.Without.Contains(t.Id))) await RemoveUserCopy(log, tool);
         log("Administrator step");
-        var reboot = await WindowsSetup.MachineInstall(log, request.Dashboard, request.Without, packageManaged);
+        var reboot = await WindowsSetup.MachineInstall(log, request.Dashboard, request.Without);
         log("User step");
         var withLinux = !request.Without.Contains(nameof(Component.LinuxEngine));
         var hadDistro = withLinux && await distro.Exists();
@@ -227,24 +225,12 @@ sealed class WindowsHost : IEngineHost
         return reboot;
     }
 
-    // Before the administrator step, which then takes away the copies Dockyard put in Program Files for these. A tool left
-    // out stays as it is in winget: it may be the user's own.
-    async Task<IReadOnlyCollection<string>> InstallWithWinget(Action<string> log, IReadOnlyCollection<string> without)
+    // A copy winget installed for the user would keep winget from installing the machine's, and only a process without
+    // administrator rights may remove it.
+    async Task RemoveUserCopy(Action<string> log, CliTool tool)
     {
-        if (tools.Packages is null)
-        {
-            log("The tools are Dockyard's own copies, in Program Files");
-            return [];
-        }
-        if (!await winget.IsAvailable())
-        {
-            log("winget is not available, so Dockyard puts its own copies of the tools in Program Files");
-            return [];
-        }
-        List<string> managed = [];
-        foreach (var tool in Tools.All.Where(t => !without.Contains(t.Id)))
-            if (await tools.FromPackageManager(log, tool)) managed.Add(tool.Id);
-        return managed;
+        if (tools.Packages is null || Winget.UserCommand(tool) is null || !await winget.IsAvailable()) return;
+        await winget.RemoveUserCopy(log, tool);
     }
 
     static async Task FindWingetPlugins(Action<string> log)
