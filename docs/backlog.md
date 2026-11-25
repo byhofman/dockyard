@@ -18,6 +18,7 @@ IDs are permanent: never renumber or reuse one.
 - [x] DOK-20 On macOS, uninstall removes the CA trust setting along with the certificate (pulled in from Later by the owner, 2026-11-07, SCOPE.md; from the window and the wizard, where a person can approve it; a silent uninstall leaves it and says so)
 - [ ] DOK-41 A silent install of just the engine and the docker CLI, without the Toolbox, dashboard or tray, for a machine like Windows Server: one line in the README per OS (owner 2026-11-25, a version after 0.9.0)
 - [ ] DOK-42 Resource saver: when no container has run for a few minutes, the engine drops Linux's page cache so the WSL VM (vmmemWSL) and the Mac VM give the memory back; optionally the engine stops after a longer idle time, and starts again on the next docker command. Never by changing the user's .wslconfig (owner 2026-11-25, a version after 0.9.0)
+- [ ] DOK-43 Declared domains: a domain of your own outside dockyard.internal (such as dev.example.com) that clusters publish to through external-dns and Dockyard answers for, approved once per domain, with a root CA of its own constrained to that domain, and a warning when the domain exists publicly (owner 2026-11-25, a version after 0.9.0 unless pulled in)
 
 ## Networking
 
