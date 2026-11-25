@@ -36,18 +36,6 @@
           <TextBlock Classes="muted small" Text="{Binding Busy}" />
         </StackPanel>
       </StackPanel>
-      <Border DockPanel.Dock="Bottom" IsVisible="{Binding HasOutput}" MaxHeight="180" Margin="16,4,16,12"
-              Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="6">
-        <ScrollViewer>
-          <ItemsControl ItemsSource="{Binding Output}" Margin="10,6">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="x:String">
-                <SelectableTextBlock Classes="mono small" Text="{Binding}" TextWrapping="Wrap" />
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-        </ScrollViewer>
-      </Border>
       <ListBox x:Name="List" Classes="rows" ItemsSource="{Binding Rows}" SelectionMode="Multiple" SelectedItems="{Binding SelectedItems}" Padding="0,4">
         <ListBox.ItemTemplate>
           <DataTemplate DataType="clu:KindCluster">
@@ -106,6 +94,12 @@
             </Button>
             <Button Command="{Binding CopyKubeconfigCommand}" ToolTip.Tip="kind get kubeconfig, onto the clipboard">
               <StackPanel Classes="label"><PathIcon Data="{StaticResource IconCopy}" /><TextBlock Text="Copy kubeconfig" /></StackPanel>
+            </Button>
+            <Button Command="{Binding DuplicateCommand}" ToolTip.Tip="A new cluster from this one's definition">
+              <StackPanel Classes="label"><PathIcon Data="{StaticResource IconCopy}" /><TextBlock Text="Duplicate…" /></StackPanel>
+            </Button>
+            <Button Command="{Binding RecreateCommand}" ToolTip.Tip="Its definition, to change and make the cluster again from">
+              <StackPanel Classes="label"><PathIcon Data="{StaticResource IconRestart}" /><TextBlock Text="Definition…" /></StackPanel>
             </Button>
             <Button Classes="danger" Command="{Binding DeleteCommand}" ToolTip.Tip="Delete (Del)">
               <StackPanel Classes="label"><PathIcon Data="{StaticResource IconDelete}" /><TextBlock Text="Delete…" /></StackPanel>

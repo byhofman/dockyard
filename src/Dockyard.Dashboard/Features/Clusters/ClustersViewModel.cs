@@ -7,7 +7,6 @@ namespace Dockyard.Dashboard.Features.Clusters;
 
 sealed class ClustersViewModel : SelectableSection<KindCluster>
 {
-    const int OutputLines = 200;
     public static readonly IReadOnlyList<string> WorkerChoices = ["None", "1", "2", "3"];
     readonly DashboardSettings settings;
     List<KindCluster> all = [];
@@ -25,6 +24,8 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         DeleteRowCommand = new Command<KindCluster>(c => { AskDelete([c]); return Task.CompletedTask; });
         CopyKubeconfigCommand = new Command(CopyKubeconfig, () => HasKind && Selected is { IsRunning: true });
         UseContextCommand = new Command(UseContext, () => !IsBusy && HasKind && Selected is { IsRunning: true });
+        DuplicateCommand = new Command(() => { if (Selected is { } c) AskDuplicate(c); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine && Selected is not null);
+        RecreateCommand = new Command(() => { if (Selected is { } c) AskRecreate(c); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine && Selected is not null);
         ToggleCommand = new Command(() => Selected is { } c ? Toggle(c) : Task.CompletedTask, () => !IsBusy && Selected is not null);
         ToggleRowCommand = new Command<KindCluster>(c => IsBusy ? Task.CompletedTask : Toggle(c));
         OpenUrlCommand = new Command<PublishedPort>(p =>
@@ -51,13 +52,14 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         PropertyChanged += (_, e) => { if (e.PropertyName == nameof(IsBusy)) RefreshCommands(); };
     }
 
-    public ObservableCollection<string> Output { get; } = [];
     public ObservableCollection<LoadBalancer> LoadBalancerRows { get; } = [];
     public Command CreateCommand { get; }
     public Command DeleteCommand { get; }
     public Command<KindCluster> DeleteRowCommand { get; }
     public Command CopyKubeconfigCommand { get; }
     public Command UseContextCommand { get; }
+    public Command DuplicateCommand { get; }
+    public Command RecreateCommand { get; }
     public Command ToggleCommand { get; }
     public Command<KindCluster> ToggleRowCommand { get; }
     public Command<PublishedPort> OpenUrlCommand { get; }
@@ -69,7 +71,6 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
 
     public bool HasKind => kind is not null;
     public bool NeedsLinuxEngine => Session.IsWindowsEngine;
-    public bool HasOutput => Output.Count > 0;
     public bool HasLoadBalancers => LoadBalancerRows.Count > 0;
 
     public bool LoadBalancersEnabled
@@ -167,6 +168,8 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         DeleteCommand.Refresh();
         CopyKubeconfigCommand.Refresh();
         UseContextCommand.Refresh();
+        DuplicateCommand.Refresh();
+        RecreateCommand.Refresh();
         ToggleCommand.Refresh();
     }
 
@@ -187,30 +190,74 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
 
     public static int Workers(string choice) => int.TryParse(choice, out var n) ? n : 0;
 
-    void AskCreate()
+    // The form writes the definition until it is changed by hand; a duplicate starts from the other cluster's.
+    void AskCreate(ClusterDefinition? from = null, string? fromName = null)
     {
         var name = new DialogField("Name", placeholder: "dev");
         var workers = new DialogField("Worker nodes", choices: WorkerChoices);
         var helm = CliLocator.Locate("helm");
-        var metrics = DialogField.Check($"metrics-server {ClusterAddons.MetricsServer.Version}: kubectl top and pod autoscaling", isChecked: true);
-        var traefik = DialogField.Check($"Traefik {ClusterAddons.Traefik.Version}: an ingress controller, reachable through its load balancer");
-        var message = "Each node is a container on the Linux engine. The first cluster pulls kind's node image, which takes a few minutes. Its context goes into your kubeconfig and becomes the current one."
+        var metrics = DialogField.Check($"metrics-server {ClusterAddons.MetricsServer.Version}: kubectl top and pod autoscaling", isChecked: from?.Addons.Contains(ClusterAddons.MetricsServer.Release) ?? true);
+        var traefik = DialogField.Check($"Traefik {ClusterAddons.Traefik.Version}: an ingress controller, reachable through its load balancer", isChecked: from?.Addons.Contains(ClusterAddons.Traefik.Release) ?? false);
+        string? generated = from is null ? KindCli.Config(0) : null;
+        var definition = DialogField.Code("Definition: kind's cluster config", from?.Yaml ?? generated!, Controls.CodeLanguage.Yaml, ClusterDefinitions.Problem);
+        var message = (fromName is null ? "Each node is a container on the Linux engine. The first cluster pulls kind's node image, which takes a few minutes. " : $"From {fromName}'s definition. ")
+            + "Its context goes into your kubeconfig and becomes the current one."
             + (helm is null ? " Add Helm in Dockyard's window to install metrics-server and Traefik with it." : "");
-        Shell.Open(new Dialog("Create a kind cluster", message,
-            "Create", d => Create(d, name.Value, Workers(workers.Value), d.Option, Addons(metrics, traefik), helm),
-            fields: helm is null ? [name, workers] : [name, workers, metrics, traefik],
+        List<DialogField> fields = [name, .. from is null ? [workers] : Array.Empty<DialogField>(), .. helm is null ? Array.Empty<DialogField>() : [metrics, traefik], definition];
+        Dialog? dialog = null;
+        dialog = new Dialog(fromName is null ? "Create a kind cluster" : $"Duplicate {fromName}", message, "Create",
+            d => Create(d, name.Value, definition.Text, d.Option, Addons(metrics, traefik, helm), helm),
+            fields: fields,
             optionText: "Shared storage: a storage class every node mounts at once (ReadWriteMany), with one folder for all clusters made with it. It can only be added now.",
-            canConfirm: _ => KindClusters.IsValidName(name.Value) && all.All(c => c.Name != name.Value)));
+            canConfirm: _ => KindClusters.IsValidName(name.Value) && all.All(c => c.Name != name.Value) && definition.Problem is null);
+        void Regenerate()
+        {
+            if (generated is null || definition.Text != generated) return;
+            generated = KindCli.Config(Workers(workers.Value), dialog.Option);
+            definition.Text = generated;
+        }
+        workers.Changed += Regenerate;
+        dialog.Option = from?.SharedStorage ?? false;
+        dialog.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(Dialog.Option)) Regenerate(); };
+        Shell.Open(dialog);
     }
 
-    static List<ClusterAddon> Addons(DialogField metrics, DialogField traefik) =>
+    static List<ClusterAddon> Addons(DialogField metrics, DialogField traefik, string? helm) => helm is null ? [] :
         [.. metrics.IsChecked ? [ClusterAddons.MetricsServer] : Array.Empty<ClusterAddon>(), .. traefik.IsChecked ? [ClusterAddons.Traefik] : Array.Empty<ClusterAddon>()];
 
-    Task Create(Dialog dialog, string name, int workers, bool sharedStorage, IReadOnlyList<ClusterAddon> addons, string? helm) => RunKind(dialog, async (actions, onLine) =>
+    Task Create(Dialog dialog, string name, string definition, bool sharedStorage, IReadOnlyList<ClusterAddon> addons, string? helm) => RunKind(dialog, async (actions, onLine) =>
     {
-        var file = await actions.Create(name, onLine, workers, sharedStorage, addons, helm);
+        ClusterDefinitions.Save(name, new ClusterDefinition(definition, sharedStorage, addons.Select(a => a.Release).ToList()));
+        var file = await actions.Create(name, onLine, sharedStorage: sharedStorage, addons: addons, helm: helm, definition: definition);
         Shell.ShowInfo($"kubectl now uses {KindKubeconfig.Key(name)}, from {file}");
     });
+
+    static ClusterDefinition DefinitionOf(KindCluster cluster) => ClusterDefinitions.Load(cluster.Name) ?? ClusterDefinitions.Guess(cluster);
+
+    void AskDuplicate(KindCluster cluster) => AskCreate(DefinitionOf(cluster), cluster.Name);
+
+    // kind cannot change a cluster: a changed definition means making it again, with everything in it gone.
+    void AskRecreate(KindCluster cluster)
+    {
+        var saved = ClusterDefinitions.Load(cluster.Name);
+        var current = saved ?? ClusterDefinitions.Guess(cluster);
+        var definition = DialogField.Code("Definition: kind's cluster config", current.Yaml, Controls.CodeLanguage.Yaml, ClusterDefinitions.Problem);
+        var addons = current.AddonList;
+        var message = (saved is null ? "Dockyard did not make this cluster, so this is put together from its nodes. " : "")
+            + "kind cannot change a cluster that exists: Recreate deletes it, with everything in it, and makes it again from this definition"
+            + (addons.Count > 0 ? $", with {string.Join(" and ", addons.Select(a => a.Title))}." : ".");
+        Shell.Open(new Dialog($"{cluster.Name}: definition", message, "Recreate", d => RunKind(d, async (actions, onLine) =>
+        {
+            var helm = CliLocator.Locate("helm");
+            d.Report($"Deleting {cluster.Name}");
+            await actions.Delete(cluster.Name, onLine);
+            await RemoveProxies(cluster.Name);
+            var remade = current with { Yaml = definition.Text, Addons = helm is null ? [] : current.Addons };
+            ClusterDefinitions.Save(cluster.Name, remade);
+            await actions.Create(cluster.Name, onLine, sharedStorage: remade.SharedStorage, addons: remade.AddonList, helm: helm, definition: remade.Yaml);
+            Shell.ShowInfo($"{cluster.Name} is made again from its definition");
+        }), danger: true, fields: [definition], canConfirm: _ => definition.Problem is null));
+    }
 
     void AskDelete(IReadOnlyList<KindCluster> clusters)
     {
@@ -222,6 +269,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
             {
                 await actions.Delete(c.Name, onLine);
                 await RemoveProxies(c.Name);
+                ClusterDefinitions.Remove(c.Name);
             })));
     }
 
@@ -236,16 +284,14 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     async Task RunKind(Dialog dialog, Func<KindActions, Action<string>, Task> action)
     {
         if (kind is not { } exe) throw new InvalidOperationException("kind is not installed.");
-        Output.Clear();
-        Raise(nameof(HasOutput));
         try
         {
+            // The dialog shows the step at hand and the footer's activity keeps every line, also once the dialog is hidden.
             await action(new KindActions(exe, Session.ContextName, kubeconfig), line => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
-                if (Output.Count == OutputLines) Output.RemoveAt(0);
-                Output.Add(line);
-                Raise(nameof(HasOutput));
-                if (line.Trim().Length > 0 && !dialog.IsClosed) dialog.Report(line.Trim());
+                if (line.Trim().Length == 0) return;
+                if (!dialog.IsClosed) dialog.Report(line.Trim());
+                else Shell.Activity.Note(line);
             }));
         }
         finally { await Reload(); }

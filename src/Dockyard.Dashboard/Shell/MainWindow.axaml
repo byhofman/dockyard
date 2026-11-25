@@ -5,6 +5,7 @@
         xmlns:res="using:Dockyard.Dashboard.Features.Resources"
         xmlns:clu="using:Dockyard.Dashboard.Features.Clusters"
         xmlns:eng="using:Dockyard.Dashboard.Features.Engine"
+        xmlns:ctl="using:Dockyard.Dashboard.Controls"
         x:Class="Dockyard.Dashboard.Shell.MainWindow"
         x:DataType="shell:ShellViewModel"
         Title="Dockyard Dashboard"
@@ -236,7 +237,7 @@
     <Panel x:Name="DialogLayer" IsVisible="{Binding HasDialog}">
       <Border Background="{DynamicResource Scrim}" Opacity="0.55" />
       <Border Classes="dialog" DataContext="{Binding Dialog}" x:DataType="shell:Dialog"
-              HorizontalAlignment="Center" VerticalAlignment="Center" Width="460" Margin="16"
+              HorizontalAlignment="Center" VerticalAlignment="Center" Width="{Binding Width}" Margin="16"
               Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="10" Padding="20,18">
         <StackPanel Spacing="12">
           <TextBlock Classes="title" Text="{Binding Title}" TextWrapping="Wrap" />
@@ -258,6 +259,8 @@
                   <CheckBox IsChecked="{Binding IsChecked}" IsVisible="{Binding IsCheck}" AutomationProperties.Name="{Binding Label}">
                     <TextBlock Text="{Binding Label}" TextWrapping="Wrap" />
                   </CheckBox>
+                  <ctl:CodeEditor Height="260" Language="{Binding Language}" Text="{Binding Text}" IsVisible="{Binding IsCode}" AutomationProperties.Name="{Binding Label}" />
+                  <TextBlock Foreground="{DynamicResource Bad}" FontSize="12" TextWrapping="Wrap" Text="{Binding Problem}" IsVisible="{Binding HasProblem}" />
                 </StackPanel>
               </DataTemplate>
             </ItemsControl.ItemTemplate>

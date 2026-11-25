@@ -6,17 +6,17 @@ sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
     // Returns the kubeconfig file the cluster's context went into.
     // Add-ons go in with helm once the cluster is in the kubeconfig, so a chart that fails leaves a cluster kubectl can reach.
     public async Task<string> Create(string name, Action<string>? onLine = null, int workers = 0, bool sharedStorage = false,
-        IReadOnlyList<ClusterAddon>? addons = null, string? helm = null)
+        IReadOnlyList<ClusterAddon>? addons = null, string? helm = null, string? definition = null)
     {
         var scratch = Directory.CreateTempSubdirectory("dockyard-kind-");
         try
         {
             var own = Path.Combine(scratch.FullName, "config");
             string? config = null;
-            if (workers > 0 || sharedStorage)
+            if (definition is not null || workers > 0 || sharedStorage)
             {
                 config = Path.Combine(scratch.FullName, "cluster.yaml");
-                await File.WriteAllTextAsync(config, KindCli.Config(workers, sharedStorage));
+                await File.WriteAllTextAsync(config, definition ?? KindCli.Config(workers, sharedStorage));
             }
             Check(await KindCli.Run(kind, dockerContext, KindCli.Create(name, own, config), onLine));
             if (sharedStorage) await SharedStorage.Install(dockerContext.Length > 0 ? dockerContext : "default", name, onLine);

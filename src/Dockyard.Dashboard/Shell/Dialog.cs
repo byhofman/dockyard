@@ -25,12 +25,22 @@ sealed class DialogField : Observable
 
     public static DialogField Check(string label, bool isChecked = false) => new(label, isChecked);
 
+    // A YAML or JSON text in the code editor; problem says what is wrong with it as it is typed.
+    public static DialogField Code(string label, string text, Controls.CodeLanguage language, Func<string, string?>? problem = null) =>
+        new(label, text) { IsCode = true, Language = language, problemOf = problem };
+
+    Func<string, string?>? problemOf;
+
     public string Label { get; }
     public string Placeholder { get; }
     public IReadOnlyList<string>? Choices { get; }
     public bool IsCheck { get; }
+    public bool IsCode { get; private init; }
+    public Controls.CodeLanguage Language { get; private init; }
     public bool IsChoice => Choices is not null;
-    public bool IsText => Choices is null && !IsCheck;
+    public bool IsText => Choices is null && !IsCheck && !IsCode;
+    public string? Problem => problemOf?.Invoke(text);
+    public bool HasProblem => Problem is not null;
     public bool HasLabel => !IsCheck;
     public event Action? Changed;
 
@@ -43,7 +53,12 @@ sealed class DialogField : Observable
     public string Text
     {
         get => text;
-        set { if (Set(ref text, value ?? "")) Changed?.Invoke(); }
+        set
+        {
+            if (!Set(ref text, value ?? "")) return;
+            Raise(nameof(Problem), nameof(HasProblem));
+            Changed?.Invoke();
+        }
     }
 
     public string? Choice
@@ -92,6 +107,7 @@ sealed class Dialog : Observable
     public bool IsDanger { get; }
     public bool IsPrimary => !IsDanger;
     public IReadOnlyList<DialogField> Fields { get; }
+    public double Width => Fields.Any(f => f.IsCode) ? 720 : 460;
     public string? OptionText { get; }
     public bool HasOption => OptionText is not null;
     public Command ConfirmCommand { get; }
