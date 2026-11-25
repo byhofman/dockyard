@@ -45,7 +45,7 @@ static partial class Updates
         Component.Kind or Component.Kubectl or Component.Helm => await OwnToolVersion(Tools.Find(c.ToString())!),
         Component.LinuxEngine => Settings.Load().RemovedComponents.Contains(nameof(Component.LinuxEngine)) ? null : await new WslDistro(ProcessRunner.Instance).DockerVersion(),
         // The wizard runs from elsewhere and can be newer than what is installed, so not this process's own version.
-        Component.App => File.Exists(Paths.AppExe) ? ParseVersion(System.Diagnostics.FileVersionInfo.GetVersionInfo(Paths.AppExe).ProductVersion) : null,
+        Component.App => File.Exists(Paths.InstalledAppExe) ? ParseVersion(System.Diagnostics.FileVersionInfo.GetVersionInfo(Paths.InstalledAppExe).ProductVersion) : null,
         _ => null,
     };
 

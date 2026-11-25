@@ -84,7 +84,12 @@ case "$reply" in 000 | 404) echo "no site over HTTPS before a certificate arrive
 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -keyout /tmp/k -out /tmp/c -days 2 -subj /CN=web.dockyard.internal -addext subjectAltName=DNS:web.dockyard.internal 2>/dev/null
 tls="$(awk 'NF {printf "%s\\n", $0}' /tmp/c)"; key="$(awk 'NF {printf "%s\\n", $0}' /tmp/k)"
 printf '{"op":"tls","cert":"%s","key":"%s"}\n' "$tls" "$key" | nc -w 3 127.0.0.1 12379 | grep -qv error && echo "the agent takes a certificate" || { echo "FAIL: certificate"; exit 1; }
-reply="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 --cacert /tmp/c --resolve web.dockyard.internal:12443:127.0.0.1 https://web.dockyard.internal:12443/)"
+# dockyard-proxy reloads its certificate a moment after the agent writes it.
+i=0; reply=""
+while [ $i -lt 15 ]; do
+  reply="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 --cacert /tmp/c --resolve web.dockyard.internal:12443:127.0.0.1 https://web.dockyard.internal:12443/ || true)"
+  [ "$reply" = 200 ] && break; i=$((i+1)); sleep 1
+done
 [ "$reply" = 200 ] && echo "a container answers over HTTPS, with that certificate" || { echo "FAIL: HTTPS: '$reply'"; exit 1; }
 printf '{"op":"domains"}\n' | nc -w 3 127.0.0.1 12379 | grep -q '"https":true' && echo "the agent says HTTPS is on" || { echo "FAIL: https flag"; exit 1; }
 

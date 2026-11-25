@@ -24,6 +24,8 @@ static class Paths
     // "Dockyard Dashboard.exe", and Dockyard.Dashboard.exe up to 0.2.1.
     public const string LegacyAppProcess = "Dockyard";
     public static readonly string LegacyAppExe = Path.Combine(AppDir, LegacyAppProcess + ".exe");
+    // The Toolbox as installed: an install from before 0.9.0 has it under its old name until this version replaces it.
+    public static string InstalledAppExe => File.Exists(AppExe) || !File.Exists(LegacyAppExe) ? AppExe : LegacyAppExe;
     public static readonly string[] LegacyDashboardProcesses = ["Dockyard Dashboard", "Dockyard.Dashboard"];
     public static IEnumerable<string> LegacyDashboardExes => LegacyDashboardProcesses.Select(p => Path.Combine(AppDir, p + ".exe"));
     public static IEnumerable<string> AnyDashboardExe => LegacyDashboardExes.Prepend(DashboardExe);

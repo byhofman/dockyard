@@ -360,7 +360,8 @@ apply_daemon_json() {
   install -m 0644 "$daemon_json" /etc/docker/daemon.json
   echo "Updated /etc/docker/daemon.json"
   has_systemd && systemctl is-active --quiet docker.service || return 0
-  if [ "${1:-}" = now ] || [ -z "$(docker ps -q 2>/dev/null)" ]; then
+  # Dockyard's own containers (DNS, proxy, etcd) always run and come back with the engine; only the user's count.
+  if [ "${1:-}" = now ] || [ "$(docker ps --format '{{.Label "dockyard.service"}}' 2>/dev/null | grep -c '^$' || true)" -eq 0 ]; then
     systemctl restart docker.service
   else
     echo "Containers are running, so this applies the next time Docker starts"

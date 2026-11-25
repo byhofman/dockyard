@@ -51,7 +51,7 @@ function Click($window, $name) {
     $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
 }
 
-$appExe = Join-Path $env:ProgramFiles 'Dockyard\Dockyard.exe'
+$appExes = 'dockyard-toolbox.exe', 'Dockyard.exe' | ForEach-Object { Join-Path $env:ProgramFiles "Dockyard\$_" }
 $process = if ($Assets) { Start-Process $Exe -ArgumentList '--assets', $Assets -PassThru } else { Start-Process $Exe -PassThru }
 $handedOver = $false
 try {
@@ -60,7 +60,7 @@ try {
         if (-not $process.HasExited -and $process.MainWindowHandle -ne 0) { return $auto::FromHandle($process.MainWindowHandle) }
         if ($process.HasExited) {
             if ($process.ExitCode -ne 0) { throw "FAIL the exe exited with $($process.ExitCode)" }
-            $tray = Get-Process Dockyard -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $appExe -and $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+            $tray = Get-Process dockyard-toolbox, Dockyard -ErrorAction SilentlyContinue | Where-Object { $_.Path -in $appExes -and $_.MainWindowHandle -ne 0 } | Select-Object -First 1
             if ($tray) { $script:handedOver = $true; $auto::FromHandle($tray.MainWindowHandle) }
         }
     }

@@ -203,7 +203,7 @@ if ($Wizard) {
     # The relay holds 80 and 443 on 127.77.0.1, which must not keep a web server from taking those ports on every address.
     if ($free80) { Check 'a web server can still listen on port 80 next to the tray' (Can-Listen-On-80) }
     else { Write-Host '  something on this runner already holds port 80, so this says nothing here'; netstat -ano | Select-String ':80\s' | Write-Host }
-    Get-Process Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
+    Get-Process dockyard-toolbox, Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
     & $docker --context linux rm -f e2e-localhost | Out-Null
 
     Section "a proxy only on Windows' loopback, out of reach with NAT networking, is not given to the engine"
@@ -284,7 +284,7 @@ if ($Wizard) {
     Check 'the name resolves' ((Resolve-DnsName e2e-web.dockyard.internal -Type A -ErrorAction SilentlyContinue).IPAddress -contains '127.77.0.1')
     $code = (curl.exe -s -o NUL -w '%{http_code}' --max-time 15 http://e2e-web.dockyard.internal/ | Out-String).Trim()
     Check "http reaches it by name (got $code)" ($code -eq '200')
-    Get-Process Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
+    Get-Process dockyard-toolbox, Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
     Check 'exit 0 with --trust-https' ((Run --silent --no-start --trust-https) -eq 0)
     $root = Get-ChildItem Cert:\LocalMachine\Root | Where-Object Subject -like '*Dockyard Local CA*'
     Check 'the CA is in the trust store' ($root -ne $null)
@@ -296,7 +296,7 @@ if ($Wizard) {
     $code = (curl.exe -s --ssl-no-revoke -o NUL -w '%{http_code}' --max-time 15 https://e2e-web.dockyard.internal/ | Out-String).Trim()
     if ($code -ne '200') { curl.exe -sS -v --ssl-no-revoke -o NUL --max-time 15 https://e2e-web.dockyard.internal/ 2>&1 | Select-Object -Last 15 | Write-Host; Resolve-DnsName e2e-web.dockyard.internal -Type A -ErrorAction SilentlyContinue | Out-String | Write-Host }
     Check "https is trusted by Windows (got $code)" ($code -eq '200')
-    Get-Process Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
+    Get-Process dockyard-toolbox, Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
     $caDir = "$env:APPDATA\Dockyard\ca"
     Check 'no plain key on disk, C: being visible from WSL' (-not (Test-Path "$caDir\ca.key"))
     Check 'what is there is encrypted' ([Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes("$caDir\ca.key.dpapi")) -notmatch 'PRIVATE KEY')
@@ -534,7 +534,7 @@ $id = [Security.Principal.WindowsIdentity]::GetCurrent()
 $p = Start-Process $appExe -ArgumentList "--machine-update App --source `"$source`" --user-sid $($id.User.Value) --user-name `"$($id.Name)`" --log `"$log`" --keep-pid 0" -Wait -PassThru
 Get-Content $log | Write-Host
 Check "worker exit 0 (was $($p.ExitCode))" ($p.ExitCode -eq 0)
-Get-Process Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-Process dockyard-toolbox, Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
 
 Section 'uninstall keeps the data'
 if ($Wizard) {
