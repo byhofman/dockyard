@@ -3,11 +3,12 @@
              xmlns:ctl="using:Dockyard.Dashboard.Controls"
              xmlns:cont="using:Dockyard.Dashboard.Features.Containers"
              xmlns:res="using:Dockyard.Dashboard.Features.Resources"
+             xmlns:sh="using:Dockyard.Shared"
              x:Class="Dockyard.Dashboard.Features.Containers.ComposeDetailView"
              x:DataType="cont:ComposeDetailViewModel">
   <Grid x:Name="Layout" RowDefinitions="*,5,260">
-    <ScrollViewer>
-    <StackPanel Margin="16,14,16,8" Spacing="8">
+    <DockPanel>
+    <StackPanel DockPanel.Dock="Top" Margin="16,14,16,8" Spacing="8">
       <Grid ColumnDefinitions="Auto,*,Auto">
         <PathIcon Data="{StaticResource IconCompose}" Width="18" Height="18" Margin="0,0,10,0" />
         <TextBlock Grid.Column="1" Classes="title" Text="{Binding Project.Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
@@ -44,7 +45,12 @@
       </WrapPanel>
       <TextBlock Classes="muted small" Text="{Binding Busy}" IsVisible="{Binding IsBusy}" />
 
-      <TextBlock Classes="section" Text="SERVICES" Margin="0,6,0,0" />
+    </StackPanel>
+
+    <TabControl SelectedIndex="{Binding SelectedTab}" Margin="4,0,4,0">
+      <TabItem Header="Services">
+      <ScrollViewer>
+      <StackPanel Margin="12,8,12,8">
       <ItemsControl ItemsSource="{Binding Project.Services}">
         <ItemsControl.ItemTemplate>
           <DataTemplate DataType="res:ComposeService">
@@ -71,8 +77,38 @@
           </DataTemplate>
         </ItemsControl.ItemTemplate>
       </ItemsControl>
-    </StackPanel>
-    </ScrollViewer>
+      </StackPanel>
+      </ScrollViewer>
+      </TabItem>
+
+      <TabItem Header="Compose file">
+        <DockPanel Margin="12,8,12,8">
+          <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+            <ComboBox ItemsSource="{Binding Files}" SelectedItem="{Binding SelectedFile}" IsVisible="{Binding HasManyFiles}"
+                      IsEnabled="{Binding CanPickFile}" HorizontalAlignment="Stretch" MaxWidth="520"
+                      ToolTip.Tip="This project combines several compose files; save before switching" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsFileLoaded}">
+              <Button Content="Revert" Command="{Binding RevertCommand}" />
+              <Button Content="Save" Command="{Binding SaveCommand}" />
+              <Button Classes="primary" Command="{Binding SaveAndApplyCommand}" ToolTip.Tip="Save, then docker compose up -d: only changed services are recreated">
+                <StackPanel Classes="label"><PathIcon Data="{StaticResource IconPlay}" /><TextBlock Text="Save and apply" /></StackPanel>
+              </Button>
+              <Button Classes="danger" Command="{Binding DownCommand}" ToolTip.Tip="Remove containers and networks; volumes are kept">
+                <StackPanel Classes="label"><PathIcon Data="{StaticResource IconDown}" /><TextBlock Text="Down…" /></StackPanel>
+              </Button>
+            </StackPanel>
+          </Grid>
+          <SelectableTextBlock DockPanel.Dock="Bottom" Classes="small" TextWrapping="Wrap" Margin="0,8,0,0" MaxHeight="120"
+                     Text="{Binding FileStatus}" IsVisible="{Binding HasFileStatus}"
+                     Classes.muted="{Binding FileOk}" Classes.err="{Binding !FileOk}" />
+          <TextBlock DockPanel.Dock="Top" Classes="muted" TextWrapping="Wrap" IsVisible="{Binding HasNoFiles}"
+                     Text="Docker did not record which compose files this project was started from." />
+          <TextBlock DockPanel.Dock="Top" Classes="muted" TextWrapping="Wrap" IsVisible="{Binding HasFileMissing}" Text="{Binding FileMissing}" />
+          <sh:CodeEditor Language="Yaml" Text="{Binding FileText}" ProblemLines="{Binding ProblemLines}" IsVisible="{Binding IsFileLoaded}" />
+        </DockPanel>
+      </TabItem>
+    </TabControl>
+    </DockPanel>
 
     <GridSplitter x:Name="Splitter" Grid.Row="1" ResizeDirection="Rows" Background="{DynamicResource Line}" />
 

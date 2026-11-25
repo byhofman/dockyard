@@ -14,6 +14,14 @@ sealed class ComposeDetailViewModel : Observable, IDisposable
     ComposeProject project;
     string? busy;
     bool showLogs;
+    int selectedTab;
+    string? selectedFile;
+    ComposeFile? file;
+    string fileText = "";
+    string? fileStatus;
+    bool fileOk;
+    IReadOnlyList<int> problemLines = [];
+    CancellationTokenSource? check;
 
     public ComposeDetailViewModel(ContainersViewModel owner, EngineSession session, ComposeProject project, Action<string> showError)
     {
@@ -33,12 +41,16 @@ sealed class ComposeDetailViewModel : Observable, IDisposable
         ServiceStartCommand = new Command<ComposeService>(s => ForService(s, (c, id) => c.StartContainerAsync(id)));
         ServiceStopCommand = new Command<ComposeService>(s => ForService(s, (c, id) => c.StopContainerAsync(id)));
         ServiceRestartCommand = new Command<ComposeService>(s => ForService(s, (c, id) => c.RestartContainerAsync(id)));
+        SaveCommand = new Command(() => { Save(); return Task.CompletedTask; }, () => IsDirty);
+        SaveAndApplyCommand = new Command(async () => { if (Save()) await Up(); }, () => !IsBusy && file is not null && Project.CanUp);
+        RevertCommand = new Command(() => { if (file is not null) FileText = file.Text; return Task.CompletedTask; }, () => IsDirty);
+        selectedFile = project.ConfigFiles.FirstOrDefault();
     }
 
     public ComposeProject Project
     {
         get => project;
-        private set { if (Set(ref project, value)) { Raise(nameof(IsRecentOnly)); RefreshCommands(); } }
+        private set { if (Set(ref project, value)) { Raise(nameof(IsRecentOnly), nameof(Files), nameof(HasManyFiles), nameof(HasNoFiles)); RefreshCommands(); } }
     }
 
     public bool IsRecentOnly => Project.Total == 0 && owner.IsRecent(Project.Name);
@@ -68,6 +80,65 @@ sealed class ComposeDetailViewModel : Observable, IDisposable
 
     public bool IsBusy => Busy is not null;
 
+    public Command SaveCommand { get; }
+    public Command SaveAndApplyCommand { get; }
+    public Command RevertCommand { get; }
+
+    public int SelectedTab
+    {
+        get => selectedTab;
+        set { if (Set(ref selectedTab, value) && value == 1 && !IsDirty) LoadFile(); }
+    }
+
+    public IReadOnlyList<string> Files => Project.ConfigFiles;
+    public bool HasManyFiles => Files.Count > 1;
+    public bool HasNoFiles => Files.Count == 0;
+
+    public string? SelectedFile
+    {
+        get => selectedFile;
+        set { if (value is not null && Set(ref selectedFile, value)) LoadFile(); }
+    }
+
+    public bool IsFileLoaded => file is not null;
+    public string? FileMissing { get; private set; }
+    public bool HasFileMissing => FileMissing is not null;
+
+    public string FileText
+    {
+        get => fileText;
+        set
+        {
+            if (!Set(ref fileText, value)) return;
+            Raise(nameof(IsDirty), nameof(CanPickFile));
+            RefreshFileCommands();
+            CheckFile();
+        }
+    }
+
+    public bool IsDirty => file is not null && file.IsChangedBy(FileText);
+    public bool CanPickFile => !IsDirty;
+
+    public IReadOnlyList<int> ProblemLines
+    {
+        get => problemLines;
+        private set => Set(ref problemLines, value);
+    }
+
+    public string? FileStatus
+    {
+        get => fileStatus;
+        private set { if (Set(ref fileStatus, value)) Raise(nameof(HasFileStatus)); }
+    }
+
+    public bool HasFileStatus => FileStatus is not null;
+
+    public bool FileOk
+    {
+        get => fileOk;
+        private set => Set(ref fileOk, value);
+    }
+
     public bool ShowLogs
     {
         get => showLogs;
@@ -91,6 +162,90 @@ sealed class ComposeDetailViewModel : Observable, IDisposable
     void RefreshCommands()
     {
         foreach (var c in new[] { UpCommand, StopCommand, RestartCommand, PullCommand, DownCommand }) c.Refresh();
+        RefreshFileCommands();
+    }
+
+    void RefreshFileCommands()
+    {
+        SaveCommand?.Refresh();
+        SaveAndApplyCommand?.Refresh();
+        RevertCommand?.Refresh();
+    }
+
+    void LoadFile()
+    {
+        check?.Cancel();
+        FileStatus = null;
+        ProblemLines = [];
+        if (SelectedFile is not { } path) return;
+        try
+        {
+            file = ComposeFile.Load(path);
+            FileMissing = null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            file = null;
+            FileMissing = Path.IsPathFullyQualified(path) && !path.StartsWith('/')
+                ? $"Could not read {path}: {ex.Message}"
+                : $"{path} is not a path on this computer; the project was started from somewhere else, inside WSL for example.";
+        }
+        Raise(nameof(IsFileLoaded), nameof(FileMissing), nameof(HasFileMissing));
+        fileText = file?.Text ?? "";
+        Raise(nameof(FileText), nameof(IsDirty), nameof(CanPickFile));
+        RefreshFileCommands();
+        CheckFile();
+    }
+
+    bool Save()
+    {
+        if (file is null) return false;
+        if (!IsDirty) return true;
+        try
+        {
+            file.Save(FileText);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            showError($"Could not save {file.Path}: {ex.Message}");
+            return false;
+        }
+        Raise(nameof(IsDirty), nameof(CanPickFile));
+        RefreshFileCommands();
+        return true;
+    }
+
+    async void CheckFile()
+    {
+        check?.Cancel();
+        if (file is null) return;
+        if (ComposeFile.Problem(FileText) is { } problem)
+        {
+            ProblemLines = [problem.Line];
+            FileStatus = $"Line {problem.Line}: {problem.Message}";
+            FileOk = false;
+            return;
+        }
+        ProblemLines = [];
+        var path = file.Path;
+        var text = FileText;
+        var cancel = (check = new CancellationTokenSource()).Token;
+        try
+        {
+            await Task.Delay(800, cancel);
+            FileStatus = "Checking with docker compose…";
+            var context = session.ContextName.Length > 0 ? session.ContextName : "default";
+            var (exit, output) = await CliRunner.Capture(ComposeFile.ConfigArgs(context, Project, path), text, cancel);
+            if (cancel.IsCancellationRequested) return;
+            FileOk = exit == 0;
+            FileStatus = exit == 0 ? "docker compose accepts this file" : output.Length > 0 ? output : $"docker compose config failed (exit code {exit})";
+            if (exit != 0 && ComposeFile.LineOf(output) is { } line) ProblemLines = [line];
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or IOException)
+        {
+            if (!cancel.IsCancellationRequested) FileStatus = null;
+        }
     }
 
     async Task Cli(string what, params string[] verb)
@@ -154,5 +309,9 @@ sealed class ComposeDetailViewModel : Observable, IDisposable
         if (ShowLogs && Project.Name == name) Logs.Start(client, sources);
     }
 
-    public void Dispose() => Logs.Dispose();
+    public void Dispose()
+    {
+        check?.Cancel();
+        Logs.Dispose();
+    }
 }
