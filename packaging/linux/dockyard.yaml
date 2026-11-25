@@ -17,7 +17,7 @@ contents:
   - src: /usr/lib/dockyard/dockyard-toolbox
     dst: /usr/lib/dockyard/Dockyard
     type: symlink
-  - src: dist/linux/cli/dockyard
+  - src: dist/linux/cli/dockyard-cli
     dst: /usr/lib/dockyard/dockyard-cli
     file_info: { mode: 0755 }
   - src: /usr/lib/dockyard/dockyard-cli

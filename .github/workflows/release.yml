@@ -86,7 +86,7 @@ jobs:
         shell: pwsh
         run: |
           dotnet publish src/Dockyard.Cli/Dockyard.Cli.csproj -c Release -r win-x64 -o out/cli -p:Version=${{ needs.plan.outputs.version }} -warnaserror
-          Copy-Item out/cli/dockyard.exe out/dockyard-windows-x64.exe
+          Copy-Item out/cli/dockyard-cli.exe out/dockyard-windows-x64.exe
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -148,7 +148,7 @@ jobs:
           if [ "$TOOLBOX" = true ]; then
             dotnet publish src/Dockyard/Dockyard.csproj -c Release -r linux-x64 -o dist/linux/tray -p:Version="$VERSION" -p:GuestBundle="$PWD/guest/dockyard-guest-guest-x86_64.tar.gz" -warnaserror
             rm -f dist/linux/*/*.pdb
-            mkdir -p out/Dockyard && cp dist/linux/tray/* dist/linux/dashboard/* out/Dockyard/ && cp dist/linux/cli/dockyard out/Dockyard/dockyard-cli
+            mkdir -p out/Dockyard && cp dist/linux/tray/* dist/linux/dashboard/* out/Dockyard/ && cp dist/linux/cli/dockyard-cli out/Dockyard/dockyard-cli
             cp dist/linux/tray/dockyard-toolbox out/Dockyard-linux-x64
             tar -czf "out/Dockyard-$VERSION-linux-x64.tar.gz" -C out Dockyard
             for packager in deb rpm; do nfpm dockyard "$packager"; done
@@ -157,7 +157,7 @@ jobs:
             rm -f dist/linux/dashboard/*.pdb
             for packager in deb rpm; do nfpm dockyard-dashboard "$packager"; done
           fi
-          if [ "$CLI" = true ]; then cp dist/linux/cli/dockyard out/dockyard-linux-x64; fi
+          if [ "$CLI" = true ]; then cp dist/linux/cli/dockyard-cli out/dockyard-linux-x64; fi
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -253,11 +253,11 @@ jobs:
         run: |
           dotnet publish src/Dockyard.Cli/Dockyard.Cli.csproj -c Release -r osx-arm64 -o dist/cli -p:Version="$VERSION" -warnaserror
           mkdir -p out
-          if [ "${{ needs.plan.outputs.cli }}" = true ]; then cp dist/cli/dockyard out/dockyard-macos-arm64; fi
+          if [ "${{ needs.plan.outputs.cli }}" = true ]; then cp dist/cli/dockyard-cli out/dockyard-macos-arm64; fi
           if [ "${{ needs.plan.outputs.toolbox }}" = true ]; then
             dotnet publish src/Dockyard/Dockyard.csproj -c Release -r osx-arm64 -o dist/macos -p:Version="$VERSION" -warnaserror
             dotnet publish src/Dockyard.Dashboard/Dockyard.Dashboard.csproj -c Release -r osx-arm64 -o dist/macos -p:Version="$VERSION" -warnaserror
-            cp dist/cli/dockyard dist/macos/dockyard-cli
+            cp dist/cli/dockyard-cli dist/macos/dockyard-cli
             swift build -c release --package-path macos/DockyardVM
             cp macos/DockyardVM/.build/release/dockyard-vm dist/macos/
             mkdir -p dist/macos/vm && tar -xzf vm-image/dockyard-vm-*-aarch64.tar.gz -C dist/macos/vm
