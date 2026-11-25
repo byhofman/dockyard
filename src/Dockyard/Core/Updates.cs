@@ -189,6 +189,11 @@ static partial class Updates
     static async Task<Dictionary<string, ComponentEntry>> Index() =>
         await GetTextIfFound(AssetUrl(Paths.Repo, "index", "components.json")) is { } json ? ParseIndex(json) : [];
 
+    // A component that needs a newer Toolbox waits for the Toolbox's own update, which comes first. A development build
+    // (0.0.0) is taken as meeting every requirement.
+    internal static bool RequirementsMet(ComponentEntry entry, Version? toolbox) =>
+        !entry.Requires.TryGetValue(ToolboxComponent, out var needed) || toolbox is null || toolbox == new Version(0, 0, 0) || toolbox >= needed;
+
     // A component's latest release, or null when the index does not name it (a release from before the split).
     internal static async Task<ComponentEntry?> LatestComponent(string component) =>
         (await Index()).GetValueOrDefault(component);
@@ -196,6 +201,7 @@ static partial class Updates
     public static async Task<Release?> LatestComponentAsset(string component, string assetPattern)
     {
         if (await LatestComponent(component) is not { } entry) return await LatestApp(assetPattern);
+        if (!RequirementsMet(entry, ParseVersion(Paths.AppVersion))) return null;
         if (await GetTextIfFound(AssetUrl(Paths.Repo, entry.Tag, "SHA256SUMS")) is not { } sums) return null;
         return Checksums.Names(sums).FirstOrDefault(n => Regex.IsMatch(n, assetPattern)) is { } asset
             ? new Release(entry.Version, entry.Tag, AssetUrl(Paths.Repo, entry.Tag, asset))
@@ -213,6 +219,9 @@ static partial class Updates
             return copy;
         }
         var entry = await LatestComponent(component);
+        // Since 0.9.0 only the index says where a component other than the Toolbox is; the Toolbox's release does not carry it.
+        if (entry is null && component != ToolboxComponent && Paths.AppVersion != "0.0.0" && ParseVersion(Paths.AppVersion) >= new Version(0, 9, 0))
+            throw new InvalidOperationException($"Could not read which {component} release is the latest (components.json on the release tagged index); check the connection to github.com, or pass the files with --assets");
         return await DownloadReleaseAsset(assetPattern, targetDir, isPattern: true, tag: entry?.Tag);
     }
 

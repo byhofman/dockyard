@@ -61,6 +61,9 @@ static class ShellSetup
         return without.Length == 0 ? block : without.TrimEnd('\r', '\n') + newline + newline + block;
     }
 
+    public static bool HasBrokenBlock(string content) =>
+        content.IndexOf(Begin, StringComparison.Ordinal) is var start and >= 0 && content.IndexOf(End, start, StringComparison.Ordinal) < 0;
+
     public static string Without(string content)
     {
         var start = content.IndexOf(Begin, StringComparison.Ordinal);
@@ -115,6 +118,11 @@ static class ShellSetup
         foreach (var (file, kind) in Profiles(home, documents))
         {
             var existing = File.Exists(file) ? File.ReadAllText(file) : null;
+            if (existing is not null && HasBrokenBlock(existing))
+            {
+                log($"{file} has the start of Dockyard's kubectl block without its end ({End}); left as it is");
+                continue;
+            }
             var updated = enabled ? With(existing, kind) : existing is null ? null : Without(existing);
             if (updated is null || updated == existing) continue;
             Directory.CreateDirectory(Path.GetDirectoryName(file)!);

@@ -142,19 +142,22 @@ static class MachineApps
     // From the given folder, or the CLI's own release. Without it Dockyard works, so a failed download is said, not fatal.
     public static async Task InstallCommand(Action<string> log, string? sourceDir)
     {
-        var local = sourceDir is null ? null : Directory.EnumerateFiles(sourceDir).FirstOrDefault(f => Regex.IsMatch(Path.GetFileName(f), Updates.CliAssetPattern));
+        string? local;
         string? downloaded = null;
+        var download = Path.Combine(Paths.AppDir, $".download-{Guid.NewGuid():N}");
         try
         {
+            local = sourceDir is null ? null : Directory.EnumerateFiles(sourceDir).FirstOrDefault(f => Regex.IsMatch(Path.GetFileName(f), Updates.CliAssetPattern));
             if (local is null)
             {
                 log("Downloading the dockyard command");
-                local = downloaded = await Updates.DownloadComponentAsset(Updates.CliComponent, Updates.CliAssetPattern, Path.Combine(Paths.AppDir, $".download-{Guid.NewGuid():N}"));
+                local = downloaded = await Updates.DownloadComponentAsset(Updates.CliComponent, Updates.CliAssetPattern, download);
             }
         }
-        catch (Exception e) when (e is HttpRequestException or InvalidOperationException or IOException)
+        catch (Exception e) when (e is HttpRequestException or InvalidOperationException or IOException or TaskCanceledException or UnauthorizedAccessException)
         {
             log($"The dockyard command was not installed: {e.Message}");
+            if (Directory.Exists(download)) Directory.Delete(download, recursive: true);
             return;
         }
         Directory.CreateDirectory(CommandDir);

@@ -24,6 +24,8 @@ sealed class Services(Func<DockerClient> connect, DomainTable table, string root
     string DnsDir => Path.Combine(root, "dns");
     string ProxyDir => Path.Combine(root, "proxy");
     bool tls;
+    // The agent API (a new certificate) and the loop both write; one at a time.
+    readonly object writing = new();
     readonly Dictionary<string, string> zoneRecords = [];
     long serial = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
@@ -59,7 +61,7 @@ sealed class Services(Func<DockerClient> connect, DomainTable table, string root
         if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(dir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         Write(Path.Combine(dir, "cert.pem"), certPem);
         Write(Path.Combine(dir, "key.pem"), keyPem);
-        tls = true;
+        lock (writing) tls = true;
         WriteConfig();
     }
 
@@ -81,8 +83,21 @@ sealed class Services(Func<DockerClient> connect, DomainTable table, string root
         catch (Exception e) when (e is not OperationCanceledException)
         {
             log($"the DNS, proxy and etcd containers did not start ({e.Message}); the agent answers for container names itself");
+            await RemovePartial();
             return false;
         }
+    }
+
+    // One of them may have started before another failed; it would hold the ports the agent's own servers need.
+    async Task RemovePartial()
+    {
+        try
+        {
+            using var docker = connect();
+            foreach (var container in (await docker.ListContainersAsync(all: true)).Where(c => Containers().Any(s => c.Names?.Contains("/" + s.Name) == true)))
+                await docker.RemoveContainerAsync(container.Id, force: true);
+        }
+        catch (Exception e) when (e is not OperationCanceledException) { log($"could not remove the service containers: {e.Message}"); }
     }
 
     public async Task Run(CancellationToken ct)
@@ -111,6 +126,11 @@ sealed class Services(Func<DockerClient> connect, DomainTable table, string root
     }
 
     void WriteConfig()
+    {
+        lock (writing) WriteConfigLocked();
+    }
+
+    void WriteConfigLocked()
     {
         var views = currentViews();
         var names = table.Names();

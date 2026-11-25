@@ -60,12 +60,12 @@ public class ServiceConfigTests
             "http://198.19.250.1:2384", tls: true))!;
 
         var routers = json["http"]!["routers"]!;
-        Assert.Equal("Host(`web.dockyard.internal`)", routers["c-web-dockyard-internal"]!["rule"]!.GetValue<string>());
-        Assert.NotNull(routers["c-web-dockyard-internal-tls"]!["tls"]);
-        Assert.Equal("http://172.17.0.2:80", json["http"]!["services"]!["c-web-dockyard-internal"]!["loadBalancer"]!["servers"]![0]!["url"]!.GetValue<string>());
-        Assert.Equal(@"HostRegexp(`^.+\.dev\.dockyard\.internal$`)", routers["k-dev"]!["rule"]!.GetValue<string>());
-        Assert.Equal(1, routers["explain"]!["priority"]!.GetValue<int>());
-        var tcp = json["tcp"]!["routers"]!["k-dev"]!;
+        var web = Router(routers, "Host(`web.dockyard.internal`)", tls: false);
+        Assert.NotNull(Router(routers, "Host(`web.dockyard.internal`)", tls: true));
+        Assert.Equal("http://172.17.0.2:80", json["http"]!["services"]![web["service"]!.GetValue<string>()]!["loadBalancer"]!["servers"]![0]!["url"]!.GetValue<string>());
+        Assert.NotNull(Router(routers, @"HostRegexp(`^.+\.dev\.dockyard\.internal$`)", tls: false));
+        Assert.Equal(1, Router(routers, "PathPrefix(`/`)", tls: false)["priority"]!.GetValue<int>());
+        var tcp = Router(json["tcp"]!["routers"]!, @"HostSNIRegexp(`^.+\.dev\.dockyard\.internal$`)", tls: true);
         Assert.True(tcp["tls"]!["passthrough"]!.GetValue<bool>());
         Assert.Equal("websecure", tcp["entryPoints"]![0]!.GetValue<string>());
         Assert.Equal("/etc/dockyard/tls/cert.pem", json["tls"]!["stores"]!["default"]!["defaultCertificate"]!["certFile"]!.GetValue<string>());
@@ -77,9 +77,24 @@ public class ServiceConfigTests
         ProxyEntryPoint[] points = [new("web", "198.19.250.1:2380", false), new("websecure", "198.19.250.1:2381", true)];
         var json = JsonNode.Parse(ServiceConfig.TraefikDynamic(points, [new ProxyRoute("web.dockyard.internal", "http://172.17.0.2:80")], [], "http://198.19.250.1:2384", tls: false))!;
 
-        Assert.Null(json["http"]!["routers"]!["c-web-dockyard-internal-tls"]);
+        Assert.DoesNotContain(json["http"]!["routers"]!.AsObject(), r => r.Value!["tls"] is not null);
         Assert.Null(json["tls"]);
     }
+
+    [Fact]
+    public void Names_that_differ_only_in_punctuation_get_routes_of_their_own()
+    {
+        ProxyEntryPoint[] points = [new("web", "198.19.250.1:2380", false)];
+        var json = JsonNode.Parse(ServiceConfig.TraefikDynamic(points,
+            [new ProxyRoute("web.shop.dockyard.internal", "http://172.17.0.2:80"), new ProxyRoute("web-shop.dockyard.internal", "http://172.17.0.3:80")],
+            [], "http://198.19.250.1:2384", tls: false))!;
+
+        Assert.Equal(3, json["http"]!["routers"]!.AsObject().Count);
+        Assert.Equal(3, json["http"]!["services"]!.AsObject().Count);
+    }
+
+    internal static JsonNode Router(JsonNode routers, string rule, bool tls) =>
+        routers.AsObject().Select(r => r.Value!).Single(r => r["rule"]!.GetValue<string>() == rule && (r["tls"] is not null) == tls);
 
     [Fact]
     public void Traefik_listens_where_each_engine_needs_it()

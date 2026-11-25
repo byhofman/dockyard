@@ -64,8 +64,8 @@ public class ExternalRecordsTests
         var ingress = new ClusterIngress("dev", IPAddress.Parse("172.18.0.5"), IPAddress.Parse("172.18.0.5"));
         var json = JsonNode.Parse(ServiceConfig.TraefikDynamic(points, [], [ingress], "http://198.19.250.1:2384", tls: false, [("shop.dockyard.internal", ingress)]))!;
 
-        Assert.Equal("Host(`shop.dockyard.internal`)", json["http"]!["routers"]!["e-shop-dockyard-internal"]!["rule"]!.GetValue<string>());
-        Assert.Equal("HostSNI(`shop.dockyard.internal`)", json["tcp"]!["routers"]!["e-shop-dockyard-internal"]!["rule"]!.GetValue<string>());
-        Assert.Equal("172.18.0.5:443", json["tcp"]!["services"]!["e-shop-dockyard-internal"]!["loadBalancer"]!["servers"]![0]!["address"]!.GetValue<string>());
+        Assert.NotNull(ServiceConfigTests.Router(json["http"]!["routers"]!, "Host(`shop.dockyard.internal`)", tls: false));
+        var tcp = ServiceConfigTests.Router(json["tcp"]!["routers"]!, "HostSNI(`shop.dockyard.internal`)", tls: true);
+        Assert.Equal("172.18.0.5:443", json["tcp"]!["services"]![tcp["service"]!.GetValue<string>()]!["loadBalancer"]!["servers"]![0]!["address"]!.GetValue<string>());
     }
 }

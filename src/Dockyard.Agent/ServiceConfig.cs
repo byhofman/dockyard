@@ -69,11 +69,13 @@ static class ServiceConfig
         return text.ToString();
     }
 
+    // Readable, and distinct for names that differ only in punctuation, such as web.shop and web-shop.
     static string Key(string text)
     {
         var builder = new StringBuilder();
         foreach (var c in text) builder.Append(char.IsAsciiLetterOrDigit(c) ? c : '-');
-        return builder.ToString();
+        var hash = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(text));
+        return $"{builder}-{Convert.ToHexStringLower(hash)[..8]}";
     }
 
     static JsonArray Names(IEnumerable<ProxyEntryPoint> entryPoints) => new(entryPoints.Select(e => (JsonNode)JsonValue.Create(e.Name)).ToArray());

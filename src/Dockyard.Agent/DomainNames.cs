@@ -21,12 +21,11 @@ static class DomainNames
 
     // <host>.<cluster>.dockyard.internal is for a kind cluster's ingress: the cluster's own Ingress rules pick the service.
     // A container's name has one label, so the two never meet.
-    public static string? ClusterOf(string name)
-    {
-        if (!name.EndsWith("." + Zone, StringComparison.Ordinal)) return null;
-        var labels = name[..^(Zone.Length + 1)].Split('.');
-        return labels.Length >= 2 && labels.All(l => l.Length > 0) ? labels[^1] : null;
-    }
+    // Matched against the clusters there are, longest first: a cluster's name may have a dot in it itself.
+    public static string? ClusterOf(string name, IEnumerable<string> clusters) => clusters
+        .Where(c => name.EndsWith($".{c}.{Zone}", StringComparison.Ordinal) && name.Length > c.Length + Zone.Length + 2 && name[0] != '.')
+        .OrderByDescending(c => c.Length)
+        .FirstOrDefault();
 
     // A flat name on purpose: a certificate's wildcard covers exactly one label, so web.shop.dockyard.internal would need a
     // new certificate per project and the app holding the CA to answer for each.

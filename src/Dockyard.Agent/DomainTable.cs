@@ -26,8 +26,15 @@ sealed class DomainTable(Func<DockerClient> connect, string choicesFile, Action<
 
     public ClusterIngress? Ingress(string domain)
     {
-        if (DomainNames.ClusterOf(domain) is not { } cluster) return null;
-        lock (gate) return clusters.GetValueOrDefault(cluster);
+        lock (gate) return DomainNames.ClusterOf(domain, clusters.Keys) is { } cluster ? clusters[cluster] : null;
+    }
+
+    // A cluster can have several LoadBalancer services on 80 or 443; the ingress controller is the one with both, and
+    // otherwise the choice is by name, so it does not change with the order the engine lists containers in.
+    internal static ClusterIngress PickIngress(string cluster, IEnumerable<(string Cluster, string Name, IPAddress Address, bool Http, bool Https)> balancers)
+    {
+        var ordered = balancers.OrderByDescending(b => b.Http && b.Https).ThenBy(b => b.Name, StringComparer.Ordinal).ToList();
+        return new ClusterIngress(cluster, ordered.FirstOrDefault(b => b.Http).Address, ordered.FirstOrDefault(b => b.Https).Address);
     }
 
     public bool Contains(string domain) => Find(domain) is not null || Ingress(domain) is not null;
@@ -127,6 +134,7 @@ sealed class DomainTable(Func<DockerClient> connect, string choicesFile, Action<
     {
         Dictionary<string, DomainTarget> next = [];
         Dictionary<string, ClusterIngress> ingress = [];
+        List<(string Cluster, string Name, IPAddress Address, bool Http, bool Https)> balancers = [];
         foreach (var summary in (await docker.ListContainersAsync(all: false, ct)).Where(c => c.State == "running"))
         {
             var inspect = await docker.GetNodeAsync($"containers/{Uri.EscapeDataString(summary.Id)}/json", ct);
@@ -142,12 +150,7 @@ sealed class DomainTable(Func<DockerClient> connect, string choicesFile, Action<
             if (labels?.GetValueOrDefault(ClusterLabel) is { Length: > 0 } cluster)
             {
                 var onKind = inspect["NetworkSettings"]?["Networks"]?["kind"]?["IPAddress"]?.GetValue<string>() is { Length: > 0 } ip ? IPAddress.Parse(ip) : null;
-                var known = ingress.GetValueOrDefault(cluster) ?? new ClusterIngress(cluster, null, null);
-                ingress[cluster] = known with
-                {
-                    Http = known.Http ?? (exposed.Contains(80) ? onKind : null),
-                    Https = known.Https ?? (exposed.Contains(443) ? onKind : null),
-                };
+                if (onKind is not null) balancers.Add((cluster, summary.Name, onKind, exposed.Contains(80), exposed.Contains(443)));
                 continue;
             }
             foreach (var domain in DomainNames.For(summary.Name, labels?.GetValueOrDefault("com.docker.compose.project"), labels?.GetValueOrDefault("com.docker.compose.service")))
@@ -155,6 +158,8 @@ sealed class DomainTable(Func<DockerClient> connect, string choicesFile, Action<
                 next.TryAdd(domain, new DomainTarget(summary.Id, summary.Name, domain, address is null ? null : IPAddress.Parse(address),
                     inspect["State"]?["Pid"]?.GetValue<int>(), exposed, DomainNames.LabelPort(labels), hostNetwork));
         }
+        foreach (var cluster in balancers.GroupBy(b => b.Cluster))
+            ingress[cluster.Key] = PickIngress(cluster.Key, cluster);
         lock (gate)
         {
             byDomain = next;

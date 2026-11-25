@@ -14,8 +14,20 @@ public sealed class ClusterIngressTests
     [InlineData("dockyard.internal", null)]
     [InlineData("web.dev.example.com", null)]
     [InlineData(".dev.dockyard.internal", null)]
-    public void A_name_with_two_labels_or_more_in_the_zone_is_for_the_cluster_named_last(string name, string? cluster) =>
-        Assert.Equal(cluster, DomainNames.ClusterOf(name));
+    [InlineData("web.my.dev.dockyard.internal", "my.dev")]
+    [InlineData("web.qa.dockyard.internal", null)]
+    public void A_name_under_a_cluster_is_for_the_longest_cluster_name_it_ends_in(string name, string? cluster) =>
+        Assert.Equal(cluster, DomainNames.ClusterOf(name, ["dev", "my.dev"]));
+
+    [Fact]
+    public void The_ingress_is_the_load_balancer_with_both_ports_whatever_the_order()
+    {
+        var other = ("dev", "a-other", IPAddress.Parse("172.18.0.9"), true, false);
+        var traefik = ("dev", "z-traefik", IPAddress.Parse("172.18.0.4"), true, true);
+
+        Assert.Equal(new ClusterIngress("dev", IPAddress.Parse("172.18.0.4"), IPAddress.Parse("172.18.0.4")), DomainTable.PickIngress("dev", [other, traefik]));
+        Assert.Equal(DomainTable.PickIngress("dev", [traefik, other]), DomainTable.PickIngress("dev", [other, traefik]));
+    }
 
     [Fact]
     public async Task The_server_name_comes_from_a_real_clients_hello_and_the_rest_is_replayed()
