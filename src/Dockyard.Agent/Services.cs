@@ -61,8 +61,8 @@ sealed class Services(Func<DockerClient> connect, DomainTable table, string root
         if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(dir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         Write(Path.Combine(dir, "cert.pem"), certPem);
         Write(Path.Combine(dir, "key.pem"), keyPem);
+        // The loop writes Traefik's configuration within two seconds; the agent API answers at once.
         lock (writing) tls = true;
-        WriteConfig();
     }
 
     // Started before the agent's own DNS and proxy would be: when the images cannot be had, offline or blocked, the

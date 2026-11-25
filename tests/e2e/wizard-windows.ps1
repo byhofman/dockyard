@@ -271,8 +271,8 @@ if ($Wizard) {
     wsl.exe -d dockyard -u root -- sh -c 'kill -TERM $(pidof dockerd); while pidof dockerd >/dev/null; do sleep 0.2; done'
     Linux-Engine
     $info = & $docker --context linux info --format '{{json .RegistryConfig}}' | Out-String
-    Check 'the mirror applies' ($info -match 'mirror\.dockyard\.test')
-    Check 'the insecure registry applies' ($info -match 'registry\.dockyard\.test:5000')
+    Check 'the mirror applies' ($info -match 'mirror\.dockyard\.internal')
+    Check 'the insecure registry applies' ($info -match 'registry\.dockyard\.internal:5000')
     & $docker --context linux network create e2e-pool | Out-Null
     $subnet = & $docker --context linux network inspect e2e-pool --format '{{(index .IPAM.Config 0).Subnet}}' | Out-String
     Check "a new network comes from the pool (got $subnet)" ($subnet -match '^10\.123\.')
@@ -546,7 +546,7 @@ if ($Wizard) {
     $p = Start-Process (Resolve-Path $Wizard) -ArgumentList '--silent', '--uninstall' -Wait -PassThru -NoNewWindow -RedirectStandardOutput $said
     Get-Content $said | Write-Host
     Check 'exit 0' ($p.ExitCode -eq 0)
-    Check 'it says which login stays in the store' ((Get-Content $said -Raw) -match 'e2e\.dockyard\.test.*Windows Credential Manager')
+    Check 'it says which login stays in the store' ((Get-Content $said -Raw) -match 'e2e\.dockyard\.internal.*Windows Credential Manager')
     cmdkey /delete:e2e.dockyard.internal | Out-Null
 } else {
     Check 'exit 0' ((Run --silent --uninstall) -eq 0)
