@@ -19,6 +19,15 @@
             </Button>
           </StackPanel>
         </Grid>
+        <Border Background="{DynamicResource Bg}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="7" Padding="3" HorizontalAlignment="Left">
+          <StackPanel Orientation="Horizontal" Spacing="2">
+            <Button Classes="segment" Classes.selected="{Binding Usage.IsAll}" Content="{Binding Usage.AllText}" Command="{Binding Usage.ShowCommand}" CommandParameter="All" />
+            <Button Classes="segment" Classes.selected="{Binding Usage.IsUsed}" Content="{Binding Usage.UsedText}" Command="{Binding Usage.ShowCommand}" CommandParameter="Used"
+                    ToolTip.Tip="Used by a container, running or not" />
+            <Button Classes="segment" Classes.selected="{Binding Usage.IsUnused}" Content="{Binding Usage.UnusedText}" Command="{Binding Usage.ShowCommand}" CommandParameter="Unused"
+                    ToolTip.Tip="No container uses it" />
+          </StackPanel>
+        </Border>
         <Border Classes="selectionbar" IsVisible="{Binding HasMany}">
           <Grid ColumnDefinitions="*,Auto,Auto">
             <TextBlock Classes="count" Text="{Binding SelectionText}" />
