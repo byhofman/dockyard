@@ -10,11 +10,11 @@ description: |
 homepage: https://github.com/byhofman/dockyard
 license: MIT
 depends:
-  - dockyard (= ${VERSION})
+  - dockyard
 overrides:
   rpm:
     depends:
-      - dockyard = ${VERSION}
+      - dockyard
 contents:
   - src: dist/linux/dashboard/Dockyard Dashboard
     dst: /usr/lib/dockyard/Dockyard Dashboard

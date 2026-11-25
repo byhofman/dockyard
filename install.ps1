@@ -41,16 +41,16 @@
         $arguments = @($arguments) + '--assets', $dir
     } else {
         if ($env:DOCKYARD_VERSION) {
-            $tag = "v$env:DOCKYARD_VERSION"
+            $tag = "toolbox/$env:DOCKYARD_VERSION"
         } else {
             # The redirect names one release, so the file and its checksum come from the same one, and it has no API rate limit.
             $request = [Net.WebRequest]::Create("https://github.com/$repo/releases/latest")
             $request.Method = 'HEAD'
             $response = $request.GetResponse()
-            $tag = $response.ResponseUri.Segments[-1]
+            $tag = [Uri]::UnescapeDataString(($response.ResponseUri.AbsolutePath -split '/releases/tag/', 2)[-1])
             $response.Dispose()
         }
-        if ($tag -notmatch '^v\d') { throw 'No Dockyard release found.' }
+        if ($tag -notmatch '^(v|toolbox/)\d') { throw 'No Dockyard release found.' }
 
         Write-Host "Downloading the Dockyard installer ($tag)"
         $base = "https://github.com/$repo/releases/download/$tag"

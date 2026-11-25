@@ -12,7 +12,7 @@ bundle() {
   app="$1/Dockyard.app"; with_dashboard="$2"
   mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
   sed "s/VERSION/$version/g" "$here/Info.plist" > "$app/Contents/Info.plist"
-  cp "$dist/Dockyard" "$dist/dockyard-vm" "$app/Contents/MacOS/"
+  cp "$dist/Dockyard" "$dist/dockyard-vm" "$dist/dockyard-cli" "$app/Contents/MacOS/"
   if [ "$with_dashboard" = 1 ]; then
     cp "$dist/Dockyard Dashboard" "$dist"/*.dylib "$app/Contents/MacOS/"
   fi

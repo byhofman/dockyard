@@ -78,6 +78,10 @@ make it public, and update `components.json`.
 
 ## Not in this step
 
-- On macOS the dashboard and the CLI still ship inside the Toolbox's app bundle; a separate download needs the app bundle
-  split, which is its own piece of work.
+- On macOS the dashboard and the CLI still ship inside the Toolbox's app bundle (the CLI as `dockyard-cli`, since the
+  default file system cannot tell `dockyard` from `Dockyard`), and the Linux Toolbox package and tarball carry the CLI as
+  well. Downloading them on their own there needs the app bundle and the packages split, which is its own piece of work.
+  On Windows the CLI and the dashboard come from their own releases.
+- Releasing for the first time: `engine/…` first (the Toolbox's macOS app and its end-to-end tests take the latest
+  engine), then `dashboard/…` and `cli/…`, then `toolbox/…`, which carries the dashboard's assets for 0.8.x.
 - The services move into containers in the next step (proxy, DNS), see `docs/design/dockyard-services.md`.

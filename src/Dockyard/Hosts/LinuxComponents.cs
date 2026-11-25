@@ -47,7 +47,8 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
         "Engine" => Updates.LinuxDocker,
         "Compose" => Updates.LinuxCompose,
         "Buildx" => Updates.LinuxBuildx,
-        "App" or ComponentRules.DashboardId => await Updates.LatestApp(LinuxLayout.AppAsset),
+        "App" => await Updates.LatestApp(LinuxLayout.AppAsset),
+        ComponentRules.DashboardId => await Updates.LatestComponentAsset(Updates.DashboardComponent, LinuxLayout.DashboardPackage("apt")),
         _ => null,
     };
 
@@ -148,7 +149,7 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
             List<string> packages = [];
             log("Downloading Dockyard");
             if (app) packages.Add(await Updates.ReleaseAssetOrLocal(LinuxLayout.AppPackage(packageManager), dir, tag));
-            if (dashboard) packages.Add(await Updates.ReleaseAssetOrLocal(LinuxLayout.DashboardPackage(packageManager), dir, tag));
+            if (dashboard) packages.Add(await Updates.DownloadComponentAsset(Updates.DashboardComponent, LinuxLayout.DashboardPackage(packageManager), dir));
             // apt hands local packages to its unprivileged _apt user.
             File.SetUnixFileMode(dir, (UnixFileMode)0b111_101_101);
             foreach (var package in packages) File.SetUnixFileMode(package, (UnixFileMode)0b110_100_100);

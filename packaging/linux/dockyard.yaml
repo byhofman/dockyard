@@ -13,7 +13,10 @@ contents:
   - src: dist/linux/tray/Dockyard
     dst: /usr/lib/dockyard/Dockyard
     file_info: { mode: 0755 }
-  - src: /usr/lib/dockyard/Dockyard
+  - src: dist/linux/cli/dockyard
+    dst: /usr/lib/dockyard/dockyard-cli
+    file_info: { mode: 0755 }
+  - src: /usr/lib/dockyard/dockyard-cli
     dst: /usr/bin/dockyard
     type: symlink
   - src: packaging/linux/dockyard.desktop
