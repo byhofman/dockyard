@@ -17,6 +17,9 @@ static class GuestAddresses
     public const int ContainerDnsPort = 2354;
     // Where dockyard-proxy sends what it has no route for, so the agent can say why.
     public const int ExplainPort = 2384;
+    // dockyard-etcd, where external-dns in each kind cluster publishes names; its peer port stays on loopback.
+    public const int EtcdPort = 2379;
+    public const int EtcdPeerPort = 2390;
 
     // Where the host's browser finds domains where it cannot use the engine's own address: all of 127/8 is loopback,
     // and an address nothing else uses cannot clash with a server on 127.0.0.1:80, such as another Docker app's.

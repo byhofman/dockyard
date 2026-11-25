@@ -296,7 +296,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         {
             Choice = StorageChoices[from?.Storage switch { ClusterStorage.HostFolder => 1, ClusterStorage.Nfs when helm is not null => 2, _ => 0 }],
         };
-        var balancer = DialogField.Check("Load balancer: LoadBalancer services get an address, and an ingress controller's hosts are reachable as <host>.<name>.dockyard.internal", from?.LoadBalancer ?? true);
+        var balancer = DialogField.Check("Load balancer: LoadBalancer services get an address, an ingress controller's hosts are reachable as <host>.<name>.dockyard.internal, and external-dns publishes Ingress hosts under dockyard.internal", from?.LoadBalancer ?? true);
         var ports = PortsField(from?.Ports ?? ClusterDefinition.DefaultPorts, null);
         ports.IsShown = balancer.IsChecked;
         balancer.Changed += () => ports.IsShown = balancer.IsChecked;
@@ -334,7 +334,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     {
         ClusterDefinitions.Save(name, definition);
         appliedPlan = null;
-        var file = await actions.Create(name, onLine, storage: definition.Storage, addons: definition.AddonList, helm: helm, definition: definition.Yaml);
+        var file = await actions.Create(name, onLine, storage: definition.Storage, addons: definition.AddonList, helm: helm, definition: definition.Yaml, publishNames: definition.LoadBalancer);
         Shell.ShowInfo($"kubectl now uses {KindKubeconfig.Key(name)}, from {file}");
     });
 
@@ -360,7 +360,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
             await RemoveProxies(cluster.Name);
             var remade = current with { Yaml = definition.Text, Addons = helm is null ? [] : current.Addons };
             ClusterDefinitions.Save(cluster.Name, remade);
-            await actions.Create(cluster.Name, onLine, storage: remade.Storage, addons: remade.AddonList, helm: helm, definition: remade.Yaml);
+            await actions.Create(cluster.Name, onLine, storage: remade.Storage, addons: remade.AddonList, helm: helm, definition: remade.Yaml, publishNames: remade.LoadBalancer);
             Shell.ShowInfo($"{cluster.Name} is made again from its definition");
         }), danger: true, fields: [definition], canConfirm: _ => definition.Problem is null));
     }

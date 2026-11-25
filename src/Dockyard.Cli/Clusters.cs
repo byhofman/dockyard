@@ -55,7 +55,7 @@ sealed class Clusters(Action<string> log)
             ? CliLocator.Locate("helm") ?? throw new InvalidOperationException("The add-ons and NFS storage go in with Helm, which is not installed: dockyard --silent --with helm adds it")
             : null;
         ClusterDefinitions.Save(name, new ClusterDefinition(definition, storage, addons.Select(a => a.Release).ToList(), loadBalancer, ports));
-        var file = await Actions().Create(name, log, storage: storage, addons: addons, helm: helm, definition: definition);
+        var file = await Actions().Create(name, log, storage: storage, addons: addons, helm: helm, definition: definition, publishNames: loadBalancer);
         log($"kubectl now uses {KindKubeconfig.Key(name)}, from {file}");
     }
 
@@ -69,7 +69,7 @@ sealed class Clusters(Action<string> log)
         await DeleteWithProxies(actions, name);
         var remade = saved with { Yaml = definition, Addons = helm is null ? [] : saved.Addons };
         ClusterDefinitions.Save(name, remade);
-        await actions.Create(name, log, storage: remade.Storage, addons: remade.AddonList, helm: helm, definition: remade.Yaml);
+        await actions.Create(name, log, storage: remade.Storage, addons: remade.AddonList, helm: helm, definition: remade.Yaml, publishNames: remade.LoadBalancer);
         log($"{name} is made again from its definition");
     }
 

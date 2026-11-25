@@ -6,8 +6,9 @@ namespace Dockyard.Agent;
 
 sealed record ServiceContainer(string Name, string Image, string[] Command, string[] Binds);
 
-// dockyard-dns (CoreDNS) and dockyard-proxy (Traefik): containers on the engine's own network, in the Dockyard group, that
-// answer for container names. The agent only writes what they are to serve, from the running containers.
+// dockyard-dns (CoreDNS), dockyard-proxy (Traefik) and dockyard-etcd, where external-dns in kind clusters publishes names:
+// containers on the engine's own network, in the Dockyard group. The agent only writes what they are to serve, from the
+// running containers and what the clusters published.
 sealed class Services(Func<DockerClient> connect, DomainTable table, string root, Func<IReadOnlyList<DnsView>> currentViews,
     IReadOnlyList<ProxyEntryPoint> entryPoints, Action<string> log)
 {
@@ -15,6 +16,10 @@ sealed class Services(Func<DockerClient> connect, DomainTable table, string root
     const string SetupLabel = "dockyard.service.setup";
     public const string DnsImage = "coredns/coredns:1.13.1@sha256:9b9128672209474da07c91439bf15ed704ae05ad918dd6454e5b6ae14e35fee6";
     public const string ProxyImage = "traefik:v3.6@sha256:31267173a15b4944e797a76ffd9c419707c8d8b32fe5b610f80cd0cfa05f372d";
+    public const string EtcdImage = "quay.io/coreos/etcd:v3.6.6@sha256:ea8a4698f22200bf0322fd8ed6e0b106a3107db649bd61f654e1a9fc14d9a17e";
+    readonly HttpClient etcd = new() { Timeout = TimeSpan.FromSeconds(3) };
+    List<ExternalRecord> published = [];
+    DateTime publishedRead = DateTime.MinValue;
 
     string DnsDir => Path.Combine(root, "dns");
     string ProxyDir => Path.Combine(root, "proxy");
@@ -24,11 +29,28 @@ sealed class Services(Func<DockerClient> connect, DomainTable table, string root
 
     public static string ExplainUrl => $"http://{GuestAddresses.Dns}:{GuestAddresses.ExplainPort}";
 
+    static readonly string[] EtcdCommand =
+    [
+        "/usr/local/bin/etcd", "--name", "dockyard", "--data-dir", "/var/lib/etcd",
+        "--listen-client-urls", ExternalRecords.Endpoint, "--advertise-client-urls", ExternalRecords.Endpoint,
+        "--listen-peer-urls", $"http://127.0.0.1:{GuestAddresses.EtcdPeerPort}", "--initial-advertise-peer-urls", $"http://127.0.0.1:{GuestAddresses.EtcdPeerPort}",
+        "--initial-cluster", $"dockyard=http://127.0.0.1:{GuestAddresses.EtcdPeerPort}",
+    ];
+
     IEnumerable<ServiceContainer> Containers() =>
     [
         new("dockyard-dns", DnsImage, ["-conf", $"{ServiceConfig.ConfigDir}/Corefile"], [$"{DnsDir}:{ServiceConfig.ConfigDir}:ro"]),
         new("dockyard-proxy", ProxyImage, [$"--configFile={ServiceConfig.ConfigDir}/traefik.yml"], [$"{ProxyDir}:{ServiceConfig.ConfigDir}:ro"]),
     ];
+
+    // Only clusters' published names depend on it, so it failing leaves DNS and the proxy as they are.
+    static readonly ServiceContainer Etcd = new("dockyard-etcd", EtcdImage, EtcdCommand, ["dockyard-etcd:/var/lib/etcd"]);
+
+    async Task EnsureEtcd(DockerClient docker, CancellationToken ct)
+    {
+        try { await Ensure(docker, Etcd, ct); }
+        catch (Exception e) when (e is not OperationCanceledException) { log($"dockyard-etcd: {e.Message}; names published by clusters are not answered"); }
+    }
 
     public void SetCertificate(string certPem, string keyPem)
     {
@@ -53,11 +75,12 @@ sealed class Services(Func<DockerClient> connect, DomainTable table, string root
             WriteConfig();
             using var docker = connect();
             foreach (var container in Containers()) await Ensure(docker, container, ct);
+            await EnsureEtcd(docker, ct);
             return true;
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
-            log($"the DNS and proxy containers did not start ({e.Message}); the agent answers for container names itself");
+            log($"the DNS, proxy and etcd containers did not start ({e.Message}); the agent answers for container names itself");
             return false;
         }
     }
@@ -70,11 +93,18 @@ sealed class Services(Func<DockerClient> connect, DomainTable table, string root
             await Task.Delay(TimeSpan.FromSeconds(2), ct);
             try
             {
+                if (DateTime.UtcNow - publishedRead > TimeSpan.FromSeconds(5))
+                {
+                    publishedRead = DateTime.UtcNow;
+                    try { published = await ExternalRecords.Read(etcd, ct); }
+                    catch (Exception e) when (e is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested) { }
+                }
                 WriteConfig();
                 if (DateTime.UtcNow - lastCheck < TimeSpan.FromSeconds(30)) continue;
                 lastCheck = DateTime.UtcNow;
                 using var docker = connect();
                 foreach (var container in Containers()) await Ensure(docker, container, ct);
+                await EnsureEtcd(docker, ct);
             }
             catch (Exception e) when (e is not OperationCanceledException) { log($"services: {e.Message}"); }
         }
@@ -85,20 +115,25 @@ sealed class Services(Func<DockerClient> connect, DomainTable table, string root
         var views = currentViews();
         var names = table.Names();
         var clusters = table.Clusters();
+        // A published name that points at a cluster's ingress goes through the proxy, which every place can reach; any
+        // other address is answered as it is.
+        ClusterIngress? IngressOf(ExternalRecord r) => clusters.FirstOrDefault(c => c.Cluster == r.Cluster && (r.Address.Equals(c.Http) || r.Address.Equals(c.Https)));
+        var proxied = published.Where(r => IngressOf(r) is not null).Select(r => (r.Name, IngressOf(r)!)).ToList();
         Write(Path.Combine(DnsDir, "Corefile"), ServiceConfig.Corefile(views));
         foreach (var view in views)
         {
             var zone = Path.Combine(DnsDir, ServiceConfig.ZoneFileName(view));
-            var records = ServiceConfig.Zone(view.Answer, names, clusters.Select(c => c.Cluster), 0);
+            var extra = published.Select(r => (r.Name, IngressOf(r) is null ? r.Address : view.Answer)).ToList();
+            var records = ServiceConfig.Zone(view.Answer, names, clusters.Select(c => c.Cluster), 0, extra);
             if (records != zoneRecords.GetValueOrDefault(view.Name))
             {
                 zoneRecords[view.Name] = records;
-                Write(zone, ServiceConfig.Zone(view.Answer, names, clusters.Select(c => c.Cluster), ++serial));
+                Write(zone, ServiceConfig.Zone(view.Answer, names, clusters.Select(c => c.Cluster), ++serial, extra));
             }
             if (view.Recursive) Write(Path.Combine(DnsDir, $"{view.Name}.special"), ServiceConfig.Hosts(GuestAddresses.Host, GuestAddresses.HostNames));
         }
         Write(Path.Combine(ProxyDir, "traefik.yml"), ServiceConfig.TraefikStatic(entryPoints));
-        Write(Path.Combine(ProxyDir, "dynamic", "dockyard.yml"), ServiceConfig.TraefikDynamic(entryPoints, table.Routes(), clusters, ExplainUrl, tls));
+        Write(Path.Combine(ProxyDir, "dynamic", "dockyard.yml"), ServiceConfig.TraefikDynamic(entryPoints, table.Routes(), clusters, ExplainUrl, tls, proxied));
     }
 
     // Replaced whole, so a reader never sees half a file; left alone when nothing changed, so nothing reloads for nothing.

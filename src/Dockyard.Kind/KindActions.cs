@@ -6,7 +6,7 @@ sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
     // Returns the kubeconfig file the cluster's context went into.
     // Add-ons go in with helm once the cluster is in the kubeconfig, so a chart that fails leaves a cluster kubectl can reach.
     public async Task<string> Create(string name, Action<string>? onLine = null, int workers = 0, ClusterStorage storage = ClusterStorage.None,
-        IReadOnlyList<ClusterAddon>? addons = null, string? helm = null, string? definition = null)
+        IReadOnlyList<ClusterAddon>? addons = null, string? helm = null, string? definition = null, bool publishNames = false)
     {
         var scratch = Directory.CreateTempSubdirectory("dockyard-kind-");
         try
@@ -23,6 +23,11 @@ sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
             if (storage == ClusterStorage.Nfs) await NfsStorage.Install(dockerContext.Length > 0 ? dockerContext : "default", name, own, helm, Path.Combine(scratch.FullName, "helm"), onLine);
             var text = await File.ReadAllTextAsync(own);
             var file = await Into(name, text, "was created");
+            if (publishNames)
+            {
+                try { await ExternalDns.Install(dockerContext.Length > 0 ? dockerContext : "default", name, onLine); }
+                catch (InvalidOperationException e) { onLine?.Invoke($"{e.Message}. The cluster works; its Ingress hosts under {name}.{ExternalDns.Zone} still resolve."); }
+            }
             foreach (var addon in addons ?? [])
                 await ClusterAddons.Install(helm ?? throw new InvalidOperationException("Helm is not installed."), addon, own, name, Path.Combine(scratch.FullName, "helm"), onLine);
             return file;

@@ -38,7 +38,8 @@ static class ServiceConfig
 
     // Authoritative, so a name nobody has is NXDOMAIN, and a cluster's wildcard covers every host under it. The serial
     // is what makes CoreDNS read the file again.
-    public static string Zone(IPAddress address, IEnumerable<string> names, IEnumerable<string> clusters, long serial)
+    public static string Zone(IPAddress address, IEnumerable<string> names, IEnumerable<string> clusters, long serial,
+        IEnumerable<(string Name, IPAddress Address)>? records = null)
     {
         var origin = DomainNames.Zone;
         var text = new StringBuilder($"$ORIGIN {origin}.\n@ 5 IN SOA ns.{origin}. hostmaster.{origin}. {serial} 60 60 60 5\n@ 5 IN NS ns.{origin}.\nns 5 IN A {address}\n");
@@ -46,6 +47,10 @@ static class ServiceConfig
             text.Append($"{name} 5 IN A {address}\n");
         foreach (var cluster in clusters.Distinct().OrderBy(c => c, StringComparer.Ordinal))
             text.Append($"*.{cluster} 5 IN A {address}\n");
+        var taken = names.ToHashSet();
+        foreach (var (name, recordAddress) in (records ?? []).Where(r => !taken.Contains(r.Name) && r.Name.EndsWith("." + origin, StringComparison.Ordinal))
+                     .DistinctBy(r => r.Name).OrderBy(r => r.Name, StringComparer.Ordinal))
+            text.Append($"{name[..^(origin.Length + 1)]} 5 IN A {recordAddress}\n");
         return text.ToString();
     }
 
@@ -76,7 +81,7 @@ static class ServiceConfig
     // JSON is YAML, so Traefik's file provider reads it as a .yml file. A container without a port, a cluster without an
     // ingress controller and a name nobody has fall through to the agent, which says why in plain words.
     public static string TraefikDynamic(IReadOnlyList<ProxyEntryPoint> entryPoints, IEnumerable<ProxyRoute> routes, IEnumerable<ClusterIngress> clusters,
-        string explainUrl, bool tls)
+        string explainUrl, bool tls, IEnumerable<(string Name, ClusterIngress Ingress)>? published = null)
     {
         var plain = entryPoints.Where(e => !e.Tls).ToList();
         var secure = entryPoints.Where(e => e.Tls).ToList();
@@ -115,6 +120,25 @@ static class ServiceConfig
                 tcpRouters[key] = new JsonObject
                 {
                     ["rule"] = $"HostSNIRegexp(`{pattern}`)", ["entryPoints"] = Names(secure), ["service"] = key,
+                    ["tls"] = new JsonObject { ["passthrough"] = true },
+                };
+            }
+        }
+        // Hosts a cluster published through external-dns that point at its ingress, outside the cluster's own subdomain.
+        foreach (var (name, ingress) in (published ?? []).DistinctBy(p => p.Name).OrderBy(p => p.Name, StringComparer.Ordinal))
+        {
+            var key = "e-" + Key(name);
+            if (ingress.Http is { } http)
+            {
+                services[key] = new JsonObject { ["loadBalancer"] = new JsonObject { ["servers"] = new JsonArray(new JsonObject { ["url"] = $"http://{http}:80" }) } };
+                routers[key] = new JsonObject { ["rule"] = $"Host(`{name}`)", ["entryPoints"] = Names(plain), ["service"] = key };
+            }
+            if (ingress.Https is { } https)
+            {
+                tcpServices[key] = new JsonObject { ["loadBalancer"] = new JsonObject { ["servers"] = new JsonArray(new JsonObject { ["address"] = $"{https}:443" }) } };
+                tcpRouters[key] = new JsonObject
+                {
+                    ["rule"] = $"HostSNI(`{name}`)", ["entryPoints"] = Names(secure), ["service"] = key,
                     ["tls"] = new JsonObject { ["passthrough"] = true },
                 };
             }
