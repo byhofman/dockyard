@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Dockyard.Agent/Dockyard.Agent.csproj" />
+    <Project Path="src/Dockyard.Command/Dockyard.Command.csproj" />
     <Project Path="src/Dockyard.Dashboard/Dockyard.Dashboard.csproj" />
     <Project Path="src/Dockyard.Engine/Dockyard.Engine.csproj" />
     <Project Path="src/Dockyard.Kind/Dockyard.Kind.csproj" />

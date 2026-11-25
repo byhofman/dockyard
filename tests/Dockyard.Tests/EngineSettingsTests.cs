@@ -15,7 +15,7 @@ public sealed class EngineSettingsTests : IDisposable
     {
         public string Stored = """{ "log-level": "warn" }""";
         public List<string> Applied { get; } = [];
-        public IReadOnlyList<EngineInfo> Engines { get; } = [new("linux", "Linux", "", "", "linux", "npipe://x"), new("win", "Windows", "", "", "win", "npipe://y")];
+        public IReadOnlyList<EngineInfo> Engines { get; } = [new("linux", "Linux", "Linux containers", "", "linux", "npipe://x"), new("win", "Windows", "Windows containers", "", "win", "npipe://y")];
         public IReadOnlyList<ComponentInfo> Components { get; } = [];
         public bool IsInstalled => true;
         public bool RunsFromInstallLocation => true;
@@ -146,6 +146,27 @@ public sealed class EngineSettingsTests : IDisposable
     }
 
     [Fact]
+    public async Task Engine_ls_marks_the_active_engine_and_the_others_take_an_engine_there_is()
+    {
+        var host = new SettingsHost();
+
+        Assert.Equal(0, await Run(host, "engine", "ls"));
+        Assert.Equal(0, await Run(host, "engine", "use", "win"));
+        Assert.Equal(2, await Run(host, "engine", "start", "mars"));
+        Assert.Equal(2, await Run(host, "engine", "start"));
+
+        Assert.Equal(["* linux\tLinux containers\trunning", "  win\tWindows containers\trunning", "docker uses win"], output.Take(3));
+        Assert.Contains(errors, e => e.StartsWith("An engine is needed: linux, win", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task The_new_commands_are_commands_and_https_takes_on_or_off()
+    {
+        foreach (var command in new[] { "engine", "cluster", "https", "update", "config" }) Assert.True(Cli.IsCommand([command, "x"]));
+        Assert.Equal(2, await Run(new SettingsHost(), "https", "maybe"));
+    }
+
+    [Fact]
     public async Task Wrong_arguments_exit_2_with_the_usage()
     {
         var host = new SettingsHost();
@@ -153,7 +174,7 @@ public sealed class EngineSettingsTests : IDisposable
         Assert.Equal(2, await Run(host, "config", "apply"));
         Assert.Equal(2, await Run(host, "config", "show", "--engine", "mars"));
         Assert.Equal(2, await Run(host, "config", "frobnicate"));
-        Assert.Contains(errors, e => e.Contains("Usage: dockyard config", StringComparison.Ordinal));
+        Assert.Contains(errors, e => e.Contains("Usage: dockyard", StringComparison.Ordinal));
     }
 
     [Fact]

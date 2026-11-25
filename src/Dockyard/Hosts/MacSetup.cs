@@ -22,6 +22,7 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
             else await tools.Ensure(log, tool);
         }
         await FindBrewPlugins(log, tools);
+        LinkCommand();
 
         await AdministratorSteps(log, request.Silent);
         await InstallCredentialHelper(log);
@@ -209,6 +210,16 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
         if (new FileInfo(MacLayout.UserSocketLink).LinkTarget == MacLayout.DockerSocket) File.Delete(MacLayout.UserSocketLink);
         if (File.Exists(MacLayout.TestcontainersFile) && File.ReadAllText(MacLayout.TestcontainersFile).Trim() == MacLayout.TestcontainersLine)
             File.Delete(MacLayout.TestcontainersFile);
+    }
+
+    // The dockyard command, through the same wrapper on the PATH as the tools: a link to the app in this user's bin folder.
+    static void LinkCommand()
+    {
+        var link = Path.Combine(MacLayout.BinDir, "dockyard");
+        Directory.CreateDirectory(MacLayout.BinDir);
+        if (new FileInfo(link).LinkTarget == MacLayout.InstalledExe) return;
+        File.Delete(link);
+        File.CreateSymbolicLink(link, MacLayout.InstalledExe);
     }
 
     public static async Task FindBrewPlugins(Action<string> log, ToolComponents tools)

@@ -136,7 +136,7 @@ static class MacLayout
     // /etc/paths.d is read by every account's shells, root's too, and ~/.dockyard/bin is this user's to change. So the PATH
     // gets a folder only root can write, with a small script per command that runs this user's copy for this user alone.
     public const string SharedBinDir = "/usr/local/dockyard/bin";
-    public static readonly string[] SharedCommands = ["docker", "kind", "kubectl", "helm", "docker-credential-osxkeychain"];
+    public static readonly string[] SharedCommands = ["docker", "kind", "kubectl", "helm", "docker-credential-osxkeychain", "dockyard"];
 
     // brewBin: where Homebrew's copy is, for when the tool came from there and this user has no copy of Dockyard's.
     public static string Wrapper(string uid, string binDir, string command, string? brewBin = null) =>

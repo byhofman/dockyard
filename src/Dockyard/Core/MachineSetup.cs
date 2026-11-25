@@ -82,6 +82,7 @@ static class MachineSetup
             $"Remove-MpPreference -AttackSurfaceReductionOnlyExclusions {string.Join(',', MachineApps.EverExcludedFromAsr.Select(Shell.PsQuote))}");
         await Shell.Run("net.exe", "localgroup", "docker-users", "/delete");
         MachineApps.RemoveFromMachinePath(Paths.DockerDir);
+        MachineApps.RemoveFromMachinePath(MachineApps.CommandDir);
         MachineApps.RemoveLegacy(log, keepPid);
 
         foreach (var dir in new[] { Paths.DockerDir, Paths.AppDir })

@@ -9,25 +9,35 @@ namespace Dockyard.Core;
 static class Cli
 {
     public const string Usage = """
-        Usage: dockyard config show [--engine <engine>]
-               dockyard config validate [--engine <engine>] --file <file>
-               dockyard config apply [--engine <engine>] --file <file>
-               dockyard config edit [--engine <engine>]
+        Usage: dockyard engine ls | start <engine> | stop <engine> | use <engine>
+               dockyard config show | validate --file <file> | apply --file <file> | edit   [--engine <engine>]
+               dockyard cluster ls
+               dockyard cluster create <name> [--workers <n>] [--addons <names>] [--shared-storage] [--file <definition>]
+               dockyard cluster recreate <name> [--file <definition>]
+               dockyard cluster delete | use | kubeconfig | definition <name>
+               dockyard https on | off
+               dockyard update [--check]
 
+          engine     The engines: linux, and win on Windows. use makes it the docker context.
           config     An engine's daemon.json: what you set in it, without the keys Dockyard adds (dns; hosts on Windows).
                      apply checks it, restarts the engine if it runs, and puts the previous one back if it will not start.
                      edit opens it in your editor (VISUAL or EDITOR; Notepad, TextEdit or nano otherwise) and applies it.
+          cluster    kind clusters as the dashboard makes them: the context in your kubeconfig, the definition kept.
+                     --addons: metrics-server, traefik (with Helm). recreate deletes it, with everything in it, and makes
+                     it again from its definition or the one given.
+          https      Trusted HTTPS for container domains, with Dockyard's own certificate authority.
+          update     Brings the components up to date; --check only lists them. Dockyard itself updates from the tray.
           --engine   linux or win (Windows); the active engine without it.
           --file     A file, or - for standard input.
 
         Exit code: 0 done, 1 failed, 2 wrong arguments.
         """;
 
-    static readonly string[] Commands = ["config"];
+    static readonly string[] Commands = ["config", "engine", "cluster", "https", "update"];
 
     public static bool IsCommand(string[] args) => args.Length > 0 && Commands.Contains(args[0]);
 
-    sealed class UsageException(string message) : Exception(message);
+    internal sealed class UsageException(string message) : Exception(message);
 
     // From a terminal: edit stays here, with the editor; everything else goes to the tray when there is one.
     public static int RunFromTerminal(string[] args)
@@ -72,6 +82,10 @@ static class Cli
             return args switch
             {
                 { Count: >= 2 } when args[0] == "config" => await Config(host, args[1], args.Skip(2).ToList(), log, error),
+                { Count: >= 2 } when args[0] == "engine" => await Engines(host, args[1], args.Skip(2).ToList(), log),
+                { Count: >= 2 } when args[0] == "cluster" => await CliClusters.Run(host, args[1], args.Skip(2).ToList(), log, error),
+                { Count: 2 } when args[0] == "https" => await HttpsCommand(host, args[1], log),
+                { Count: >= 1 } when args[0] == "update" => await Update(host, args.Contains("--check"), log, error),
                 _ => throw new UsageException($"Unknown command: {string.Join(' ', args)}"),
             };
         }
@@ -88,7 +102,7 @@ static class Cli
         }
     }
 
-    static string? Option(IReadOnlyList<string> args, string name)
+    internal static string? Option(IReadOnlyList<string> args, string name)
     {
         var at = args.ToList().IndexOf(name);
         if (at < 0) return null;
@@ -101,7 +115,7 @@ static class Cli
         return host.Engines.Any(e => e.Id == engine) ? engine : throw new UsageException($"No engine {engine} here. Engines: {string.Join(", ", host.Engines.Select(e => e.Id))}");
     }
 
-    static string Content(IReadOnlyList<string> args)
+    internal static string Content(IReadOnlyList<string> args)
     {
         var file = Option(args, "--file") ?? throw new UsageException("--file is required");
         return file.StartsWith(InlinePrefix, StringComparison.Ordinal)
@@ -135,6 +149,66 @@ static class Cli
             }
             default: throw new UsageException($"Unknown config command: {verb}");
         }
+    }
+
+    static async Task<int> Engines(IEngineHost host, string verb, IReadOnlyList<string> args, Action<string> log)
+    {
+        if (verb == "ls")
+        {
+            var active = host.ActiveEngine();
+            foreach (var e in host.Engines)
+                log($"{(e.Id == active ? "*" : " ")} {e.Id}\t{e.Title}\t{(await host.IsRunning(e.Id) ? "running" : "stopped")}");
+            return 0;
+        }
+        var engine = args.FirstOrDefault() is { } id && host.Engines.Any(e => e.Id == id)
+            ? id : throw new UsageException($"An engine is needed: {string.Join(", ", host.Engines.Select(e => e.Id))}");
+        switch (verb)
+        {
+            case "start": await host.Start(engine); log($"{engine} runs"); break;
+            case "stop": await host.Stop(engine); log($"{engine} is stopped"); break;
+            case "use": await host.UseContext(engine); log($"docker uses {engine}"); break;
+            default: throw new UsageException($"Unknown engine command: {verb}");
+        }
+        return 0;
+    }
+
+    static async Task<int> HttpsCommand(IEngineHost host, string state, Action<string> log)
+    {
+        switch (state)
+        {
+            case "on": await Https.Enable(host, log, silent: false); break;
+            case "off": await Https.Disable(host, log, silent: false); break;
+            default: throw new UsageException("https takes on or off");
+        }
+        return 0;
+    }
+
+    // Dockyard itself is left to the tray, which has to restart for it.
+    static async Task<int> Update(IEngineHost host, bool checkOnly, Action<string> log, Action<string> error)
+    {
+        List<(string Component, Release? Release)> available = [];
+        foreach (var c in host.Components)
+        {
+            Version? installed;
+            Release? latest;
+            try
+            {
+                installed = await host.Installed(c.Id);
+                latest = installed is null ? null : await host.Latest(c.Id);
+            }
+            catch (HttpRequestException e)
+            {
+                error($"{c.Title}: {e.Message}");
+                continue;
+            }
+            if (installed is null) continue;
+            var newer = latest is not null && latest.Version > installed;
+            log($"{c.Title}\t{installed}\t{(newer ? $"{latest!.Version} available" : "up to date")}");
+            if (newer && c.Id != nameof(Component.App)) available.Add((c.Id, latest));
+        }
+        if (checkOnly || available.Count == 0) return 0;
+        await host.Update(log, available);
+        return 0;
     }
 
     // The file goes to the editor until it is valid or left unchanged.

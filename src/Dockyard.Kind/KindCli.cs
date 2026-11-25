@@ -40,6 +40,7 @@ static class KindCli
     }
     public static string[] Delete(string name, string kubeconfig) => ["delete", "cluster", "--name", name, "--kubeconfig", kubeconfig];
     public static string[] Kubeconfig(string name) => ["get", "kubeconfig", "--name", name];
+    public static readonly string[] Clusters = ["get", "clusters"];
 
     public static async Task<(int ExitCode, string Output, string Error)> Run(string kind, string context, IReadOnlyList<string> args, Action<string>? onLine = null)
     {

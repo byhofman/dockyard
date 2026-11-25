@@ -74,7 +74,7 @@ static class MachineApps
     // Only files in Program Files, which only administrators can write: an exclusion goes by path and exempts whatever is
     // there from every ASR rule. Earlier versions also excluded the installer wherever it ran, and the one-liner asks for
     // its own download path when Defender blocks it, so uninstall takes those back too.
-    static IEnumerable<string> ExcludedFromAsr => new[] { Paths.AppExe, Paths.DashboardExe };
+    static IEnumerable<string> ExcludedFromAsr => new[] { Paths.AppExe, Paths.DashboardExe, CommandExe };
     public static IEnumerable<string> EverExcludedFromAsr => ExcludedFromAsr.Append(Paths.LegacyDashboardExe).Append(Paths.OneLinerExe).Concat(WingetToolFiles);
 
     // Defender's prevalence/age rule (event 1121) blocks every new build, and an exclusion goes by path because a hash changes with each build.
@@ -110,6 +110,27 @@ static class MachineApps
         if (!engineOnly) await InstallDashboard(log, dashboardDir);
         else if (File.Exists(Paths.DashboardExe) || File.Exists(Paths.LegacyDashboardExe)) RemoveDashboard(log);
         else log("The dashboard is not installed");
+        InstallCommand();
+    }
+
+    // The dockyard command, a console program that starts Dockyard.exe with the terminal's own handles: cmd and PowerShell
+    // neither wait for a windowed program nor give it their output. In a folder of its own, where it is the only dockyard.
+    public static string CommandDir => Path.Combine(Paths.AppDir, "bin");
+    public static string CommandExe => Path.Combine(CommandDir, "dockyard.exe");
+
+    static void InstallCommand()
+    {
+        using var embedded = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("dockyard-command.exe");
+        if (embedded is null) return;
+        Directory.CreateDirectory(CommandDir);
+        var incoming = CommandExe + ".new";
+        using (var file = File.Create(incoming)) embedded.CopyTo(file);
+        InUseFiles.MoveAside(CommandExe);
+        File.Move(incoming, CommandExe);
+        File.Delete(Path.Combine(CommandDir, "dockyard.cmd"));
+        File.Delete(Path.Combine(Paths.AppDir, "dockyard.cmd"));
+        RemoveFromMachinePath(Paths.AppDir);
+        AddToMachinePath(CommandDir);
     }
 
     // A running exe cannot be overwritten but can be renamed, and the worker doing this may be running from that very

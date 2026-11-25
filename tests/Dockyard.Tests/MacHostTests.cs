@@ -32,7 +32,7 @@ public sealed class MacHostTests
 
         Assert.EndsWith("echo /usr/local/dockyard/bin > /etc/paths.d/dockyard && chmod 644 /etc/paths.d/dockyard", script);
         Assert.Contains("chown root:wheel /usr/local/dockyard /usr/local/dockyard/bin", script);
-        foreach (var command in new[] { "docker", "kind", "docker-credential-osxkeychain" })
+        foreach (var command in new[] { "docker", "kind", "docker-credential-osxkeychain", "dockyard" })
             Assert.Contains($"> /usr/local/dockyard/bin/{command} && chmod 755 /usr/local/dockyard/bin/{command}", script);
     }
 

@@ -6,7 +6,7 @@ namespace Dockyard.Dashboard.Features.Clusters;
 // kind keeps no state of its own: a cluster is the containers carrying its labels, so the engine's list is the truth.
 static partial class KindClusters
 {
-    public const string ClusterLabel = "io.x-k8s.kind.cluster";
+    public const string ClusterLabel = KindLabels.Cluster;
     public const string RoleLabel = "io.x-k8s.kind.role";
     const int ApiServerPort = 6443;
 
@@ -28,10 +28,7 @@ static partial class KindClusters
         .OrderBy(c => c.Name, StringComparer.Ordinal)
         .ToList();
 
-    public static bool IsValidName(string name) => ValidName().IsMatch(name);
-
-    [GeneratedRegex(@"^[a-z0-9.-]+$")]
-    private static partial Regex ValidName();
+    public static bool IsValidName(string name) => KindNames.IsValid(name);
 
     [GeneratedRegex(@"^(?:[^@]*/)?node:(?<v>v\d+\.\d+\.\d+)")]
     private static partial Regex NodeVersion();
