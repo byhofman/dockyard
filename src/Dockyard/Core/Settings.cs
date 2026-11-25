@@ -40,6 +40,8 @@ sealed class Settings
     public void Save()
     {
         var mine = AsJson();
+        // Nothing to say when nothing changed: setup runs this every time, also for a user who may not write here.
+        if (mine.All(p => JsonNode.DeepEquals(p.Value, loaded[p.Key]))) return;
         var merged = Load(file).AsJson();
         foreach (var (name, value) in mine)
             if (!JsonNode.DeepEquals(value, loaded[name])) merged[name] = value?.DeepClone();

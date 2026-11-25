@@ -17,9 +17,11 @@ $dashboard = Join-Path $appDir 'dockyard-dashboard.exe'
 $ownDocker = Join-Path $env:ProgramFiles 'Docker\docker.exe'
 
 # winget's copy where it brought one, otherwise Dockyard's own in Program Files. Found again after every run of the wizard.
+# Dockyard installs winget's tools for all users, whose links are in Program Files; a user's own are in LocalAppData.
 function Tool($name, $own) {
-    $link = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\$name.exe"
-    if (Test-Path $link) { $link } else { $own }
+    $links = (Join-Path $env:ProgramFiles "WinGet\Links\$name.exe"), (Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\$name.exe")
+    $found = $links | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if ($found) { $found } else { $own }
 }
 function Find-Tools {
     $script:docker = Tool 'docker' $ownDocker
@@ -117,6 +119,7 @@ Check 'no dashboard' (-not (Test-Path $dashboard))
 Check 'settings kept' ((Get-Content "$env:APPDATA\Dockyard\settings.json" -Raw) -match '"StopOtherOnSwitch":\s*false')
 $distros = (wsl.exe -l -q | Out-String) -replace "`0", ''
 Check 'the dockyard distro is there' ($distros -match 'dockyard')
+Find-Tools
 Check 'docker contexts' ((& $docker context ls -q) -contains 'linux')
 if ($Wizard) { Check 'no mirrored networking on Windows Server, where it cuts the engine off' (-not ((Test-Path "$env:USERPROFILE\.wslconfig") -and ((Get-Content "$env:USERPROFILE\.wslconfig" -Raw) -match 'networkingMode=mirrored'))) }
 
