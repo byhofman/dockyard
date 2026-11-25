@@ -164,7 +164,7 @@
       </Border>
 
       <Border DockPanel.Dock="Bottom" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="14,4">
-        <Grid ColumnDefinitions="Auto,*">
+        <Grid ColumnDefinitions="Auto,*,Auto">
           <ProgressBar IsIndeterminate="True" IsVisible="{Binding Activity.IsWorking}" Width="60" MinWidth="60" Margin="0,0,10,0" VerticalAlignment="Center" />
           <Button x:Name="ActivityButton" Grid.Column="1" Padding="0" Background="Transparent" BorderThickness="0" HorizontalAlignment="Left"
                   Command="{Binding Activity.ToggleCommand}" ToolTip.Tip="Show or hide what the dashboard did" AutomationProperties.Name="Activity">
@@ -188,6 +188,8 @@
               </ScrollViewer>
             </Border>
           </Popup>
+          <TextBlock Grid.Column="2" Classes="muted small" Text="{x:Static shell:ShellViewModel.Version}" VerticalAlignment="Center" Margin="12,0,0,0"
+                     ToolTip.Tip="Dockyard's version" />
         </Grid>
       </Border>
 

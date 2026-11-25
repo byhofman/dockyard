@@ -11,6 +11,10 @@ namespace Dockyard.Dashboard.Shell;
 
 sealed class ShellViewModel : Observable
 {
+    public static string Version { get; } = "v" + (System.Reflection.Assembly.GetEntryAssembly()?
+        .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+        .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion ?? "0.0.0").Split('+')[0];
+
     ContextWatcher? watcher;
     Section currentSection;
     string search = "";
