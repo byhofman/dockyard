@@ -95,7 +95,12 @@ static class ShellSetup
     public static void Apply(Settings settings, Action<string> log)
     {
         if (Environment.UserName == "root") return;
-        try { Apply(settings.KubectlShell && !settings.RemovedComponents.Contains(nameof(Component.Kubectl)), log); }
+        TryApply(settings.KubectlShell && !settings.RemovedComponents.Contains(nameof(Component.Kubectl)), log);
+    }
+
+    public static void TryApply(bool enabled, Action<string> log)
+    {
+        try { Apply(enabled, log); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { log($"The shell setup for kubectl was left as it is ({e.Message})"); }
     }
 

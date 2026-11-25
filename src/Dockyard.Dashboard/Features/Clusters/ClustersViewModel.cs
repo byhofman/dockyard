@@ -201,7 +201,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         var metrics = DialogField.Check($"metrics-server {ClusterAddons.MetricsServer.Version}: kubectl top and pod autoscaling", isChecked: from?.Addons.Contains(ClusterAddons.MetricsServer.Release) ?? true);
         var traefik = DialogField.Check($"Traefik {ClusterAddons.Traefik.Version}: an ingress controller, reachable through its load balancer", isChecked: from?.Addons.Contains(ClusterAddons.Traefik.Release) ?? false);
         string? generated = from is null ? KindCli.Config(0) : null;
-        var definition = DialogField.Code("Definition: kind's cluster config", from?.Yaml ?? generated!, Controls.CodeLanguage.Yaml, ClusterDefinitions.Problem);
+        var definition = DialogField.Code("Definition: kind's cluster config", from?.Yaml ?? generated!, Shared.CodeLanguage.Yaml, ClusterDefinitions.Problem);
         var message = (fromName is null ? "Each node is a container on the Linux engine. The first cluster pulls kind's node image, which takes a few minutes. " : $"From {fromName}'s definition. ")
             + "Its context goes into your kubeconfig and becomes the current one."
             + (helm is null ? " Add Helm in Dockyard's window to install metrics-server and Traefik with it." : "");
@@ -243,7 +243,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     {
         var saved = ClusterDefinitions.Load(cluster.Name);
         var current = saved ?? ClusterDefinitions.Guess(cluster);
-        var definition = DialogField.Code("Definition: kind's cluster config", current.Yaml, Controls.CodeLanguage.Yaml, ClusterDefinitions.Problem);
+        var definition = DialogField.Code("Definition: kind's cluster config", current.Yaml, Shared.CodeLanguage.Yaml, ClusterDefinitions.Problem);
         var addons = current.AddonList;
         var message = (saved is null ? "Dockyard did not make this cluster, so this is put together from its nodes. " : "")
             + "kind cannot change a cluster that exists: Recreate deletes it, with everything in it, and makes it again from this definition"

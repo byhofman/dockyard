@@ -44,6 +44,7 @@ sealed class MainViewModel : Observable
         {
             ToggleCommand = Cmd(() => Toggle(e.Id)),
             UseCommand = Cmd(() => Switch(e.Id)),
+            SettingsCommand = new Command(() => { EngineSettingsRequested?.Invoke(e); return Task.CompletedTask; }),
         }).ToList();
 
         var catalog = host.Components.Any(c => c.Id == ComponentRules.DashboardId)
@@ -122,15 +123,22 @@ sealed class MainViewModel : Observable
     public Command DisableHttpsCommand { get; }
     public bool HttpsEnabled => settings.HttpsEnabled;
     public bool HttpsDisabled => !settings.HttpsEnabled;
+    // A switch under Settings: the commands do the work, and a declined approval puts it back.
+    public bool HttpsSwitch
+    {
+        get => settings.HttpsEnabled;
+        set
+        {
+            if (value == settings.HttpsEnabled) return;
+            _ = (value ? EnableHttpsCommand : DisableHttpsCommand).ExecuteAsync().ContinueWith(_ => Raise(nameof(HttpsSwitch)), TaskScheduler.FromCurrentSynchronizationContext());
+        }
+    }
     public bool ShowImport => ShowManage && DockerDesktop.IsInstalled;
     public ComponentViewModel Dashboard { get; }
 
     public bool ShowEngineConfiguration => ShowManage;
-    // The dashboard edits daemon.json; without it, the dockyard command does.
-    public event Action<string>? OpenDashboardRequested;
-    public Command EditEngineSettingsCommand => editEngineSettings ??= new Command(() => { OpenDashboardRequested?.Invoke("Engine"); return Task.CompletedTask; }, () => host.HasDashboard);
-    Command? editEngineSettings;
-    public bool HasDashboardForSettings => host.HasDashboard;
+    // The window that edits an engine's daemon.json, opened from its card.
+    public event Action<EngineInfo>? EngineSettingsRequested;
 
     public bool IncludeDashboard { get => Dashboard.Include; set { Dashboard.Include = value; Raise(nameof(IncludeDashboard)); } }
     public IEnumerable<ComponentViewModel> OptionalChoices => Components.Where(c => c.IsOptional);
@@ -189,6 +197,7 @@ sealed class MainViewModel : Observable
     public bool IsBusy => busy is not null;
     public string Status { get => status; private set => Set(ref status, value); }
     public string LogText => log.ToString();
+    public bool HasLog => log.Length > 0;
     // The log stays out of the way: the footer shows the step at hand, and a click on it opens the rest.
     bool showLog;
     public bool ShowLog { get => showLog; set => Set(ref showLog, value); }
@@ -531,7 +540,7 @@ sealed class MainViewModel : Observable
         }
         log.AppendLine(line);
         if (Busy is not null) Status = line;
-        Raise(nameof(LogText));
+        Raise(nameof(LogText), nameof(HasLog));
     }
 
     Command Cmd(Func<Task> run, Func<bool>? canRun = null)

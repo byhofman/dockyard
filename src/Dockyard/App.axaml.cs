@@ -47,7 +47,6 @@ public partial class App : Application
     {
         desktop = (IClassicDesktopStyleApplicationLifetime)ApplicationLifetime!;
         vm = new MainViewModel(Hosts.HostFactory.Create(), setupMode: mode == AppMode.Setup, SetupOptions.Parse(args));
-        vm.OpenDashboardRequested += section => OpenDashboard(section);
         vm.StartPolling();
         vm.ShutdownRequested += () => Dispatcher.UIThread.Post(Quit);
 

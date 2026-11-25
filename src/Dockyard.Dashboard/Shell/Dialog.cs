@@ -26,7 +26,7 @@ sealed class DialogField : Observable
     public static DialogField Check(string label, bool isChecked = false) => new(label, isChecked);
 
     // A YAML or JSON text in the code editor; problem says what is wrong with it as it is typed.
-    public static DialogField Code(string label, string text, Controls.CodeLanguage language, Func<string, string?>? problem = null) =>
+    public static DialogField Code(string label, string text, Shared.CodeLanguage language, Func<string, string?>? problem = null) =>
         new(label, text) { IsCode = true, Language = language, problemOf = problem };
 
     Func<string, string?>? problemOf;
@@ -36,7 +36,7 @@ sealed class DialogField : Observable
     public IReadOnlyList<string>? Choices { get; }
     public bool IsCheck { get; }
     public bool IsCode { get; private init; }
-    public Controls.CodeLanguage Language { get; private init; }
+    public Shared.CodeLanguage Language { get; private init; }
     public bool IsChoice => Choices is not null;
     public bool IsText => Choices is null && !IsCheck && !IsCode;
     public string? Problem => problemOf?.Invoke(text);

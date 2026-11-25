@@ -3,7 +3,7 @@ using Avalonia.Media;
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Rendering;
 
-namespace Dockyard.Dashboard.Controls;
+namespace Dockyard.Shared;
 
 enum CodeLanguage { Json, Yaml }
 

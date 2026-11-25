@@ -14,6 +14,7 @@ sealed class ActivityLog : Observable
     public ActivityLog() => ToggleCommand = new Command(() => { IsOpen = !IsOpen; return Task.CompletedTask; });
 
     public ObservableCollection<string> Lines { get; } = [];
+    public bool HasLines => Lines.Count > 0;
     public Command ToggleCommand { get; }
     public string Current { get => current; private set => Set(ref current, value); }
     public bool IsWorking => running > 0;
@@ -29,6 +30,7 @@ sealed class ActivityLog : Observable
         line = line.Trim();
         if (line.Length == 0) return;
         Lines.Add($"{DateTime.Now:HH:mm:ss}  {line}");
+        if (Lines.Count == 1) Raise(nameof(HasLines));
         while (Lines.Count > Kept) Lines.RemoveAt(0);
         Current = line;
     }

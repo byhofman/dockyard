@@ -15,6 +15,7 @@ sealed class EngineViewModel(EngineInfo info) : Observable
     public string Endpoint => Info.Endpoint;
     public required Command ToggleCommand { get; init; }
     public required Command UseCommand { get; init; }
+    public required Command SettingsCommand { get; init; }
 
     public bool IsRunning
     {

@@ -4,8 +4,7 @@
         xmlns:cont="using:Dockyard.Dashboard.Features.Containers"
         xmlns:res="using:Dockyard.Dashboard.Features.Resources"
         xmlns:clu="using:Dockyard.Dashboard.Features.Clusters"
-        xmlns:eng="using:Dockyard.Dashboard.Features.Engine"
-        xmlns:ctl="using:Dockyard.Dashboard.Controls"
+        xmlns:ctl="using:Dockyard.Shared"
         x:Class="Dockyard.Dashboard.Shell.MainWindow"
         x:DataType="shell:ShellViewModel"
         Title="Dockyard Dashboard"
@@ -28,9 +27,6 @@
     </DataTemplate>
     <DataTemplate DataType="res:DiskViewModel">
       <res:DiskView />
-    </DataTemplate>
-    <DataTemplate DataType="eng:EngineSettingsViewModel">
-      <eng:EngineSettingsView />
     </DataTemplate>
     <DataTemplate DataType="clu:ClustersViewModel">
       <clu:ClustersView />
@@ -178,6 +174,9 @@
                  IsOpen="{Binding Activity.IsOpen, Mode=TwoWay}" IsLightDismissEnabled="True">
             <Border Classes="searchmenu" Width="620" MaxHeight="340" Padding="12,10">
               <ScrollViewer>
+                <StackPanel>
+                <TextBlock Classes="muted small" IsVisible="{Binding !Activity.HasLines}" TextWrapping="Wrap"
+                           Text="Nothing yet. What the dashboard does, such as starting containers or making clusters, shows up here." />
                 <ItemsControl ItemsSource="{Binding Activity.Lines}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="x:String">
@@ -185,6 +184,7 @@
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                </StackPanel>
               </ScrollViewer>
             </Border>
           </Popup>
