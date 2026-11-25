@@ -315,6 +315,45 @@
       <Setter Property="IsHitTestVisible" Value="False" />
       <Setter Property="Focusable" Value="False" />
     </Style>
+    <Style Selector="SelectableTextBlock.activity">
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="SelectableTextBlock.activity.step">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="SelectableTextBlock.activity.detail">
+      <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+      <Setter Property="Margin" Value="0,0,0,0" />
+    </Style>
+    <Style Selector="SelectableTextBlock.activity.command">
+      <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+    </Style>
+    <Style Selector="SelectableTextBlock.activity.error">
+      <Setter Property="Foreground" Value="{DynamicResource Bad}" />
+    </Style>
+    <Style Selector="Grid.activitystep">
+      <Setter Property="Margin" Value="14,8,14,1" />
+    </Style>
+    <Style Selector="Ellipse.activitydot">
+      <Setter Property="Width" Value="6" />
+      <Setter Property="Height" Value="6" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="Fill" Value="{DynamicResource Muted}" />
+    </Style>
+    <Style Selector="Ellipse.activitydot.step">
+      <Setter Property="Fill" Value="{DynamicResource Accent}" />
+    </Style>
+    <Style Selector="Ellipse.activitydot.info">
+      <Setter Property="Fill" Value="{DynamicResource Ok}" />
+    </Style>
+    <Style Selector="Ellipse.activitydot.error">
+      <Setter Property="Fill" Value="{DynamicResource Bad}" />
+    </Style>
+    <Style Selector="TextBlock.muted.activityerror">
+      <Setter Property="Foreground" Value="{DynamicResource Bad}" />
+    </Style>
     <Style Selector="Grid.system">
       <Setter Property="Opacity" Value="0.6" />
     </Style>

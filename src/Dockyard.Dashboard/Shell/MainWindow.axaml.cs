@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -20,7 +21,20 @@ public partial class MainWindow : Window
                 {
                     if (e.PropertyName == nameof(ShellViewModel.HasDialog) && vm.HasDialog) Dispatcher.UIThread.Post(FocusDialog, DispatcherPriority.Loaded);
                 };
+            if (DataContext is ShellViewModel shell)
+            {
+                shell.Activity.Lines.CollectionChanged += (_, _) => ScrollActivityToEnd();
+                shell.Activity.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(ActivityLog.IsOpen) && shell.Activity.IsOpen) ScrollActivityToEnd(); };
+            }
         };
+    }
+
+    void ScrollActivityToEnd() => Dispatcher.UIThread.Post(() => ActivityScroll.ScrollToEnd(), DispatcherPriority.Background);
+
+    async void CopyActivity(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is ShellViewModel shell && TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
+            await clipboard.SetTextAsync(shell.Activity.Text);
     }
 
     // The first field, or else the button that confirms, so Enter and Escape work without the mouse.

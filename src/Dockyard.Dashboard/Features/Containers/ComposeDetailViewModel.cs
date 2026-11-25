@@ -255,7 +255,7 @@ sealed class ComposeDetailViewModel : Observable, IDisposable
         var args = ComposeCli.Args(context, Project, verb);
         Busy = $"{what} {Project.Name}…";
         using var working = activity.Working(Busy);
-        activity.Note($"> docker {string.Join(' ', args)}");
+        activity.Note($"docker {string.Join(' ', args)}", ActivityKind.Command);
         var last = "";
         try
         {

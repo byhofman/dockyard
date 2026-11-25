@@ -183,7 +183,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
                 var note = string.Join(", ", forwards.Where(f => !busy.Contains(f.Port)).Select(f => $"127.0.0.1:{f.Port} → {f.Service}")
                     .Concat(busy.Select(p => $"port {p} in use by another program")));
                 if (note != loggedForwards.GetValueOrDefault(cluster.Name, "") && (note.Length > 0 || loggedForwards.ContainsKey(cluster.Name)))
-                    Shell.Activity.Note($"{cluster.Name} load balancer: {(note.Length > 0 ? note : "no ports")}");
+                    Shell.Activity.Note($"{cluster.Name} load balancer: {(note.Length > 0 ? note : "no ports")}", ActivityKind.Info);
                 loggedForwards[cluster.Name] = note;
                 forwardNotes[cluster.Name] = string.Join("\n", forwards.Where(f => !busy.Contains(f.Port)).Select(f => $"127.0.0.1:{f.Port} → {f.Service}")
                     .Concat(taken.Select(t => $"Port {t.Port} is used by cluster {t.Cluster}; its service keeps the port Docker picked"))

@@ -231,7 +231,7 @@ sealed class ShellViewModel : Observable
 
     void Show(Toast toast)
     {
-        Activity.Note(toast.Message);
+        Activity.Note(toast.Message, toast.IsError ? ActivityKind.Error : ActivityKind.Info);
         Toasts.Add(toast);
         DispatcherTimer.RunOnce(() => Toasts.Remove(toast), TimeSpan.FromSeconds(6));
     }
