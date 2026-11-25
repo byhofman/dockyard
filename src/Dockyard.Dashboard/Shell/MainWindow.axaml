@@ -4,6 +4,7 @@
         xmlns:cont="using:Dockyard.Dashboard.Features.Containers"
         xmlns:res="using:Dockyard.Dashboard.Features.Resources"
         xmlns:clu="using:Dockyard.Dashboard.Features.Clusters"
+        xmlns:bld="using:Dockyard.Dashboard.Features.Builds"
         xmlns:ctl="using:Dockyard.Shared"
         x:Class="Dockyard.Dashboard.Shell.MainWindow"
         x:DataType="shell:ShellViewModel"
@@ -24,6 +25,9 @@
     </DataTemplate>
     <DataTemplate DataType="res:NetworksViewModel">
       <res:NetworksView />
+    </DataTemplate>
+    <DataTemplate DataType="bld:BuildsViewModel">
+      <bld:BuildsView />
     </DataTemplate>
     <DataTemplate DataType="res:DiskViewModel">
       <res:DiskView />

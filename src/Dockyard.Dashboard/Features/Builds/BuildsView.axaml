@@ -1,0 +1,131 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:bld="using:Dockyard.Dashboard.Features.Builds"
+             x:Class="Dockyard.Dashboard.Features.Builds.BuildsView"
+             x:DataType="bld:BuildsViewModel">
+  <UserControl.Styles>
+    <Style Selector="PathIcon.ok">
+      <Setter Property="Foreground" Value="{DynamicResource Ok}" />
+    </Style>
+    <Style Selector="PathIcon.bad">
+      <Setter Property="Foreground" Value="{DynamicResource Bad}" />
+    </Style>
+    <Style Selector="PathIcon.idle">
+      <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+    </Style>
+    <Style Selector="ProgressBar.share">
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="Height" Value="4" />
+      <Setter Property="MinHeight" Value="4" />
+      <Setter Property="Maximum" Value="1" />
+    </Style>
+  </UserControl.Styles>
+
+  <Grid x:Name="Layout" ColumnDefinitions="*,5,460">
+    <DockPanel>
+      <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="16,12,16,4">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+          <CheckBox Classes="pick" IsChecked="{Binding AllSelected}" ToolTip.Tip="Select all" AutomationProperties.Name="Select all builds" />
+          <TextBlock Grid.Column="1" Classes="section" Text="BUILDS" VerticalAlignment="Center" />
+          <Button Grid.Column="2" Command="{Binding RefreshCommand}" ToolTip.Tip="Read the build history again">
+            <StackPanel Classes="label"><PathIcon Data="{StaticResource IconRefresh}" /><TextBlock Text="Refresh" /></StackPanel>
+          </Button>
+        </Grid>
+        <Border Classes="selectionbar" IsVisible="{Binding HasMany}">
+          <Grid ColumnDefinitions="*,Auto,Auto">
+            <TextBlock Classes="count" Text="{Binding SelectionText}" />
+            <Button Grid.Column="1" Classes="danger" Command="{Binding RemoveCommand}">
+              <StackPanel Classes="label"><PathIcon Data="{StaticResource IconDelete}" /><TextBlock Text="Remove…" /></StackPanel>
+            </Button>
+            <Button Grid.Column="2" Classes="link" Content="Clear" Command="{Binding ClearSelectionCommand}" Margin="12,0,0,0" />
+          </Grid>
+        </Border>
+        <TextBlock Classes="muted" Text="{Binding Hint}" TextWrapping="Wrap" IsVisible="{Binding HasHint}" />
+      </StackPanel>
+      <ListBox x:Name="List" Classes="rows" ItemsSource="{Binding Rows}" SelectionMode="Multiple" SelectedItems="{Binding SelectedItems}" Padding="0,4">
+        <ListBox.ItemTemplate>
+          <DataTemplate DataType="bld:BuildRecord">
+            <Grid ColumnDefinitions="Auto,Auto,*,150,70,Auto">
+              <CheckBox Classes="pick" IsChecked="{Binding $parent[ListBoxItem].IsSelected}" AutomationProperties.Name="{Binding Name}" />
+              <Panel Grid.Column="1" Margin="0,0,10,0" VerticalAlignment="Center" ToolTip.Tip="{Binding StatusText}">
+                <PathIcon Classes="ok" Data="{StaticResource IconCheck}" IsVisible="{Binding IsOk}" />
+                <PathIcon Classes="bad" Data="{StaticResource IconError}" IsVisible="{Binding IsFailed}" />
+                <PathIcon Classes="idle" Data="{StaticResource IconRefresh}" IsVisible="{Binding IsRunning}" />
+              </Panel>
+              <StackPanel Grid.Column="2">
+                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                <TextBlock Classes="muted small" Text="{Binding StepsLine}" />
+              </StackPanel>
+              <TextBlock Grid.Column="3" Classes="muted small" Text="{Binding StartedText}" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="4" Classes="muted small" Text="{Binding DurationText}" TextAlignment="Right" VerticalAlignment="Center" />
+              <StackPanel Grid.Column="5" Classes="rowactions" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                <Button Classes="iconbtn danger" ToolTip.Tip="Remove from the history (Del)"
+                        Command="{Binding $parent[UserControl].((bld:BuildsViewModel)DataContext).RemoveRowCommand}" CommandParameter="{Binding}">
+                  <PathIcon Data="{StaticResource IconDelete}" />
+                </Button>
+              </StackPanel>
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </DockPanel>
+
+    <GridSplitter x:Name="Splitter" Grid.Column="1" ResizeDirection="Columns" Background="Transparent" />
+
+    <Border x:Name="Panel" Grid.Column="2" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="1,0,0,0">
+      <ScrollViewer>
+        <StackPanel Margin="16,14" Spacing="10">
+          <Grid ColumnDefinitions="Auto,*,Auto">
+            <Panel Margin="0,0,10,0" VerticalAlignment="Center">
+              <PathIcon Classes="ok" Data="{StaticResource IconCheck}" IsVisible="{Binding Selected.IsOk, FallbackValue=False}" Width="18" Height="18" />
+              <PathIcon Classes="bad" Data="{StaticResource IconError}" IsVisible="{Binding Selected.IsFailed, FallbackValue=False}" Width="18" Height="18" />
+            </Panel>
+            <TextBlock Grid.Column="1" Classes="title" Text="{Binding Selected.Name, FallbackValue=''}" TextWrapping="Wrap" VerticalAlignment="Center" />
+            <Button Grid.Column="2" Classes="iconbtn" Command="{Binding ClearSelectionCommand}" ToolTip.Tip="Close">
+              <PathIcon Data="{StaticResource IconClose}" />
+            </Button>
+          </Grid>
+          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto">
+            <TextBlock Classes="muted small" Text="Started" Margin="0,0,16,4" />
+            <TextBlock Grid.Column="1" Text="{Binding Selected.StartedText, FallbackValue=''}" />
+            <TextBlock Grid.Row="1" Classes="muted small" Text="Took" Margin="0,0,16,4" />
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Selected.DurationText, FallbackValue=''}" />
+            <TextBlock Grid.Row="2" Classes="muted small" Text="Steps" Margin="0,0,16,4" />
+            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Selected.StepsText, FallbackValue=''}" TextWrapping="Wrap" />
+            <TextBlock Grid.Row="3" Classes="muted small" Text="From" Margin="0,0,16,4" IsVisible="{Binding HasLocation}" />
+            <SelectableTextBlock Grid.Row="3" Grid.Column="1" Classes="small" Text="{Binding Location}" TextWrapping="Wrap" IsVisible="{Binding HasLocation}" />
+          </Grid>
+          <Border Background="{DynamicResource BadBg}" CornerRadius="6" Padding="10,8" IsVisible="{Binding HasError}">
+            <SelectableTextBlock Text="{Binding Error}" TextWrapping="Wrap" Foreground="{DynamicResource Bad}" />
+          </Border>
+
+          <TextBlock Classes="section" Text="STEPS" Margin="0,8,0,0" />
+          <ItemsControl ItemsSource="{Binding Steps}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="bld:StepRow">
+                <Expander HorizontalAlignment="Stretch" Margin="0,2" IsEnabled="{Binding HasLines}">
+                  <Expander.Header>
+                    <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto">
+                      <Panel Margin="0,0,8,0" VerticalAlignment="Center">
+                        <PathIcon Classes="ok" Data="{StaticResource IconCheck}" IsVisible="{Binding IsDone}" Width="14" Height="14" />
+                        <PathIcon Classes="idle" Data="{StaticResource IconCheck}" IsVisible="{Binding IsCached}" Width="14" Height="14" />
+                        <PathIcon Classes="bad" Data="{StaticResource IconError}" IsVisible="{Binding IsFailed}" Width="14" Height="14" />
+                        <PathIcon Classes="idle" Data="{StaticResource IconRefresh}" IsVisible="{Binding IsRunning}" Width="14" Height="14" />
+                      </Panel>
+                      <TextBlock Grid.Column="1" Classes="mono small" Classes.muted="{Binding IsInternal}" Text="{Binding Name}"
+                                 TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="2" Classes="muted small" Text="{Binding DurationText}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                      <ProgressBar Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Classes="share" Value="{Binding Share}" Margin="0,4,0,0"
+                                   ToolTip.Tip="Its share of the build's time" />
+                    </Grid>
+                  </Expander.Header>
+                  <SelectableTextBlock Classes="mono small" Text="{Binding Lines}" TextWrapping="Wrap" />
+                </Expander>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </ScrollViewer>
+    </Border>
+  </Grid>
+</UserControl>

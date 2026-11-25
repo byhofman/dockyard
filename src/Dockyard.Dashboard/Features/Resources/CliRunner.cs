@@ -34,6 +34,25 @@ static class CliRunner
         return process.ExitCode;
     }
 
+    public static async Task<(int Exit, string Output, string Error)> Output(IReadOnlyList<string> args)
+    {
+        var psi = new ProcessStartInfo(DockerCli.Path())
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
+        };
+        foreach (var a in args) psi.ArgumentList.Add(a);
+        using var process = Process.Start(psi) ?? throw new InvalidOperationException("Could not start docker");
+        var output = process.StandardOutput.ReadToEndAsync();
+        var error = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        return (process.ExitCode, await output, await error);
+    }
+
     public static async Task<(int Exit, string Output)> Capture(IReadOnlyList<string> args, string stdin, CancellationToken cancel, bool windowsEngine = false)
     {
         var psi = new ProcessStartInfo(DockerCli.Path())
