@@ -44,9 +44,10 @@ static class Installer
             }
             var removedBefore = settings.RemovedComponents.ToList();
             var removed = ComponentRules.Removed(host.Components, removedBefore, options.With, options.Without);
-            if (!removed.SequenceEqual(settings.RemovedComponents))
+            if (!removed.SequenceEqual(settings.RemovedComponents) || (options.PackageManager is { } use && use != settings.UsePackageManager))
             {
                 settings.RemovedComponents = removed;
+                settings.UsePackageManager = options.PackageManager ?? settings.UsePackageManager;
                 settings.Save();
             }
 

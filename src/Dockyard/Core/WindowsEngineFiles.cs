@@ -5,6 +5,6 @@ static class WindowsEngineFiles
 {
     public static bool Keep(string name) =>
         name.Equals("docker.exe", StringComparison.OrdinalIgnoreCase)
-        || name.Equals("kind.exe", StringComparison.OrdinalIgnoreCase)
+        || Tools.Standalone.Any(t => name.Equals(t.Command + ".exe", StringComparison.OrdinalIgnoreCase))
         || name.StartsWith("docker-credential", StringComparison.OrdinalIgnoreCase);
 }

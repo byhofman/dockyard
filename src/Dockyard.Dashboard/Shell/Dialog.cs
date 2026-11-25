@@ -6,6 +6,7 @@ sealed class DialogField : Observable
 {
     string text;
     string? choice;
+    bool isChecked;
 
     public DialogField(string label, string text = "", string placeholder = "", IReadOnlyList<string>? choices = null)
     {
@@ -16,12 +17,28 @@ sealed class DialogField : Observable
         choice = choices?.FirstOrDefault();
     }
 
+    DialogField(string label, bool isChecked) : this(label)
+    {
+        IsCheck = true;
+        this.isChecked = isChecked;
+    }
+
+    public static DialogField Check(string label, bool isChecked = false) => new(label, isChecked);
+
     public string Label { get; }
     public string Placeholder { get; }
     public IReadOnlyList<string>? Choices { get; }
+    public bool IsCheck { get; }
     public bool IsChoice => Choices is not null;
-    public bool IsText => Choices is null;
+    public bool IsText => Choices is null && !IsCheck;
+    public bool HasLabel => !IsCheck;
     public event Action? Changed;
+
+    public bool IsChecked
+    {
+        get => isChecked;
+        set { if (Set(ref isChecked, value)) Changed?.Invoke(); }
+    }
 
     public string Text
     {

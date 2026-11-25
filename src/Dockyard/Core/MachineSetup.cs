@@ -6,7 +6,9 @@ namespace Dockyard.Core;
 static class MachineSetup
 {
     // Returns true when a reboot is needed.
-    public static async Task<bool> Install(Action<string> log, string userSid, string userName, int keepPid, bool engineOnly, IReadOnlyCollection<string> without)
+    // packageManaged: the tools winget brought, whose copies in Program Files go.
+    public static async Task<bool> Install(Action<string> log, string userSid, string userName, int keepPid, bool engineOnly, IReadOnlyCollection<string> without,
+        IReadOnlyCollection<string> packageManaged)
     {
         InUseFiles.CleanUp(Paths.DockerDir);
         var withWindows = !without.Contains(nameof(Component.Engine));
@@ -14,19 +16,21 @@ static class MachineSetup
         if (!without.Contains(nameof(Component.LinuxEngine))) reboot |= await InstallWsl(log);
         await MachineApps.AddDefenderExclusions(log);
         if (withWindows) await MachineEngine.Update(log, onlyIfNewer: true);
-        else
-        {
-            await MachineEngine.UpdateCli(log, onlyIfNewer: true);
-            await MachineEngine.Remove(log);
-        }
+        else await MachineEngine.Remove(log);
+        if (packageManaged.Contains(nameof(Component.Cli))) MachineEngine.RemoveCli(log);
+        else await MachineEngine.UpdateCli(log, onlyIfNewer: true);
         MachineApps.AddToMachinePath(Paths.DockerDir);
         foreach (var plugin in MachineApps.Plugins)
         {
-            if (without.Contains(plugin.Component.ToString())) MachineApps.RemovePlugin(log, plugin.Component);
+            var id = plugin.Component.ToString();
+            if (without.Contains(id) || packageManaged.Contains(id)) MachineApps.RemovePlugin(log, plugin.Component);
             else if (await Updates.Installed(plugin.Component) is not { } installed || installed < plugin.Release.Version) await MachineApps.UpdatePlugin(log, plugin.Component);
         }
-        if (without.Contains(Kind.Id)) MachineApps.RemoveKind(log);
-        else if (await Updates.Installed(Component.Kind) != Kind.Version) await MachineApps.InstallKind(log);
+        foreach (var tool in Tools.Standalone)
+        {
+            if (without.Contains(tool.Id) || packageManaged.Contains(tool.Id)) MachineApps.RemoveTool(log, tool);
+            else if (await Updates.Installed(Enum.Parse<Component>(tool.Id)) != Tools.Pinned(tool).Version) await MachineApps.InstallTool(log, tool);
+        }
         await MachineApps.InstallCredentialHelper(log);
         if (without.Contains(nameof(Component.LinuxEngine))) await UnrouteDomains();
         else await RouteDomains(log);
@@ -43,7 +47,7 @@ static class MachineSetup
             case Component.Engine: await MachineEngine.Update(log, onlyIfNewer: false); break;
             case Component.Cli: await MachineEngine.UpdateCli(log, onlyIfNewer: false); break;
             case Component.Compose or Component.Buildx: await MachineApps.UpdatePlugin(log, component); break;
-            case Component.Kind: await MachineApps.InstallKind(log); break;
+            case Component.Kind or Component.Kubectl or Component.Helm: await MachineApps.InstallTool(log, Tools.Find(component.ToString())!); break;
             case Component.App:
                 // Defender's rule goes by path, and an update can bring the first dashboard with the new name.
                 await MachineApps.AddDefenderExclusions(log);
@@ -91,9 +95,13 @@ static class MachineSetup
                 if (installed) await MachineApps.UpdatePlugin(log, component);
                 else MachineApps.RemovePlugin(log, component);
                 break;
-            case Component.Kind:
-                if (installed) await MachineApps.InstallKind(log);
-                else MachineApps.RemoveKind(log);
+            case Component.Kind or Component.Kubectl or Component.Helm:
+                if (installed) await MachineApps.InstallTool(log, Tools.Find(component.ToString())!);
+                else MachineApps.RemoveTool(log, Tools.Find(component.ToString())!);
+                break;
+            case Component.Cli:
+                if (installed) await MachineEngine.UpdateCli(log, onlyIfNewer: false);
+                else MachineEngine.RemoveCli(log);
                 break;
             // The distro and its images are the user's half, in UserSetup. Only the engine answers those names.
             case Component.LinuxEngine:

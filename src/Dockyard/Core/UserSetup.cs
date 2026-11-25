@@ -105,10 +105,10 @@ static partial class UserSetup
         await CredentialStore.Forget(Paths.CredentialStoreMarker, Paths.CredentialHelper, log);
         await EngineConfig.ApplyClientProxy(Paths.LinuxHost, null);
         await EngineConfig.ApplyClientProxy(Paths.LegacyLinuxHost, null);
-        if (File.Exists(Paths.DockerExe))
+        if (File.Exists(Paths.DockerCli))
         {
-            await Shell.Run(Paths.DockerExe, "context", "use", "default");
-            await Shell.Run(Paths.DockerExe, "context", "rm", "-f", "linux", "win");
+            await Shell.Run(Paths.DockerCli, "context", "use", "default");
+            await Shell.Run(Paths.DockerCli, "context", "rm", "-f", "linux", "win");
             log("Removed docker contexts");
         }
         var tc = Path.Combine(Paths.UserProfile, ".testcontainers.properties");
@@ -204,27 +204,27 @@ static partial class UserSetup
         else await RemoveContext("linux", "win", log);
         if (withWindows) await AddContext("win", Paths.WindowsHost);
         else await RemoveContext("win", "linux", log);
-        var current = (await Shell.Check(Paths.DockerExe, "context", "show")).Trim();
-        if (current is not ("linux" or "win")) await Shell.Check(Paths.DockerExe, "context", "use", withLinux ? "linux" : "win");
+        var current = (await Shell.Check(Paths.DockerCli, "context", "show")).Trim();
+        if (current is not ("linux" or "win")) await Shell.Check(Paths.DockerCli, "context", "use", withLinux ? "linux" : "win");
         log(withLinux && withWindows ? "Docker contexts: linux (default), win" : $"Docker context: {(withLinux ? "linux" : "win")}");
     }
 
     public static async Task AddContext(string name, string host)
     {
-        var exists = (await Shell.Run(Paths.DockerExe, "context", "inspect", name)).ExitCode == 0;
-        await Shell.Check(Paths.DockerExe, "context", exists ? "update" : "create", name, "--docker", $"host={host}");
+        var exists = (await Shell.Run(Paths.DockerCli, "context", "inspect", name)).ExitCode == 0;
+        await Shell.Check(Paths.DockerCli, "context", exists ? "update" : "create", name, "--docker", $"host={host}");
     }
 
     // The docker command must not be left pointing at an engine that is gone.
     public static async Task RemoveContext(string name, string fallback, Action<string> log)
     {
-        if (!File.Exists(Paths.DockerExe)) return;
-        if ((await Shell.Run(Paths.DockerExe, "context", "show")).Output.Trim() == name)
+        if (!File.Exists(Paths.DockerCli)) return;
+        if ((await Shell.Run(Paths.DockerCli, "context", "show")).Output.Trim() == name)
         {
-            await Shell.Run(Paths.DockerExe, "context", "use", fallback);
+            await Shell.Run(Paths.DockerCli, "context", "use", fallback);
             log($"The docker context is now {fallback}");
         }
-        await Shell.Run(Paths.DockerExe, "context", "rm", "-f", name);
+        await Shell.Run(Paths.DockerCli, "context", "rm", "-f", name);
     }
 
     public static async Task EnableLinuxEngine(Action<string> log)

@@ -16,3 +16,9 @@ a7031335bebc9a8573fbacae6e56fe7848a360d6746c62a7680849012dac0068  https://github
 4b22adaa135368c5a465d56bbd8e520cbea87272a06ca00b6078e7b81515c9fc  https://github.com/kubernetes-sigs/kind/releases/download/v0.33.0/kind-windows-amd64
 0c8c7dbe5e23594a198b786c4bc13dacc101fa6196b0cb0b23a1ca44e61f4b4f  https://github.com/kubernetes-sigs/kind/releases/download/v0.33.0/kind-darwin-arm64
 aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d  https://github.com/kubernetes-sigs/kind/releases/download/v0.33.0/kind-linux-amd64
+1691938f7de0e931969f9968c3601cf32d6b0d573573afb4ce471f3d28f51984  https://dl.k8s.io/release/v1.37.2/bin/windows/amd64/kubectl.exe
+55701af0d51815ee335f240e48acf0959c3c23017ed3fa816e880c4a92bae581  https://dl.k8s.io/release/v1.37.2/bin/darwin/arm64/kubectl
+c04487523e7aa7d1493f7808174c899db93d7a9cf57531420cd76b9bd415f8f4  https://dl.k8s.io/release/v1.37.2/bin/linux/amd64/kubectl
+77c5c782aaef1abbfafe75b88412d2b6df8e4a36d14522273397f0d02c6ecc29  https://get.helm.sh/helm-v4.3.2-windows-amd64.zip
+6f3421de3a8cc2ac578c8cfb33b8edde290dde2871bc1bab12e24f2e5caeaa90  https://get.helm.sh/helm-v4.3.2-darwin-arm64.tar.gz
+d1c0278d46beab79582d7e50f5b3dc206944ba8e577cde618513fd07daa53983  https://get.helm.sh/helm-v4.3.2-linux-amd64.tar.gz

@@ -15,15 +15,20 @@ sealed class LinuxHost : IEngineHost
     readonly LinuxComponents components;
     readonly LinuxSetup setup;
     readonly LinuxTrust trust;
+    readonly ToolComponents tools;
 
     public LinuxHost(ICommandRunner runner)
     {
         this.runner = runner;
         var root = new LinuxRoot(runner);
         components = new LinuxComponents(runner, root);
-        setup = new LinuxSetup(root, components);
+        tools = new ToolComponents(new LinuxPackages(root), new LinuxOwnCopies(runner, root), () => Settings.Load().UsePackageManager);
+        setup = new LinuxSetup(root, components, tools);
         trust = new LinuxTrust(root);
     }
+
+    // Docker's own pieces are the Engine package's business here; the other tools are each their own.
+    static CliTool? Tool(string component) => Core.Tools.Standalone.FirstOrDefault(t => t.Id == component);
 
     public IReadOnlyList<EngineInfo> Engines { get; } =
         [new(Engine, "Linux", "Docker Engine", "system dockerd, started on demand", "default", "unix:///var/run/docker.sock")];
@@ -35,7 +40,9 @@ sealed class LinuxHost : IEngineHost
         new("Engine", "Docker Engine & CLI", RequiredBecause: "it is what Dockyard starts and stops. It stays yours to remove with your package manager, also after uninstalling Dockyard.", RequiredFlag: "linux-engine"),
         new("Compose", "Docker Compose", Flag: "compose", Note: "Needs Docker. The dashboard's Compose actions use it."),
         new("Buildx", "Docker Buildx", Flag: "buildx", Note: "Needs Docker. docker build uses it."),
-        Core.Kind.Component,
+        Core.Tools.Kind.Component,
+        Core.Tools.Kubectl.Component,
+        Core.Tools.Helm.Component,
         new("App", "Dockyard", RequiredBecause: "it is what runs everything here. Uninstall removes it."),
         new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard", Note: "Optional. Its package is versioned with Dockyard, so updating it updates both."),
     ];
@@ -59,16 +66,16 @@ sealed class LinuxHost : IEngineHost
 
     public Task UseContext(string engine) => runner.Check("docker", "context", "use", "default");
 
-    public Task<Version?> Installed(string component) => components.Installed(component);
-    public Task<Release?> Latest(string component) => LinuxComponents.Latest(component);
+    public Task<Version?> Installed(string component) => Tool(component) is { } tool ? tools.Installed(tool) : components.Installed(component);
+    public Task<Release?> Latest(string component) => Tool(component) is { } tool ? tools.Latest(tool) : LinuxComponents.Latest(component);
 
     public async Task<bool> SetComponent(Action<string> log, string component, bool installed, bool removeData = false)
     {
         if (component == ComponentRules.DashboardId) return await SetDashboard(log, installed);
-        if (component == Core.Kind.Id)
+        if (Tool(component) is { } tool)
         {
-            if (installed) await components.InstallKind(log);
-            else await components.RemoveKind(log);
+            if (installed) await tools.Install(log, tool);
+            else await tools.Remove(log, tool);
             return false;
         }
         if (component is not ("Compose" or "Buildx")) throw new InvalidOperationException($"{component} cannot be changed here");
@@ -79,7 +86,8 @@ sealed class LinuxHost : IEngineHost
     public async Task<bool> Update(Action<string> log, IReadOnlyList<(string Component, Release? Release)> components)
     {
         if (components.Any(c => c.Component is "Engine" or "Compose" or "Buildx")) await this.components.UpdateDockerPackages(log);
-        if (components.Any(c => c.Component == Core.Kind.Id)) await this.components.InstallKind(log);
+        foreach (var (component, _) in components)
+            if (Tool(component) is { } tool) await tools.Install(log, tool);
         if (components.FirstOrDefault(c => c.Component is "App" or ComponentRules.DashboardId) is { Release: { } app })
         {
             await this.components.StopDashboard();

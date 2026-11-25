@@ -69,6 +69,11 @@ if [ "$rc" -eq 2 ]; then ok "exit 2"; else fail "--typo exits $rc"; fi
 check "and nothing was installed" missing "$app"
 
 echo "== first install, no dashboard"
+# Homebrew installs for the whole Mac, outside this throwaway home, so Dockyard keeps its own copies here. As a setting
+# and not --no-package-manager: the one-liner may run a release from before it.
+unset XDG_CONFIG_HOME
+mkdir -p "$home/.config/Dockyard"
+printf '{"UsePackageManager": false}\n' > "$home/.config/Dockyard/settings.json"
 run --silent --no-dashboard --no-start
 check "app in place" test -x "$macos/Dockyard"
 check "the VM helper too" test -x "$macos/dockyard-vm"
@@ -168,6 +173,8 @@ if [ -z "${ONELINER:-}" ]; then
   check "it stays gone on a rerun" missing "$kind"
   run --silent --dashboard --no-start --with kind
   check "it is back" test -x "$kind"
+  "$home/.dockyard/bin/kubectl" version --client >/dev/null && ok "kubectl is Dockyard's own and runs" || fail "kubectl"
+  "$home/.dockyard/bin/helm" version --short >/dev/null && ok "helm comes out of its archive and runs" || fail "helm"
 fi
 rc=0; run --silent --no-start --without linux-engine >/dev/null 2>&1 || rc=$?
 if [ "$rc" -eq 2 ]; then ok "the engine is required here"; else fail "--without linux-engine exits $rc"; fi

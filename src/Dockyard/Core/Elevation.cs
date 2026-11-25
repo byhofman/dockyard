@@ -175,7 +175,7 @@ static partial class Elevation
                 MachineSetup.SetDashboard(Log, dashboard == "add", keepPid).GetAwaiter().GetResult();
                 return 0;
             }
-            var reboot = MachineSetup.Install(Log, Arg("--user-sid"), Arg("--user-name"), keepPid, args.Contains("--engine-only"), Opt("--without")?.Split(',') ?? []).GetAwaiter().GetResult();
+            var reboot = MachineSetup.Install(Log, Arg("--user-sid"), Arg("--user-name"), keepPid, args.Contains("--engine-only"), Opt("--without")?.Split(',') ?? [], Opt("--package-managed")?.Split(',') ?? []).GetAwaiter().GetResult();
             return reboot ? RebootExitCode : 0;
         }
         catch (Exception ex)

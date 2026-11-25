@@ -8,15 +8,20 @@ namespace Dockyard.Hosts;
 [SupportedOSPlatform("windows")]
 static class WindowsSetup
 {
-    public static async Task<bool> MachineInstall(Action<string> log, bool dashboard, IReadOnlyCollection<string> without)
+    public static async Task<bool> MachineInstall(Action<string> log, bool dashboard, IReadOnlyCollection<string> without, IReadOnlyCollection<string> packageManaged)
     {
         if (!Elevation.IsElevated)
         {
-            string[] extra = [.. dashboard ? Array.Empty<string>() : ["--engine-only"], .. without.Count > 0 ? new[] { "--without", string.Join(',', without) } : []];
+            string[] extra =
+            [
+                .. dashboard ? Array.Empty<string>() : ["--engine-only"],
+                .. without.Count > 0 ? new[] { "--without", string.Join(',', without) } : [],
+                .. packageManaged.Count > 0 ? new[] { "--package-managed", string.Join(',', packageManaged) } : [],
+            ];
             return await Elevation.Run(log, "--machine-install", extra);
         }
         var (sid, name) = Elevation.CurrentUser;
-        return await MachineSetup.Install(log, sid, name, Environment.ProcessId, engineOnly: !dashboard, without);
+        return await MachineSetup.Install(log, sid, name, Environment.ProcessId, engineOnly: !dashboard, without, packageManaged);
     }
 
     public static async Task MachineUninstall(Action<string> log)

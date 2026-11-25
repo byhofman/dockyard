@@ -6,22 +6,12 @@ static class KindCli
 {
     static string Exe => OperatingSystem.IsWindows() ? "kind.exe" : "kind";
 
-    // Where Dockyard installs it on each system.
-    public static string OwnPath(string home) =>
-        OperatingSystem.IsWindows() ? System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.ProgramFiles), "Docker", "kind.exe")
-        : OperatingSystem.IsMacOS() ? System.IO.Path.Combine(home, ".dockyard", "bin", "kind")
-        : "/usr/local/bin/kind";
+    // Where Dockyard installs its own copy on each system.
+    public static string OwnPath(string home) => System.IO.Path.Combine(CliLocator.KnownDirs(home).First(), Exe);
 
-    public static string? Locate() =>
-        Find(File.Exists, System.Environment.GetEnvironmentVariable("PATH"), System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile));
+    public static string? Locate() => CliLocator.Locate("kind");
 
-    // An app started from the menu bar or at login does not get a shell's PATH, so Homebrew's folders are looked at too.
-    public static string? Find(Func<string, bool> exists, string? path, string home)
-    {
-        IEnumerable<string> dirs = (path ?? "").Split(System.IO.Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
-        if (OperatingSystem.IsMacOS()) dirs = dirs.Concat(["/opt/homebrew/bin", "/usr/local/bin"]);
-        return new[] { OwnPath(home) }.Concat(dirs.Select(d => System.IO.Path.Combine(d, Exe))).FirstOrDefault(exists);
-    }
+    public static string? Find(Func<string, bool> exists, string? path, string home) => CliLocator.Find("kind", exists, path, home);
 
     // kind calls the docker CLI: it has to find the same one, and use the engine the dashboard shows.
     public static Dictionary<string, string> Environment(string context, string dockerCli, string? path)

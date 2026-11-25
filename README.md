@@ -36,13 +36,16 @@ Setup asks which optional components to install. Afterwards **Engines and settin
 
 The tray looks for updates by itself every six hours. A blue dot on its icon and an **Update Dockyard to …** item in its menu say one is there; **What's new** next to the version opens its release notes.
 
-Every tool Dockyard downloads from someone else (Docker, Compose, Buildx, the credential helpers and kind) has its version fixed per Dockyard release and is checked against a SHA-256 kept in Dockyard (`image/versions.env`, `image/versions.sha256`), so a replaced file upstream is refused. A new Dockyard release is what moves them.
+The command-line tools (the Docker CLI, Compose, Buildx, kind, kubectl and Helm) come from the system's package manager wherever it has them: winget on Windows, Homebrew on macOS, and on Linux the Docker, Kubernetes and Helm apt or dnf repositories. They then update the way everything else on the computer does (`winget upgrade`, `brew upgrade`, `apt upgrade`), and Dockyard's **Update** offers what the package manager has. A copy an earlier Dockyard put in place makes way for the package. Where there is no package manager, where it fails, or when you turn **Install docker, kind, kubectl and helm with …** off in the wizard or under Settings (`--no-package-manager`), Dockyard keeps its own copies.
+
+Everything Dockyard downloads itself (its own copies of those tools, the engines and the credential helpers) has its version fixed per Dockyard release and is checked against a SHA-256 kept in Dockyard (`image/versions.env`, `image/versions.sha256`), so a replaced file upstream is refused. A new Dockyard release is what moves them.
 
 | Component | | |
 |---|---|---|
 | Dashboard | Optional | Has its own version and **Update** |
 | Docker Compose, Docker Buildx | Optional | Need the Docker CLI |
 | kind | Optional | Kubernetes clusters in containers, on the Linux engine |
+| kubectl, Helm | Optional | The Kubernetes command line, and the charts Clusters can add to a new cluster |
 | Windows engine, Linux engine (Windows) | Optional, one has to stay | Removing keeps its images; the wizard brings them back with it |
 | Docker CLI | Required | Everything else goes through it |
 | Docker Engine (macOS VM, Linux) | Required | The only engine there. On Linux, Docker stays yours to remove with your package manager |
@@ -65,8 +68,9 @@ curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install.sh |
 | Argument | Meaning |
 |---|---|
 | `--silent` | No window: install, or update what is installed. Progress goes to the console. Needs no display. |
-| `--with <names>` | Add components, comma separated, also on an existing install: `dashboard`, `compose`, `buildx`, `kind`, and on Windows `linux-engine`, `windows-engine`. |
-| `--without <names>` | Leave them out, or remove them. Asking for a required one or for the last engine exits 2 and changes nothing. With `--remove-data`, an engine's images go too. |
+| `--with <names>` | Add components, comma separated, also on an existing install: `dashboard`, `compose`, `buildx`, `kind`, `kubectl`, `helm`, and on Windows `linux-engine`, `windows-engine`. |
+| `--without <names>` | Leave them out, or remove them, also when the package manager brought them. Asking for a required one or for the last engine exits 2 and changes nothing. With `--remove-data`, an engine's images go too. A later run leaves a tool that stayed out alone, also one you installed yourself. |
+| `--no-package-manager`, `--package-manager` | Keep Dockyard's own pinned copies of the tools instead of winget's, Homebrew's or apt/dnf's, or go back. Remembered for later runs and the tray. |
 | `--dashboard`, `--no-dashboard` | The same as `--with dashboard`, `--without dashboard`. |
 | `--no-start` | Do not start Dockyard afterwards. |
 | `--assets <folder>` | Take Dockyard's own release files (image, dashboard, packages) from this folder instead of downloading them, for an install without internet or a build before its release. They are not checked, so only name a folder you filled yourself. |
@@ -85,7 +89,7 @@ Each release has `Dockyard.exe` for Windows, `Dockyard-<version>-macos.dmg` for 
 
 ## What it sets up
 
-**Windows.** WSL if it is missing, the Windows `Containers` feature, Docker's static binaries in `C:\Program Files\Docker` with compose and buildx, the `docker` service started on demand, a small `dockyard` WSL distro for Linux containers, the `linux` and `win` docker contexts, Defender exclusions for Dockyard, mirrored WSL networking unless you chose otherwise in `.wslconfig`, and autostart at logon.
+**Windows.** WSL if it is missing, the Windows `Containers` feature, Docker's static engine in `C:\Program Files\Docker`, the docker CLI with compose and buildx, kind, kubectl and helm from winget (in your account, so no administrator for them; `~/.docker/config.json` gets winget's folder in `cliPluginsExtraDirs` so `docker compose` finds it), the `docker` service started on demand, a small `dockyard` WSL distro for Linux containers, the `linux` and `win` docker contexts, Defender exclusions for Dockyard, mirrored WSL networking unless you chose otherwise in `.wslconfig`, and autostart at logon.
 
 | Context | Engine | Endpoint |
 |---|---|---|
@@ -94,9 +98,9 @@ Each release has `Dockyard.exe` for Windows, `Dockyard-<version>-macos.dmg` for 
 
 The Linux engine has no open port on Windows: the tray serves it on a named pipe only you can open, and passes it to the distro with a secret only you can read. Tools that need `DOCKER_HOST` use that pipe; `tcp://127.0.0.1:2375` from earlier versions is gone, because every user of the PC and any web page could reach it.
 
-**macOS.** Docker's `docker` CLI with compose and buildx, Rosetta for `linux/amd64` images, a small Linux VM on Apple's Virtualization.framework in `~/.dockyard`, the `dockyard` docker context, `docker` and `kind` on the PATH through `/usr/local/dockyard/bin` (small scripts that run your copy for your account only), `~/Applications/Dockyard.app` and a login item. It makes `/var/run/docker.sock` point at the engine unless another Docker app has it, and `docker login` keeps credentials in the Keychain. In the VM: `/Users`, `/Volumes` and the temp folders are shared at the same paths, so `-v $PWD:/app` works; published ports reach `127.0.0.1`, and so do servers in `--network host` containers; memory the guest does not use goes back to macOS.
+**macOS.** Docker's `docker` CLI with compose and buildx, kind, kubectl and helm, from Homebrew when it is there, Rosetta for `linux/amd64` images, a small Linux VM on Apple's Virtualization.framework in `~/.dockyard`, the `dockyard` docker context, `docker`, `kind`, `kubectl` and `helm` on the PATH through `/usr/local/dockyard/bin` (small scripts that run your copy for your account only, or Homebrew's), `~/Applications/Dockyard.app` and a login item. It makes `/var/run/docker.sock` point at the engine unless another Docker app has it, and `docker login` keeps credentials in the Keychain. In the VM: `/Users`, `/Volumes` and the temp folders are shared at the same paths, so `-v $PWD:/app` works; published ports reach `127.0.0.1`, and so do servers in `--network host` containers; memory the guest does not use goes back to macOS.
 
-**Linux.** Docker CE with buildx and compose from Docker's repository on Debian, Ubuntu, Fedora, RHEL and their derivatives, or from the distribution on Arch and openSUSE; the Dockyard packages, or a copy in `~/.local/lib/dockyard` on distributions without apt or dnf; the engine started on demand; docker access for you right away; the tray with its GNOME extension where needed; autostart at login.
+**Linux.** Docker CE with buildx and compose from Docker's repository on Debian, Ubuntu, Fedora, RHEL and their derivatives, or from the distribution on Arch and openSUSE; kubectl from the Kubernetes project's apt or dnf repository and helm from Helm's apt repository or Fedora's own, with kind (and the others where there is neither apt nor dnf) as Dockyard's own copy in `/usr/local/bin`; the Dockyard packages, or a copy in `~/.local/lib/dockyard` on distributions without apt or dnf; the engine started on demand; docker access for you right away; the tray with its GNOME extension where needed; autostart at login.
 
 ## Using it
 
@@ -125,7 +129,7 @@ Keys: `S` start/stop, `R` restart, `E` terminal, `L` logs, `Del` remove (with co
 
 ## Kubernetes with kind
 
-Dockyard installs [kind](https://kind.sigs.k8s.io), which runs a Kubernetes cluster as containers on the Linux engine: in `C:\Program Files\Docker` on Windows, `~/.dockyard/bin` on macOS and `/usr/local/bin` on Linux. Like the other tools, its version is fixed per Dockyard release and checked against a checksum kept in Dockyard, and **Update** moves it along with Dockyard. A kind that someone else put in `/usr/local/bin` on Linux is left alone and used.
+Dockyard installs [kind](https://kind.sigs.k8s.io), which runs a Kubernetes cluster as containers on the Linux engine, with kubectl and [Helm](https://helm.sh): from winget on Windows and Homebrew on macOS, like the other tools. Without them, and for kind on Linux, which has no repository, they are Dockyard's own copies in `C:\Program Files\Docker`, `~/.dockyard/bin` or `/usr/local/bin`, with a version fixed per Dockyard release and checked against a checksum kept in Dockyard. A kind, kubectl or helm that someone else put in `/usr/local/bin` on Linux is left alone and used.
 
 From a terminal it is kind itself:
 
@@ -138,9 +142,11 @@ kind delete cluster --name dev
 
 On Windows, kind uses the `linux` context, the default; with `win` active it has no Linux engine to run on.
 
-In the dashboard, **Clusters** lists them from the engine with their Kubernetes version, nodes and API server, creates and deletes them, copies a cluster's kubeconfig and makes its context the current one. Creating a cluster there adds its context to `~/.kube/config` (or the first existing file in `$KUBECONFIG`) and makes it current; deleting it takes exactly those entries out again and goes back to the context that was current before. The first time Dockyard changes that file it keeps a copy next to it, `config.dockyard-backup`. kubectl is not part of Dockyard; any kubectl reaches the cluster with `--context kind-<name>`.
+In the dashboard, **Clusters** lists them from the engine with their Kubernetes version, nodes and API server, creates and deletes them, copies a cluster's kubeconfig and makes its context the current one. Creating a cluster there adds its context to `~/.kube/config` (or the first existing file in `$KUBECONFIG`) and makes it current; deleting it takes exactly those entries out again and goes back to the context that was current before. The first time Dockyard changes that file it keeps a copy next to it, `config.dockyard-backup`. Any kubectl reaches the cluster with `--context kind-<name>`.
 
-- **Load balancers:** a `type: LoadBalancer` service gets an IP through kind's [cloud provider](https://github.com/kubernetes-sigs/cloud-provider-kind), which Dockyard runs as one container for all clusters while the **Load balancers** switch in Clusters is on (the default). Clusters shows each service's load balancer IP and its ports as `http://127.0.0.1:<port>` links that work from this computer. It installs nothing else in your clusters: no ingress controller and no Gateway API.
+- **Add-ons:** with Helm installed, creating a cluster can put two charts in it, at versions fixed per Dockyard release: [metrics-server](https://github.com/kubernetes-sigs/metrics-server) (on by default), so `kubectl top` and pod autoscaling work, and [Traefik](https://traefik.io) as an ingress controller, whose `LoadBalancer` service shows up under the cluster's load balancers with its `http://127.0.0.1:<port>` links. kind's kubelets serve certificates without their IP address, so metrics-server runs with `--kubelet-insecure-tls`. Both are ordinary Helm releases: `helm upgrade` and `helm uninstall` work on them.
+
+- **Load balancers:** a `type: LoadBalancer` service gets an IP through kind's [cloud provider](https://github.com/kubernetes-sigs/cloud-provider-kind), which Dockyard runs as one container for all clusters while the **Load balancers** switch in Clusters is on (the default). Clusters shows each service's load balancer IP and its ports as `http://127.0.0.1:<port>` links that work from this computer. It installs nothing else in your clusters: no Gateway API, and an ingress controller only when you tick Traefik.
 - **Shared storage:** chosen per cluster when you create it in the dashboard. Every node mounts one folder, and a `shared` StorageClass (ReadWriteMany, reclaim policy Retain) puts each claim in `<namespace>/<claim>/files` there, so pods on different nodes see the same files and they survive deleting the claim. Clusters has a button that opens the folder.
 
 ## Container domains

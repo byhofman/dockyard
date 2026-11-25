@@ -191,16 +191,24 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     {
         var name = new DialogField("Name", placeholder: "dev");
         var workers = new DialogField("Worker nodes", choices: WorkerChoices);
-        Shell.Open(new Dialog("Create a kind cluster",
-            "Each node is a container on the Linux engine. The first cluster pulls kind's node image, which takes a few minutes. Its context goes into your kubeconfig and becomes the current one.",
-            "Create", d => Create(d, name.Value, Workers(workers.Value), d.Option), fields: [name, workers],
+        var helm = CliLocator.Locate("helm");
+        var metrics = DialogField.Check($"metrics-server {ClusterAddons.MetricsServer.Version}: kubectl top and pod autoscaling", isChecked: true);
+        var traefik = DialogField.Check($"Traefik {ClusterAddons.Traefik.Version}: an ingress controller, reachable through its load balancer");
+        var message = "Each node is a container on the Linux engine. The first cluster pulls kind's node image, which takes a few minutes. Its context goes into your kubeconfig and becomes the current one."
+            + (helm is null ? " Add Helm in Dockyard's window to install metrics-server and Traefik with it." : "");
+        Shell.Open(new Dialog("Create a kind cluster", message,
+            "Create", d => Create(d, name.Value, Workers(workers.Value), d.Option, Addons(metrics, traefik), helm),
+            fields: helm is null ? [name, workers] : [name, workers, metrics, traefik],
             optionText: "Shared storage: a storage class every node mounts at once (ReadWriteMany), with one folder for all clusters made with it. It can only be added now.",
             canConfirm: _ => KindClusters.IsValidName(name.Value) && all.All(c => c.Name != name.Value)));
     }
 
-    Task Create(Dialog dialog, string name, int workers, bool sharedStorage) => RunKind(dialog, async (actions, onLine) =>
+    static List<ClusterAddon> Addons(DialogField metrics, DialogField traefik) =>
+        [.. metrics.IsChecked ? [ClusterAddons.MetricsServer] : Array.Empty<ClusterAddon>(), .. traefik.IsChecked ? [ClusterAddons.Traefik] : Array.Empty<ClusterAddon>()];
+
+    Task Create(Dialog dialog, string name, int workers, bool sharedStorage, IReadOnlyList<ClusterAddon> addons, string? helm) => RunKind(dialog, async (actions, onLine) =>
     {
-        var file = await actions.Create(name, onLine, workers, sharedStorage);
+        var file = await actions.Create(name, onLine, workers, sharedStorage, addons, helm);
         Shell.ShowInfo($"kubectl now uses {KindKubeconfig.Key(name)}, from {file}");
     });
 

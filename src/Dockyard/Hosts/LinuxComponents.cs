@@ -4,7 +4,7 @@ using Dockyard.Core;
 namespace Dockyard.Hosts;
 
 // What Dockyard installs on a Linux host: its own app and dashboard (as packages, or a tarball where there is no apt or
-// dnf), the Docker packages it keeps up to date, their plugins, and kind.
+// dnf), the Docker packages it keeps up to date and their plugins.
 [SupportedOSPlatform("linux")]
 sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
 {
@@ -20,7 +20,6 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
         "Engine" => Updates.ParseVersion((await runner.Run("dockerd", "--version")).Output),
         "Compose" => Updates.ParseVersion((await runner.Run("docker", "compose", "version", "--short")).Output),
         "Buildx" => Updates.ParseVersion((await runner.Run("docker", "buildx", "version")).Output),
-        Core.Kind.Id => File.Exists(LinuxLayout.Kind) ? Updates.ParseVersion((await runner.Run(LinuxLayout.Kind, "version")).Output) : null,
         "App" => await InstalledAppVersion(),
         ComponentRules.DashboardId => await InstalledDashboardVersion(),
         _ => null,
@@ -48,7 +47,6 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
         "Engine" => Updates.LinuxDocker,
         "Compose" => Updates.LinuxCompose,
         "Buildx" => Updates.LinuxBuildx,
-        Core.Kind.Id => Core.Kind.Release,
         "App" or ComponentRules.DashboardId => await Updates.LatestApp(LinuxLayout.AppAsset),
         _ => null,
     };
@@ -208,22 +206,4 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
             if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
         }
     }
-
-    // Root puts it in /usr/local/bin, where every shell finds it, and only over a kind that Dockyard put there.
-    public async Task InstallKind(Action<string> log)
-    {
-        var dir = Directory.CreateTempSubdirectory("dockyard-kind").FullName;
-        try
-        {
-            var file = Path.Combine(dir, "kind");
-            await Core.Kind.Download(file);
-            await root.RunSetup(log, "add-kind", "", file);
-        }
-        finally
-        {
-            Directory.Delete(dir, recursive: true);
-        }
-    }
-
-    public Task RemoveKind(Action<string> log) => root.RunSetup(log, "remove-kind");
 }

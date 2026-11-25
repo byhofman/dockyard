@@ -112,7 +112,8 @@ sealed class MainViewModel : Observable
     public IReadOnlyList<EngineViewModel> EngineCards { get; }
     public ObservableCollection<ComponentViewModel> Components { get; } = [];
     public IReadOnlyList<ComponentViewModel> DockyardComponents => Components.Where(c => c.IsDockyard).OrderBy(c => c == Dashboard).ToList();
-    public IReadOnlyList<ComponentViewModel> DockerComponents => Components.Where(c => !c.IsDockyard).ToList();
+    public IReadOnlyList<ComponentViewModel> DockerComponents => Components.Where(c => !c.IsDockyard && !c.IsKubernetes).ToList();
+    public IReadOnlyList<ComponentViewModel> KubernetesComponents => Components.Where(c => c.IsKubernetes).ToList();
 
     public Command CheckUpdatesCommand { get; }
     public Command UpdateAllCommand { get; }
@@ -202,6 +203,21 @@ sealed class MainViewModel : Observable
         get => settings.StopOtherOnSwitch;
         set { settings.StopOtherOnSwitch = value; settings.Save(); Raise(nameof(StopOtherOnSwitch)); }
     }
+
+    // Read by the hosts from the saved settings, so a new install saves it with the rest just before installing.
+    public bool UsePackageManager
+    {
+        get => settings.UsePackageManager;
+        set
+        {
+            settings.UsePackageManager = value;
+            if (IsInstalled) settings.Save();
+            Raise(nameof(UsePackageManager));
+        }
+    }
+
+    public static string PackageManagerText =>
+        $"Install docker, kind, kubectl and helm with {(OperatingSystem.IsWindows() ? "winget" : OperatingSystem.IsMacOS() ? "Homebrew" : "apt or dnf")}, so they update with everything else";
 
     public bool StartActiveAtLogon
     {
@@ -399,15 +415,17 @@ sealed class MainViewModel : Observable
     async Task InstallCore()
     {
         var dashboard = IsInstalled ? DashboardChoice.Resolve(options.Dashboard, true, host.HasDashboard, host.RunsFromInstallLocation) : IncludeDashboard;
+        if (options.PackageManager is { } use && use != settings.UsePackageManager)
+        {
+            settings.UsePackageManager = use;
+            settings.Save();
+        }
         if (!IsInstalled)
         {
             var left = Components.Where(c => c.IsOptional && !c.Include && c != Dashboard).Select(c => c.Id).Order().ToList();
             if (ComponentRules.Problems(host.Components, [], [], left) is { Count: > 0 } problems) throw new InvalidOperationException(problems[0]);
-            if (!left.SequenceEqual(settings.RemovedComponents))
-            {
-                settings.RemovedComponents = left;
-                settings.Save();
-            }
+            settings.RemovedComponents = left;
+            settings.Save();
         }
         var reboot = await host.Install(Log, new InstallRequest(dashboard) { Without = settings.RemovedComponents });
         IsInstalled = true;

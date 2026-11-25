@@ -6,7 +6,7 @@ namespace Dockyard.Hosts;
 // Installing and uninstalling on a Mac: the app bundle, the administrator steps, the docker context, the credential store,
 // the sockets other tools look for and the login item.
 [SupportedOSPlatform("macos")]
-sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm)
+sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm, ToolComponents tools)
 {
     public static bool RunsFromInstallLocation => Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory) == Path.TrimEndingDirectorySeparator(MacLayout.AppBase);
 
@@ -14,14 +14,14 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm)
     {
         await InstallBundle(log, request.Dashboard);
 
-        await components.InstallCli(log, MacLayout.Cli);
-        foreach (var (component, plugin, release) in new[] { ("Compose", "docker-compose", MacLayout.Compose), ("Buildx", "docker-buildx", MacLayout.Buildx) })
+        if (tools.Packages is null) log("The tools are Dockyard's own copies, in " + MacLayout.BinDir);
+        else if (!await tools.Packages.IsAvailable()) log($"No Homebrew here, so the tools are Dockyard's own copies, in {MacLayout.BinDir}");
+        foreach (var tool in Tools.All)
         {
-            if (request.Without.Contains(component)) MacComponents.RemovePlugin(plugin);
-            else await MacComponents.InstallPlugin(log, plugin, release);
+            if (request.Without.Contains(tool.Id)) await tools.RemoveOwn(log, tool);
+            else await tools.Ensure(log, tool);
         }
-        if (request.Without.Contains(Kind.Id)) MacComponents.RemoveKind(log);
-        else if (await components.Installed(Kind.Id) != Kind.Version) await MacComponents.InstallKind(log);
+        await FindBrewPlugins(log, tools);
 
         await AdministratorSteps(log, request.Silent);
         await InstallCredentialHelper(log);
@@ -31,11 +31,11 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm)
         await vm.WriteEngineConfig(log);
 
         var dockerHost = "unix://" + MacLayout.DockerSocket;
-        var exists = (await runner.Run(MacLayout.DockerCli, "context", "inspect", MacLayout.Context)).ExitCode == 0;
-        await runner.Check(MacLayout.DockerCli, "context", exists ? "update" : "create", MacLayout.Context, "--docker", $"host={dockerHost}");
-        var current = (await runner.Run(MacLayout.DockerCli, "context", "show")).Output.Trim();
+        var exists = (await runner.Run(MacLayout.Docker, "context", "inspect", MacLayout.Context)).ExitCode == 0;
+        await runner.Check(MacLayout.Docker, "context", exists ? "update" : "create", MacLayout.Context, "--docker", $"host={dockerHost}");
+        var current = (await runner.Run(MacLayout.Docker, "context", "show")).Output.Trim();
         if (current.Length > 0 && current != MacLayout.Context) await File.WriteAllTextAsync(MacLayout.PreviousContextFile, current);
-        await runner.Check(MacLayout.DockerCli, "context", "use", MacLayout.Context);
+        await runner.Check(MacLayout.Docker, "context", "use", MacLayout.Context);
         log($"Docker context '{MacLayout.Context}' → {dockerHost}");
 
         if (request.TrustHttps) await Https.Enable(host, log, request.Silent);
@@ -53,11 +53,11 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm)
         foreach (var bundle in bundles.Where(b => b != own))
             await runner.Run("/usr/bin/pkill", "-f", Path.Combine(bundle, "Contents", "MacOS", "Dockyard"));
         if (File.Exists(MacLayout.LaunchAgent)) File.Delete(MacLayout.LaunchAgent);
-        if (File.Exists(MacLayout.DockerCli))
+        if (File.Exists(MacLayout.Docker))
         {
             var previous = File.Exists(MacLayout.PreviousContextFile) ? await File.ReadAllTextAsync(MacLayout.PreviousContextFile) : null;
-            await runner.Run(MacLayout.DockerCli, "context", "use", MacLayout.ContextToRestore(previous));
-            await runner.Run(MacLayout.DockerCli, "context", "rm", "-f", MacLayout.Context);
+            await runner.Run(MacLayout.Docker, "context", "use", MacLayout.ContextToRestore(previous));
+            await runner.Run(MacLayout.Docker, "context", "rm", "-f", MacLayout.Context);
         }
         await Https.Disable(host, log, silent);
         await CredentialStore.Forget(MacLayout.CredentialStoreMarker, MacLayout.CredentialHelper, log);
@@ -133,10 +133,12 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm)
             steps.Add("/usr/sbin/softwareupdate --install-rosetta --agree-to-license");
             what.Add("installing Rosetta for amd64 images");
         }
-        if (!File.Exists("/etc/paths.d/dockyard") || await PathEntryIs(MacLayout.BinDir))
+        var uid = (await runner.Check("/usr/bin/id", "-u")).Trim();
+        var brewBin = Homebrew.FindPrefix() is { } prefix ? Path.Combine(prefix, "bin") : null;
+        if (!File.Exists("/etc/paths.d/dockyard") || await PathEntryIs(MacLayout.BinDir) || !MacLayout.WrappersAreCurrent(uid, MacLayout.BinDir, brewBin))
         {
-            steps.Add(MacLayout.PathsEntry((await runner.Check("/usr/bin/id", "-u")).Trim(), MacLayout.BinDir));
-            what.Add($"adding docker and kind to the PATH through {MacLayout.SharedBinDir}");
+            steps.Add(MacLayout.PathsEntry(uid, MacLayout.BinDir, brewBin));
+            what.Add($"adding docker, kind, kubectl and helm to the PATH through {MacLayout.SharedBinDir}");
         }
 
         var socketUse = SystemSocketUse();
@@ -207,6 +209,12 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm)
         if (new FileInfo(MacLayout.UserSocketLink).LinkTarget == MacLayout.DockerSocket) File.Delete(MacLayout.UserSocketLink);
         if (File.Exists(MacLayout.TestcontainersFile) && File.ReadAllText(MacLayout.TestcontainersFile).Trim() == MacLayout.TestcontainersLine)
             File.Delete(MacLayout.TestcontainersFile);
+    }
+
+    public static async Task FindBrewPlugins(Action<string> log, ToolComponents tools)
+    {
+        if (tools.Packages is Homebrew { CliPlugins: { } dir } && (await tools.IsManaged(Tools.Compose) || await tools.IsManaged(Tools.Buildx)))
+            await DockerPlugins.AddExtraDir(log, dir);
     }
 
     static async Task<bool> PathEntryIs(string dir) =>

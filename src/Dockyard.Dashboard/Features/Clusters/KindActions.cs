@@ -4,7 +4,9 @@ namespace Dockyard.Dashboard.Features.Clusters;
 sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
 {
     // Returns the kubeconfig file the cluster's context went into.
-    public async Task<string> Create(string name, Action<string>? onLine = null, int workers = 0, bool sharedStorage = false)
+    // Add-ons go in with helm once the cluster is in the kubeconfig, so a chart that fails leaves a cluster kubectl can reach.
+    public async Task<string> Create(string name, Action<string>? onLine = null, int workers = 0, bool sharedStorage = false,
+        IReadOnlyList<ClusterAddon>? addons = null, string? helm = null)
     {
         var scratch = Directory.CreateTempSubdirectory("dockyard-kind-");
         try
@@ -19,7 +21,10 @@ sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
             Check(await KindCli.Run(kind, dockerContext, KindCli.Create(name, own, config), onLine));
             if (sharedStorage) await SharedStorage.Install(dockerContext.Length > 0 ? dockerContext : "default", name, onLine);
             var text = await File.ReadAllTextAsync(own);
-            return await Into(name, text, "was created");
+            var file = await Into(name, text, "was created");
+            foreach (var addon in addons ?? [])
+                await ClusterAddons.Install(helm ?? throw new InvalidOperationException("Helm is not installed."), addon, own, name, Path.Combine(scratch.FullName, "helm"), onLine);
+            return file;
         }
         finally { scratch.Delete(recursive: true); }
     }

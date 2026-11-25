@@ -21,6 +21,10 @@ static class Pinned
     public static Release CredentialHelper(string helper, string platform) =>
         GitHub("docker/docker-credential-helpers", "CREDENTIAL_HELPERS", $"docker-credential-{helper}-{{tag}}.{platform}");
     public static Release Kind(string asset) => GitHub("kubernetes-sigs/kind", "KIND", asset);
+    // platform as dl.k8s.io names it: windows/amd64/kubectl.exe.
+    public static Release Kubectl(string platform) => Make("KUBECTL", v => $"v{v}", v => $"https://dl.k8s.io/release/v{v}/bin/{platform}");
+    // platform as get.helm.sh names it: windows-amd64.zip.
+    public static Release Helm(string platform) => Make("HELM", v => $"v{v}", v => $"https://get.helm.sh/helm-v{v}-{platform}");
 
     public static string Sha256Of(string url) =>
         Checksums.Expected(Sums, url) ?? throw new InvalidOperationException($"{url} has no pinned checksum");

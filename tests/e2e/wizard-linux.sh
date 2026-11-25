@@ -137,6 +137,18 @@ if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
 fi
 
 if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
+  echo "== kubectl and helm: from their apt or dnf repositories"
+  for tool in kubectl helm; do
+    if command -v dpkg-query >/dev/null 2>&1; then
+      dpkg-query -W -f '${db:Status-Status}' "$tool" 2>/dev/null | grep -qx installed && ok "$tool is a package" || fail "$tool package"
+    else
+      rpm -q "$tool" >/dev/null && ok "$tool is a package" || fail "$tool package"
+    fi
+    check "and not a copy of Dockyard's" missing "/etc/dockyard/$tool"
+  done
+  /usr/bin/kubectl version --client >/dev/null && ok "kubectl runs" || fail "kubectl version"
+  /usr/bin/helm version --short >/dev/null && ok "helm runs" || fail "helm version"
+
   echo "== kind: installed, and a cluster from create to delete"
   check "kind is on the PATH" test -x /usr/local/bin/kind
   check "marked as Dockyard's" test -f /etc/dockyard/kind

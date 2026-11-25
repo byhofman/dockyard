@@ -28,7 +28,9 @@ static partial class Updates
         Component.Buildx => "Docker Buildx",
         Component.LinuxEngine => "Docker Engine (Linux, WSL)",
         Component.App => "Dockyard",
-        Component.Kind => Kind.Title,
+        Component.Kind => Tools.Kind.Title,
+        Component.Kubectl => Tools.Kubectl.Title,
+        Component.Helm => Tools.Helm.Title,
         _ => c.ToString(),
     };
 
@@ -40,7 +42,7 @@ static partial class Updates
         Component.Dashboard => new[] { Paths.DashboardExe, Paths.LegacyDashboardExe }.FirstOrDefault(File.Exists) is { } dashboard ? ParseVersion(System.Diagnostics.FileVersionInfo.GetVersionInfo(dashboard).ProductVersion) : null,
         Component.Compose => await PluginVersion("docker-compose.exe", "version", "--short"),
         Component.Buildx => await PluginVersion("docker-buildx.exe", "version"),
-        Component.Kind => File.Exists(Paths.KindExe) ? ParseVersion((await Shell.Run(Paths.KindExe, "version")).Output) : null,
+        Component.Kind or Component.Kubectl or Component.Helm => await OwnToolVersion(Tools.Find(c.ToString())!),
         Component.LinuxEngine => Settings.Load().RemovedComponents.Contains(nameof(Component.LinuxEngine)) ? null : await new WslDistro(ProcessRunner.Instance).DockerVersion(),
         // The wizard runs from elsewhere and can be newer than what is installed, so not this process's own version.
         Component.App => File.Exists(Paths.AppExe) ? ParseVersion(System.Diagnostics.FileVersionInfo.GetVersionInfo(Paths.AppExe).ProductVersion) : null,
@@ -55,7 +57,7 @@ static partial class Updates
         Component.Buildx => WindowsBuildx,
         Component.LinuxEngine => LinuxDocker,
         Component.App => await LatestApp(WindowsAppAsset),
-        Component.Kind => Kind.Release,
+        Component.Kind or Component.Kubectl or Component.Helm => Tools.Pinned(Tools.Find(c.ToString())!),
         _ => null,
     };
 
@@ -116,6 +118,10 @@ static partial class Updates
     // A repository without releases redirects to its release list instead.
     internal static string? TagOfLatestRedirect(Uri target) =>
         ReleaseTagPath().Match(target.AbsolutePath) is { Success: true } m ? m.Groups["tag"].Value : null;
+
+    [SupportedOSPlatform("windows")]
+    static async Task<Version?> OwnToolVersion(CliTool tool) =>
+        File.Exists(Paths.ToolExe(tool)) ? ParseVersion((await Shell.Run(Paths.ToolExe(tool), tool.VersionArgs)).Output) : null;
 
     static async Task<Version?> PluginVersion(string exe, params string[] args)
     {

@@ -16,12 +16,16 @@ sealed class WindowsHost : IEngineHost
     readonly WslDistro distro;
     readonly WslEngine wsl;
     readonly WindowsTrayServices tray = new();
+    readonly Winget winget;
+    readonly ToolComponents tools;
 
     public WindowsHost(ICommandRunner runner)
     {
         this.runner = runner;
         distro = new WslDistro(runner);
         wsl = new WslEngine(runner, distro);
+        winget = new Winget(runner);
+        tools = new ToolComponents(winget, new WindowsOwnCopies(), () => Settings.Load().UsePackageManager);
     }
 
     public IReadOnlyList<EngineInfo> Engines { get; } =
@@ -39,7 +43,9 @@ sealed class WindowsHost : IEngineHost
         new(nameof(Component.LinuxEngine), Updates.Title(Component.LinuxEngine), CheckNeedsEngine: Linux, Flag: "linux-engine", Note: "Linux containers. Its images stay when you remove it. One engine has to stay.", IsEngine: true),
         new(nameof(Component.Compose), Updates.Title(Component.Compose), Flag: "compose", Note: "Needs the Docker CLI. The dashboard's Compose actions use it."),
         new(nameof(Component.Buildx), Updates.Title(Component.Buildx), Flag: "buildx", Note: "Needs the Docker CLI. docker build uses it."),
-        Kind.Component with { Note = "Local Kubernetes clusters in containers. Needs the Linux engine; the dashboard's Clusters section uses it." },
+        Tools.Kind.Component with { Note = "Local Kubernetes clusters in containers. Needs the Linux engine; the dashboard's Clusters section uses it." },
+        Tools.Kubectl.Component,
+        Tools.Helm.Component,
         new(nameof(Component.App), Updates.Title(Component.App), RequiredBecause: "it is what runs everything here. Uninstall removes it."),
         new(nameof(Component.Dashboard), Updates.Title(Component.Dashboard), Flag: "dashboard", Note: "Optional. Opens from the tray."),
     ];
@@ -63,18 +69,26 @@ sealed class WindowsHost : IEngineHost
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException) { return Linux; }
     }
 
-    public Task UseContext(string engine) => runner.Check(Paths.DockerExe, "context", "use", engine == Windows ? "win" : "linux");
+    public Task UseContext(string engine) => runner.Check(Paths.DockerCli, "context", "use", engine == Windows ? "win" : "linux");
 
-    public Task<Version?> Installed(string component) => Updates.Installed(Enum.Parse<Component>(component));
-    public Task<Release?> Latest(string component) => Updates.Latest(Enum.Parse<Component>(component));
+    public Task<Version?> Installed(string component) =>
+        Tools.Find(component) is { } tool ? tools.Installed(tool) : Updates.Installed(Enum.Parse<Component>(component));
+    public Task<Release?> Latest(string component) =>
+        Tools.Find(component) is { } tool ? tools.Latest(tool) : Updates.Latest(Enum.Parse<Component>(component));
 
     public async Task<bool> Update(Action<string> log, IReadOnlyList<(string Component, Release? Release)> components)
     {
         var parsed = components.Select(c => (Component: Enum.Parse<Component>(c.Component), c.Release)).ToList();
 
-        var machine = parsed.Where(c => c.Component is Component.Engine or Component.Cli or Component.Compose or Component.Buildx or Component.Kind).ToList();
+        List<Component> machine = [];
+        foreach (var (component, _) in parsed)
+        {
+            if (Tools.Find(component.ToString()) is { } tool && await tools.IsManaged(tool)) await winget.Install(log, tool);
+            else if (component is Component.Engine or Component.Cli or Component.Compose or Component.Buildx or Component.Kind or Component.Kubectl or Component.Helm)
+                machine.Add(component);
+        }
         if (machine.Count > 0)
-            await Elevation.Run(log, "--machine-update", string.Join(',', machine.Select(m => m.Component)));
+            await Elevation.Run(log, "--machine-update", string.Join(',', machine));
 
         if (parsed.FirstOrDefault(c => c.Component == Component.LinuxEngine) is { Release: { } linux })
             await wsl.Update(log, linux);
@@ -116,6 +130,12 @@ sealed class WindowsHost : IEngineHost
                 await UserSetup.RemoveContext("win", "linux", log);
                 break;
         }
+        if (Tools.Find(component) is { } tool)
+        {
+            if (!installed) await tools.Remove(log, tool);
+            else if (await tools.Install(log, tool)) await FindWingetPlugins(log);
+            return false;
+        }
         await WindowsSetup.MachineComponent(log, component, installed);
         if (component == nameof(Component.Engine) && installed) await UserSetup.AddContext("win", Paths.WindowsHost);
         return false;
@@ -141,8 +161,9 @@ sealed class WindowsHost : IEngineHost
 
     public async Task<bool> Install(Action<string> log, InstallRequest request)
     {
+        var packageManaged = await InstallWithWinget(log, request.Without);
         log("Administrator step");
-        var reboot = await WindowsSetup.MachineInstall(log, request.Dashboard, request.Without);
+        var reboot = await WindowsSetup.MachineInstall(log, request.Dashboard, request.Without, packageManaged);
         log("User step");
         var withLinux = !request.Without.Contains(nameof(Component.LinuxEngine));
         var hadDistro = withLinux && await distro.Exists();
@@ -157,9 +178,37 @@ sealed class WindowsHost : IEngineHost
             UserSetup.ResumeAfterReboot(request.Silent, log);
             return true;
         }
+        await FindWingetPlugins(log);
         if (hadDistro) await UpdateLinuxEngineIfNewer(log);
         if (request.TrustHttps) await Https.Enable(this, log, request.Silent);
         return reboot;
+    }
+
+    // Before the administrator step, which then takes away the copies Dockyard put in Program Files for these. A tool left
+    // out stays as it is in winget: it may be the user's own.
+    async Task<IReadOnlyCollection<string>> InstallWithWinget(Action<string> log, IReadOnlyCollection<string> without)
+    {
+        if (tools.Packages is null)
+        {
+            log("The tools are Dockyard's own copies, in Program Files");
+            return [];
+        }
+        if (!await winget.IsAvailable())
+        {
+            log("winget is not available, so Dockyard puts its own copies of the tools in Program Files");
+            return [];
+        }
+        List<string> managed = [];
+        foreach (var tool in Tools.All.Where(t => !without.Contains(t.Id)))
+            if (await tools.FromPackageManager(log, tool)) managed.Add(tool.Id);
+        return managed;
+    }
+
+    static async Task FindWingetPlugins(Action<string> log)
+    {
+        // Each in its own package folder where winget could not link them.
+        foreach (var plugin in new[] { Tools.Compose, Tools.Buildx })
+            if (Winget.Command(plugin) is { } command) await DockerPlugins.AddExtraDir(log, Path.GetDirectoryName(command)!);
     }
 
     public async Task Resume(Action<string> log)

@@ -12,7 +12,21 @@ $appDir = Join-Path $env:ProgramFiles 'Dockyard'
 $appExe = Join-Path $appDir 'Dockyard.exe'
 # Either name: the one-liner test runs the release that is out, and the rename reaches it with the next release.
 $dashboard = Join-Path $appDir 'Dockyard*Dashboard.exe'
-$docker = Join-Path $env:ProgramFiles 'Docker\docker.exe'
+$ownDocker = Join-Path $env:ProgramFiles 'Docker\docker.exe'
+
+# winget's copy where it brought one, otherwise Dockyard's own in Program Files. Found again after every run of the wizard.
+function Tool($name, $own) {
+    $link = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\$name.exe"
+    if (Test-Path $link) { $link } else { $own }
+}
+function Find-Tools {
+    $script:docker = Tool 'docker' $ownDocker
+    $script:kind = Tool 'kind' (Join-Path $env:ProgramFiles 'Docker\kind.exe')
+    $script:kubectl = Tool 'kubectl' (Join-Path $env:ProgramFiles 'Docker\kubectl.exe')
+    $script:helm = Tool 'helm' (Join-Path $env:ProgramFiles 'Docker\helm.exe')
+    $script:compose = Tool 'docker-compose' (Join-Path $env:ProgramFiles 'Docker\cli-plugins\docker-compose.exe')
+}
+Find-Tools
 
 function Ok($text) { Write-Host "  ok   $text" }
 function Check($text, $condition) { if ($condition) { Ok $text } else { throw "FAIL $text" } }
@@ -21,12 +35,15 @@ function Section($text) { Write-Host "== $text" -ForegroundColor Cyan }
 function Run {
     if ($OneLiner) {
         & ([scriptblock]::Create((Invoke-RestMethod $OneLiner))) @args
-        return $global:LASTEXITCODE
+        $exit = $global:LASTEXITCODE
+        Find-Tools
+        return $exit
     }
     $out = New-TemporaryFile; $err = New-TemporaryFile
     # The image and dashboard built next to the wizard, which a build before its release cannot download.
     $p = Start-Process (Resolve-Path $Wizard) -ArgumentList (@($args) + '--assets', (Split-Path (Resolve-Path $Wizard))) -Wait -PassThru -NoNewWindow -RedirectStandardOutput $out -RedirectStandardError $err
     Get-Content $out, $err | Write-Host
+    Find-Tools
     return $p.ExitCode
 }
 
@@ -385,9 +402,23 @@ Check 'dashboard added' (Test-Path $dashboard)
 Check 'with its libraries' (Test-Path (Join-Path $appDir 'dashboard.files'))
 
 if ($Wizard) {
+    Section 'the tools: from winget where it is there, in place of the copies an earlier Dockyard put in Program Files'
+    if ($docker -ne $ownDocker) {
+        Ok "docker is winget's: $docker"
+        Check "Dockyard's own docker.exe went" (-not (Test-Path $ownDocker))
+        & $docker compose version
+        Check 'docker compose finds the plugin winget brought' ($LASTEXITCODE -eq 0)
+        & $docker buildx version
+        Check 'and docker buildx' ($LASTEXITCODE -eq 0)
+    }
+    else { Ok 'no winget here: the tools are Dockyard''s own copies' }
+    foreach ($tool in @{ Name = 'kubectl'; Path = $kubectl; Args = @('version', '--client') }, @{ Name = 'helm'; Path = $helm; Args = @('version', '--short') }) {
+        Check "$($tool.Name) is installed: $($tool.Path)" (Test-Path $tool.Path)
+        Check "it runs: $(& $tool.Path @($tool.Args) | Select-Object -First 1)" ($LASTEXITCODE -eq 0)
+    }
+
     Section 'kind: installed, and a cluster from create to delete on the Linux engine'
-    $kind = Join-Path $env:ProgramFiles 'Docker\kind.exe'
-    Check 'kind.exe is next to docker.exe' (Test-Path $kind)
+    Check "kind is installed: $kind" (Test-Path $kind)
     Check "it runs: $(& $kind version)" ($LASTEXITCODE -eq 0)
     & $docker --context linux version *> $null
     if ($LASTEXITCODE -ne 0) { Linux-Engine }
@@ -453,7 +484,6 @@ if ($Wizard) {
     Check 'it is back' (Test-Path $kind)
 
     Section 'any component can go and come back, and required ones refuse'
-    $compose = Join-Path $env:ProgramFiles 'Docker\cli-plugins\docker-compose.exe'
     Check 'exit 0 without compose' ((Run --silent --no-start --without compose) -eq 0)
     Check 'compose is gone' (-not (Test-Path $compose))
     Check 'exit 0 on a rerun' ((Run --silent --no-start) -eq 0)

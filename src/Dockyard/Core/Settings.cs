@@ -13,6 +13,8 @@ sealed class Settings
     public string? InsecureRegistries { get; set; }
     public string? AddressPools { get; set; }
     public bool HttpsEnabled { get; set; }
+    // Tools from winget, Homebrew or apt/dnf where there is one; otherwise Dockyard's own pinned copies.
+    public bool UsePackageManager { get; set; } = true;
 
     string file = Paths.SettingsFile;
 

@@ -38,7 +38,8 @@ static class MachineEngine
         var root = Path.GetDirectoryName(Paths.DockerDir)!;
         ExtractDockerZip(zip, archive =>
         {
-            foreach (var entry in archive.Entries.Where(e => e.Name.Length > 0))
+            // The CLI is its own component, which winget may have brought.
+            foreach (var entry in archive.Entries.Where(e => e.Name.Length > 0 && !e.Name.Equals("docker.exe", StringComparison.OrdinalIgnoreCase)))
             {
                 var target = Path.GetFullPath(Path.Combine(root, entry.FullName.Replace('/', '\\')));
                 if (!target.StartsWith(Paths.DockerDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
@@ -70,6 +71,13 @@ static class MachineEngine
             InUseFiles.MoveAside(Paths.DockerExe);
             entry.ExtractToFile(Paths.DockerExe);
         });
+    }
+
+    public static void RemoveCli(Action<string> log)
+    {
+        if (!File.Exists(Paths.DockerExe)) return;
+        InUseFiles.MoveAside(Paths.DockerExe);
+        log($"Removed Dockyard's own docker.exe from {Paths.DockerDir}");
     }
 
     // Into Program Files, which only administrators can write: in this user's temp folder a process without elevation

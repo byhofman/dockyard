@@ -36,21 +36,23 @@ static class MachineApps
         log($"Removed {plugin.File}");
     }
 
-    public static async Task InstallKind(Action<string> log)
+    public static async Task InstallTool(Action<string> log, CliTool tool)
     {
         Directory.CreateDirectory(Paths.DockerDir);
-        var incoming = Paths.KindExe + ".new";
-        await Kind.Download(incoming);
-        InUseFiles.MoveAside(Paths.KindExe);
-        File.Move(incoming, Paths.KindExe);
-        log($"kind {Kind.Tag}");
+        var target = Paths.ToolExe(tool);
+        var incoming = target + ".new";
+        await Tools.Download(tool, incoming);
+        InUseFiles.MoveAside(target);
+        File.Move(incoming, target);
+        log($"{tool.Command} {Tools.Pinned(tool).Tag}");
     }
 
-    public static void RemoveKind(Action<string> log)
+    public static void RemoveTool(Action<string> log, CliTool tool)
     {
-        if (!File.Exists(Paths.KindExe)) return;
-        InUseFiles.MoveAside(Paths.KindExe);
-        log("Removed kind");
+        var target = Paths.ToolExe(tool);
+        if (!File.Exists(target)) return;
+        InUseFiles.MoveAside(target);
+        log($"Removed Dockyard's own {tool.Command} from {Paths.DockerDir}");
     }
 
     // Not worth failing an install over: without it docker login just keeps working the way it did.

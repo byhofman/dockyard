@@ -222,11 +222,14 @@
             <ItemsControl.ItemTemplate>
               <DataTemplate DataType="shell:DialogField">
                 <StackPanel Spacing="4">
-                  <TextBlock Classes="muted small" Text="{Binding Label}" />
+                  <TextBlock Classes="muted small" Text="{Binding Label}" IsVisible="{Binding HasLabel}" />
                   <TextBox Classes="dialogfield" Text="{Binding Text}" PlaceholderText="{Binding Placeholder}" IsVisible="{Binding IsText}"
                            AutomationProperties.Name="{Binding Label}" />
                   <ComboBox HorizontalAlignment="Stretch" ItemsSource="{Binding Choices}" SelectedItem="{Binding Choice}" IsVisible="{Binding IsChoice}"
                             AutomationProperties.Name="{Binding Label}" />
+                  <CheckBox IsChecked="{Binding IsChecked}" IsVisible="{Binding IsCheck}" AutomationProperties.Name="{Binding Label}">
+                    <TextBlock Text="{Binding Label}" TextWrapping="Wrap" />
+                  </CheckBox>
                 </StackPanel>
               </DataTemplate>
             </ItemsControl.ItemTemplate>

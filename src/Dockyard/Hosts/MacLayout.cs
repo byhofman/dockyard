@@ -17,7 +17,10 @@ static class MacLayout
     public static string DataDir => Path.Combine(Home, ".dockyard");
     public static string BinDir => Path.Combine(DataDir, "bin");
     public static string DockerCli => Path.Combine(BinDir, "docker");
-    public static string KindCli => Path.Combine(BinDir, "kind");
+    // Dockyard's own docker where it put one, otherwise Homebrew's.
+    public static string Docker => File.Exists(DockerCli) ? DockerCli
+        : Homebrew.FindPrefix() is { } prefix && File.Exists(Path.Combine(prefix, "bin", "docker")) ? Path.Combine(prefix, "bin", "docker")
+        : DockerCli;
     public static string PluginDir => Path.Combine(Home, ".docker", "cli-plugins");
     public static string DockerSocket => Path.Combine(DataDir, "docker.sock");
     public static string ControlSocket => Path.Combine(DataDir, "run", "vm.sock");
@@ -133,15 +136,21 @@ static class MacLayout
     // /etc/paths.d is read by every account's shells, root's too, and ~/.dockyard/bin is this user's to change. So the PATH
     // gets a folder only root can write, with a small script per command that runs this user's copy for this user alone.
     public const string SharedBinDir = "/usr/local/dockyard/bin";
-    public static readonly string[] SharedCommands = ["docker", "kind", "docker-credential-osxkeychain"];
+    public static readonly string[] SharedCommands = ["docker", "kind", "kubectl", "helm", "docker-credential-osxkeychain"];
 
-    public static string Wrapper(string uid, string binDir, string command) =>
-        $"#!/bin/sh\n[ \"$(id -u)\" = {uid} ] || {{ echo \"{command}: this is Dockyard for another account on this Mac\" >&2; exit 127; }}\nexec {Shell.ShQuote($"{binDir}/{command}")} \"$@\"\n";
+    // brewBin: where Homebrew's copy is, for when the tool came from there and this user has no copy of Dockyard's.
+    public static string Wrapper(string uid, string binDir, string command, string? brewBin = null) =>
+        $"#!/bin/sh\n[ \"$(id -u)\" = {uid} ] || {{ echo \"{command}: this is Dockyard for another account on this Mac\" >&2; exit 127; }}\n"
+        + (brewBin is null ? "" : $"[ -x {Shell.ShQuote($"{binDir}/{command}")} ] || exec {Shell.ShQuote($"{brewBin}/{command}")} \"$@\"\n")
+        + $"exec {Shell.ShQuote($"{binDir}/{command}")} \"$@\"\n";
 
-    public static string PathsEntry(string uid, string binDir) =>
+    public static string PathsEntry(string uid, string binDir, string? brewBin = null) =>
         $"mkdir -p {SharedBinDir} && chown root:wheel /usr/local/dockyard {SharedBinDir} && chmod 755 /usr/local/dockyard {SharedBinDir} && "
-        + string.Concat(SharedCommands.Select(c => $"printf '%s' {Shell.ShQuote(Wrapper(uid, binDir, c))} > {SharedBinDir}/{c} && chmod 755 {SharedBinDir}/{c} && "))
+        + string.Concat(SharedCommands.Select(c => $"printf '%s' {Shell.ShQuote(Wrapper(uid, binDir, c, brewBin))} > {SharedBinDir}/{c} && chmod 755 {SharedBinDir}/{c} && "))
         + $"echo {SharedBinDir} > /etc/paths.d/dockyard && chmod 644 /etc/paths.d/dockyard";
+
+    public static bool WrappersAreCurrent(string uid, string binDir, string? brewBin, string sharedBinDir = SharedBinDir) =>
+        SharedCommands.All(c => File.Exists(Path.Combine(sharedBinDir, c)) && File.ReadAllText(Path.Combine(sharedBinDir, c)) == Wrapper(uid, binDir, c, brewBin));
 
     public const string RemovePathsEntry = "rm -f /etc/paths.d/dockyard; rm -rf /usr/local/dockyard";
 

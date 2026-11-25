@@ -4,7 +4,8 @@ using Dockyard.Core;
 
 namespace Dockyard.Hosts;
 
-// What Dockyard puts in place on a Mac apart from the VM: the docker CLI, its plugins, kind, the dashboard and the app itself.
+// What Dockyard puts in place on a Mac apart from the VM and the tools: the dashboard and the app itself, and the docker CLI
+// and its plugins where no Homebrew brings them.
 [SupportedOSPlatform("macos")]
 sealed class MacComponents(ICommandRunner runner)
 {
@@ -13,10 +14,6 @@ sealed class MacComponents(ICommandRunner runner)
     public async Task<Version?> Installed(string component) => component switch
     {
         "LinuxEngine" => File.Exists(MacLayout.RootRelease) ? MacLayout.DockerVersion(await File.ReadAllTextAsync(MacLayout.RootRelease)) : null,
-        "Cli" => File.Exists(MacLayout.DockerCli) ? Updates.ParseVersion((await runner.Run(MacLayout.DockerCli, "--version")).Output) : null,
-        "Compose" => await Plugin("docker-compose", "version", "--short"),
-        "Buildx" => await Plugin("docker-buildx", "version"),
-        Kind.Id => File.Exists(MacLayout.KindCli) ? Updates.ParseVersion((await runner.Run(MacLayout.KindCli, "version")).Output) : null,
         "App" => InstalledAppVersion(),
         ComponentRules.DashboardId => await InstalledDashboardVersion(),
         _ => null,
@@ -42,10 +39,6 @@ sealed class MacComponents(ICommandRunner runner)
         "LinuxEngine" => File.Exists(Path.Combine(MacLayout.Assets, "dockyard-release")) && MacLayout.DockerVersion(
             await File.ReadAllTextAsync(Path.Combine(MacLayout.Assets, "dockyard-release"))) is { } bundled
             ? new Release(bundled, bundled.ToString(), null) : null,
-        "Cli" => MacLayout.Cli,
-        "Compose" => MacLayout.Compose,
-        "Buildx" => MacLayout.Buildx,
-        Kind.Id => Kind.Release,
         "App" => await Updates.LatestApp(MacLayout.ZipAsset(!HasDashboard)),
         ComponentRules.DashboardId => await Updates.LatestApp(MacLayout.ZipAsset(engineOnly: false)),
         _ => null,
@@ -134,20 +127,6 @@ sealed class MacComponents(ICommandRunner runner)
         }
     }
 
-    public static async Task InstallKind(Action<string> log)
-    {
-        Directory.CreateDirectory(MacLayout.BinDir);
-        await Kind.Download(MacLayout.KindCli);
-        log($"kind {Kind.Tag} in {MacLayout.BinDir}");
-    }
-
-    public static void RemoveKind(Action<string> log)
-    {
-        if (!File.Exists(MacLayout.KindCli)) return;
-        File.Delete(MacLayout.KindCli);
-        log("Removed kind");
-    }
-
     public static async Task InstallPlugin(Action<string> log, string name, Release release)
     {
         Directory.CreateDirectory(MacLayout.PluginDir);
@@ -158,10 +137,4 @@ sealed class MacComponents(ICommandRunner runner)
     }
 
     public static void RemovePlugin(string name) => MacLayout.RemovePlugin(Path.Combine(MacLayout.PluginDir, name), MacLayout.PluginLinksDir);
-
-    async Task<Version?> Plugin(string name, params string[] args)
-    {
-        var path = Path.Combine(MacLayout.PluginDir, name);
-        return File.Exists(path) ? Updates.ParseVersion((await runner.Run(path, args)).Output) : null;
-    }
 }

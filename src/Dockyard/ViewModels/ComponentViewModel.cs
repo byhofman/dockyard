@@ -49,6 +49,7 @@ sealed class ComponentViewModel(ComponentInfo info) : Observable
     public bool Include { get => include; set => Set(ref include, value); }
     public bool IsOptional => Info.IsOptional;
     public bool IsDockyard => Id is nameof(Core.Component.App) or Core.ComponentRules.DashboardId;
+    public bool IsKubernetes => Core.Tools.Standalone.Any(t => t.Id == Id);
     public string AddId => "Add-" + Id;
     public string RemoveId => "Remove-" + Id;
     public string UpdateId => "Update-" + Id;

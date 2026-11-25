@@ -46,6 +46,34 @@ public sealed class MacHostTests
         Assert.EndsWith("exec '/Users/O'\\''Brien/.dockyard/bin/docker' \"$@\"\n", wrapper);
     }
 
+    [Fact]
+    public void A_command_that_Homebrew_brought_runs_from_Homebrew_when_this_user_has_no_copy_of_Dockyard_s()
+    {
+        var wrapper = MacLayout.Wrapper("501", "/Users/me/.dockyard/bin", "kubectl", "/opt/homebrew/bin");
+
+        Assert.Contains("[ -x '/Users/me/.dockyard/bin/kubectl' ] || exec '/opt/homebrew/bin/kubectl' \"$@\"\n", wrapper);
+        Assert.EndsWith("exec '/Users/me/.dockyard/bin/kubectl' \"$@\"\n", wrapper);
+        foreach (var command in new[] { "kubectl", "helm" })
+            Assert.Contains($"> /usr/local/dockyard/bin/{command} && chmod 755", MacLayout.PathsEntry("501", "/Users/me/.dockyard/bin", "/opt/homebrew/bin"));
+    }
+
+    [Fact]
+    public void Wrappers_written_before_Homebrew_or_before_kubectl_are_written_again()
+    {
+        var shared = Directory.CreateTempSubdirectory("dockyard-wrappers").FullName;
+        try
+        {
+            foreach (var command in MacLayout.SharedCommands)
+                File.WriteAllText(Path.Combine(shared, command), MacLayout.Wrapper("501", "/Users/me/.dockyard/bin", command));
+            Assert.True(MacLayout.WrappersAreCurrent("501", "/Users/me/.dockyard/bin", null, shared));
+            Assert.False(MacLayout.WrappersAreCurrent("501", "/Users/me/.dockyard/bin", "/opt/homebrew/bin", shared));
+
+            File.Delete(Path.Combine(shared, "helm"));
+            Assert.False(MacLayout.WrappersAreCurrent("501", "/Users/me/.dockyard/bin", null, shared));
+        }
+        finally { Directory.Delete(shared, recursive: true); }
+    }
+
     [Theory]
     [InlineData("plain", "'plain'")]
     [InlineData("O'Brien", "'O'\\''Brien'")]

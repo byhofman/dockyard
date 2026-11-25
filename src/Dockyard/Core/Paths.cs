@@ -6,10 +6,13 @@ static class Paths
 {
     public static readonly string DockerDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Docker");
     public static readonly string DockerExe = Path.Combine(DockerDir, "docker.exe");
+    // winget's docker where it brought it, otherwise the copy that came with the engine.
+    public static string DockerCli => (OperatingSystem.IsWindows() ? Hosts.Winget.Command(Tools.Docker) : null) ?? DockerExe;
     public static readonly string CredentialHelper = Path.Combine(DockerDir, "docker-credential-wincred.exe");
     public static readonly string DockerdExe = Path.Combine(DockerDir, "dockerd.exe");
     public static readonly string PluginDir = Path.Combine(DockerDir, "cli-plugins");
-    public static readonly string KindExe = Path.Combine(DockerDir, "kind.exe");
+    // Where Dockyard puts its own copy of a tool that winget did not bring.
+    public static string ToolExe(CliTool tool) => Path.Combine(DockerDir, tool.FileName);
     public static readonly string AppDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Dockyard");
     public static readonly string AppExe = Path.Combine(AppDir, "Dockyard.exe");
     public static readonly string DashboardExe = Path.Combine(AppDir, DashboardProcess + ".exe");

@@ -101,6 +101,9 @@
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
+              <CheckBox IsChecked="{Binding UsePackageManager}" ToolTip.Tip="Off: Dockyard keeps its own copies, at the versions it was tested with, and updates them itself.">
+                <TextBlock Text="{x:Static vm:MainViewModel.PackageManagerText}" TextWrapping="Wrap" />
+              </CheckBox>
               <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="{Binding RequiredSummary}" />
               <Button Classes="primary" Content="Install" Command="{Binding InstallCommand}" HorizontalAlignment="Right" />
             </StackPanel>
@@ -187,6 +190,10 @@
                 <TextBlock Classes="h2" Text="DOCKER" />
               </Border>
               <ItemsControl ItemsSource="{Binding DockerComponents}" ItemTemplate="{StaticResource ComponentRow}" />
+              <Border BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="18,12,18,6">
+                <TextBlock Classes="h2" Text="KUBERNETES" />
+              </Border>
+              <ItemsControl ItemsSource="{Binding KubernetesComponents}" ItemTemplate="{StaticResource ComponentRow}" />
             </StackPanel>
           </Border>
         </StackPanel>
@@ -195,11 +202,13 @@
         <StackPanel Spacing="10" IsVisible="{Binding ShowManage}">
           <TextBlock Classes="h2" Text="SETTINGS" />
           <Border Classes="card">
-            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
               <ToggleSwitch IsChecked="{Binding StopOtherOnSwitch}" IsVisible="{Binding HasEngineSwitch}"
                             OnContent="Stop the other engine when switching" OffContent="Stop the other engine when switching" />
               <ToggleSwitch Grid.Row="1" IsChecked="{Binding StartActiveAtLogon}" OnContent="Start the active engine at logon" OffContent="Start the active engine at logon" />
-              <Button Grid.Column="1" Grid.RowSpan="2" Classes="danger" Content="Uninstall…" VerticalAlignment="Center" Flyout="{StaticResource ConfirmUninstall}" />
+              <ToggleSwitch Grid.Row="2" IsChecked="{Binding UsePackageManager}" ToolTip.Tip="Applies the next time a tool is added or updated, or when the wizard runs again."
+                            OnContent="{x:Static vm:MainViewModel.PackageManagerText}" OffContent="{x:Static vm:MainViewModel.PackageManagerText}" />
+              <Button Grid.Column="1" Grid.RowSpan="3" Classes="danger" Content="Uninstall…" VerticalAlignment="Center" Flyout="{StaticResource ConfirmUninstall}" />
             </Grid>
           </Border>
         </StackPanel>
