@@ -1,13 +1,11 @@
 <#
-  Dockyard for Windows. This only fetches the installer, checks it and starts it:
+  Dockyard for Windows. This only fetches the Dockyard Toolbox, checks it and starts it; the Toolbox does all the rest:
 
     irm https://raw.githubusercontent.com/byhofman/dockyard/main/install.ps1 | iex
 
-  Arguments go to the installer:
+  Arguments go to the Toolbox:
 
     & ([scriptblock]::Create((irm https://raw.githubusercontent.com/byhofman/dockyard/main/install.ps1))) --silent --no-dashboard
-
-  -Build fetches the latest build of main instead of the latest release (needs the gh CLI, signed in).
 #>
 & {
     $ErrorActionPreference = 'Stop'
@@ -18,79 +16,44 @@
     $dir = Join-Path $env:USERPROFILE 'Downloads'
     $exe = Join-Path $dir $name
 
-    $build = $false
-    $arguments = foreach ($arg in $args) {
-        switch ($arg) {
-            '-Build' { $build = $true }
-            '-EngineOnly' { '--no-dashboard' }
-            '-NoStart' { '--no-start' }
-            default { $arg }
-        }
+    if ($env:DOCKYARD_VERSION) {
+        $tag = "toolbox/$env:DOCKYARD_VERSION"
+    } else {
+        # The redirect names one release, so the file and its checksum come from the same one, and it has no API rate limit.
+        $request = [Net.WebRequest]::Create("https://github.com/$repo/releases/latest")
+        $request.Method = 'HEAD'
+        $response = $request.GetResponse()
+        $tag = [Uri]::UnescapeDataString(($response.ResponseUri.AbsolutePath -split '/releases/tag/', 2)[-1])
+        $response.Dispose()
     }
+    if ($tag -notmatch '^(v|toolbox/)\d') { throw 'No Dockyard release found.' }
 
     New-Item -ItemType Directory -Force $dir | Out-Null
-    # Left by earlier one-liners, whose installer took files next to it without being asked.
-    Remove-Item $exe, (Join-Path $dir 'Dockyard.Dashboard.zip'), (Join-Path $dir 'dockyard-linux-*-x86_64.tar.gz') -Force -ErrorAction SilentlyContinue
-
-    if ($build) {
-        if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw '-Build needs the gh CLI (GitHub only serves build artifacts to signed-in users).' }
-        $run = gh run list -R $repo -b main -w build -s success -L 1 --json databaseId -q '.[0].databaseId'
-        if (-not $run) { throw "No successful build of $repo found." }
-        foreach ($artifact in 'windows', 'image') { gh run download $run -R $repo -n $artifact -D $dir }
-        Write-Host "Latest build of main (run $run)"
-        $arguments = @($arguments) + '--assets', $dir
-    } else {
-        if ($env:DOCKYARD_VERSION) {
-            $tag = "toolbox/$env:DOCKYARD_VERSION"
-        } else {
-            # The redirect names one release, so the file and its checksum come from the same one, and it has no API rate limit.
-            $request = [Net.WebRequest]::Create("https://github.com/$repo/releases/latest")
-            $request.Method = 'HEAD'
-            $response = $request.GetResponse()
-            $tag = [Uri]::UnescapeDataString(($response.ResponseUri.AbsolutePath -split '/releases/tag/', 2)[-1])
-            $response.Dispose()
-        }
-        if ($tag -notmatch '^(v|toolbox/)\d') { throw 'No Dockyard release found.' }
-
-        Write-Host "Downloading the Dockyard installer ($tag)"
-        $base = "https://github.com/$repo/releases/download/$tag"
-        Invoke-WebRequest "$base/$name" -OutFile $exe -UseBasicParsing
-        $sumsFile = Join-Path $dir 'Dockyard.SHA256SUMS'
-        Invoke-WebRequest "$base/SHA256SUMS" -OutFile $sumsFile -UseBasicParsing
-        $sums = Get-Content $sumsFile
-        Remove-Item $sumsFile -Force
-        $line = $sums | Where-Object { $_.Trim() -match "\s\*?$([regex]::Escape($name))$" } | Select-Object -First 1
-        if (-not $line) { Remove-Item $exe -Force; throw "SHA256SUMS of $tag does not list $name, not starting it." }
-        if ((Get-FileHash $exe -Algorithm SHA256).Hash -ne ($line.Trim() -split '\s+')[0]) {
-            Remove-Item $exe -Force
-            throw "Checksum mismatch for $name, not starting it."
-        }
+    Write-Host "Downloading the Dockyard Toolbox ($tag)"
+    $base = "https://github.com/$repo/releases/download/$tag"
+    Invoke-WebRequest "$base/$name" -OutFile $exe -UseBasicParsing
+    $sumsFile = Join-Path $dir 'Dockyard.SHA256SUMS'
+    Invoke-WebRequest "$base/SHA256SUMS" -OutFile $sumsFile -UseBasicParsing
+    $sums = Get-Content $sumsFile
+    Remove-Item $sumsFile -Force
+    $line = $sums | Where-Object { $_.Trim() -match "\s\*?$([regex]::Escape($name))$" } | Select-Object -First 1
+    if (-not $line -or (Get-FileHash $exe -Algorithm SHA256).Hash -ne ($line.Trim() -split '\s+')[0]) {
+        Remove-Item $exe -Force
+        throw "The checksum of $name does not match the one in $tag, not starting it."
     }
 
-    function Start-Installer {
-        $parameters = @{ FilePath = $exe; Wait = $true; PassThru = $true; NoNewWindow = $true }
-        if ($arguments) { $parameters.ArgumentList = @($arguments | ForEach-Object { if ($_ -match '\s') { "`"$_`"" } else { $_ } }) }
-        Start-Process @parameters
-    }
-
+    $parameters = @{ FilePath = $exe; Wait = $true; PassThru = $true; NoNewWindow = $true }
+    if ($args) { $parameters.ArgumentList = @($args | ForEach-Object { if ($_ -match '\s') { "`"$_`"" } else { $_ } }) }
     try {
-        $process = Start-Installer
+        $process = Start-Process @parameters
     } catch {
-        # Defender's prevalence rule blocks a new build before it can ask for anything (event 1121).
-        Write-Host 'Windows blocked the installer. Asking for administrator approval to allow it.'
-        $allow = "Add-MpPreference -AttackSurfaceReductionOnlyExclusions '$exe'"
-        Start-Process powershell.exe -Verb RunAs -Wait -ArgumentList '-NoProfile', '-Command', $allow
-        try {
-            $process = Start-Installer
-        } catch {
-            throw "Windows still blocks $exe ($_). On a managed device, your administrator has to allow this path."
-        }
+        throw "Windows did not let $exe start ($_). Dockyard's builds are not signed, so Defender may block a new one; allow it under Windows Security > Virus & threat protection > Protection history, or ask your administrator on a managed device, then run this again."
     }
 
     $global:LASTEXITCODE = $process.ExitCode
     switch ($process.ExitCode) {
         0 { }
         3010 { Write-Host 'Restart Windows to finish. Dockyard carries on by itself after the restart.' -ForegroundColor Yellow }
-        default { throw "The Dockyard installer failed (exit code $($process.ExitCode)). See the output above." }
+        default { throw "The Dockyard Toolbox failed (exit code $($process.ExitCode)). See the output above." }
     }
 } @args

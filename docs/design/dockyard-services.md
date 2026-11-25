@@ -8,8 +8,8 @@ should be a separate OS native service providing only the integration part (adap
 
 | Part | Runs as | Does | Never does |
 |---|---|---|---|
-| **Toolbox** | the app the user opens; tray icon | installs, updates and removes components; settings; shows state | listen on a port, relay traffic, hold an engine alive |
-| **dockyard-host** | an OS-native background service per OS: a per-user logon service on Windows (WSL is per user), a LaunchAgent on macOS, a systemd user unit on Linux | only what has to touch the OS: DNS routing rules (NRPT, `/etc/resolver`, systemd-resolved), loopback relays into the engine where the OS cannot reach it, the engine's pipes for the docker CLI, keeping the engine running, trusting the CA | names, routing decisions, certificates |
+| **Toolbox** | the app the user opens; tray icon | installs, updates and removes components and features, including what needs administrator rights once: DNS routing rules (NRPT, `/etc/resolver`, systemd-resolved) and trusting the CA; settings; shows state | listen on a port, relay traffic, hold an engine alive |
+| **dockyard-host** | an OS-native background service per OS: a per-user logon service on Windows (WSL is per user), a LaunchAgent on macOS, a systemd user unit on Linux | only what has to run while the engine does: loopback relays into the engine where the OS cannot reach it, the engine's pipes and socket for the docker CLI, keeping the engine running | installing anything, names, routing decisions, certificates |
 | **Services** | containers in the Dockyard group, pinned by digest | DNS for `*.dockyard.internal` and what external-dns writes; the proxy for container names and cluster ingress; kind's cloud provider; NFS | anything the OS has to be asked for |
 
 dockyard-host is small, has no UI, and its behaviour is a fixed list of OS operations, so it can be reviewed and run with
