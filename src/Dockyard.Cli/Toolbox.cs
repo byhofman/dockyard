@@ -7,14 +7,16 @@ namespace Dockyard.Cli;
 // Toolbox started for that one command.
 static class Toolbox
 {
-    static string ExeName => OperatingSystem.IsWindows() ? "Dockyard.exe" : "Dockyard";
+    static string[] ExeNames => OperatingSystem.IsWindows() ? ["dockyard-toolbox.exe", "Dockyard.exe"] : ["dockyard-toolbox", "Dockyard"];
 
-    // Next to this command (Linux, the macOS app bundle) or one folder up (Windows keeps the command in bin).
+    // Next to this command (Linux, the macOS app bundle) or one folder up (Windows keeps the command in bin); Dockyard is
+    // what the Toolbox was called before 0.9.0.
     public static string? Locate(string? baseDirectory = null)
     {
         var here = baseDirectory ?? AppContext.BaseDirectory;
         foreach (var dir in new[] { here, Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(here)) })
-            if (dir is not null && Path.Combine(dir, ExeName) is var exe && File.Exists(exe)) return exe;
+            foreach (var name in ExeNames)
+                if (dir is not null && Path.Combine(dir, name) is var exe && File.Exists(exe)) return exe;
         return null;
     }
 

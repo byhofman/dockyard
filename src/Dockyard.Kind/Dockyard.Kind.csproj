@@ -12,6 +12,8 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Dockyard" />
+    <InternalsVisibleTo Include="dockyard-cli" />
+    <InternalsVisibleTo Include="Dockyard.Cli.Tests" />
     <InternalsVisibleTo Include="Dockyard.Dashboard" />
     <InternalsVisibleTo Include="Dockyard.Tests" />
     <InternalsVisibleTo Include="Dockyard.Dashboard.Tests" />

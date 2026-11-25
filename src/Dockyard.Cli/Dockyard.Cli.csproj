@@ -5,7 +5,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
-    <AssemblyName>dockyard</AssemblyName>
+    <AssemblyName>dockyard-cli</AssemblyName>
     <RootNamespace>Dockyard.Cli</RootNamespace>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -16,13 +16,15 @@
     <Copyright>Copyright (c) 2026 Thomas Hofman</Copyright>
     <Version>0.0.0</Version>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">$(NETCoreSdkRuntimeIdentifier)</RuntimeIdentifier>
-    <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
     <PublishTrimmed>true</PublishTrimmed>
+    <!-- Spectre.Console.Cli reads the commands' settings by reflection: only the framework's own assemblies are trimmed. -->
+    <TrimMode>partial</TrimMode>
+    <SuppressTrimAnalysisWarnings>true</SuppressTrimAnalysisWarnings>
     <DebugType>none</DebugType>
   </PropertyGroup>
 
@@ -37,6 +39,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Spectre.Console.Cli" Version="0.57.2" />
     <ProjectReference Include="..\Dockyard.Kind\Dockyard.Kind.csproj" />
   </ItemGroup>
 

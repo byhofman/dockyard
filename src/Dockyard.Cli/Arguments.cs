@@ -13,14 +13,6 @@ static class Arguments
         return at + 1 < args.Count ? args[at + 1] : throw new UsageException($"{name} needs a value");
     }
 
-    public static string Content(IReadOnlyList<string> args)
-    {
-        var file = Option(args, "--file") ?? throw new UsageException("--file is required");
-        return file.StartsWith(InlinePrefix, StringComparison.Ordinal)
-            ? System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(file[InlinePrefix.Length..]))
-            : file == "-" ? Console.In.ReadToEnd() : File.ReadAllText(file);
-    }
-
     // The Toolbox may run elsewhere than this terminal, with another working directory and no stdin: the file goes along.
     public static IReadOnlyList<string> InlineFile(IReadOnlyList<string> args, Func<string, string>? read = null)
     {
