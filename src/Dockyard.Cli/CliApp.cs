@@ -77,7 +77,7 @@ sealed class CreateSettings : CommandSettings
     public int Workers { get; init; }
 
     [CommandOption("--addons <names>")]
-    [Description("metrics-server, traefik (with Helm), comma separated")]
+    [Description("metrics-server, traefik, cert-manager (with Helm), comma separated")]
     public string? Addons { get; init; }
 
     [CommandOption("--storage <kind>")]

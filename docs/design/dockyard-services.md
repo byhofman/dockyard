@@ -42,7 +42,23 @@ Done in 0.9.0: step 2. The agent runs `dockyard-dns` (CoreDNS 1.13.1) and `docky
 - **Ports:** iptables now DNATs ports 80 and 443 to `198.19.250.1`, so Traefik listens there and not on every interface.
 - **Fallback:** when the images cannot be had, the agent serves names itself as before.
 
-Verified on Windows (WSL); the Mac VM and Linux host run through CI. Note: etcd and external-dns (step 4) are not in yet.
+Verified on Windows (WSL); the Mac VM and Linux host run through CI.
+
+Done in 0.9.0 as well:
+
+- **Step 1 on macOS and Linux.**
+  - On the Mac, the VM helper is `dockyard-host`, under a LaunchAgent of its own: launchd restarts it after a failure, and it is never stopped by the Toolbox quitting.
+  - On Linux, `dockyard-host.service`.
+- **Step 3.**
+  - `.internal` replaces `.test`, with no alias.
+  - The root CA allows one level below it. `dockyard https cluster-issuer <cluster>` issues an intermediate CA, name constrained to `<cluster>.dockyard.internal`.
+  - The cert-manager add-on turns that intermediate into the `ClusterIssuer` called `dockyard`.
+- **external-dns (step 4, without declared domains).**
+  - `dockyard-etcd` runs next to CoreDNS. Every cluster with the load balancer gets external-dns with the CoreDNS provider, under the prefix `/dockyard/<cluster>/`.
+  - The agent reads the records into the zones. A record pointing at the cluster's ingress resolves to the proxy, which routes it by Host header and SNI.
+  - Records of a stopped or deleted cluster are not answered, and deleting a cluster clears its prefix.
+
+Still open: declared domains outside `dockyard.internal` (step 4's approval per domain and separate constrained root). Any container can write to `dockyard-etcd`; it is reachable from containers only, but a container could publish a name under `dockyard.internal`. A name a container already has always wins.
 
 1. **dockyard-host, Windows first.** A `dockyard-host` executable (a component of its own, released as `host/<semver>`)
    takes over the relays, the pipes and the keep-alive from the Toolbox; the Toolbox talks to it over a local pipe to start
