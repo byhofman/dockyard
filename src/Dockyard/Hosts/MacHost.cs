@@ -44,6 +44,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
 
     public Task<Version?> Installed(string component) => Core.Tools.Find(component) is { } tool ? Tools.Installed(tool) : parts.Installed(component);
     public Task<Release?> Latest(string component) => Core.Tools.Find(component) is { } tool ? Tools.Latest(tool) : MacComponents.Latest(component);
+    public Task<string?> Source(string component) => Core.Tools.Find(component) is { } tool ? Tools.Source(tool) : Task.FromResult<string?>("Dockyard");
 
     public string CaDirectory => Path.Combine(MacLayout.DataDir, "ca");
     public ICaKeyStore CaKeys => new KeychainCaKey(MacLayout.LoginKeychain);

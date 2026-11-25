@@ -165,6 +165,15 @@ public sealed class ToolTests : IDisposable
     }
 
     [Fact]
+    public async Task A_tool_says_whether_the_package_manager_or_Dockyard_put_it_there()
+    {
+        Assert.Equal("fake", await new ToolComponents(new FakePackages(installed: new Version(1, 0, 0)), new FakeOwn()).Source(Tools.Kind));
+        Assert.Equal("Dockyard", await new ToolComponents(new FakePackages(), new FakeOwn(installed: FakeOwn.Pin.Version)).Source(Tools.Kind));
+        Assert.Equal("Dockyard", await new ToolComponents(new FakePackages(installed: new Version(1, 0, 0)), new FakeOwn(installed: FakeOwn.Pin.Version), () => false).Source(Tools.Kind));
+        Assert.Null(await new ToolComponents(new FakePackages(), new FakeOwn()).Source(Tools.Kind));
+    }
+
+    [Fact]
     public async Task A_managed_tool_s_latest_is_what_the_package_manager_offers()
     {
         var tools = new ToolComponents(new FakePackages(installed: new Version(4, 3, 2), newest: new Version(4, 4, 0)), new FakeOwn());

@@ -30,6 +30,9 @@ interface IEngineHost
     // Puts the settings in place, restarting the engine if it runs: it reads them only when it starts.
     Task ApplyEngineConfiguration(Action<string> log) => Task.CompletedTask;
 
+    // Where an installed component came from, as people know it: winget, Homebrew, apt, dnf, or Dockyard for its own copy.
+    Task<string?> Source(string component) => Task.FromResult<string?>(null);
+
     // An engine's daemon.json as the user edits it, without what Dockyard adds; null where it cannot be edited here.
     Task<string?> ReadEngineSettings(string engine) => Task.FromResult<string?>(null);
     // Null when the engine accepts them, otherwise why not.

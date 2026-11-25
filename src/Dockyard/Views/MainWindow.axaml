@@ -16,7 +16,10 @@
             <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,10,0" />
             <TextBlock Classes="muted" FontSize="11" TextWrapping="Wrap" Text="{Binding Note}" IsVisible="{Binding HasNote}" Margin="0,0,10,0" />
           </StackPanel>
-          <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Installed}" VerticalAlignment="Center" />
+          <StackPanel Grid.Column="1" VerticalAlignment="Center">
+            <TextBlock Classes="mono" Text="{Binding Installed}" />
+            <TextBlock Classes="muted" FontSize="11" Text="{Binding Source}" IsVisible="{Binding HasSource}" ToolTip.Tip="Where this version came from, and what updates it" />
+          </StackPanel>
           <StackPanel Grid.Column="2" VerticalAlignment="Center">
             <TextBlock Classes="mono" Text="{Binding Latest}" />
             <Button Classes="link" Content="What's new" Command="{Binding OpenNotesCommand}" IsVisible="{Binding HasNotes}" Padding="0,2" HorizontalAlignment="Left"

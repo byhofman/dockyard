@@ -22,6 +22,9 @@ sealed class ToolComponents(IPackageManager? packages, IOwnCopies own, Func<bool
 
     public async Task<bool> IsManaged(CliTool tool) => Carries(tool) && await packages!.Installed(tool) is not null;
 
+    public async Task<string?> Source(CliTool tool) =>
+        await IsManaged(tool) ? packages!.Name : await own.Installed(tool) is not null ? "Dockyard" : null;
+
     public async Task<Version?> Installed(CliTool tool) => (Carries(tool) ? await packages!.Installed(tool) : null) ?? await own.Installed(tool);
 
     // What the package manager would upgrade to, for a tool it manages; otherwise the pinned version.

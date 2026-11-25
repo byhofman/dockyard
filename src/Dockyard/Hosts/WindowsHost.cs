@@ -75,6 +75,7 @@ sealed class WindowsHost : IEngineHost
         Tools.Find(component) is { } tool ? tools.Installed(tool) : Updates.Installed(Enum.Parse<Component>(component));
     public Task<Release?> Latest(string component) =>
         Tools.Find(component) is { } tool ? tools.Latest(tool) : Updates.Latest(Enum.Parse<Component>(component));
+    public Task<string?> Source(string component) => Tools.Find(component) is { } tool ? tools.Source(tool) : Task.FromResult<string?>("Dockyard");
 
     public async Task<bool> Update(Action<string> log, IReadOnlyList<(string Component, Release? Release)> components)
     {

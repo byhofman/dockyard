@@ -101,6 +101,21 @@ sealed class LinuxHost : IEngineHost
         finally { Directory.Delete(dir, recursive: true); }
     }
 
+    // Docker's own pieces come from the distribution's package manager, Dockyard too where there is apt or dnf.
+    public async Task<string?> Source(string component)
+    {
+        if (Tool(component) is { } tool) return await tools.Source(tool);
+        var os = File.Exists("/etc/os-release") ? OsRelease.Parse(await File.ReadAllTextAsync("/etc/os-release")) : null;
+        var family = os?.PackageManager ?? (os is null ? null : new[] { os.Id }.Concat(os.IdLike).Select(id => id switch
+        {
+            "arch" => "pacman",
+            "opensuse" or "suse" or "sles" => "zypper",
+            _ => id.StartsWith("opensuse", StringComparison.Ordinal) ? "zypper" : null,
+        }).FirstOrDefault(f => f is not null));
+        return component is "Engine" or "Compose" or "Buildx" ? family
+            : LinuxLayout.InstallDir == LinuxLayout.PackageDir ? family : "Dockyard";
+    }
+
     public Task<Version?> Installed(string component) => Tool(component) is { } tool ? tools.Installed(tool) : components.Installed(component);
     public Task<Release?> Latest(string component) => Tool(component) is { } tool ? tools.Latest(tool) : LinuxComponents.Latest(component);
 

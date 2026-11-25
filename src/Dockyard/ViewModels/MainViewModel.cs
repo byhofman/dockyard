@@ -356,6 +356,7 @@ sealed class MainViewModel : Observable
         {
             var installed = await host.Installed(c.Id);
             c.Installed = installed?.ToString() ?? "–";
+            c.Source = installed is null ? null : await host.Source(c.Id);
             if (c.Id == nameof(Component.App)) InstalledVersion = c.Installed;
             c.IsPresent = c == Dashboard ? host.HasDashboard : installed is not null;
             var latest = await host.Latest(c.Id);
