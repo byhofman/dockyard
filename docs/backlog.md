@@ -41,7 +41,7 @@ IDs are permanent: never renumber or reuse one.
 - [ ] DOK-1 `linux-arm64` and `win-arm64` builds
 - [x] DOK-2 Tray popover with container quick actions — v0.4.0
 - [ ] DOK-3 Embedded terminal in the dashboard
-- [ ] DOK-4 Compose editor
+- [x] DOK-4 Compose editor: a compose project's file in the dashboard, checked as it is typed, saved and applied with `docker compose up -d` — 0.9.0
 - [x] DOK-5 File browser inside containers — v0.4.0
 - [ ] DOK-6 Registry login UI: manage registries from the dashboard, logging in and out with `docker login`, which keeps working on the CLI (owner asked again 2026-11-25, a version after 0.9.0)
 - [x] DOK-7 `host.docker.internal` reaches the host from Linux containers — v0.4.0
