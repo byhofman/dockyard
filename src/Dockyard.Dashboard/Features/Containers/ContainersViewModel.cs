@@ -40,8 +40,8 @@ sealed class ContainersViewModel : Observable, ISearchable
         ClusterStartStopCommand = new Command<ClusterRow>(k => shell.Clusters?.StartOrStop(k.Cluster) ?? Task.CompletedTask);
         OpenClusterCommand = new Command<ClusterRow>(k => { shell.Reveal("Clusters", k.Cluster); return Task.CompletedTask; });
 
-        StartPickedCommand = new Command(() => Bulk("Starting", PickedContainers.Where(c => !c.IsRunning).ToList(), (c, i) => c.StartContainerAsync(i.Id)), () => PickedContainers.Any(c => !c.IsRunning));
-        StopPickedCommand = new Command(() => Bulk("Stopping", PickedContainers.Where(c => c.IsRunning).ToList(), (c, i) => c.StopContainerAsync(i.Id)), () => PickedContainers.Any(c => c.IsRunning));
+        StartPickedCommand = new Command(() => StartOrStopPicked(stop: false), () => PickedContainers.Any(c => !c.IsRunning) || PickedClusters.Any(c => !c.IsRunning));
+        StopPickedCommand = new Command(() => StartOrStopPicked(stop: true), () => PickedContainers.Any(c => c.IsRunning) || PickedClusters.Any(c => c.Nodes.Any(n => n.IsRunning)));
         RestartPickedCommand = new Command(() => Bulk("Restarting", PickedContainers, (c, i) => c.RestartContainerAsync(i.Id)), () => PickedContainers.Count > 0);
         RemovePickedCommand = new Command(() => { AskRemove(PickedContainers); return Task.CompletedTask; }, () => PickedContainers.Count > 0);
         ClearSelectionCommand = new Command(() => { SelectedRow = null; return Task.CompletedTask; });
@@ -115,6 +115,19 @@ sealed class ContainersViewModel : Observable, ISearchable
         })
         .DistinctBy(c => c.Id)
         .ToList();
+
+    IReadOnlyList<KindCluster> PickedClusters => SelectedItems.OfType<ClusterRow>().Select(r => r.Cluster).ToList();
+
+    // A cluster's nodes start control plane first, and its load balancer proxies go with it, so clusters go through Clusters.
+    async Task StartOrStopPicked(bool stop)
+    {
+        if (shell.Clusters is { } clusters)
+            foreach (var cluster in PickedClusters.Where(c => stop ? c.Nodes.Any(n => n.IsRunning) : !c.IsRunning))
+                await (stop ? clusters.Stop(cluster) : clusters.Start(cluster));
+        var containers = PickedContainers.Where(c => c.IsRunning == stop).ToList();
+        if (containers.Count > 0)
+            await Bulk(stop ? "Stopping" : "Starting", containers, (c, i) => stop ? c.StopContainerAsync(i.Id) : c.StartContainerAsync(i.Id));
+    }
 
     public string? Busy { get => busy; private set { if (Set(ref busy, value)) Raise(nameof(IsBusy)); } }
     public bool IsBusy => busy is not null;

@@ -4,8 +4,15 @@ using YamlDotNet.RepresentationModel;
 namespace Dockyard.Kind;
 
 // How a cluster was made, so it can be made again: kind keeps no copy of the config it was given.
-sealed record ClusterDefinition(string Yaml, bool SharedStorage, IReadOnlyList<string> Addons)
+enum ClusterStorage { None, HostFolder, Nfs }
+
+// The load balancer gives LoadBalancer services an address; Ports are the host ports on 127.0.0.1 its services get.
+sealed record ClusterDefinition(string Yaml, ClusterStorage Storage, IReadOnlyList<string> Addons, bool LoadBalancer = true, IReadOnlyList<int>? Ports = null)
 {
+    public static readonly IReadOnlyList<int> DefaultPorts = [80, 443];
+
+    public bool SharedStorage => Storage == ClusterStorage.HostFolder;
+    public IReadOnlyList<int> LoadBalancerPorts => LoadBalancer ? Ports ?? DefaultPorts : [];
     public IReadOnlyList<ClusterAddon> AddonList => ClusterAddons.All.Where(a => Addons.Contains(a.Release)).ToList();
 }
 
@@ -22,10 +29,18 @@ static class ClusterDefinitions
         if (!File.Exists(YamlFile(folder, name))) return null;
         var meta = File.Exists(MetaFile(folder, name)) ? File.ReadAllLines(MetaFile(folder, name)) : [];
         string? Value(string key) => meta.Select(l => l.Split('=', 2)).FirstOrDefault(p => p.Length == 2 && p[0] == key)?[1];
+        var storage = Value("storage") switch
+        {
+            "host-folder" => ClusterStorage.HostFolder,
+            "nfs" => ClusterStorage.Nfs,
+            _ => Value("shared-storage") == "true" ? ClusterStorage.HostFolder : ClusterStorage.None,
+        };
         return new ClusterDefinition(
             File.ReadAllText(YamlFile(folder, name)),
-            Value("shared-storage") == "true",
-            (Value("addons") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries));
+            storage,
+            (Value("addons") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries),
+            Value("load-balancer") != "false",
+            ParsePorts(Value("ports") ?? "") ?? ClusterDefinition.DefaultPorts);
     }
 
     public static void Save(string name, ClusterDefinition definition, string? folder = null)
@@ -33,7 +48,33 @@ static class ClusterDefinitions
         folder ??= Folder;
         Directory.CreateDirectory(folder);
         File.WriteAllText(YamlFile(folder, name), definition.Yaml);
-        File.WriteAllLines(MetaFile(folder, name), [$"shared-storage={(definition.SharedStorage ? "true" : "false")}", $"addons={string.Join(',', definition.Addons)}"]);
+        File.WriteAllLines(MetaFile(folder, name),
+        [
+            $"storage={StorageKey(definition.Storage)}",
+            $"addons={string.Join(',', definition.Addons)}",
+            $"load-balancer={(definition.LoadBalancer ? "true" : "false")}",
+            $"ports={string.Join(',', definition.Ports ?? ClusterDefinition.DefaultPorts)}",
+        ]);
+    }
+
+    public static string StorageKey(ClusterStorage storage) => storage switch
+    {
+        ClusterStorage.HostFolder => "host-folder",
+        ClusterStorage.Nfs => "nfs",
+        _ => "none",
+    };
+
+    // "80, 443" as ports; null when it is not a list of distinct ports.
+    public static IReadOnlyList<int>? ParsePorts(string text)
+    {
+        var parts = text.Split([',', ' '], StringSplitOptions.RemoveEmptyEntries);
+        var ports = new List<int>();
+        foreach (var part in parts)
+        {
+            if (!int.TryParse(part, out var port) || port is < 1 or > 65535 || ports.Contains(port)) return null;
+            ports.Add(port);
+        }
+        return ports.Count > 0 ? ports : null;
     }
 
     public static void Remove(string name, string? folder = null)
@@ -46,7 +87,7 @@ static class ClusterDefinitions
     // A cluster made elsewhere, or before Dockyard kept definitions: its nodes are what its config said, near enough.
     public static ClusterDefinition Guess(KindCluster cluster) => new(
         KindCli.Config(cluster.Nodes.Count(n => n.Role == "worker"), cluster.HasSharedStorage),
-        cluster.HasSharedStorage, []);
+        cluster.HasSharedStorage ? ClusterStorage.HostFolder : ClusterStorage.None, []);
 
     // Null when kind can take it as far as can be told without kind: a v1alpha4 Cluster with a control plane.
     public static string? Problem(string yaml)

@@ -29,11 +29,14 @@ public sealed class ClusterDefinitionTests : IDisposable
     {
         var yaml = KindCli.Config(1) + "networking:\n  podSubnet: 10.244.0.0/16\n";
 
-        ClusterDefinitions.Save("dev", new ClusterDefinition(yaml, true, ["metrics-server", "traefik"]), dir);
+        ClusterDefinitions.Save("dev", new ClusterDefinition(yaml, ClusterStorage.Nfs, ["metrics-server", "traefik"], LoadBalancer: false, Ports: [8080, 8443]), dir);
         var loaded = ClusterDefinitions.Load("dev", dir)!;
 
         Assert.Equal(yaml, loaded.Yaml);
-        Assert.True(loaded.SharedStorage);
+        Assert.Equal(ClusterStorage.Nfs, loaded.Storage);
+        Assert.False(loaded.LoadBalancer);
+        Assert.Equal([8080, 8443], loaded.Ports);
+        Assert.Empty(loaded.LoadBalancerPorts);
         Assert.Equal([ClusterAddons.MetricsServer, ClusterAddons.Traefik], loaded.AddonList);
         ClusterDefinitions.Remove("dev", dir);
         Assert.Null(ClusterDefinitions.Load("dev", dir));

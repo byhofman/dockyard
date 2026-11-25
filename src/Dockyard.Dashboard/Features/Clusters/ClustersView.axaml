@@ -12,8 +12,6 @@
           <CheckBox Classes="pick" IsChecked="{Binding AllSelected}" ToolTip.Tip="Select all" AutomationProperties.Name="Select all clusters" />
           <TextBlock Grid.Column="1" Classes="section" Text="CLUSTERS" VerticalAlignment="Center" />
           <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12">
-            <ToggleSwitch IsChecked="{Binding LoadBalancersEnabled}" IsVisible="{Binding HasKind}" OnContent="Load balancers" OffContent="Load balancers"
-                          VerticalAlignment="Center" ToolTip.Tip="kind's cloud provider: LoadBalancer services get an address on 127.0.0.1" />
             <Button Classes="primary" Command="{Binding CreateCommand}" IsVisible="{Binding HasKind}">
               <StackPanel Classes="label"><PathIcon Data="{StaticResource IconPlus}" /><TextBlock Text="Create cluster…" /></StackPanel>
             </Button>
@@ -119,7 +117,11 @@
           <Button Content="Open the shared folder" Command="{Binding OpenSharedFolderCommand}" IsVisible="{Binding HasSharedFolder}"
                   HorizontalAlignment="Left" ToolTip.Tip="{Binding SharedFolder}" />
 
-          <TextBlock Classes="section" Text="LOAD BALANCERS" Margin="0,8,0,0" />
+          <Grid ColumnDefinitions="*,Auto" Margin="0,8,0,0">
+            <TextBlock Classes="section" Text="LOAD BALANCER" VerticalAlignment="Center" />
+            <Button Grid.Column="1" Classes="link" Content="Change…" Command="{Binding LoadBalancerCommand}" ToolTip.Tip="On or off for this cluster, and its ports on 127.0.0.1" />
+          </Grid>
+          <SelectableTextBlock Classes="mono" Text="{Binding ForwardsText}" TextWrapping="Wrap" IsVisible="{Binding HasForwards}" />
           <ItemsControl ItemsSource="{Binding LoadBalancerRows}" IsVisible="{Binding HasLoadBalancers}">
             <ItemsControl.ItemTemplate>
               <DataTemplate DataType="clu:LoadBalancer">
@@ -151,7 +153,7 @@
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
-          <TextBlock Classes="muted small" Text="{Binding LoadBalancerHint}" TextWrapping="Wrap" IsVisible="{Binding !HasLoadBalancers}" />
+          <TextBlock Classes="muted small" Text="{Binding LoadBalancerHint}" TextWrapping="Wrap" />
 
           <TextBlock Classes="section" Text="NODES" Margin="0,8,0,0" />
           <ItemsControl ItemsSource="{Binding Selected.Nodes, FallbackValue={x:Null}}">

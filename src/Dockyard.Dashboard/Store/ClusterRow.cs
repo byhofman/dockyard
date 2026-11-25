@@ -8,7 +8,7 @@ sealed record ClusterRow(KindCluster Cluster, bool IsExpanded)
     public string Key => KeyPrefix + Name;
     public string Summary => $"{Cluster.Nodes.Count(n => n.IsRunning)}/{Cluster.Nodes.Count} nodes running";
     public string Location => Cluster.KubernetesVersion is { } v ? $"kind cluster · Kubernetes {v}" : "kind cluster";
-    public bool IsRunning => Cluster.Nodes.Any(n => n.IsRunning);
+    public bool IsRunning => Cluster.IsRunning;
     public override string ToString() => Name;
 
     // KindCluster holds its nodes in a list, which a record compares by reference; the store keeps rows that did not change.

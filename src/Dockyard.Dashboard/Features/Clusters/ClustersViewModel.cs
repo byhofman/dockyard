@@ -28,6 +28,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         RecreateCommand = new Command(() => { if (Selected is { } c) AskRecreate(c); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine && Selected is not null);
         ToggleCommand = new Command(() => Selected is { } c ? Toggle(c) : Task.CompletedTask, () => !IsBusy && Selected is not null);
         ToggleRowCommand = new Command<KindCluster>(c => IsBusy ? Task.CompletedTask : Toggle(c));
+        LoadBalancerCommand = new Command(() => { if (Selected is { } c) AskLoadBalancer(c); return Task.CompletedTask; }, () => HasKind && Selected is not null);
         OpenUrlCommand = new Command<PublishedPort>(p =>
         {
             try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(p.Url) { UseShellExecute = true })?.Dispose(); }
@@ -73,22 +74,22 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     public bool NeedsLinuxEngine => Session.IsWindowsEngine;
     public bool HasLoadBalancers => LoadBalancerRows.Count > 0;
 
-    public bool LoadBalancersEnabled
-    {
-        get => settings.LoadBalancers;
-        set
-        {
-            if (settings.LoadBalancers == value) return;
-            settings.LoadBalancers = value;
-            settings.Save();
-            Raise(nameof(LoadBalancersEnabled), nameof(LoadBalancerHint));
-            _ = SyncController();
-        }
-    }
+    static ClusterDefinition? DefinitionFor(string cluster) => ClusterDefinitions.Load(cluster);
+    static bool WantsLoadBalancer(string cluster) => DefinitionFor(cluster)?.LoadBalancer ?? true;
 
-    public string LoadBalancerHint => LoadBalancersEnabled
-        ? "A service of type LoadBalancer gets an address here, on this computer's 127.0.0.1."
-        : "Off: LoadBalancer services stay pending. Turn on load balancers above the list.";
+    public bool SelectedLoadBalancer => Selected is { } c && WantsLoadBalancer(c.Name);
+
+    public string LoadBalancerHint => Selected is not { } c ? ""
+        : !WantsLoadBalancer(c.Name) ? "Off for this cluster: Dockyard publishes none of its ports. While another cluster's load balancer runs, kind's cloud provider still gives its LoadBalancer services an address."
+        : "A service of type LoadBalancer gets an address here, and its ports on this computer.";
+
+    public string ForwardsText => Selected is { } c && forwardNotes.TryGetValue(c.Name, out var note) ? note : "";
+    public bool HasForwards => ForwardsText.Length > 0;
+
+    readonly Dictionary<string, string> forwardNotes = [];
+    string? appliedPlan;
+
+    public Command LoadBalancerCommand { get; }
 
     public string Hint =>
         !HasKind ? "kind is not installed. Add it under Engines and settings, or run the setup again with --with kind."
@@ -110,7 +111,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
 
     protected override void OnSelectionChanged(KindCluster? before)
     {
-        Raise(nameof(KubectlHint), nameof(HasSharedStorage), nameof(SharedStorageText), nameof(SharedFolder), nameof(HasSharedFolder));
+        Raise(nameof(KubectlHint), nameof(HasSharedStorage), nameof(SharedStorageText), nameof(SharedFolder), nameof(HasSharedFolder), nameof(SelectedLoadBalancer), nameof(LoadBalancerHint), nameof(ForwardsText), nameof(HasForwards));
         RefreshCommands();
         ShowLoadBalancers();
     }
@@ -146,21 +147,74 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         Raise(nameof(HasLoadBalancers));
     }
 
-    // Only when what is wanted changes: every container event reloads this section.
+    // Only when what is wanted changes: every container event reloads this section. The controller runs while a running
+    // cluster wants a load balancer; each such cluster's forwarder publishes its ports, first come by name when two want one.
     async Task SyncController()
     {
         if (NeedsLinuxEngine || !Session.IsConnected || Session.Client is not { } client || syncing) return;
-        var wanted = HasKind && LoadBalancersEnabled && all.Count > 0;
-        if (controllerWanted == wanted) return;
+        var context = Session.ContextName.Length > 0 ? Session.ContextName : "default";
+        var claimed = new Dictionary<int, string>();
+        var plans = new List<(KindCluster Cluster, List<LoadBalancers.Forward> Forwards, List<(int Port, string Cluster)> Taken)>();
+        foreach (var cluster in all.OrderBy(c => c.Name, StringComparer.Ordinal))
+        {
+            var definition = DefinitionFor(cluster.Name);
+            var ports = cluster.IsRunning ? definition?.LoadBalancerPorts ?? [] : [];
+            var (forwards, taken) = LoadBalancers.PlanForwards(ports, LoadBalancers.For(cluster.Name, Session.Containers.Items), claimed, cluster.Name);
+            foreach (var port in ports) claimed.TryAdd(port, cluster.Name);
+            plans.Add((cluster, forwards, taken));
+        }
+        var wanted = HasKind && all.Any(c => c.IsRunning && WantsLoadBalancer(c.Name));
+        var plan = $"{wanted};" + string.Join(';', plans.Select(p => $"{p.Cluster.Name}:{p.Cluster.IsRunning}:{LoadBalancers.Describe(p.Forwards)}"));
+        if (plan == appliedPlan) return;
         syncing = true;
         try
         {
-            await LoadBalancers.Sync(client, Session.ContextName.Length > 0 ? Session.ContextName : "default", wanted);
-            controllerWanted = wanted;
+            if (controllerWanted != wanted)
+            {
+                await LoadBalancers.Sync(client, context, wanted);
+                controllerWanted = wanted;
+            }
+            foreach (var (cluster, forwards, taken) in plans)
+            {
+                var busy = await LoadBalancers.SyncForwarder(client, context, cluster.Name, forwards, cluster.IsRunning);
+                forwardNotes[cluster.Name] = string.Join("\n", forwards.Where(f => !busy.Contains(f.Port)).Select(f => $"127.0.0.1:{f.Port} → {f.Service}")
+                    .Concat(taken.Select(t => $"Port {t.Port} is used by cluster {t.Cluster}; its service keeps the port Docker picked"))
+                    .Concat(busy.Select(p => $"Port {p} is in use by another program; its service keeps the port Docker picked. Dockyard tries again when the cluster starts.")));
+            }
+            appliedPlan = plan;
+            Raise(nameof(ForwardsText), nameof(HasForwards));
         }
         catch (Exception ex) { Shell.ShowError($"Load balancers for kind: {ex.Message}"); }
         finally { syncing = false; }
     }
+
+    void AskLoadBalancer(KindCluster cluster)
+    {
+        var current = DefinitionFor(cluster.Name) ?? ClusterDefinitions.Guess(cluster);
+        var on = DialogField.Check("A load balancer for this cluster", current.LoadBalancer);
+        var ports = PortsField(current.Ports ?? ClusterDefinition.DefaultPorts, cluster.Name);
+        ports.IsShown = on.IsChecked;
+        on.Changed += () => ports.IsShown = on.IsChecked;
+        Shell.Open(new Dialog($"{cluster.Name}: load balancer",
+            "LoadBalancer services get an address from kind's cloud provider. The ports below go to the service that has them, on this computer's 127.0.0.1; its other ports keep the one Docker picks.",
+            "Save", _ =>
+            {
+                ClusterDefinitions.Save(cluster.Name, current with { LoadBalancer = on.IsChecked, Ports = ClusterDefinitions.ParsePorts(ports.Text) ?? current.Ports });
+                appliedPlan = null;
+                Raise(nameof(SelectedLoadBalancer), nameof(LoadBalancerHint));
+                return SyncController();
+            },
+            fields: [on, ports], canConfirm: _ => !on.IsChecked || ports.Problem is null));
+    }
+
+    DialogField PortsField(IReadOnlyList<int> ports, string? cluster) => new("Ports on 127.0.0.1", string.Join(", ", ports), "80, 443")
+    {
+        Validate = text => ClusterDefinitions.ParsePorts(text) is null ? "A list of ports, such as 80, 443" : null,
+        Warn = text => ClusterDefinitions.ParsePorts(text) is not { } list ? null
+            : all.Where(c => c.Name != cluster).Select(c => (c.Name, Ports: DefinitionFor(c.Name)?.LoadBalancerPorts ?? []))
+                .SelectMany(o => o.Ports.Intersect(list).Select(p => $"Port {p} is also cluster {o.Name}'s: while both run, the first by name has it and the other's service keeps the port Docker picks"))
+                .FirstOrDefault(),
+    };
 
     void RefreshCommands()
     {
@@ -170,67 +224,101 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         UseContextCommand.Refresh();
         DuplicateCommand.Refresh();
         RecreateCommand.Refresh();
+        LoadBalancerCommand.Refresh();
         ToggleCommand.Refresh();
     }
 
     // The nodes are containers, so a stopped cluster keeps everything in it. Its load balancer proxies stop and start with it.
     public Task StartOrStop(KindCluster cluster) => Toggle(cluster);
 
-    Task Toggle(KindCluster cluster) => Run(cluster.IsRunning ? $"Stopping {cluster.Name}" : $"Starting {cluster.Name}", async client =>
+    Task Toggle(KindCluster cluster) => cluster.IsRunning ? Stop(cluster) : Start(cluster);
+
+    List<string> ProxiesOf(KindCluster cluster) =>
+        Session.Containers.Items.Where(i => OwnedBy(i, cluster.Name)).Select(i => i.Id).ToList();
+
+    static bool OwnedBy(ContainerItem item, string cluster) =>
+        item.Labels.GetValueOrDefault(LoadBalancers.ClusterLabel) == cluster || item.Labels.GetValueOrDefault(LoadBalancers.ForwarderClusterLabel) == cluster;
+
+    public Task Stop(KindCluster cluster) => Run($"Stopping {cluster.Name}", async client =>
     {
-        var proxies = Session.Containers.Items.Where(i => i.Labels.GetValueOrDefault(LoadBalancers.ClusterLabel) == cluster.Name).Select(i => i.Id).ToList();
-        if (cluster.IsRunning)
-        {
-            await Task.WhenAll(proxies.Concat(cluster.Nodes.Select(n => n.Name)).Select(id => client.StopContainerAsync(id, timeoutSeconds: 30)));
-            Shell.ShowInfo($"{cluster.Name} is stopped; Start brings it back as it was");
-            return;
-        }
+        await Task.WhenAll(ProxiesOf(cluster).Concat(cluster.Nodes.Where(n => n.IsRunning).Select(n => n.Name)).Select(id => client.StopContainerAsync(id, timeoutSeconds: 30)));
+        Shell.ShowInfo($"{cluster.Name} is stopped; Start brings it back as it was");
+    });
+
+    public Task Start(KindCluster cluster) => Run($"Starting {cluster.Name}", async client =>
+    {
         foreach (var node in cluster.StartOrder.Where(n => !n.IsRunning)) await client.StartContainerAsync(node.Name);
-        await Task.WhenAll(proxies.Select(id => client.StartContainerAsync(id)));
+        await Task.WhenAll(ProxiesOf(cluster).Select(id => client.StartContainerAsync(id)));
         Shell.ShowInfo($"{cluster.Name} is starting; Kubernetes takes a minute to be ready");
     });
 
     public static int Workers(string choice) => int.TryParse(choice, out var n) ? n : 0;
 
     // The form writes the definition until it is changed by hand; a duplicate starts from the other cluster's.
+    static readonly string[] StorageChoices =
+    [
+        "Node-local only (standard)",
+        "Shared host folder (class \"shared\", ReadWriteMany)",
+        "NFS (class \"nfs\", served by the dockyard-nfs container)",
+    ];
+
+    static ClusterStorage StorageOf(string choice) => Array.IndexOf(StorageChoices, choice) switch
+    {
+        1 => ClusterStorage.HostFolder,
+        2 => ClusterStorage.Nfs,
+        _ => ClusterStorage.None,
+    };
+
+    // What to put in comes first, kind's config that follows from it last: the form writes it until it is changed by
+    // hand. A duplicate starts from the other cluster's.
     void AskCreate(ClusterDefinition? from = null, string? fromName = null)
     {
+        var helm = CliLocator.Locate("helm");
         var name = new DialogField("Name", placeholder: "dev");
         var workers = new DialogField("Worker nodes", choices: WorkerChoices);
-        var helm = CliLocator.Locate("helm");
+        var storage = new DialogField("Storage that every node can use at once", choices: helm is null ? StorageChoices[..2] : StorageChoices)
+        {
+            Choice = StorageChoices[from?.Storage switch { ClusterStorage.HostFolder => 1, ClusterStorage.Nfs when helm is not null => 2, _ => 0 }],
+        };
+        var balancer = DialogField.Check("Load balancer: LoadBalancer services get an address, and these ports on 127.0.0.1", from?.LoadBalancer ?? true);
+        var ports = PortsField(from?.Ports ?? ClusterDefinition.DefaultPorts, null);
+        ports.IsShown = balancer.IsChecked;
+        balancer.Changed += () => ports.IsShown = balancer.IsChecked;
         var metrics = DialogField.Check($"metrics-server {ClusterAddons.MetricsServer.Version}: kubectl top and pod autoscaling", isChecked: from?.Addons.Contains(ClusterAddons.MetricsServer.Release) ?? true);
-        var traefik = DialogField.Check($"Traefik {ClusterAddons.Traefik.Version}: an ingress controller, reachable through its load balancer", isChecked: from?.Addons.Contains(ClusterAddons.Traefik.Release) ?? false);
+        var traefik = DialogField.Check($"Traefik {ClusterAddons.Traefik.Version}: an ingress controller, reachable through the load balancer", isChecked: from?.Addons.Contains(ClusterAddons.Traefik.Release) ?? false);
         string? generated = from is null ? KindCli.Config(0) : null;
-        var definition = DialogField.Code("Definition: kind's cluster config", from?.Yaml ?? generated!, Shared.CodeLanguage.Yaml, ClusterDefinitions.Problem);
+        var definition = DialogField.Code("Definition: kind's cluster config, from the choices above until you change it", from?.Yaml ?? generated!, Shared.CodeLanguage.Yaml, ClusterDefinitions.Problem);
         var message = (fromName is null ? "Each node is a container on the Linux engine. The first cluster pulls kind's node image, which takes a few minutes. " : $"From {fromName}'s definition. ")
             + "Its context goes into your kubeconfig and becomes the current one."
-            + (helm is null ? " Add Helm in Dockyard's window to install metrics-server and Traefik with it." : "");
-        List<DialogField> fields = [name, .. from is null ? [workers] : Array.Empty<DialogField>(), .. helm is null ? Array.Empty<DialogField>() : [metrics, traefik], definition];
-        Dialog? dialog = null;
-        dialog = new Dialog(fromName is null ? "Create a kind cluster" : $"Duplicate {fromName}", message, "Create",
-            d => Create(d, name.Value, definition.Text, d.Option, Addons(metrics, traefik, helm), helm),
-            fields: fields,
-            optionText: "Shared storage: a storage class every node mounts at once (ReadWriteMany), with one folder for all clusters made with it. It can only be added now.",
-            canConfirm: _ => KindClusters.IsValidName(name.Value) && all.All(c => c.Name != name.Value) && definition.Problem is null);
+            + (helm is null ? " Add Helm in Dockyard's window for metrics-server, Traefik and NFS storage." : "");
+        List<DialogField> fields =
+        [
+            name, .. from is null ? [workers] : Array.Empty<DialogField>(), storage, balancer, ports,
+            .. helm is null ? Array.Empty<DialogField>() : [metrics, traefik], definition,
+        ];
         void Regenerate()
         {
             if (generated is null || definition.Text != generated) return;
-            generated = KindCli.Config(Workers(workers.Value), dialog.Option);
+            generated = KindCli.Config(Workers(workers.Value), StorageOf(storage.Value) == ClusterStorage.HostFolder);
             definition.Text = generated;
         }
         workers.Changed += Regenerate;
-        dialog.Option = from?.SharedStorage ?? false;
-        dialog.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(Dialog.Option)) Regenerate(); };
-        Shell.Open(dialog);
+        storage.Changed += Regenerate;
+        Shell.Open(new Dialog(fromName is null ? "Create a kind cluster" : $"Duplicate {fromName}", message, "Create",
+            d => Create(d, name.Value, new ClusterDefinition(definition.Text, StorageOf(storage.Value), Addons(metrics, traefik, helm).Select(a => a.Release).ToList(),
+                balancer.IsChecked, ClusterDefinitions.ParsePorts(ports.Text) ?? ClusterDefinition.DefaultPorts), helm),
+            fields: fields,
+            canConfirm: _ => KindClusters.IsValidName(name.Value) && all.All(c => c.Name != name.Value) && definition.Problem is null && (!balancer.IsChecked || ports.Problem is null)));
     }
 
     static List<ClusterAddon> Addons(DialogField metrics, DialogField traefik, string? helm) => helm is null ? [] :
         [.. metrics.IsChecked ? [ClusterAddons.MetricsServer] : Array.Empty<ClusterAddon>(), .. traefik.IsChecked ? [ClusterAddons.Traefik] : Array.Empty<ClusterAddon>()];
 
-    Task Create(Dialog dialog, string name, string definition, bool sharedStorage, IReadOnlyList<ClusterAddon> addons, string? helm) => RunKind(dialog, async (actions, onLine) =>
+    Task Create(Dialog dialog, string name, ClusterDefinition definition, string? helm) => RunKind(dialog, async (actions, onLine) =>
     {
-        ClusterDefinitions.Save(name, new ClusterDefinition(definition, sharedStorage, addons.Select(a => a.Release).ToList()));
-        var file = await actions.Create(name, onLine, sharedStorage: sharedStorage, addons: addons, helm: helm, definition: definition);
+        ClusterDefinitions.Save(name, definition);
+        appliedPlan = null;
+        var file = await actions.Create(name, onLine, storage: definition.Storage, addons: definition.AddonList, helm: helm, definition: definition.Yaml);
         Shell.ShowInfo($"kubectl now uses {KindKubeconfig.Key(name)}, from {file}");
     });
 
@@ -256,7 +344,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
             await RemoveProxies(cluster.Name);
             var remade = current with { Yaml = definition.Text, Addons = helm is null ? [] : current.Addons };
             ClusterDefinitions.Save(cluster.Name, remade);
-            await actions.Create(cluster.Name, onLine, sharedStorage: remade.SharedStorage, addons: remade.AddonList, helm: helm, definition: remade.Yaml);
+            await actions.Create(cluster.Name, onLine, storage: remade.Storage, addons: remade.AddonList, helm: helm, definition: remade.Yaml);
             Shell.ShowInfo($"{cluster.Name} is made again from its definition");
         }), danger: true, fields: [definition], canConfirm: _ => definition.Problem is null));
     }
@@ -272,6 +360,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
                 await actions.Delete(c.Name, onLine);
                 await RemoveProxies(c.Name);
                 ClusterDefinitions.Remove(c.Name);
+                await NfsStorage.RemoveServerIfUnused(Session.ContextName.Length > 0 ? Session.ContextName : "default", all.Where(o => o.Name != c.Name).Select(o => DefinitionFor(o.Name)));
             })));
     }
 
@@ -279,8 +368,9 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     async Task RemoveProxies(string cluster)
     {
         if (Session.Client is not { } client) return;
-        foreach (var proxy in Session.Containers.Items.Where(i => i.Labels.GetValueOrDefault(LoadBalancers.ClusterLabel) == cluster).ToList())
+        foreach (var proxy in Session.Containers.Items.Where(i => OwnedBy(i, cluster)).ToList())
             await client.RemoveContainerAsync(proxy.Id, force: true);
+        appliedPlan = null;
     }
 
     async Task RunKind(Dialog dialog, Func<KindActions, Action<string>, Task> action)

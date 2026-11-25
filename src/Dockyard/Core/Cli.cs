@@ -12,7 +12,8 @@ static class Cli
         Usage: dockyard engine ls | start <engine> | stop <engine> | use <engine>
                dockyard config show | validate --file <file> | apply --file <file> | edit   [--engine <engine>]
                dockyard cluster ls
-               dockyard cluster create <name> [--workers <n>] [--addons <names>] [--shared-storage] [--file <definition>]
+               dockyard cluster create <name> [--workers <n>] [--addons <names>] [--storage none|host-folder|nfs]
+                                              [--no-load-balancer | --ports <ports>] [--file <definition>]
                dockyard cluster recreate <name> [--file <definition>]
                dockyard cluster delete | use | kubeconfig | definition <name>
                dockyard https on | off
@@ -23,8 +24,9 @@ static class Cli
                      apply checks it, restarts the engine if it runs, and puts the previous one back if it will not start.
                      edit opens it in your editor (VISUAL or EDITOR; Notepad, TextEdit or nano otherwise) and applies it.
           cluster    kind clusters as the dashboard makes them: the context in your kubeconfig, the definition kept.
-                     --addons: metrics-server, traefik (with Helm). recreate deletes it, with everything in it, and makes
-                     it again from its definition or the one given.
+                     --addons: metrics-server, traefik (with Helm). --storage: shared storage every node uses at once,
+                     a folder on the engine or NFS (with Helm). --ports: its load balancer's ports on 127.0.0.1, 80,443 when
+                     not given. recreate deletes it, with everything in it, and makes it again from its definition.
           https      Trusted HTTPS for container domains, with Dockyard's own certificate authority.
           update     Brings the components up to date; --check only lists them. Dockyard itself updates from the tray.
           --engine   linux or win (Windows); the active engine without it.

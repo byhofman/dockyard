@@ -250,7 +250,7 @@
             </ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
               <DataTemplate DataType="shell:DialogField">
-                <StackPanel Spacing="4">
+                <StackPanel Spacing="4" IsVisible="{Binding IsShown}">
                   <TextBlock Classes="muted small" Text="{Binding Label}" IsVisible="{Binding HasLabel}" />
                   <TextBox Classes="dialogfield" Text="{Binding Text}" PlaceholderText="{Binding Placeholder}" IsVisible="{Binding IsText}"
                            AutomationProperties.Name="{Binding Label}" />
@@ -261,6 +261,7 @@
                   </CheckBox>
                   <ctl:CodeEditor Height="260" Language="{Binding Language}" Text="{Binding Text}" IsVisible="{Binding IsCode}" AutomationProperties.Name="{Binding Label}" />
                   <TextBlock Foreground="{DynamicResource Bad}" FontSize="12" TextWrapping="Wrap" Text="{Binding Problem}" IsVisible="{Binding HasProblem}" />
+                  <TextBlock Foreground="{DynamicResource Warn}" FontSize="12" TextWrapping="Wrap" Text="{Binding Warning}" IsVisible="{Binding HasWarning}" />
                 </StackPanel>
               </DataTemplate>
             </ItemsControl.ItemTemplate>

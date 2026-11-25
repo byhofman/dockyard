@@ -30,6 +30,15 @@ sealed class DialogField : Observable
         new(label, text) { IsCode = true, Language = language, problemOf = problem };
 
     Func<string, string?>? problemOf;
+    Func<string, string?>? warningOf;
+    bool isShown = true;
+
+    public Func<string, string?>? Validate { init => problemOf = value; }
+    public Func<string, string?>? Warn { init => warningOf = value; }
+    public string? Warning => warningOf?.Invoke(text);
+    public bool HasWarning => Warning is not null && !HasProblem;
+
+    public bool IsShown { get => isShown; set => Set(ref isShown, value); }
 
     public string Label { get; }
     public string Placeholder { get; }
@@ -56,7 +65,7 @@ sealed class DialogField : Observable
         set
         {
             if (!Set(ref text, value ?? "")) return;
-            Raise(nameof(Problem), nameof(HasProblem));
+            Raise(nameof(Problem), nameof(HasProblem), nameof(Warning), nameof(HasWarning));
             Changed?.Invoke();
         }
     }

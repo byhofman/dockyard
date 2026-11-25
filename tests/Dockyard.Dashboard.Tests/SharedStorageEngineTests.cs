@@ -18,7 +18,7 @@ public sealed class SharedStorageEngineTests
         var ns = "dockyard-e2e-" + Guid.NewGuid().ToString("N")[..8];
         try
         {
-            await actions.Create(name, workers: 1, sharedStorage: true);
+            await actions.Create(name, workers: 1, storage: ClusterStorage.HostFolder);
             var helper = SharedStorage.Images((await SharedStorage.Docker(SharedStorage.ImagesArgs(context, controlPlane))).Output)!.Value.Helper;
             var manifest = string.Join("\n---\n",
                 $"apiVersion: v1\nkind: Namespace\nmetadata:\n  name: {ns}",

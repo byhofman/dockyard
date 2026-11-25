@@ -33,13 +33,20 @@ static class CliClusters
             {
                 var name = Name();
                 var addons = Addons(Cli.Option(args, "--addons"));
-                var shared = args.Contains("--shared-storage");
+                var storage = (Cli.Option(args, "--storage") ?? (args.Contains("--shared-storage") ? "host-folder" : "none")) switch
+                {
+                    "none" => ClusterStorage.None,
+                    "host-folder" => ClusterStorage.HostFolder,
+                    "nfs" => ClusterStorage.Nfs,
+                    var other => throw new Cli.UsageException($"Unknown storage: {other}. Storage: none, host-folder, nfs"),
+                };
+                var ports = Cli.Option(args, "--ports") is { } p ? ClusterDefinitions.ParsePorts(p) ?? throw new Cli.UsageException("--ports takes a list of ports, such as 80,443") : ClusterDefinition.DefaultPorts;
                 var workers = Cli.Option(args, "--workers") is { } w ? int.TryParse(w, out var n) && n is >= 0 and <= 10 ? n : throw new Cli.UsageException("--workers takes 0 to 10") : 0;
-                var definition = Cli.Option(args, "--file") is not null ? Cli.Content(args) : KindCli.Config(workers, shared);
+                var definition = Cli.Option(args, "--file") is not null ? Cli.Content(args) : KindCli.Config(workers, storage == ClusterStorage.HostFolder);
                 if (ClusterDefinitions.Problem(definition) is { } problem) { error(problem); return 1; }
-                var helm = addons.Count > 0 ? CliLocator.Locate("helm") ?? throw new InvalidOperationException("The add-ons go in with Helm, which is not installed: dockyard --silent --with helm adds it") : null;
-                ClusterDefinitions.Save(name, new ClusterDefinition(definition, shared, addons.Select(a => a.Release).ToList()));
-                var file = await actions.Create(name, log, sharedStorage: shared, addons: addons, helm: helm, definition: definition);
+                var helm = addons.Count > 0 || storage == ClusterStorage.Nfs ? CliLocator.Locate("helm") ?? throw new InvalidOperationException("The add-ons go in with Helm, which is not installed: dockyard --silent --with helm adds it") : null;
+                ClusterDefinitions.Save(name, new ClusterDefinition(definition, storage, addons.Select(a => a.Release).ToList(), !args.Contains("--no-load-balancer"), ports));
+                var file = await actions.Create(name, log, storage: storage, addons: addons, helm: helm, definition: definition);
                 log($"kubectl now uses {KindKubeconfig.Key(name)}, from {file}");
                 return 0;
             }
@@ -49,11 +56,11 @@ static class CliClusters
                 var saved = ClusterDefinitions.Load(name) ?? throw new InvalidOperationException($"Dockyard has no definition of {name}: the dashboard puts one together from its nodes, under Definition");
                 var definition = Cli.Option(args, "--file") is not null ? Cli.Content(args) : saved.Yaml;
                 if (ClusterDefinitions.Problem(definition) is { } problem) { error(problem); return 1; }
-                var helm = saved.Addons.Count > 0 ? CliLocator.Locate("helm") : null;
+                var helm = saved.Addons.Count > 0 || saved.Storage == ClusterStorage.Nfs ? CliLocator.Locate("helm") : null;
                 await Delete(actions, context, name, log);
                 var remade = saved with { Yaml = definition, Addons = helm is null ? [] : saved.Addons };
                 ClusterDefinitions.Save(name, remade);
-                await actions.Create(name, log, sharedStorage: remade.SharedStorage, addons: remade.AddonList, helm: helm, definition: remade.Yaml);
+                await actions.Create(name, log, storage: remade.Storage, addons: remade.AddonList, helm: helm, definition: remade.Yaml);
                 log($"{name} is made again from its definition");
                 return 0;
             }
@@ -62,6 +69,8 @@ static class CliClusters
                 var name = Name();
                 await Delete(actions, context, name, log);
                 ClusterDefinitions.Remove(name);
+                var left = (await KindCli.Run(kind, context, KindCli.Clusters)).Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                await NfsStorage.RemoveServerIfUnused(context, left.Select(c => ClusterDefinitions.Load(c)));
                 log($"Deleted {name}");
                 return 0;
             }
@@ -82,7 +91,7 @@ static class CliClusters
     }
 
     static string Describe(ClusterDefinition d) =>
-        string.Join(", ", new[] { d.SharedStorage ? "shared storage" : null }.Concat(d.AddonList.Select(a => a.Title)).OfType<string>()) is { Length: > 0 } extras ? extras : "-";
+        string.Join(", ", new[] { d.Storage switch { ClusterStorage.HostFolder => "shared host folder", ClusterStorage.Nfs => "NFS storage", _ => null }, d.LoadBalancer ? $"ports {string.Join(',', d.LoadBalancerPorts)}" : null }.Concat(d.AddonList.Select(a => a.Title)).OfType<string>()) is { Length: > 0 } extras ? extras : "-";
 
     static IReadOnlyList<ClusterAddon> Addons(string? names)
     {
@@ -96,7 +105,8 @@ static class CliClusters
     static async Task Delete(KindActions actions, string context, string name, Action<string> log)
     {
         await actions.Delete(name, log);
-        var ps = await Docker(["--context", context, "ps", "-aq", "--filter", $"label={KindLabels.LoadBalancerCluster}={name}"]);
+        var ps = await Docker(["--context", context, "ps", "-aq", "--filter", $"label={KindLabels.LoadBalancerCluster}={name}"])
+            + "\n" + await Docker(["--context", context, "ps", "-aq", "--filter", $"label={KindLabels.ForwarderCluster}={name}"]);
         var proxies = ps.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (proxies.Length > 0) await Docker(["--context", context, "rm", "-f", .. proxies]);
     }

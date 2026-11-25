@@ -5,4 +5,5 @@ static class KindLabels
 {
     public const string Cluster = "io.x-k8s.kind.cluster";
     public const string LoadBalancerCluster = "io.x-k8s.cloud-provider-kind.cluster";
+    public const string ForwarderCluster = "dockyard.lb.cluster";
 }

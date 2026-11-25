@@ -135,7 +135,8 @@ sealed class ContainerStore
 
     // A node of a kind cluster, or a load balancer proxy for one of its services.
     static string? ClusterOf(ContainerItem i) =>
-        i.Labels.GetValueOrDefault(Features.Clusters.KindClusters.ClusterLabel) ?? i.Labels.GetValueOrDefault(Features.Clusters.LoadBalancers.ClusterLabel);
+        i.Labels.GetValueOrDefault(Features.Clusters.KindClusters.ClusterLabel) ?? i.Labels.GetValueOrDefault(Features.Clusters.LoadBalancers.ClusterLabel)
+        ?? i.Labels.GetValueOrDefault(Features.Clusters.LoadBalancers.ForwarderClusterLabel);
 
     internal static bool Matches(ContainerItem i, string filter) =>
         filter.Length == 0
