@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using Dockyard.Dashboard.Features.Containers;
+using Dockyard.Dashboard.Features.Resources;
 using Dockyard.Engine;
 
 namespace Dockyard.Dashboard.Shell;
@@ -16,10 +17,20 @@ sealed class LogTab : Observable, IDisposable
     }
 
     bool isSelected;
+    bool isShown = true;
 
     public string Key { get; }
     public string Title { get; }
     public bool IsSelected { get => isSelected; set => Set(ref isSelected, value); }
+
+    // Whether it is one of the logs shown side by side.
+    public bool IsShown
+    {
+        get => isShown;
+        set { if (Set(ref isShown, value)) ShownChanged?.Invoke(); }
+    }
+
+    public event Action? ShownChanged;
     public LogsViewModel? Logs { get; }
     public ActivityLog? Activity { get; }
     public bool IsActivity => Activity is not null;
@@ -47,10 +58,28 @@ sealed class LogPanel : Observable
         SelectCommand = new Command<LogTab>(t => { Selected = t; return Task.CompletedTask; });
         CloseTabCommand = new Command<LogTab>(t => { Close(t); return Task.CompletedTask; });
         ToggleSideBySideCommand = new Command(() => { SideBySide = !SideBySide; return Task.CompletedTask; });
-        Tabs.CollectionChanged += (_, _) => Raise(nameof(HasLogTabs));
+        Tabs.CollectionChanged += (_, _) => { Raise(nameof(HasLogTabs)); RefreshShown(); };
+        selected.ShownChanged += RefreshShown;
+        RefreshShown();
+        height = DashboardSettings.Current.PanelSize(HeightKey, 300);
     }
 
     public ObservableCollection<LogTab> Tabs { get; } = [];
+    public ObservableCollection<LogTab> ShownTabs { get; } = [];
+    const string HeightKey = "logs.panel";
+    double height;
+
+    public double Height
+    {
+        get => height;
+        set { if (Set(ref height, Math.Round(value))) DashboardSettings.Current.SetPanelSize(HeightKey, height); }
+    }
+
+    void RefreshShown()
+    {
+        ShownTabs.Clear();
+        foreach (var tab in Tabs.Where(t => t.IsShown)) ShownTabs.Add(tab);
+    }
     public Command<LogTab> SelectCommand { get; }
     public Command<LogTab> CloseTabCommand { get; }
     public Command ToggleSideBySideCommand { get; }
@@ -85,6 +114,7 @@ sealed class LogPanel : Observable
             var logs = new LogsViewModel();
             logs.Start(client, sources);
             tab = new LogTab(key, title, logs, null);
+            tab.ShownChanged += RefreshShown;
             Tabs.Add(tab);
         }
         Selected = tab;

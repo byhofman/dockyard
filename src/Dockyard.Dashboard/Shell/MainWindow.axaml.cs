@@ -36,6 +36,12 @@ public partial class MainWindow : Window
             if (list.ItemCount > 0) list.ScrollIntoView(list.ItemCount - 1);
     }, DispatcherPriority.Background);
 
+    void ResizeLogs(object? sender, VectorEventArgs e)
+    {
+        if (DataContext is ShellViewModel shell)
+            shell.Logs.Height = Math.Clamp(shell.Logs.Height - e.Vector.Y, 120, Math.Max(120, Bounds.Height - 220));
+    }
+
     async void CopyActivity(object? sender, RoutedEventArgs e)
     {
         if (DataContext is ShellViewModel shell && TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)

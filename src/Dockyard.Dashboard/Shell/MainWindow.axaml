@@ -214,10 +214,11 @@
         </Grid>
       </Border>
 
-      <Border DockPanel.Dock="Bottom" Height="300" IsVisible="{Binding Activity.IsOpen}" Background="{DynamicResource Bg}"
+      <Border DockPanel.Dock="Bottom" Height="{Binding Logs.Height}" IsVisible="{Binding Activity.IsOpen}" Background="{DynamicResource Bg}"
               BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0">
         <DockPanel>
-          <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto,Auto,Auto" Margin="8,4,8,2">
+          <Thumb DockPanel.Dock="Top" Classes="resizer" Height="5" Cursor="SizeNorthSouth" DragDelta="ResizeLogs" ToolTip.Tip="Drag to resize" />
+          <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto,Auto,Auto" Margin="8,0,8,2">
             <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
               <ItemsControl ItemsSource="{Binding Logs.Tabs}">
                 <ItemsControl.ItemsPanel>
@@ -229,6 +230,8 @@
                   <DataTemplate x:DataType="shell:LogTab">
                     <Border Classes="logtab" Classes.selected="{Binding IsSelected}">
                       <StackPanel Orientation="Horizontal">
+                        <CheckBox IsChecked="{Binding IsShown}" IsVisible="{Binding $parent[Window].((shell:ShellViewModel)DataContext).Logs.SideBySide}" MinWidth="0" Padding="0" Margin="6,0,0,0"
+                                  ToolTip.Tip="Show this one side by side" AutomationProperties.Name="{Binding Title}" />
                         <Button Classes="logtab" Command="{Binding $parent[Window].((shell:ShellViewModel)DataContext).Logs.SelectCommand}" CommandParameter="{Binding}">
                           <StackPanel Classes="label" Spacing="6">
                             <PathIcon Data="{StaticResource IconLogs}" Width="12" Height="12" />
@@ -258,7 +261,7 @@
           </Grid>
           <Panel>
             <ContentControl Content="{Binding Logs.Selected}" IsVisible="{Binding Logs.ShowsOne}" />
-            <ItemsControl ItemsSource="{Binding Logs.Tabs}" IsVisible="{Binding Logs.SideBySide}">
+            <ItemsControl ItemsSource="{Binding Logs.ShownTabs}" IsVisible="{Binding Logs.SideBySide}">
               <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
                   <UniformGrid Rows="1" />

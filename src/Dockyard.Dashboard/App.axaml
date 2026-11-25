@@ -378,6 +378,17 @@
     <Style Selector="Button.iconbtn.selected">
       <Setter Property="Background" Value="{DynamicResource AccentBg}" />
     </Style>
+    <Style Selector="Thumb.resizer">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Background="{TemplateBinding Background}" />
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="Thumb.resizer:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Accent}" />
+    </Style>
     <Style Selector="Grid.system">
       <Setter Property="Opacity" Value="0.6" />
     </Style>
