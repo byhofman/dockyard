@@ -22,7 +22,7 @@ else
   app_dir=/usr/lib/dockyard
 fi
 # Either name: the one-liner test runs the release that is out, and the rename reaches it with the next release.
-dash() { for f in "$app_dir/Dockyard Dashboard" "$app_dir/Dockyard.Dashboard"; do [ -e "$f" ] && { echo "$f"; return; }; done; echo "$app_dir/Dockyard Dashboard"; }
+dash() { for f in "$app_dir/dockyard-dashboard" "$app_dir/Dockyard Dashboard" "$app_dir/Dockyard.Dashboard"; do [ -e "$f" ] && { echo "$f"; return; }; done; echo "$app_dir/dockyard-dashboard"; }
 marker=/etc/dockyard/installed
 
 echo "== wrong arguments are refused"
@@ -42,13 +42,13 @@ fi
 
 echo "== first install, no dashboard"
 run --silent --no-dashboard --no-start
-check "app in place" test -x "$app_dir/Dockyard"
+check "app in place" test -x "$app_dir/dockyard-toolbox"
 check "no dashboard" missing "$(dash)"
 check "setup ran" test -f "$marker"
 check "docker installed" command -v dockerd
 if [ "$container" -eq 0 ]; then
   check "tray autostarts" test -f "$HOME/.config/autostart/dockyard.desktop"
-  grep -q "Exec=\"$app_dir/Dockyard\" --tray" "$HOME/.config/autostart/dockyard.desktop" && ok "autostart points at the installed app" || fail "autostart target"
+  grep -q "Exec=\"$app_dir/dockyard-toolbox\" --tray" "$HOME/.config/autostart/dockyard.desktop" && ok "autostart points at the installed app" || fail "autostart target"
 
   echo "== docker works in this session, without signing out"
   sudo systemctl stop docker.service docker.socket
@@ -193,9 +193,9 @@ check "with its libraries" test -f "$app_dir/libSkiaSharp.so"
 
 if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
   echo "== the process name"
-  check "the new file name" test -x "$app_dir/Dockyard Dashboard"
+  check "the new file name" test -x "$app_dir/dockyard-dashboard"
   check "no old file" missing "$app_dir/Dockyard.Dashboard"
-  echo "  for the record, /proc comm of that file name is 15 characters: $(printf 'Dockyard Dashboard' | cut -c1-15)"
+  echo "  for the record, /proc comm of that file name is 15 characters: $(printf 'dockyard-dashboard' | cut -c1-15)"
 fi
 
 if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
@@ -218,11 +218,11 @@ check "dashboard kept" test -x "$(dash)"
 echo "== remove the dashboard"
 run --silent --no-dashboard --no-start
 check "dashboard removed" missing "$(dash)"
-check "app stays" test -x "$app_dir/Dockyard"
+check "app stays" test -x "$app_dir/dockyard-toolbox"
 
 echo "== uninstall keeps docker's data"
 run --silent --uninstall
-check "app removed" missing "$app_dir/Dockyard"
+check "app removed" missing "$app_dir/dockyard-toolbox"
 check "setup undone" missing "$marker"
 if [ "$container" -eq 0 ]; then
   check "the agent is gone" missing /etc/systemd/system/dockyard-agent.service

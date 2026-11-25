@@ -9,9 +9,11 @@ param([string]$Wizard, [string]$OneLiner, [string]$Screenshots = (Join-Path $PSS
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 $appDir = Join-Path $env:ProgramFiles 'Dockyard'
-$appExe = Join-Path $appDir 'Dockyard.exe'
+$appExe = Join-Path $appDir 'dockyard-toolbox.exe'
+# What the Toolbox was called before 0.9.0.
+$legacyExe = Join-Path $appDir 'Dockyard.exe'
 # Either name: the one-liner test runs the release that is out, and the rename reaches it with the next release.
-$dashboard = Join-Path $appDir 'Dockyard*Dashboard.exe'
+$dashboard = Join-Path $appDir 'dockyard-dashboard.exe'
 $ownDocker = Join-Path $env:ProgramFiles 'Docker\docker.exe'
 
 # winget's copy where it brought one, otherwise Dockyard's own in Program Files. Found again after every run of the wizard.
@@ -102,14 +104,15 @@ if ($OneLiner) {
 
 Section 'over v0.1.0, as the owner has it: update, the skipped dashboard stays skipped'
 New-Item -ItemType Directory -Force $appDir | Out-Null
-Invoke-WebRequest https://github.com/byhofman/dockyard/releases/download/v0.1.0/Dockyard.exe -OutFile $appExe
-Check 'really v0.1.0 to start from' ((Get-Item $appExe).VersionInfo.ProductVersion -like '0.1.0*')
+Invoke-WebRequest https://github.com/byhofman/dockyard/releases/download/v0.1.0/Dockyard.exe -OutFile $legacyExe
+Check 'really v0.1.0 to start from' ((Get-Item $legacyExe).VersionInfo.ProductVersion -like '0.1.0*')
 New-Item -ItemType Directory -Force "$env:APPDATA\Dockyard" | Out-Null
 '{"StopOtherOnSwitch":false,"StartActiveAtLogon":false}' | Set-Content "$env:APPDATA\Dockyard\settings.json"
 if (-not $OneLiner) { Window -LookOnly 'manage-over-v0.1.0' }
 $code = Run --silent --no-start
 Check "exit 0 (was $code)" ($code -eq 0)
 Check 'no longer v0.1.0' ((Get-Item $appExe).VersionInfo.ProductVersion -notlike '0.1.0*')
+Check 'the old name is gone' (-not (Test-Path $legacyExe))
 Check 'no dashboard' (-not (Test-Path $dashboard))
 Check 'settings kept' ((Get-Content "$env:APPDATA\Dockyard\settings.json" -Raw) -match '"StopOtherOnSwitch":\s*false')
 $distros = (wsl.exe -l -q | Out-String) -replace "`0", ''
@@ -386,12 +389,12 @@ if ($Wizard) {
     Check 'exit 0' ((Run --silent --no-start) -eq 0)
     Check 'the old process was stopped' ($old.HasExited)
     Check 'the old file is gone' (-not (Test-Path $oldExe))
-    $newExe = Join-Path $appDir 'Dockyard Dashboard.exe'
+    $newExe = Join-Path $appDir 'dockyard-dashboard.exe'
     Check 'the new file is there' (Test-Path $newExe)
     Check 'the description Task Manager shows' ((Get-Item $newExe).VersionInfo.FileDescription -eq 'Dockyard Dashboard')
     $new = Start-Process $newExe -PassThru
     Start-Sleep 5
-    Check 'the process is called Dockyard Dashboard' ((Get-Process -Id $new.Id).ProcessName -eq 'Dockyard Dashboard')
+    Check 'the process is called dockyard-dashboard' ((Get-Process -Id $new.Id).ProcessName -eq 'dockyard-dashboard')
     Check 'exit 0 with it running' ((Run --silent --no-dashboard --no-start) -eq 0)
     Check 'removing it stops it' ($new.HasExited)
 }

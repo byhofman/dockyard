@@ -74,6 +74,23 @@ public sealed class CliTests
     }
 
     [Fact]
+    public void The_command_never_takes_itself_for_the_Toolbox()
+    {
+        var root = Directory.CreateTempSubdirectory("dockyard-cli-").FullName;
+        try
+        {
+            var bin = Directory.CreateDirectory(Path.Combine(root, "bin")).FullName;
+            var self = Path.Combine(bin, OperatingSystem.IsWindows() ? "Dockyard.exe" : "Dockyard");
+            File.WriteAllText(self, "");
+            Assert.Null(Toolbox.Locate(bin, self));
+            var toolbox = Path.Combine(root, OperatingSystem.IsWindows() ? "dockyard-toolbox.exe" : "dockyard-toolbox");
+            File.WriteAllText(toolbox, "");
+            Assert.Equal(toolbox, Toolbox.Locate(bin, self));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
     public void Clusters_use_the_Linux_engine_Dockyard_set_up() =>
         Assert.Equal(OperatingSystem.IsWindows() ? "linux" : OperatingSystem.IsMacOS() ? "dockyard" : "default", Clusters.Context);
 }

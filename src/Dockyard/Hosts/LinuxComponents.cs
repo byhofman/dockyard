@@ -13,7 +13,7 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
     public static bool RunsFromInstallLocation => string.Equals(
         Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory), LinuxLayout.InstallDir, StringComparison.Ordinal);
 
-    public static bool HasDashboard => File.Exists(LinuxLayout.Dashboard) || File.Exists(LinuxLayout.LegacyDashboard);
+    public static bool HasDashboard => File.Exists(LinuxLayout.Dashboard);
 
     public async Task<Version?> Installed(string component) => component switch
     {
@@ -100,7 +100,7 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
         log($"Removed {package}");
     }
 
-    public async Task StopDashboard() => await root.TryRun("pkill", "-f", "/Dockyard[. ]Dashboard$");
+    public async Task StopDashboard() => await root.TryRun("pkill", "-f", "/(dockyard-dashboard|Dockyard[. ]Dashboard)$");
 
     public async Task SetDashboard(Action<string> log, bool installed)
     {
@@ -193,13 +193,14 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
                 var name = Path.GetFileName(file);
                 if (dashboard || !LinuxLayout.DashboardFiles.Contains(name)) File.Move(file, Path.Combine(LinuxLayout.HomeDir, name), overwrite: true);
             }
-            File.Delete(Path.Combine(LinuxLayout.HomeDir, "Dockyard.Dashboard"));
+            foreach (var old in LinuxLayout.ToolboxNames.Skip(1).Concat(LinuxLayout.DashboardNames.Skip(1)))
+                File.Delete(Path.Combine(LinuxLayout.HomeDir, old));
             if (!dashboard)
                 foreach (var name in LinuxLayout.DashboardFiles) File.Delete(Path.Combine(LinuxLayout.HomeDir, name));
             await File.WriteAllTextAsync(LinuxLayout.VersionFile, Updates.ParseVersion(Path.GetFileName(tarball))?.ToString() ?? "");
             Directory.CreateDirectory(Path.GetDirectoryName(LinuxLayout.HomeLink)!);
             File.Delete(LinuxLayout.HomeLink);
-            File.CreateSymbolicLink(LinuxLayout.HomeLink, Path.Combine(LinuxLayout.HomeDir, "Dockyard"));
+            File.CreateSymbolicLink(LinuxLayout.HomeLink, Path.Combine(LinuxLayout.HomeDir, LinuxLayout.Cli));
             log($"Installed {LinuxLayout.HomeDir}");
         }
         finally

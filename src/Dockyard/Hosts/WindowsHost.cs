@@ -192,7 +192,7 @@ sealed class WindowsHost : IEngineHost
 
     public bool RunsFromInstallLocation => Paths.IsInstalledCopy;
 
-    public bool HasDashboard => File.Exists(Paths.DashboardExe) || File.Exists(Paths.LegacyDashboardExe);
+    public bool HasDashboard => Paths.HasDashboard;
 
     public async Task<bool> SetDashboard(Action<string> log, bool installed)
     {

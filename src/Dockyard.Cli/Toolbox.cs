@@ -10,13 +10,17 @@ static class Toolbox
     static string[] ExeNames => OperatingSystem.IsWindows() ? ["dockyard-toolbox.exe", "Dockyard.exe"] : ["dockyard-toolbox", "Dockyard"];
 
     // Next to this command (Linux, the macOS app bundle) or one folder up (Windows keeps the command in bin); Dockyard is
-    // what the Toolbox was called before 0.9.0.
-    public static string? Locate(string? baseDirectory = null)
+    // what the Toolbox was called before 0.9.0. Never this command itself: on Windows that is bin\dockyard.exe, which the
+    // old name matches, as Windows ignores case, and it would start itself without end.
+    public static string? Locate(string? baseDirectory = null, string? self = null)
     {
         var here = baseDirectory ?? AppContext.BaseDirectory;
+        self ??= Environment.ProcessPath;
         foreach (var dir in new[] { here, Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(here)) })
             foreach (var name in ExeNames)
-                if (dir is not null && Path.Combine(dir, name) is var exe && File.Exists(exe)) return exe;
+                if (dir is not null && Path.Combine(dir, name) is var exe && File.Exists(exe)
+                    && !string.Equals(Path.GetFullPath(exe), self is null ? null : Path.GetFullPath(self), StringComparison.OrdinalIgnoreCase))
+                    return exe;
         return null;
     }
 

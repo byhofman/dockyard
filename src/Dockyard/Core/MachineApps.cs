@@ -76,7 +76,7 @@ static class MachineApps
     // there from every ASR rule. Earlier versions also excluded the installer wherever it ran, and the one-liner asks for
     // its own download path when Defender blocks it, so uninstall takes those back too.
     static IEnumerable<string> ExcludedFromAsr => new[] { Paths.AppExe, Paths.DashboardExe, CommandExe };
-    public static IEnumerable<string> EverExcludedFromAsr => ExcludedFromAsr.Append(Paths.LegacyDashboardExe).Append(Paths.OneLinerExe).Concat(WingetToolFiles);
+    public static IEnumerable<string> EverExcludedFromAsr => ExcludedFromAsr.Concat(Paths.LegacyDashboardExes).Append(Paths.LegacyAppExe).Append(Paths.OneLinerExe).Concat(WingetToolFiles);
 
     // Defender's prevalence/age rule (event 1121) blocks every new build, and an exclusion goes by path because a hash changes with each build.
     public static async Task AddDefenderExclusions(Action<string> log)
@@ -108,8 +108,13 @@ static class MachineApps
             ReplaceAppExe(source);
             log($"Installed {Paths.AppExe}");
         }
+        if (File.Exists(Paths.LegacyAppExe))
+        {
+            InUseFiles.MoveAside(Paths.LegacyAppExe);
+            log($"Removed {Paths.LegacyAppExe}, the Toolbox's name before 0.9.0");
+        }
         if (!engineOnly) await InstallDashboard(log, dashboardDir);
-        else if (File.Exists(Paths.DashboardExe) || File.Exists(Paths.LegacyDashboardExe)) RemoveDashboard(log);
+        else if (Paths.HasDashboard) RemoveDashboard(log);
         else log("The dashboard is not installed");
         await InstallCommand(log, dashboardDir);
     }
@@ -181,7 +186,7 @@ static class MachineApps
         }
         try
         {
-            DashboardFiles.Extract(zip, Paths.AppDir, Path.GetFileName(Paths.LegacyDashboardExe));
+            DashboardFiles.Extract(zip, Paths.AppDir, [.. Paths.LegacyDashboardExes.Select(Path.GetFileName).OfType<string>()]);
             log($"Installed {Paths.DashboardExe}");
         }
         finally
@@ -192,7 +197,7 @@ static class MachineApps
 
     public static void RemoveDashboard(Action<string> log)
     {
-        DashboardFiles.Remove(Paths.AppDir, [Path.GetFileName(Paths.DashboardExe), Path.GetFileName(Paths.LegacyDashboardExe)], log);
+        DashboardFiles.Remove(Paths.AppDir, [.. Paths.AnyDashboardExe.Select(Path.GetFileName).OfType<string>()], log);
         log("Removed the dashboard");
     }
 
@@ -206,14 +211,14 @@ static class MachineApps
 
     public static void StopApps(int keepPid, bool dashboardOnly = false)
     {
-        var processes = Process.GetProcessesByName(Paths.DashboardProcess).Concat(Process.GetProcessesByName(Paths.LegacyDashboardProcess));
-        if (!dashboardOnly) processes = processes.Concat(Process.GetProcessesByName(Paths.AppName));
+        var processes = Paths.LegacyDashboardProcesses.Prepend(Paths.DashboardProcess).SelectMany(Process.GetProcessesByName);
+        if (!dashboardOnly) processes = processes.Concat(Process.GetProcessesByName(Paths.AppProcess)).Concat(Process.GetProcessesByName(Paths.LegacyAppProcess));
         foreach (var p in processes)
         {
             try
             {
                 var file = p.MainModule?.FileName;
-                if (new[] { Paths.AppExe, Paths.DashboardExe, Paths.LegacyDashboardExe }.Contains(file, StringComparer.OrdinalIgnoreCase)) Kill(p, keepPid);
+                if (Paths.AnyDashboardExe.Append(Paths.AppExe).Append(Paths.LegacyAppExe).Contains(file, StringComparer.OrdinalIgnoreCase)) Kill(p, keepPid);
             }
             // Gone by now, or another user's process whose file cannot be read: not one of ours to stop.
             catch (Exception e) when (e is Win32Exception or InvalidOperationException) { }

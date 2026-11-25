@@ -37,7 +37,7 @@ public partial class App : Application
     }
 
     // The old name counts until the next wizard run replaces it: a tray that updated itself from before the rename can find it there.
-    static readonly string[] DashboardFiles = OperatingSystem.IsWindows() ? ["Dockyard Dashboard.exe", "Dockyard.Dashboard.exe"] : ["Dockyard Dashboard", "Dockyard.Dashboard"];
+    static readonly string[] DashboardFiles = OperatingSystem.IsWindows() ? ["dockyard-dashboard.exe", "Dockyard Dashboard.exe", "Dockyard.Dashboard.exe"] : ["dockyard-dashboard", "Dockyard Dashboard", "Dockyard.Dashboard"];
     static string DashboardExe => DashboardFiles.Select(f => Path.Combine(AppContext.BaseDirectory, f)).FirstOrDefault(File.Exists) ?? Path.Combine(AppContext.BaseDirectory, DashboardFiles[0]);
     static bool HasDashboard => File.Exists(DashboardExe);
 

@@ -48,11 +48,11 @@
 
   <!-- What Task Manager, Activity Monitor and ps show. Only the published file: resources are found by assembly name, and
        a space in that would have to survive every avares:// address. -->
-  <Target Name="NameTheProcess" AfterTargets="CopyNativeBinary">
+  <Target Name="NameTheProcess" AfterTargets="Publish">
     <PropertyGroup>
       <NativeExtension Condition="$(RuntimeIdentifier.StartsWith('win'))">.exe</NativeExtension>
     </PropertyGroup>
-    <Move SourceFiles="$(PublishDir)$(AssemblyName)$(NativeExtension)" DestinationFiles="$(PublishDir)Dockyard Dashboard$(NativeExtension)" />
+    <Move SourceFiles="$(PublishDir)$(AssemblyName)$(NativeExtension)" DestinationFiles="$(PublishDir)dockyard-dashboard$(NativeExtension)" />
   </Target>
 
 </Project>

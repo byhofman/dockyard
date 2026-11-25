@@ -72,6 +72,7 @@ jobs:
         if: needs.plan.outputs.toolbox == 'true'
         shell: pwsh
         run: dotnet publish src/Dockyard/Dockyard.csproj -c Release -r win-x64 -o out -p:Version=${{ needs.plan.outputs.version }} -p:GuestBundle="$PWD/guest/dockyard-guest-guest-x86_64.tar.gz" -warnaserror
+          Copy-Item out/dockyard-toolbox.exe out/Dockyard.exe
 
       - name: Dashboard
         if: needs.plan.outputs.dashboard == 'true'
@@ -148,7 +149,7 @@ jobs:
             dotnet publish src/Dockyard/Dockyard.csproj -c Release -r linux-x64 -o dist/linux/tray -p:Version="$VERSION" -p:GuestBundle="$PWD/guest/dockyard-guest-guest-x86_64.tar.gz" -warnaserror
             rm -f dist/linux/*/*.pdb
             mkdir -p out/Dockyard && cp dist/linux/tray/* dist/linux/dashboard/* out/Dockyard/ && cp dist/linux/cli/dockyard out/Dockyard/dockyard-cli
-            cp dist/linux/tray/Dockyard out/Dockyard-linux-x64
+            cp dist/linux/tray/dockyard-toolbox out/Dockyard-linux-x64
             tar -czf "out/Dockyard-$VERSION-linux-x64.tar.gz" -C out Dockyard
             for packager in deb rpm; do nfpm dockyard "$packager"; done
           fi

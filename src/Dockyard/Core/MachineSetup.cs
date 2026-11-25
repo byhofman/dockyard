@@ -63,7 +63,7 @@ static class MachineSetup
                 await MachineApps.AddDefenderExclusions(log);
                 // Next to the new exe in the folder the tray downloaded and checked both into.
                 var exe = source ?? throw new ArgumentException("--source is required for the app update");
-                await MachineApps.InstallApp(log, exe, keepPid, engineOnly: !File.Exists(Paths.DashboardExe) && !File.Exists(Paths.LegacyDashboardExe), Path.GetDirectoryName(Path.GetFullPath(exe)));
+                await MachineApps.InstallApp(log, exe, keepPid, engineOnly: !Paths.HasDashboard, Path.GetDirectoryName(Path.GetFullPath(exe)));
                 Shell.StartUnelevated(Paths.AppExe);
                 break;
             default: throw new ArgumentException($"{component} is not a machine component");

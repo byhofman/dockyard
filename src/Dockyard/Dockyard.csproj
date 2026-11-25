@@ -53,4 +53,13 @@
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.14" />
   </ItemGroup>
 
+  <!-- The published Toolbox is dockyard-toolbox, next to dockyard-dashboard and dockyard-cli. Only the published file:
+       resources are found by assembly name. -->
+  <Target Name="NameTheToolbox" AfterTargets="Publish">
+    <PropertyGroup>
+      <ExeExtension Condition="$(RuntimeIdentifier.StartsWith('win'))">.exe</ExeExtension>
+    </PropertyGroup>
+    <Move SourceFiles="$(PublishDir)$(AssemblyName)$(ExeExtension)" DestinationFiles="$(PublishDir)dockyard-toolbox$(ExeExtension)" />
+  </Target>
+
 </Project>

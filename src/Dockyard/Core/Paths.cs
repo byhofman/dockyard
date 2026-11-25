@@ -14,12 +14,18 @@ static class Paths
     // Where Dockyard puts its own copy of a tool that winget did not bring.
     public static string ToolExe(CliTool tool) => Path.Combine(DockerDir, tool.FileName);
     public static readonly string AppDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Dockyard");
-    public static readonly string AppExe = Path.Combine(AppDir, "Dockyard.exe");
+    public const string AppProcess = "dockyard-toolbox";
+    public static readonly string AppExe = Path.Combine(AppDir, AppProcess + ".exe");
+    public const string DashboardProcess = "dockyard-dashboard";
     public static readonly string DashboardExe = Path.Combine(AppDir, DashboardProcess + ".exe");
-    public static readonly string LegacyDashboardExe = Path.Combine(AppDir, LegacyDashboardProcess + ".exe");
-    public const string DashboardProcess = "Dockyard Dashboard";
-    // What installs up to v0.2.1 have, running or not.
-    public const string LegacyDashboardProcess = "Dockyard.Dashboard";
+    // What earlier installs have, running or not: the Toolbox was Dockyard.exe before 0.9.0, and the dashboard
+    // "Dockyard Dashboard.exe", and Dockyard.Dashboard.exe up to 0.2.1.
+    public const string LegacyAppProcess = "Dockyard";
+    public static readonly string LegacyAppExe = Path.Combine(AppDir, LegacyAppProcess + ".exe");
+    public static readonly string[] LegacyDashboardProcesses = ["Dockyard Dashboard", "Dockyard.Dashboard"];
+    public static IEnumerable<string> LegacyDashboardExes => LegacyDashboardProcesses.Select(p => Path.Combine(AppDir, p + ".exe"));
+    public static IEnumerable<string> AnyDashboardExe => LegacyDashboardExes.Prepend(DashboardExe);
+    public static bool HasDashboard => AnyDashboardExe.Any(File.Exists);
     // The asset keeps its name: scripts and trays already out there ask for it.
     public const string DashboardZipName = "Dockyard.Dashboard.zip";
     public static readonly string DaemonConfigDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "docker", "config");
