@@ -37,7 +37,7 @@
       <StackPanel Spacing="12" MaxWidth="320" x:DataType="vm:MainViewModel">
         <TextBlock FontWeight="SemiBold" Text="Uninstall Dockyard?" />
         <TextBlock TextWrapping="Wrap" Classes="muted"
-                   Text="Removes Dockyard, its engines, the docker CLI and the contexts." />
+                   Text="Removes Dockyard, its engines, its own copies of the tools and the docker contexts. Tools your package manager installed stay, to remove with it." />
         <CheckBox IsChecked="{Binding RemoveData}" Content="Also delete my images and containers" />
         <Button Classes="dangerfill" Content="Uninstall" Command="{Binding UninstallCommand}" HorizontalAlignment="Right" />
       </StackPanel>
@@ -185,7 +185,10 @@
                 <TextBlock Grid.Column="3" Classes="muted" FontSize="12" Text="Status" />
               </Grid>
               <Border BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="18,12,18,6">
-                <TextBlock Classes="h2" Text="DOCKYARD" />
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Classes="h2" Text="DOCKYARD" VerticalAlignment="Center" />
+                  <Button Grid.Column="1" Classes="danger" Content="Uninstall Dockyard…" Flyout="{StaticResource ConfirmUninstall}" IsVisible="{Binding ShowManage}" />
+                </Grid>
               </Border>
               <ItemsControl ItemsSource="{Binding DockyardComponents}" ItemTemplate="{StaticResource ComponentRow}" />
               <Border BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="18,12,18,6">
@@ -210,7 +213,6 @@
               <ToggleSwitch Grid.Row="1" IsChecked="{Binding StartActiveAtLogon}" OnContent="Start the active engine at logon" OffContent="Start the active engine at logon" />
               <ToggleSwitch Grid.Row="2" IsChecked="{Binding UsePackageManager}" ToolTip.Tip="Applies the next time a tool is added or updated, or when the wizard runs again."
                             OnContent="{x:Static vm:MainViewModel.PackageManagerText}" OffContent="{x:Static vm:MainViewModel.PackageManagerText}" />
-              <Button Grid.Column="1" Grid.RowSpan="3" Classes="danger" Content="Uninstall…" VerticalAlignment="Center" Flyout="{StaticResource ConfirmUninstall}" />
             </Grid>
           </Border>
         </StackPanel>
