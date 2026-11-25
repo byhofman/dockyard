@@ -109,6 +109,9 @@
               <CheckBox IsChecked="{Binding UsePackageManager}" ToolTip.Tip="Off: Dockyard keeps its own copies, at the versions it was tested with, and updates them itself.">
                 <TextBlock Text="{x:Static vm:MainViewModel.PackageManagerText}" TextWrapping="Wrap" />
               </CheckBox>
+              <CheckBox IsChecked="{Binding KubectlShell}" ToolTip.Tip="A marked block in your shell's profile, which Dockyard takes out again when this is off.">
+                <TextBlock Text="Set up kubectl in my shell: k, completion, $do for --dry-run=client -o yaml and $now for --force --grace-period 0" TextWrapping="Wrap" />
+              </CheckBox>
               <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="{Binding RequiredSummary}" />
               <Button Classes="primary" Content="Install" Command="{Binding InstallCommand}" HorizontalAlignment="Right" />
             </StackPanel>
@@ -210,12 +213,14 @@
         <StackPanel Spacing="10" IsVisible="{Binding ShowManage}">
           <TextBlock Classes="h2" Text="SETTINGS" />
           <Border Classes="card">
-            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
+            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto">
               <ToggleSwitch IsChecked="{Binding StopOtherOnSwitch}" IsVisible="{Binding HasEngineSwitch}"
                             OnContent="Stop the other engine when switching" OffContent="Stop the other engine when switching" />
               <ToggleSwitch Grid.Row="1" IsChecked="{Binding StartActiveAtLogon}" OnContent="Start the active engine at logon" OffContent="Start the active engine at logon" />
               <ToggleSwitch Grid.Row="2" IsChecked="{Binding UsePackageManager}" ToolTip.Tip="Applies the next time a tool is added or updated, or when the wizard runs again."
                             OnContent="{x:Static vm:MainViewModel.PackageManagerText}" OffContent="{x:Static vm:MainViewModel.PackageManagerText}" />
+              <ToggleSwitch Grid.Row="3" IsChecked="{Binding KubectlShell}" ToolTip.Tip="A marked block in your shell's profile: k, completion, $do and $now. Off takes it out."
+                            OnContent="Set up kubectl in my shell" OffContent="Set up kubectl in my shell" />
             </Grid>
           </Border>
         </StackPanel>

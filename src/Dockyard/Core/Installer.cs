@@ -16,6 +16,7 @@ static class Installer
         {
             if (options.Action == SetupAction.Uninstall)
             {
+                ShellSetup.Apply(false, log);
                 await host.Uninstall(log, options.RemoveData, silent: true);
                 log(options.RemoveData ? "Dockyard was removed, with its images and containers." : "Dockyard was removed. Images and containers were kept.");
                 return Ok;
@@ -44,12 +45,10 @@ static class Installer
             }
             var removedBefore = settings.RemovedComponents.ToList();
             var removed = ComponentRules.Removed(host.Components, removedBefore, options.With, options.Without);
-            if (!removed.SequenceEqual(settings.RemovedComponents) || (options.PackageManager is { } use && use != settings.UsePackageManager))
-            {
-                settings.RemovedComponents = removed;
-                settings.UsePackageManager = options.PackageManager ?? settings.UsePackageManager;
-                settings.Save();
-            }
+            settings.RemovedComponents = removed;
+            settings.UsePackageManager = options.PackageManager ?? settings.UsePackageManager;
+            settings.KubectlShell = options.KubectlShell ?? settings.KubectlShell;
+            settings.Save();
 
             var dashboard = DashboardChoice.Resolve(options.Dashboard, host.IsInstalled, host.HasDashboard, host.RunsFromInstallLocation);
             var reboot = await host.Install(log, new InstallRequest(dashboard, options.Image, Silent: true, TrustHttps: options.TrustHttps) { Without = removed });
@@ -60,6 +59,7 @@ static class Installer
             foreach (var flag in options.Without)
                 if (ComponentRules.ByFlag(host.Components, flag) is { } gone && await host.Installed(gone.Id) is not null)
                     await host.SetComponent(log, gone.Id, installed: false, options.RemoveData);
+            ShellSetup.Apply(Settings.Load(), log);
             // Installing never fails halfway unnoticed: a step that quietly did nothing would otherwise report success.
             if (!reboot && !host.IsInstalled) throw new InvalidOperationException("Setup finished, but Dockyard is not installed");
             if (host.HasDashboard != dashboard)

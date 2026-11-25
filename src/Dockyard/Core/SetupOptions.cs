@@ -4,7 +4,7 @@ sealed record SetupOptions
 {
     public const string Usage = """
         Usage: Dockyard [--silent] [--with <names>] [--without <names>] [--no-start] [--image <file>] [--assets <folder>] [--trust-https]
-                        [--no-package-manager]
+                        [--no-package-manager] [--kubectl-shell]
                Dockyard --silent --uninstall [--remove-data]
                Dockyard --silent --import [--import-from <endpoint>]
                Dockyard --version
@@ -21,6 +21,8 @@ sealed record SetupOptions
           --no-package-manager
                              Keep Dockyard's own pinned copies of docker, kind, kubectl and helm instead of installing them
                              with winget, Homebrew or apt/dnf. --package-manager goes back. Either is remembered.
+          --kubectl-shell    Set up kubectl in your shell: k, completion, $do (--dry-run=client -o yaml) and $now (--force
+                             --grace-period 0), in a marked block in its profile. --no-kubectl-shell takes it out. Remembered.
           --image <file>     Windows: the Linux engine image to import instead of downloading it.
           --assets <folder>  Take Dockyard's own release files from this folder instead of downloading them, for an
                              install without internet or a build before its release. They are not checked.
@@ -52,6 +54,7 @@ sealed record SetupOptions
     public bool TrustHttps { get; init; }
     // null keeps what an earlier install chose.
     public bool? PackageManager { get; init; }
+    public bool? KubectlShell { get; init; }
     public string? ImportFrom { get; init; }
 
     public static SetupOptions Parse(IReadOnlyList<string> args)
@@ -75,6 +78,8 @@ sealed record SetupOptions
                 "--trust-https" => options with { TrustHttps = true },
                 "--package-manager" => options with { PackageManager = options.PackageManager == false ? throw new SetupUsageException("--package-manager and --no-package-manager exclude each other") : true },
                 "--no-package-manager" => options with { PackageManager = options.PackageManager == true ? throw new SetupUsageException("--package-manager and --no-package-manager exclude each other") : false },
+                "--kubectl-shell" => options with { KubectlShell = true },
+                "--no-kubectl-shell" => options with { KubectlShell = false },
                 "--no-start" => options with { Start = false },
                 "--remove-data" => options with { RemoveData = true },
                 "--resume" => options with { Resume = true },

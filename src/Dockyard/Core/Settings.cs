@@ -15,6 +15,8 @@ sealed class Settings
     public bool HttpsEnabled { get; set; }
     // Tools from winget, Homebrew or apt/dnf where there is one; otherwise Dockyard's own pinned copies.
     public bool UsePackageManager { get; set; } = true;
+    // k, completion, $do and $now in the shell's profile.
+    public bool KubectlShell { get; set; }
 
     string file = Paths.SettingsFile;
 

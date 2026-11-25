@@ -213,6 +213,21 @@ sealed class MainViewModel : Observable
         }
     }
 
+    public bool KubectlShell
+    {
+        get => settings.KubectlShell;
+        set
+        {
+            settings.KubectlShell = value;
+            if (IsInstalled)
+            {
+                settings.Save();
+                ShellSetup.Apply(settings, Log);
+            }
+            Raise(nameof(KubectlShell));
+        }
+    }
+
     public static string PackageManagerText =>
         $"Install docker, kind, kubectl and helm with {(OperatingSystem.IsWindows() ? "winget" : OperatingSystem.IsMacOS() ? "Homebrew" : "apt or dnf")}, so they update with everything else";
 
@@ -401,6 +416,11 @@ sealed class MainViewModel : Observable
     async Task InstallCore()
     {
         var dashboard = IsInstalled ? DashboardChoice.Resolve(options.Dashboard, true, host.HasDashboard, host.RunsFromInstallLocation) : IncludeDashboard;
+        if (options.KubectlShell is { } shell && shell != settings.KubectlShell)
+        {
+            settings.KubectlShell = shell;
+            settings.Save();
+        }
         if (options.PackageManager is { } use && use != settings.UsePackageManager)
         {
             settings.UsePackageManager = use;
@@ -414,6 +434,7 @@ sealed class MainViewModel : Observable
             settings.Save();
         }
         var reboot = await host.Install(Log, new InstallRequest(dashboard) { Without = settings.RemovedComponents });
+        ShellSetup.Apply(settings, Log);
         IsInstalled = true;
         NeedsReboot = reboot;
         RefreshDashboard();
@@ -458,6 +479,7 @@ sealed class MainViewModel : Observable
                 if (installed) settings.RemovedComponents.Remove(item.Id);
                 else if (!settings.RemovedComponents.Contains(item.Id)) settings.RemovedComponents.Add(item.Id);
                 settings.Save();
+                if (item.Id == nameof(Component.Kubectl)) ShellSetup.Apply(settings, Log);
             }
             await Check(item);
             RefreshDashboard();
@@ -467,6 +489,7 @@ sealed class MainViewModel : Observable
 
     Task Uninstall() => Run("Uninstalling", async () =>
     {
+        ShellSetup.Apply(false, Log);
         await host.Uninstall(Log, RemoveData, silent: false);
         IsInstalled = false;
         Log(RemoveData ? "Dockyard was removed, with its images and containers." : "Dockyard was removed. Images and containers were kept.");
