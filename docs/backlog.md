@@ -30,6 +30,7 @@ IDs are permanent: never renumber or reuse one.
 - [ ] DOK-37 A basic look into a cluster from the dashboard: deployments, pods, services, ingresses, persistent volume claims and persistent volumes, listed per namespace with their state (owner 2026-11-25, a version after 0.9.0)
 - [ ] DOK-38 A pod's logs and a terminal into it from the dashboard, the same way as for a Docker container (owner 2026-11-25, a version after 0.9.0)
 - [ ] DOK-39 The Helm releases installed in a cluster, with their chart, version and status (owner 2026-11-25, a version after 0.9.0)
+- [ ] DOK-40 Images built locally are usable in kind clusters without pushing them anywhere: loaded into a cluster (kind load) from the dashboard and the CLI, or a local registry every cluster pulls from (owner 2026-11-25, a version after 0.9.0)
 
 ## Quality
 
