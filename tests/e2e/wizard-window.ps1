@@ -94,10 +94,12 @@ try {
     if ($version -like '0.0.0*') {
         Click $window 'Check for updates'
         Click $window 'Update'
-        Wait-For 'the dashboard to be updated' { (Get-Item $Dashboard).VersionInfo.ProductVersion -notlike '0.0.0*' } | Out-Null
+        # The release that is out may still name it as before 0.9.0.
+        $named = $Dashboard, (Join-Path (Split-Path $Dashboard) 'Dockyard.Dashboard.exe')
+        Wait-For 'the dashboard to be updated' { $named | Where-Object { (Test-Path $_) -and (Get-Item $_).VersionInfo.ProductVersion -notlike '0.0.0*' } | Select-Object -First 1 } | Out-Null
         Wait-For 'the Remove button' { Find-Button $window 'Remove' } | Out-Null
         Shot 'updated'
-        Write-Host "  ok   Update brings the dashboard to $((Get-Item $Dashboard).VersionInfo.ProductVersion) and it stays removable"
+        Write-Host "  ok   Update brings the dashboard to $((Get-Item ($named | Where-Object { Test-Path $_ } | Select-Object -First 1)).VersionInfo.ProductVersion) and it stays removable"
     }
 
     Click $window 'Remove'
