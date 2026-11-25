@@ -53,8 +53,14 @@ sealed class Winget(ICommandRunner runner) : IPackageManager
         catch (System.ComponentModel.Win32Exception) { return false; }
     }
 
-    public async Task<Version?> Installed(CliTool tool) =>
-        Command(tool) is { } command ? Updates.ParseVersion((await runner.Run(command, tool.VersionArgs)).Output) : null;
+    // A copy that cannot run counts as none: Defender's prevalence rule (attack surface reduction, event 1121), which
+    // organisations turn on, blocks a release too new to be common, and then Dockyard's own copy has to do.
+    public async Task<Version?> Installed(CliTool tool)
+    {
+        if (Command(tool) is not { } command) return null;
+        try { return Updates.ParseVersion((await runner.Run(command, tool.VersionArgs)).Output); }
+        catch (System.ComponentModel.Win32Exception) { return null; }
+    }
 
     public async Task<Version?> Available(CliTool tool) =>
         VersionAfterId((await runner.Run(Exe, "search", "--id", tool.Winget, "--exact", "--source", "winget", "--accept-source-agreements", "--disable-interactivity")).Output, tool.Winget);
@@ -67,6 +73,8 @@ sealed class Winget(ICommandRunner runner) : IPackageManager
     {
         if (Elevated && Command(tool) is not null)
         {
+            if (await Installed(tool) is null)
+                throw new InvalidOperationException($"Windows does not let winget's {tool.Command} run, likely Defender's rule against files too new to be common");
             log($"{tool.Title} came from winget; `winget upgrade {tool.Winget}` in a terminal without administrator rights updates it");
             return;
         }
@@ -76,6 +84,8 @@ sealed class Winget(ICommandRunner runner) : IPackageManager
         if (r.ExitCode is not (0 or NoApplicableUpgrade or AlreadyInstalled))
             throw new InvalidOperationException($"winget could not install {tool.Winget} ({r.ExitCode:X8}): {LastLine(r)}");
         if (Command(tool) is null) throw new InvalidOperationException($"winget installed {tool.Winget} but left no {tool.Command} command");
+        if (await Installed(tool) is null)
+            throw new InvalidOperationException($"Windows does not let winget's {tool.Command} run, likely Defender's rule against files too new to be common");
     }
 
     public async Task Remove(Action<string> log, CliTool tool)
