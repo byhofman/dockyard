@@ -16,7 +16,7 @@ static class MachineTrust
         using var store = new X509Store(StoreName.Root, StoreLocation.LocalMachine);
         store.Open(OpenFlags.ReadWrite);
         store.Add(certificate);
-        log("Windows trusts Dockyard's certificate, for names under dockyard.test only");
+        log("Windows trusts Dockyard's certificate, for names under dockyard.internal only");
     }
 
     public static void UntrustCa(Action<string> log)

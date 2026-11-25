@@ -23,8 +23,8 @@ the least rights it needs. The Toolbox installs and updates it like any other co
 | published container ports on Windows' localhost, in the Toolbox process | dockyard-host |
 | the engine's named pipes for docker and the agent API, in the Toolbox process | dockyard-host |
 | the WSL keep-alive (`wsl.exe … dockyard-init`), held by the Toolbox | dockyard-host |
-| DNS for `*.dockyard.test` and the name proxy with TLS, in the engine agent | `dockyard-dns` (CoreDNS + etcd) and `dockyard-proxy` (Traefik) containers |
-| a cluster's ingress by `<host>.<cluster>.dockyard.test` (0.9.0, in the agent) | a Traefik route per cluster in `dockyard-proxy`, TLS passed through |
+| DNS for `*.dockyard.internal` and the name proxy with TLS, in the engine agent | `dockyard-dns` (CoreDNS + etcd) and `dockyard-proxy` (Traefik) containers |
+| a cluster's ingress by `<host>.<cluster>.dockyard.internal` (0.9.0, in the agent) | a Traefik route per cluster in `dockyard-proxy`, TLS passed through |
 | Windows bind paths rewritten in the docker API (0.9.0, in the agent) | stays in the engine side, where the docker API passes |
 | kind's cloud provider, NFS (0.9.0) | already containers in the Dockyard group |
 
@@ -38,8 +38,7 @@ Done in 0.9.0: step 1 on Windows. `dockyard-host.exe` (src/Dockyard.Host) keeps 
 1. **dockyard-host, Windows first.** A `dockyard-host` executable (a component of its own, released as `host/<semver>`)
    takes over the relays, the pipes and the keep-alive from the Toolbox; the Toolbox talks to it over a local pipe to start
    and stop engines. Started at logon by dockyard-host's own entry, not by the Toolbox. Then the same for macOS and Linux.
-2. **`dockyard-dns` and `dockyard-proxy`.** CoreDNS answering `*.dockyard.internal` (and `*.dockyard.test` for a release
-   or two), Traefik with a file provider the agent writes from the running containers (name, detected port, HTTPS when on;
+2. **`dockyard-dns` and `dockyard-proxy`.** CoreDNS answering `*.dockyard.internal` (`.dockyard.test` is gone in 0.9.0, without an alias), Traefik with a file provider the agent writes from the running containers (name, detected port, HTTPS when on;
    a container's own `traefik.*` labels win). dockyard-host's DNS rule points at `dockyard-dns`, its relay at
    `dockyard-proxy`. Images are published as `byhofman/dockyard-*` on Docker Hub from `services/<semver>` tags when one of
    ours is needed; upstream images pinned by digest otherwise.

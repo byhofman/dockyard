@@ -353,7 +353,7 @@ public sealed class MacInstallTests : IDisposable
     [Fact]
     public void The_resolver_entry_names_the_relay_on_a_port_that_needs_no_privileges()
     {
-        Assert.Contains("/etc/resolver/dockyard.test", MacLayout.InstallDomainResolver);
+        Assert.Contains("/etc/resolver/dockyard.internal", MacLayout.InstallDomainResolver);
         Assert.Contains("port 15353", MacLayout.InstallDomainResolver.Replace("\\n", " "));
     }
 

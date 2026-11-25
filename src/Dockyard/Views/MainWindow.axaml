@@ -247,7 +247,7 @@
           <Border Classes="card">
             <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto">
               <ToggleSwitch Grid.Row="3" IsChecked="{Binding HttpsSwitch}"
-                            ToolTip.Tip="Every running container answers at http://name.dockyard.test without a published port. Trusted HTTPS adds a certificate authority of Dockyard's own, made on this computer and valid only for names under dockyard.test; your system asks to trust it. Off takes it out of the trust store again."
+                            ToolTip.Tip="Every running container answers at http://name.dockyard.internal without a published port. Trusted HTTPS adds a certificate authority of Dockyard's own, made on this computer and valid only for names under dockyard.internal; your system asks to trust it. Off takes it out of the trust store again."
                             OnContent="Trusted HTTPS for container domains" OffContent="Trusted HTTPS for container domains" />
               <ToggleSwitch IsChecked="{Binding StopOtherOnSwitch}" IsVisible="{Binding HasEngineSwitch}"
                             OnContent="Stop the other engine when switching" OffContent="Stop the other engine when switching" />

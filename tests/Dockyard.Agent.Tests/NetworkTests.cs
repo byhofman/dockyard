@@ -6,8 +6,8 @@ namespace Dockyard.Agent.Tests;
 public sealed class DomainTests
 {
     [Theory]
-    [InlineData("web", null, null, new[] { "web.dockyard.test" })]
-    [InlineData("Shop_Web-1", "shop", "web", new[] { "shop-web-1.dockyard.test", "shop-web.dockyard.test" })]
+    [InlineData("web", null, null, new[] { "web.dockyard.internal" })]
+    [InlineData("Shop_Web-1", "shop", "web", new[] { "shop-web-1.dockyard.internal", "shop-web.dockyard.internal" })]
     [InlineData("__", null, null, new string[0])]
     public void Names_are_flat_and_lowercase_under_the_zone(string name, string? project, string? service, string[] expected) =>
         Assert.Equal(expected, DomainNames.For(name, project, service));
@@ -36,8 +36,8 @@ public sealed class DomainTests
     }
 
     [Theory]
-    [InlineData("GET / HTTP/1.1\r\nHost: Web.Dockyard.Test:8080\r\n\r\n", "web.dockyard.test")]
-    [InlineData("GET / HTTP/1.1\r\nhost:web.dockyard.test\r\nAccept: x\r\n\r\n", "web.dockyard.test")]
+    [InlineData("GET / HTTP/1.1\r\nHost: Web.Dockyard.Internal:8080\r\n\r\n", "web.dockyard.internal")]
+    [InlineData("GET / HTTP/1.1\r\nhost:web.dockyard.internal\r\nAccept: x\r\n\r\n", "web.dockyard.internal")]
     [InlineData("GET / HTTP/1.0\r\n\r\n", null)]
     public void The_container_comes_from_the_host_header(string head, string? expected) =>
         Assert.Equal(expected, HttpHead.Host(System.Text.Encoding.ASCII.GetBytes(head)));
@@ -64,7 +64,7 @@ public sealed class DomainTests
         using var udp = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
         await udp.ConnectAsync(IPAddress.Loopback, dns.Port, ct);
         var query = new List<byte> { 0, 7, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0 };
-        foreach (var label in "gone.dockyard.test".Split('.')) { query.Add((byte)label.Length); query.AddRange(System.Text.Encoding.ASCII.GetBytes(label)); }
+        foreach (var label in "gone.dockyard.internal".Split('.')) { query.Add((byte)label.Length); query.AddRange(System.Text.Encoding.ASCII.GetBytes(label)); }
         query.AddRange([0, 0, 1, 0, 1]);
         var buffer = new byte[512];
         await udp.SendAsync(query.ToArray(), ct);

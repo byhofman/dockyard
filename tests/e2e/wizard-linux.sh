@@ -106,27 +106,27 @@ if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
   docker run -d --name e2e-web nginx:alpine >/dev/null
   docker run -d --name e2e-custom -l dockyard.port=8099 alpine:3.24 sh -c 'while :; do printf "HTTP/1.0 200 OK\r\n\r\nfrom-8099" | nc -l -p 8099 >/dev/null; done' >/dev/null
   sleep 3
-  resolvectl query e2e-web.dockyard.test | grep -q 127.77.0.1 && ok "the name resolves on this machine" || fail "resolve: $(resolvectl query e2e-web.dockyard.test 2>&1)"
-  [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 http://e2e-web.dockyard.test/)" = 200 ] && ok "http reaches it by name" || fail "http by name"
-  [ "$(curl -s --max-time 15 http://e2e-custom.dockyard.test/)" = from-8099 ] && ok "the label picks the port" || fail "label port"
-  [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 --resolve gone.dockyard.test:80:127.77.0.1 http://gone.dockyard.test/)" = 404 ] && ok "a name nothing answers to says so" || fail "unknown name"
-  [ "$(docker run --rm alpine:3.24 wget -qO- -T 10 http://e2e-custom.dockyard.test/)" = from-8099 ] && ok "the name works inside containers too" || fail "from a container"
+  resolvectl query e2e-web.dockyard.internal | grep -q 127.77.0.1 && ok "the name resolves on this machine" || fail "resolve: $(resolvectl query e2e-web.dockyard.internal 2>&1)"
+  [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 http://e2e-web.dockyard.internal/)" = 200 ] && ok "http reaches it by name" || fail "http by name"
+  [ "$(curl -s --max-time 15 http://e2e-custom.dockyard.internal/)" = from-8099 ] && ok "the label picks the port" || fail "label port"
+  [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 --resolve gone.dockyard.internal:80:127.77.0.1 http://gone.dockyard.internal/)" = 404 ] && ok "a name nothing answers to says so" || fail "unknown name"
+  [ "$(docker run --rm alpine:3.24 wget -qO- -T 10 http://e2e-custom.dockyard.internal/)" = from-8099 ] && ok "the name works inside containers too" || fail "from a container"
   if ss -ltn | grep -E ':(80|443|53)[[:space:]]' | grep -vE '127\.0\.0\.5[34]' >/dev/null; then fail "Dockyard holds port 80, 443 or 53: $(ss -ltn | grep -E ':(80|443|53)[[:space:]]')"; else ok "no port 80, 443 or 53 taken on this machine"; fi
   docker run -d --name e2e-published -p 80:80 nginx:alpine >/dev/null && ok "a container can still publish port 80" || fail "port 80 cannot be published"
-  [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 http://e2e-web.dockyard.test/)" = 200 ] && ok "and domains keep working next to it" || fail "domain next to a published port 80"
+  [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 http://e2e-web.dockyard.internal/)" = 200 ] && ok "and domains keep working next to it" || fail "domain next to a published port 80"
   docker rm -f e2e-published >/dev/null
 
   echo "  agent RSS $(awk '/VmRSS/{print $2}' /proc/$(pidof dockyard-agent)/status) kB, for the record"
 
   echo "== trusted HTTPS"
-  [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 https://e2e-web.dockyard.test/ || true)" = 000 ] && ok "without trusting, no HTTPS" || fail "HTTPS before it was turned on"
+  [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 https://e2e-web.dockyard.internal/ || true)" = 000 ] && ok "without trusting, no HTTPS" || fail "HTTPS before it was turned on"
   run --silent --no-start --trust-https
   # Setup restarted the agent and the resolver, and the agent looks containers up again when it starts.
-  i=0; while [ $i -lt 20 ] && [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 https://e2e-web.dockyard.test/ || true)" != 200 ]; do i=$((i+1)); sleep 1; done
-  [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://e2e-web.dockyard.test/)" = 200 ] && ok "https is trusted by the system" || fail "https: $(curl -v --max-time 15 https://e2e-web.dockyard.test/ 2>&1 | tail -5)"
+  i=0; while [ $i -lt 20 ] && [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 https://e2e-web.dockyard.internal/ || true)" != 200 ]; do i=$((i+1)); sleep 1; done
+  [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://e2e-web.dockyard.internal/)" = 200 ] && ok "https is trusted by the system" || fail "https: $(curl -v --max-time 15 https://e2e-web.dockyard.internal/ 2>&1 | tail -5)"
   key="$HOME/.config/Dockyard/ca/ca.key"
   [ "$(stat -c %a "$key")" = 600 ] && ok "the key is the owner's only" || fail "key mode $(stat -c %a "$key")"
-  openssl x509 -in "$HOME/.config/Dockyard/ca/ca.pem" -noout -text | grep -A2 'Name Constraints: critical' | grep -q 'DNS:dockyard.test' && ok "the CA is name constrained" || fail "name constraint"
+  openssl x509 -in "$HOME/.config/Dockyard/ca/ca.pem" -noout -text | grep -A2 'Name Constraints: critical' | grep -q 'DNS:dockyard.internal' && ok "the CA is name constrained" || fail "name constraint"
   rogue="$(mktemp -d)"
   openssl req -new -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -keyout "$rogue/k" -out "$rogue/r" -subj /CN=www.example.com 2>/dev/null
   printf 'subjectAltName=DNS:www.example.com\n' > "$rogue/x"

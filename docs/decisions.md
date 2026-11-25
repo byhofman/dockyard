@@ -406,3 +406,7 @@ DOK-23. `MacHost`, `LinuxHost`, `WindowsHost` and `MachineSetup` were 450 to 650
 - **Windows:** `WslEngine` (the distro's keep-alive and the pipes), `WindowsServiceEngine` (the Windows engine's service), `WindowsTrayServices` (published ports, domain relay), `WindowsSetup` (machine steps in or out of elevation). `MachineSetup` keeps only the order of install, update and uninstall, over `MachineEngine`, `MachineApps` and `MachineTrust`.
 
 Separate classes, not partial classes: a partial class keeps one set of fields that every part can touch, which is the coupling the split is meant to remove. No behaviour changed. The code moved as it was, and the unit tests and the three e2e runs are the check.
+
+## 2026-11-25: Container names move to dockyard.internal, without an alias
+
+The owner chose `.internal`, the name space ICANN reserved for private use, over `.test`, which is meant for testing. `*.dockyard.test` stops answering in 0.9.0: no alias. Setup takes out the old NRPT rule on Windows and `/etc/resolver/dockyard.test` on macOS, and the local CA is replaced, because its name constraint names the zone. The machine is asked to trust the new one once.

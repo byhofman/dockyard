@@ -66,7 +66,7 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
         UnlinkUserSocket();
         List<string> steps = [];
         if (await PathEntryIs(MacLayout.BinDir) || await PathEntryIs(MacLayout.SharedBinDir)) steps.Add(MacLayout.RemovePathsEntry);
-        if (File.Exists(MacLayout.DomainResolver)) steps.Add($"rm -f {MacLayout.DomainResolver}");
+        if (File.Exists(MacLayout.DomainResolver) || File.Exists(MacLayout.LegacyDomainResolver)) steps.Add($"rm -f {MacLayout.DomainResolver} {MacLayout.LegacyDomainResolver}");
         if (File.Exists(MacLayout.SocketDaemon) || SystemSocketUse() == MacLayout.SocketUse.Ours) steps.Add(MacLayout.RemoveSocketDaemon(MacLayout.DockerSocket));
         if (steps.Count > 0)
         {

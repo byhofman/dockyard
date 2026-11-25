@@ -260,8 +260,8 @@ if ($Wizard) {
     Section 'engine configuration from the settings reaches the engine'
     $saved = Get-Content "$env:APPDATA\Dockyard\settings.json" -Raw
     $settings = $saved | ConvertFrom-Json
-    $settings | Add-Member -Force RegistryMirrors 'https://mirror.dockyard.test'
-    $settings | Add-Member -Force InsecureRegistries 'registry.dockyard.test:5000'
+    $settings | Add-Member -Force RegistryMirrors 'https://mirror.dockyard.internal'
+    $settings | Add-Member -Force InsecureRegistries 'registry.dockyard.internal:5000'
     $settings | Add-Member -Force AddressPools '10.123.0.0/16 24'
     $settings | ConvertTo-Json | Set-Content "$env:APPDATA\Dockyard\settings.json"
     Check 'exit 0' ((Run --silent --no-start) -eq 0)
@@ -277,12 +277,12 @@ if ($Wizard) {
     $saved | Set-Content "$env:APPDATA\Dockyard\settings.json"
 
     Section 'container domains and trusted HTTPS, without publishing a port'
-    Check 'windows sends the name space to Dockyard' ((Get-DnsClientNrptRule | Where-Object { $_.Namespace -contains '.dockyard.test' }) -ne $null)
+    Check 'windows sends the name space to Dockyard' ((Get-DnsClientNrptRule | Where-Object { $_.Namespace -contains '.dockyard.internal' }) -ne $null)
     & $docker --context linux run -d --name e2e-web nginx:alpine | Out-Null
     $tray = Start-Process $appExe -ArgumentList '--tray' -PassThru
     Start-Sleep 8
-    Check 'the name resolves' ((Resolve-DnsName e2e-web.dockyard.test -Type A -ErrorAction SilentlyContinue).IPAddress -contains '127.77.0.1')
-    $code = (curl.exe -s -o NUL -w '%{http_code}' --max-time 15 http://e2e-web.dockyard.test/ | Out-String).Trim()
+    Check 'the name resolves' ((Resolve-DnsName e2e-web.dockyard.internal -Type A -ErrorAction SilentlyContinue).IPAddress -contains '127.77.0.1')
+    $code = (curl.exe -s -o NUL -w '%{http_code}' --max-time 15 http://e2e-web.dockyard.internal/ | Out-String).Trim()
     Check "http reaches it by name (got $code)" ($code -eq '200')
     Get-Process Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
     Check 'exit 0 with --trust-https' ((Run --silent --no-start --trust-https) -eq 0)
@@ -293,8 +293,8 @@ if ($Wizard) {
     Start-Sleep 15
     # --ssl-no-revoke: this curl asks Windows to check revocation and fails when a private CA publishes no such list, as this
     # one does not need to. Browsers do not fail on that; a certificate that is not trusted still fails here.
-    $code = (curl.exe -s --ssl-no-revoke -o NUL -w '%{http_code}' --max-time 15 https://e2e-web.dockyard.test/ | Out-String).Trim()
-    if ($code -ne '200') { curl.exe -sS -v --ssl-no-revoke -o NUL --max-time 15 https://e2e-web.dockyard.test/ 2>&1 | Select-Object -Last 15 | Write-Host; Resolve-DnsName e2e-web.dockyard.test -Type A -ErrorAction SilentlyContinue | Out-String | Write-Host }
+    $code = (curl.exe -s --ssl-no-revoke -o NUL -w '%{http_code}' --max-time 15 https://e2e-web.dockyard.internal/ | Out-String).Trim()
+    if ($code -ne '200') { curl.exe -sS -v --ssl-no-revoke -o NUL --max-time 15 https://e2e-web.dockyard.internal/ 2>&1 | Select-Object -Last 15 | Write-Host; Resolve-DnsName e2e-web.dockyard.internal -Type A -ErrorAction SilentlyContinue | Out-String | Write-Host }
     Check "https is trusted by Windows (got $code)" ($code -eq '200')
     Get-Process Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
     $caDir = "$env:APPDATA\Dockyard\ca"
@@ -346,10 +346,10 @@ if ($Wizard) {
     Check 'the helper is there' (Test-Path (Join-Path $env:ProgramFiles 'Docker\docker-credential-wincred.exe'))
     Check 'the store is set' ((Get-Content "$env:USERPROFILE\.docker\config.json" -Raw) -match '"credsStore":\s*"wincred"')
     $helper = Join-Path $env:ProgramFiles 'Docker\docker-credential-wincred.exe'
-    '{"ServerURL":"e2e.dockyard.test","Username":"me","Secret":"s3cret"}' | & $helper store
-    Check 'a login round-trips through the store' (('e2e.dockyard.test' | & $helper get | Out-String) -match 's3cret')
+    '{"ServerURL":"e2e.dockyard.internal","Username":"me","Secret":"s3cret"}' | & $helper store
+    Check 'a login round-trips through the store' (('e2e.dockyard.internal' | & $helper get | Out-String) -match 's3cret')
     Check 'the secret is not in config.json' ((Get-Content "$env:USERPROFILE\.docker\config.json" -Raw) -notmatch 's3cret')
-    'e2e.dockyard.test' | & $helper erase
+    'e2e.dockyard.internal' | & $helper erase
 }
 
 Section 'the Windows engine: no sign-out needed'
@@ -506,7 +506,7 @@ if ($Wizard) {
     Check 'exit 0 with the Windows engine' ((Run --silent --no-start --with windows-engine) -eq 0)
     Check 'dockerd is back' (Test-Path (Join-Path $env:ProgramFiles 'Docker\dockerd.exe'))
     Check 'the win context is back' ((& $docker context ls -q) -contains 'win')
-    $routed = { (Get-DnsClientNrptRule | Where-Object { $_.Namespace -contains '.dockyard.test' }) -ne $null }
+    $routed = { (Get-DnsClientNrptRule | Where-Object { $_.Namespace -contains '.dockyard.internal' }) -ne $null }
     Check 'exit 0 without the Linux engine' ((Run --silent --no-start --without linux-engine) -eq 0)
     Check 'names no longer go to Dockyard' (-not (& $routed))
     Check 'the linux context is gone' ((& $docker context ls -q) -notcontains 'linux')
@@ -538,13 +538,13 @@ Get-Process Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
 
 Section 'uninstall keeps the data'
 if ($Wizard) {
-    '{"ServerURL":"e2e.dockyard.test","Username":"me","Secret":"s3cret"}' | & (Join-Path $env:ProgramFiles 'Docker\docker-credential-wincred.exe') store
+    '{"ServerURL":"e2e.dockyard.internal","Username":"me","Secret":"s3cret"}' | & (Join-Path $env:ProgramFiles 'Docker\docker-credential-wincred.exe') store
     $said = New-TemporaryFile
     $p = Start-Process (Resolve-Path $Wizard) -ArgumentList '--silent', '--uninstall' -Wait -PassThru -NoNewWindow -RedirectStandardOutput $said
     Get-Content $said | Write-Host
     Check 'exit 0' ($p.ExitCode -eq 0)
     Check 'it says which login stays in the store' ((Get-Content $said -Raw) -match 'e2e\.dockyard\.test.*Windows Credential Manager')
-    cmdkey /delete:e2e.dockyard.test | Out-Null
+    cmdkey /delete:e2e.dockyard.internal | Out-Null
 } else {
     Check 'exit 0' ((Run --silent --uninstall) -eq 0)
 }
@@ -553,7 +553,7 @@ $distros = (wsl.exe -l -q | Out-String) -replace "`0", ''
 Check 'the dockyard distro is kept' ($distros -match 'dockyard')
 if ($Wizard) {
     Check 'the CA is out of the trust store' ((Get-ChildItem Cert:\LocalMachine\Root | Where-Object Subject -like '*Dockyard Local CA*') -eq $null)
-    Check 'and names no longer go to Dockyard' ((Get-DnsClientNrptRule | Where-Object { $_.Namespace -contains '.dockyard.test' }) -eq $null)
+    Check 'and names no longer go to Dockyard' ((Get-DnsClientNrptRule | Where-Object { $_.Namespace -contains '.dockyard.internal' }) -eq $null)
 }
 Check 'no credential store left in the config' (-not ((Test-Path "$env:USERPROFILE\.docker\config.json") -and ((Get-Content "$env:USERPROFILE\.docker\config.json" -Raw) -match 'credsStore')))
 Check 'our .wslconfig line is gone' (-not ((Test-Path "$env:USERPROFILE\.wslconfig") -and ((Get-Content "$env:USERPROFILE\.wslconfig" -Raw) -match 'networkingMode=mirrored')))

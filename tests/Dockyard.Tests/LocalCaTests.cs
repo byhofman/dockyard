@@ -30,7 +30,7 @@ public sealed class LocalCaTests : IDisposable
         using var chain = ChainTrusting(root);
 
         Assert.True(chain.Build(certificate), string.Join(", ", chain.ChainStatus.Select(s => s.StatusInformation)));
-        Assert.True(certificate.MatchesHostname("web.dockyard.test"));
+        Assert.True(certificate.MatchesHostname("web.dockyard.internal"));
         Assert.False(certificate.MatchesHostname("example.com"));
     }
 
@@ -52,7 +52,7 @@ public sealed class LocalCaTests : IDisposable
         using var root = X509Certificate2.CreateFromPem(LocalCa.Create(Now).Certificate);
         var constraints = root.Extensions.First(e => e.Oid?.Value == "2.5.29.30");
         Assert.True(constraints.Critical);
-        Assert.Contains("dockyard.test", System.Text.Encoding.ASCII.GetString(constraints.RawData));
+        Assert.Contains("dockyard.internal", System.Text.Encoding.ASCII.GetString(constraints.RawData));
         var basic = root.Extensions.OfType<X509BasicConstraintsExtension>().Single();
         Assert.True(basic.CertificateAuthority);
         Assert.True(basic.HasPathLengthConstraint);
@@ -159,7 +159,7 @@ public sealed class LocalCaTests : IDisposable
         using var key = System.Security.Cryptography.ECDsa.Create();
         var old = new CertificateRequest($"CN={LocalCa.SubjectName}", key, System.Security.Cryptography.HashAlgorithmName.SHA256);
         old.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, true, 0, true));
-        // The constraint as earlier versions wrote it: dockyard.test permitted, nothing excluded, no extended key usage.
+        // The constraint as earlier versions wrote it: dockyard.internal permitted, nothing excluded, no extended key usage.
         old.CertificateExtensions.Add(new X509Extension("2.5.29.30", Convert.FromHexString("3013A011300F820D646F636B796172642E74657374"), critical: true));
         using var earlier = old.CreateSelfSigned(Now, Now.AddDays(1));
 

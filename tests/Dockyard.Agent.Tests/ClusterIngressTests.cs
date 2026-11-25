@@ -8,12 +8,12 @@ namespace Dockyard.Agent.Tests;
 public sealed class ClusterIngressTests
 {
     [Theory]
-    [InlineData("web.dev.dockyard.test", "dev")]
-    [InlineData("api.shop.dev.dockyard.test", "dev")]
-    [InlineData("web.dockyard.test", null)]
-    [InlineData("dockyard.test", null)]
+    [InlineData("web.dev.dockyard.internal", "dev")]
+    [InlineData("api.shop.dev.dockyard.internal", "dev")]
+    [InlineData("web.dockyard.internal", null)]
+    [InlineData("dockyard.internal", null)]
     [InlineData("web.dev.example.com", null)]
-    [InlineData(".dev.dockyard.test", null)]
+    [InlineData(".dev.dockyard.internal", null)]
     public void A_name_with_two_labels_or_more_in_the_zone_is_for_the_cluster_named_last(string name, string? cluster) =>
         Assert.Equal(cluster, DomainNames.ClusterOf(name));
 
@@ -27,7 +27,7 @@ public sealed class ClusterIngressTests
         await client.ConnectAsync(IPAddress.Loopback, port, TestContext.Current.CancellationToken);
         using var accepted = await listener.AcceptTcpClientAsync(TestContext.Current.CancellationToken);
         var ssl = new SslStream(client.GetStream(), leaveInnerStreamOpen: true, (_, _, _, _) => true);
-        _ = ssl.AuthenticateAsClientAsync(new SslClientAuthenticationOptions { TargetHost = "Web.Dev.dockyard.test" }, TestContext.Current.CancellationToken);
+        _ = ssl.AuthenticateAsClientAsync(new SslClientAuthenticationOptions { TargetHost = "Web.Dev.dockyard.internal" }, TestContext.Current.CancellationToken);
 
         var stream = accepted.GetStream();
         var header = new byte[TlsClientHello.RecordHeader];
@@ -37,7 +37,7 @@ public sealed class ClusterIngressTests
         header.CopyTo(record, 0);
         await stream.ReadExactlyAsync(record.AsMemory(TlsClientHello.RecordHeader), TestContext.Current.CancellationToken);
 
-        Assert.Equal("web.dev.dockyard.test", TlsClientHello.ServerName(record));
+        Assert.Equal("web.dev.dockyard.internal", TlsClientHello.ServerName(record));
         Assert.Null(TlsClientHello.RecordLength("GET / HTTP/1.1"u8));
         Assert.Null(TlsClientHello.ServerName(new byte[12]));
 

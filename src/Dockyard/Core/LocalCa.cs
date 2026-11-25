@@ -12,7 +12,7 @@ namespace Dockyard.Core;
 // privileged container could read, only gets a short-lived certificate for the domains themselves.
 static class LocalCa
 {
-    public const string Zone = "dockyard.test";
+    public const string Zone = "dockyard.internal";
     public const string SubjectName = "Dockyard Local CA";
     const string NameConstraintsOid = "2.5.29.30";
     const string ServerAuthOid = "1.3.6.1.5.5.7.3.1";

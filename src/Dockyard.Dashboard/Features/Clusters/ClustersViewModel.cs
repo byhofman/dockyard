@@ -212,7 +212,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         ports.IsShown = on.IsChecked;
         on.Changed += () => ports.IsShown = on.IsChecked;
         Shell.Open(new Dialog($"{cluster.Name}: load balancer",
-            $"LoadBalancer services get an address from kind's cloud provider, and an ingress controller's hosts are reachable by name as <host>.{cluster.Name}.dockyard.test on 80 and 443. Fixed ports go to the service that has them on this computer's 127.0.0.1; its other ports keep the one Docker picks.",
+            $"LoadBalancer services get an address from kind's cloud provider, and an ingress controller's hosts are reachable by name as <host>.{cluster.Name}.dockyard.internal on 80 and 443. Fixed ports go to the service that has them on this computer's 127.0.0.1; its other ports keep the one Docker picks.",
             "Save", _ =>
             {
                 ClusterDefinitions.Save(cluster.Name, current with { LoadBalancer = on.IsChecked, Ports = ClusterDefinitions.ParsePorts(ports.Text) ?? current.Ports });
@@ -296,7 +296,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         {
             Choice = StorageChoices[from?.Storage switch { ClusterStorage.HostFolder => 1, ClusterStorage.Nfs when helm is not null => 2, _ => 0 }],
         };
-        var balancer = DialogField.Check("Load balancer: LoadBalancer services get an address, and an ingress controller's hosts are reachable as <host>.<name>.dockyard.test", from?.LoadBalancer ?? true);
+        var balancer = DialogField.Check("Load balancer: LoadBalancer services get an address, and an ingress controller's hosts are reachable as <host>.<name>.dockyard.internal", from?.LoadBalancer ?? true);
         var ports = PortsField(from?.Ports ?? ClusterDefinition.DefaultPorts, null);
         ports.IsShown = balancer.IsChecked;
         balancer.Changed += () => ports.IsShown = balancer.IsChecked;

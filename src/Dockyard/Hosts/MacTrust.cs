@@ -16,7 +16,7 @@ sealed class MacTrust(ICommandRunner runner)
             ? await runner.Run("sudo", "-n", "/usr/bin/security", "add-trusted-cert", "-d", "-r", "trustRoot", "-p", "ssl", "-k", SystemKeychain, certificateFile)
             : await runner.Run("/usr/bin/security", "add-trusted-cert", "-r", "trustRoot", "-p", "ssl", "-k", MacLayout.LoginKeychain, certificateFile);
         if (r.ExitCode != 0) return false;
-        log("This Mac trusts Dockyard's certificate, for names under dockyard.test only");
+        log("This Mac trusts Dockyard's certificate, for names under dockyard.internal only");
         return true;
     }
 

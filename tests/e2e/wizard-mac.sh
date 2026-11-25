@@ -117,16 +117,16 @@ if [ -n "${ADMIN:-}" ]; then
   as_runner security default-keychain -d user -s "$real_home/e2e.keychain"
   as_runner security unlock-keychain -p e2e "$real_home/e2e.keychain"
   as_runner security set-keychain-settings "$real_home/e2e.keychain"
-  printf '{"ServerURL":"e2e.dockyard.test","Username":"me","Secret":"s3cret"}' | as_runner "$helper" store
-  if printf 'e2e.dockyard.test' | as_runner "$helper" get | grep -q s3cret; then ok "a login round-trips through the Keychain"; else fail "keychain round trip"; fi
+  printf '{"ServerURL":"e2e.dockyard.internal","Username":"me","Secret":"s3cret"}' | as_runner "$helper" store
+  if printf 'e2e.dockyard.internal' | as_runner "$helper" get | grep -q s3cret; then ok "a login round-trips through the Keychain"; else fail "keychain round trip"; fi
   if grep -q s3cret "$home/.docker/config.json"; then fail "the secret reached config.json"; else ok "the secret is not in config.json"; fi
-  printf 'e2e.dockyard.test' | as_runner "$helper" erase
+  printf 'e2e.dockyard.internal' | as_runner "$helper" erase
 fi
 check "tools that look in ~/.docker/run find it" test -L "$home/.docker/run/docker.sock"
 
 if [ -n "${ADMIN:-}" ]; then
   echo "== container domains and trusted HTTPS"
-  if grep -q 'port 15353' /etc/resolver/dockyard.test; then ok "this Mac asks Dockyard about the name space"; else fail "resolver: $(cat /etc/resolver/dockyard.test 2>&1)"; fi
+  if grep -q 'port 15353' /etc/resolver/dockyard.internal; then ok "this Mac asks Dockyard about the name space"; else fail "resolver: $(cat /etc/resolver/dockyard.internal 2>&1)"; fi
   # Dockyard uses the login keychain by its path, so this home needs one; made here and unlocked, as a login does.
   mkdir -p "$home/Library/Keychains"
   security create-keychain -p e2e "$home/Library/Keychains/login.keychain-db"
@@ -138,7 +138,7 @@ if [ -n "${ADMIN:-}" ]; then
   check "no file holds the key, /Users being shared with the engine" missing "$home/.dockyard/ca/ca.key"
   if security find-generic-password -s "Dockyard Local CA key" "$home/Library/Keychains/login.keychain-db" >/dev/null; then ok "the key is in the keychain"; else fail "the key is not in the keychain"; fi
   if security find-certificate -c "Dockyard Local CA" /Library/Keychains/System.keychain >/dev/null; then ok "the CA is in the trust store"; else fail "not in the trust store"; fi
-  if openssl x509 -in "$ca" -noout -text | grep -A2 'Name Constraints: critical' | grep -q 'DNS:dockyard.test'; then ok "the CA is name constrained"; else fail "name constraint"; fi
+  if openssl x509 -in "$ca" -noout -text | grep -A2 'Name Constraints: critical' | grep -q 'DNS:dockyard.internal'; then ok "the CA is name constrained"; else fail "name constraint"; fi
 fi
 
 date > "$home/.dockyard/marker"
@@ -205,7 +205,7 @@ if [ -f "$home/.docker/config.json" ] && grep -q credsStore "$home/.docker/confi
 if [ -n "${ADMIN:-}" ]; then
   check "/var/run/docker.sock is gone" missing /var/run/docker.sock
   check "the daemon is gone" missing /Library/LaunchDaemons/com.byhofman.dockyard.socket.plist
-  check "the resolver entry is gone" missing /etc/resolver/dockyard.test
+  check "the resolver entry is gone" missing /etc/resolver/dockyard.internal
   if security find-certificate -c "Dockyard Local CA" /Library/Keychains/System.keychain >/dev/null 2>&1; then fail "the CA stayed in the trust store"; else ok "the CA is out of the trust store"; fi
 fi
 

@@ -33,7 +33,8 @@ static class MacLayout
     public static string CredentialHelper => Path.Combine(BinDir, "docker-credential-osxkeychain");
     public const string SystemSocket = "/var/run/docker.sock";
     public static string LoginKeychain => Path.Combine(Home, "Library", "Keychains", "login.keychain-db");
-    public const string DomainResolver = "/etc/resolver/dockyard.test";
+    public const string DomainResolver = "/etc/resolver/dockyard.internal";
+    public const string LegacyDomainResolver = "/etc/resolver/dockyard.test";
     public const int DomainDnsPort = 15353;
     public const string SocketDaemonLabel = "com.byhofman.dockyard.socket";
     public const string SocketDaemon = "/Library/LaunchDaemons/" + SocketDaemonLabel + ".plist";
@@ -127,7 +128,7 @@ static class MacLayout
         + $"if [ \"$(readlink {SystemSocket})\" = {Shell.ShQuote(ourSocket)} ]; then rm -f {SystemSocket}; fi";
 
     public static string InstallDomainResolver =>
-        $"mkdir -p /etc/resolver && printf 'nameserver 127.0.0.1\\nport {DomainDnsPort}\\n' > {DomainResolver}";
+        $"mkdir -p /etc/resolver && printf 'nameserver 127.0.0.1\\nport {DomainDnsPort}\\n' > {DomainResolver} && rm -f {LegacyDomainResolver}";
 
     // One administrator prompt: AppleScript runs the shell command with administrator privileges.
     public static string[] AdminShell(string command) =>

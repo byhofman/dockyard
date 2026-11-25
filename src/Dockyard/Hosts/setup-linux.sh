@@ -272,9 +272,9 @@ EOF
 route_domains() {
   [ -d /run/systemd/resolve ] || { echo "No systemd-resolved: container domains do not resolve by name here"; return 0; }
   mkdir -p /etc/systemd/resolved.conf.d
-  printf '[Resolve]\nDNS=127.0.0.1:2353\nDomains=~dockyard.test\n' > /etc/systemd/resolved.conf.d/dockyard.conf
+  printf '[Resolve]\nDNS=127.0.0.1:2353\nDomains=~dockyard.internal\n' > /etc/systemd/resolved.conf.d/dockyard.conf
   systemctl restart systemd-resolved
-  echo "This machine asks Dockyard about names under dockyard.test"
+  echo "This machine asks Dockyard about names under dockyard.internal"
 }
 
 # The agent's addresses on lo and its rules outlive it until a reboot. They are found by what only Dockyard uses: its
@@ -319,7 +319,7 @@ trust_ca() {
     echo "This distribution has no trust store Dockyard knows how to change" >&2
     exit 5
   fi
-  echo "This machine trusts Dockyard's certificate, for names under dockyard.test only"
+  echo "This machine trusts Dockyard's certificate, for names under dockyard.internal only"
 }
 
 untrust_ca() {

@@ -162,7 +162,7 @@ In the dashboard, **Clusters** lists them from the engine with their Kubernetes 
 
 - **Creating a cluster** asks first for what to put in it (workers, storage, the load balancer and its ports, the add-ons), and shows kind's cluster config that follows from that last, to change by hand if you want. Dockyard keeps each cluster's definition, so **Duplicate** makes another like it and **Recreate** makes it again from a changed definition (kind cannot change a cluster that exists, so everything in it goes).
 - **Load balancers:** a `type: LoadBalancer` service gets an IP through kind's [cloud provider](https://github.com/kubernetes-sigs/cloud-provider-kind), which Dockyard runs as one container for every cluster whose load balancer is on (per cluster, on by default). Clusters shows each service's load balancer IP and its ports as `http://127.0.0.1:<port>` links that work from this computer. **Fixed ports** are optional per cluster: a port such as 8080 goes to the service that has it on `127.0.0.1:8080`; a port another cluster or program holds is reported, and the service keeps the port Docker picked. It installs nothing else in your clusters: no Gateway API, and an ingress controller only when you tick Traefik.
-- **Ingress by name:** with an ingress controller such as Traefik, any `<host>.<cluster>.dockyard.test` reaches it on ports 80 and 443, so an Ingress for `shop.dev.dockyard.test` works in the browser as is, HTTPS with the cluster's own certificate.
+- **Ingress by name:** with an ingress controller such as Traefik, any `<host>.<cluster>.dockyard.internal` reaches it on ports 80 and 443, so an Ingress for `shop.dev.dockyard.internal` works in the browser as is, HTTPS with the cluster's own certificate.
 - **Storage that every node uses at once**, chosen per cluster when you create it: a **shared host folder** (a `shared` StorageClass over one folder on the engine, with a button that opens it), or **NFS** (an `nfs` StorageClass through the NFS CSI driver, served by a `dockyard-nfs` container that every cluster with NFS shares). Both are ReadWriteMany with reclaim policy Retain, and put each claim in `<namespace>/<claim>`, so pods on different nodes and in different clusters see the same files, and they survive deleting the claim.
 
 ## The dockyard command
@@ -183,9 +183,9 @@ dockyard update --check
 
 ## Container domains
 
-Every running container answers at `http://<container name>.dockyard.test`, and a Compose service also at `http://<project>-<service>.dockyard.test`, without publishing a port and without clashing with anything else on your machine. Dockyard picks the port by looking at what the container listens on, the usual web ports first. If that is the wrong one, set it next to the name in the dashboard, or with a `dockyard.port` label.
+Every running container answers at `http://<container name>.dockyard.internal`, and a Compose service also at `http://<project>-<service>.dockyard.internal`, without publishing a port and without clashing with anything else on your machine. Dockyard picks the port by looking at what the container listens on, the usual web ports first. If that is the wrong one, set it next to the name in the dashboard, or with a `dockyard.port` label.
 
-**HTTPS:** turn it on under **Settings** in the Toolbox, or add `--trust-https` to a silent setup. Dockyard makes a certificate authority of its own on this device, valid only for names under `dockyard.test`, and your system asks for approval to trust it. Say no and everything keeps working over plain HTTP. Its key stays on this device, readable only by you; turning HTTPS off or uninstalling removes it from the trust store.
+**HTTPS:** turn it on under **Settings** in the Toolbox, or add `--trust-https` to a silent setup. Dockyard makes a certificate authority of its own on this device, valid only for names under `dockyard.internal`, and your system asks for approval to trust it. Say no and everything keeps working over plain HTTP. Its key stays on this device, readable only by you; turning HTTPS off or uninstalling removes it from the trust store.
 
 ## Your network
 
