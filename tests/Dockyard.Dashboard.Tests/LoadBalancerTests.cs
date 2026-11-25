@@ -149,6 +149,7 @@ public sealed class LoadBalancerTests
     [Theory]
     [InlineData("Error response from daemon: driver failed programming external connectivity on endpoint dockyard-lb-dev: Bind for 127.0.0.1:80 failed: port is already allocated", 80)]
     [InlineData("Error starting userland proxy: listen tcp4 127.0.0.1:443: bind: address already in use", 443)]
+    [InlineData("driver failed programming external connectivity on endpoint dockyard-lb-test (1a79): failed to bind host port 127.0.0.1:80/tcp: address already in use", 80)]
     [InlineData("Error response from daemon: No such image", null)]
     public void A_port_something_else_holds_is_found_in_dockers_error(string error, int? port) => Assert.Equal(port, LoadBalancers.BusyPort(error));
 }

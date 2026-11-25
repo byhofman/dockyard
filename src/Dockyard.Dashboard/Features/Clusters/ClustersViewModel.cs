@@ -14,6 +14,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     readonly HostKubeconfig kubeconfig;
     bool? controllerWanted;
     bool syncing;
+    bool resync;
 
     public ClustersViewModel(ShellViewModel shell, EngineSession session, HostKubeconfig? kubeconfig = null, DashboardSettings? settings = null) : base(shell, session)
     {
@@ -87,6 +88,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     public bool HasForwards => ForwardsText.Length > 0;
 
     readonly Dictionary<string, string> forwardNotes = [];
+    readonly Dictionary<string, string> loggedForwards = [];
     string? appliedPlan;
 
     public Command LoadBalancerCommand { get; }
@@ -151,7 +153,8 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     // cluster wants a load balancer; each such cluster's forwarder publishes its ports, first come by name when two want one.
     async Task SyncController()
     {
-        if (NeedsLinuxEngine || !Session.IsConnected || Session.Client is not { } client || syncing) return;
+        if (syncing) { resync = true; return; }
+        if (NeedsLinuxEngine || !Session.IsConnected || Session.Client is not { } client) return;
         var context = Session.ContextName.Length > 0 ? Session.ContextName : "default";
         var claimed = new Dictionary<int, string>();
         var plans = new List<(KindCluster Cluster, List<LoadBalancers.Forward> Forwards, List<(int Port, string Cluster)> Taken)>();
@@ -160,7 +163,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
             var definition = DefinitionFor(cluster.Name);
             var ports = cluster.IsRunning ? definition?.LoadBalancerPorts ?? [] : [];
             var (forwards, taken) = LoadBalancers.PlanForwards(ports, LoadBalancers.For(cluster.Name, Session.Containers.Items), claimed, cluster.Name);
-            foreach (var port in ports) claimed.TryAdd(port, cluster.Name);
+            foreach (var forward in forwards) claimed.TryAdd(forward.Port, cluster.Name);
             plans.Add((cluster, forwards, taken));
         }
         var wanted = HasKind && all.Any(c => c.IsRunning && WantsLoadBalancer(c.Name));
@@ -177,6 +180,11 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
             foreach (var (cluster, forwards, taken) in plans)
             {
                 var busy = await LoadBalancers.SyncForwarder(client, context, cluster.Name, forwards, cluster.IsRunning);
+                var note = string.Join(", ", forwards.Where(f => !busy.Contains(f.Port)).Select(f => $"127.0.0.1:{f.Port} → {f.Service}")
+                    .Concat(busy.Select(p => $"port {p} in use by another program")));
+                if (note != loggedForwards.GetValueOrDefault(cluster.Name, "") && (note.Length > 0 || loggedForwards.ContainsKey(cluster.Name)))
+                    Shell.Activity.Note($"{cluster.Name} load balancer: {(note.Length > 0 ? note : "no ports")}");
+                loggedForwards[cluster.Name] = note;
                 forwardNotes[cluster.Name] = string.Join("\n", forwards.Where(f => !busy.Contains(f.Port)).Select(f => $"127.0.0.1:{f.Port} → {f.Service}")
                     .Concat(taken.Select(t => $"Port {t.Port} is used by cluster {t.Cluster}; its service keeps the port Docker picked"))
                     .Concat(busy.Select(p => $"Port {p} is in use by another program; its service keeps the port Docker picked. Dockyard tries again when the cluster starts.")));
@@ -184,8 +192,16 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
             appliedPlan = plan;
             Raise(nameof(ForwardsText), nameof(HasForwards));
         }
-        catch (Exception ex) { Shell.ShowError($"Load balancers for kind: {ex.Message}"); }
-        finally { syncing = false; }
+        catch (Exception ex)
+        {
+            appliedPlan = plan;
+            Shell.ShowError($"Load balancers for kind: {ex.Message}");
+        }
+        finally
+        {
+            syncing = false;
+            if (resync) { resync = false; _ = SyncController(); }
+        }
     }
 
     void AskLoadBalancer(KindCluster cluster)
@@ -212,7 +228,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         Validate = text => ClusterDefinitions.ParsePorts(text) is null ? "A list of ports, such as 80, 443" : null,
         Warn = text => ClusterDefinitions.ParsePorts(text) is not { } list ? null
             : all.Where(c => c.Name != cluster).Select(c => (c.Name, Ports: DefinitionFor(c.Name)?.LoadBalancerPorts ?? []))
-                .SelectMany(o => o.Ports.Intersect(list).Select(p => $"Port {p} is also cluster {o.Name}'s: while both run, the first by name has it and the other's service keeps the port Docker picks"))
+                .SelectMany(o => o.Ports.Intersect(list).Select(p => $"Port {p} is also cluster {o.Name}'s: while both have a service on it, the first by name gets it and the other keeps the port Docker picks"))
                 .FirstOrDefault(),
     };
 

@@ -84,7 +84,7 @@ static class LoadBalancers
     // docker's words for a host port something else has: "port is already allocated" or "address already in use".
     public static int? BusyPort(string error)
     {
-        var match = System.Text.RegularExpressions.Regex.Match(error, @"(?:127\.0\.0\.1|0\.0\.0\.0)?:(\d+)[^\d]*(?:failed: port is already allocated|bind: address already in use|Only one usage)");
+        var match = System.Text.RegularExpressions.Regex.Match(error, @"(?:127\.0\.0\.1|0\.0\.0\.0):(\d+)(?:/tcp)?[^\d]*?(?:port is already allocated|address already in use|Only one usage)");
         return match.Success && int.TryParse(match.Groups[1].Value, out var port) ? port : null;
     }
 
