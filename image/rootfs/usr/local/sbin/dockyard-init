@@ -17,6 +17,12 @@ if ! grep -q ' /sys/fs/cgroup cgroup2 ' /proc/mounts; then
   mount -t cgroup2 cgroup2 /sys/fs/cgroup
 fi
 
+# Every kind node's kubelet and kube-proxy take inotify instances; the kernel's 128 runs out with a second cluster or a
+# restarted one, and kube-proxy then fails with "too many open files". Only ever raised.
+if [ "$(cat /proc/sys/fs/inotify/max_user_instances 2>/dev/null || echo 0)" -lt 8192 ]; then
+  echo 8192 > /proc/sys/fs/inotify/max_user_instances 2>/dev/null || true
+fi
+
 mkdir -p /var/run /var/lib/docker
 rm -f /var/run/docker.sock /var/run/docker.pid
 

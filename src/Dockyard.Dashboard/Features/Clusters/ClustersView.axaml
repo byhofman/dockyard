@@ -63,6 +63,13 @@
                 <TextBlock Classes="muted small" Text="{Binding NodesText}" TextAlignment="Right" />
               </StackPanel>
               <StackPanel Grid.Column="4" Classes="rowactions" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                <Button Classes="iconbtn" ToolTip.Tip="{Binding ToggleText}"
+                        Command="{Binding $parent[UserControl].((clu:ClustersViewModel)DataContext).ToggleRowCommand}" CommandParameter="{Binding}">
+                  <Panel>
+                    <PathIcon Data="{StaticResource IconStop}" IsVisible="{Binding IsRunning}" />
+                    <PathIcon Data="{StaticResource IconPlay}" IsVisible="{Binding !IsRunning}" />
+                  </Panel>
+                </Button>
                 <Button Classes="iconbtn danger" ToolTip.Tip="Delete (Del)"
                         Command="{Binding $parent[UserControl].((clu:ClustersViewModel)DataContext).DeleteRowCommand}" CommandParameter="{Binding}">
                   <PathIcon Data="{StaticResource IconDelete}" />
@@ -88,6 +95,12 @@
           </Grid>
           <TextBlock Classes="muted" Text="{Binding Selected.Summary, FallbackValue=''}" TextWrapping="Wrap" />
           <WrapPanel ItemSpacing="6" LineSpacing="6" Margin="0,4,0,0">
+            <Button Command="{Binding ToggleCommand}" ToolTip.Tip="Stops or starts its nodes; everything in the cluster stays">
+              <Panel>
+                <StackPanel Classes="label" IsVisible="{Binding Selected.IsRunning, FallbackValue=False}"><PathIcon Data="{StaticResource IconStop}" /><TextBlock Text="Stop" /></StackPanel>
+                <StackPanel Classes="label" IsVisible="{Binding !Selected.IsRunning, FallbackValue=False}"><PathIcon Data="{StaticResource IconPlay}" /><TextBlock Text="Start" /></StackPanel>
+              </Panel>
+            </Button>
             <Button Command="{Binding UseContextCommand}" ToolTip.Tip="Makes it the current context in your kubeconfig, adding it back if it went missing">
               <TextBlock Text="Use context" />
             </Button>

@@ -25,6 +25,8 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         DeleteRowCommand = new Command<KindCluster>(c => { AskDelete([c]); return Task.CompletedTask; });
         CopyKubeconfigCommand = new Command(CopyKubeconfig, () => HasKind && Selected is { IsRunning: true });
         UseContextCommand = new Command(UseContext, () => !IsBusy && HasKind && Selected is { IsRunning: true });
+        ToggleCommand = new Command(() => Selected is { } c ? Toggle(c) : Task.CompletedTask, () => !IsBusy && Selected is not null);
+        ToggleRowCommand = new Command<KindCluster>(c => IsBusy ? Task.CompletedTask : Toggle(c));
         OpenUrlCommand = new Command<PublishedPort>(p =>
         {
             try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(p.Url) { UseShellExecute = true })?.Dispose(); }
@@ -56,6 +58,8 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     public Command<KindCluster> DeleteRowCommand { get; }
     public Command CopyKubeconfigCommand { get; }
     public Command UseContextCommand { get; }
+    public Command ToggleCommand { get; }
+    public Command<KindCluster> ToggleRowCommand { get; }
     public Command<PublishedPort> OpenUrlCommand { get; }
     public Command OpenSharedFolderCommand { get; }
     public Command OpenSettingsCommand => Shell.SettingsCommand;
@@ -163,7 +167,23 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         DeleteCommand.Refresh();
         CopyKubeconfigCommand.Refresh();
         UseContextCommand.Refresh();
+        ToggleCommand.Refresh();
     }
+
+    // The nodes are containers, so a stopped cluster keeps everything in it. Its load balancer proxies stop and start with it.
+    Task Toggle(KindCluster cluster) => Run(cluster.IsRunning ? $"Stopping {cluster.Name}" : $"Starting {cluster.Name}", async client =>
+    {
+        var proxies = Session.Containers.Items.Where(i => i.Labels.GetValueOrDefault(LoadBalancers.ClusterLabel) == cluster.Name).Select(i => i.Id).ToList();
+        if (cluster.IsRunning)
+        {
+            await Task.WhenAll(proxies.Concat(cluster.Nodes.Select(n => n.Name)).Select(id => client.StopContainerAsync(id, timeoutSeconds: 30)));
+            Shell.ShowInfo($"{cluster.Name} is stopped; Start brings it back as it was");
+            return;
+        }
+        foreach (var node in cluster.StartOrder.Where(n => !n.IsRunning)) await client.StartContainerAsync(node.Name);
+        await Task.WhenAll(proxies.Select(id => client.StartContainerAsync(id)));
+        Shell.ShowInfo($"{cluster.Name} is starting; Kubernetes takes a minute to be ready");
+    });
 
     public static int Workers(string choice) => int.TryParse(choice, out var n) ? n : 0;
 
