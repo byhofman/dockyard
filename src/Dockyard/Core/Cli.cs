@@ -157,7 +157,7 @@ static class Cli
         {
             var active = host.ActiveEngine();
             foreach (var e in host.Engines)
-                log($"{(e.Id == active ? "*" : " ")} {e.Id}\t{e.Title}\t{(await host.IsRunning(e.Id) ? "running" : "stopped")}");
+                log($"{(e.Id == active ? "*" : " ")} {e.Id}\t{e.Title}\t{(await host.IsRunning(e.Id) || await Answers(e.Endpoint) ? "running" : "stopped")}");
             return 0;
         }
         var engine = args.FirstOrDefault() is { } id && host.Engines.Any(e => e.Id == id)
@@ -170,6 +170,19 @@ static class Cli
             default: throw new UsageException($"Unknown engine command: {verb}");
         }
         return 0;
+    }
+
+    // Outside the tray, which holds the Linux engine's relay on Windows, the engine runs when its endpoint answers.
+    static async Task<bool> Answers(string endpoint)
+    {
+        try
+        {
+            using var client = new Dockyard.Engine.DockerClient(Dockyard.Engine.Transport.DockerEndpoint.Parse(endpoint));
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            await client.PingAsync(timeout.Token);
+            return true;
+        }
+        catch (Exception e) when (e is HttpRequestException or IOException or OperationCanceledException or TimeoutException or Dockyard.Engine.EngineUnavailableException) { return false; }
     }
 
     static async Task<int> HttpsCommand(IEngineHost host, string state, Action<string> log)
