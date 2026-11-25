@@ -4,6 +4,7 @@
         xmlns:cont="using:Dockyard.Dashboard.Features.Containers"
         xmlns:res="using:Dockyard.Dashboard.Features.Resources"
         xmlns:clu="using:Dockyard.Dashboard.Features.Clusters"
+        xmlns:eng="using:Dockyard.Dashboard.Features.Engine"
         x:Class="Dockyard.Dashboard.Shell.MainWindow"
         x:DataType="shell:ShellViewModel"
         Title="Dockyard Dashboard"
@@ -26,6 +27,9 @@
     </DataTemplate>
     <DataTemplate DataType="res:DiskViewModel">
       <res:DiskView />
+    </DataTemplate>
+    <DataTemplate DataType="eng:EngineSettingsViewModel">
+      <eng:EngineSettingsView />
     </DataTemplate>
     <DataTemplate DataType="clu:ClustersViewModel">
       <clu:ClustersView />
@@ -159,6 +163,30 @@
           <Button Grid.Column="4" Classes="iconbtn" Command="{Binding SettingsCommand}" ToolTip.Tip="Engines, updates and settings">
             <PathIcon Data="{StaticResource IconSettings}" Width="18" Height="18" />
           </Button>
+        </Grid>
+      </Border>
+
+      <Border DockPanel.Dock="Bottom" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="14,4">
+        <Grid ColumnDefinitions="Auto,*">
+          <ProgressBar IsIndeterminate="True" IsVisible="{Binding Activity.IsWorking}" Width="60" MinWidth="60" Margin="0,0,10,0" VerticalAlignment="Center" />
+          <Button x:Name="ActivityButton" Grid.Column="1" Padding="0" Background="Transparent" BorderThickness="0" HorizontalAlignment="Left"
+                  Command="{Binding Activity.ToggleCommand}" ToolTip.Tip="Show or hide what the dashboard did" AutomationProperties.Name="Activity">
+            <TextBlock Classes="muted small" Text="{Binding Activity.Current}" TextTrimming="CharacterEllipsis" />
+          </Button>
+          <Popup Grid.Column="1" PlacementTarget="{Binding #ActivityButton}" Placement="TopEdgeAlignedLeft" VerticalOffset="-6"
+                 IsOpen="{Binding Activity.IsOpen, Mode=TwoWay}" IsLightDismissEnabled="True">
+            <Border Classes="searchmenu" Width="620" MaxHeight="340" Padding="12,10">
+              <ScrollViewer>
+                <ItemsControl ItemsSource="{Binding Activity.Lines}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="x:String">
+                      <SelectableTextBlock Classes="mono small" Text="{Binding}" TextWrapping="Wrap" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </Border>
+          </Popup>
         </Grid>
       </Border>
 

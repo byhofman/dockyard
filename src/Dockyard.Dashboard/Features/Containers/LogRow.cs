@@ -1,3 +1,6 @@
 namespace Dockyard.Dashboard.Features.Containers;
 
-sealed record LogRow(string Text, bool IsError);
+sealed record LogRow(AnsiLine Line, bool IsError)
+{
+    public string Text => Line.Text;
+}

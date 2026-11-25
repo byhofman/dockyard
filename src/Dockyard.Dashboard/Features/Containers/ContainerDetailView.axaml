@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ctl="using:Dockyard.Dashboard.Controls"
              xmlns:cont="using:Dockyard.Dashboard.Features.Containers"
              xmlns:controls="using:Dockyard.Dashboard.Controls"
              xmlns:files="using:Dockyard.Dashboard.Features.Files"
@@ -71,7 +72,7 @@
                    ScrollViewer.HorizontalScrollBarVisibility="Auto">
             <ListBox.ItemTemplate>
               <DataTemplate DataType="cont:LogRow">
-                <SelectableTextBlock Classes="mono" Classes.err="{Binding IsError}" Text="{Binding Text}" />
+                <ctl:AnsiTextBlock Classes="mono" Classes.err="{Binding IsError}" Line="{Binding Line}" />
               </DataTemplate>
             </ListBox.ItemTemplate>
           </ListBox>

@@ -30,6 +30,7 @@ sealed class ShellViewModel : Observable
             new Section("Networks", new NetworksViewModel(this, Session), Section.Resource("IconNetworks")),
             new Section("Clusters", new ClustersViewModel(this, Session), Section.Resource("IconClusters")),
             new Section("Disk", new DiskViewModel(this, Session), Section.Resource("IconDisk")),
+            new Section("Engine", new Features.Engine.EngineSettingsViewModel(this, Session), Section.Resource("IconSettings")),
         ];
         currentSection = Sections[0];
 
@@ -134,6 +135,8 @@ sealed class ShellViewModel : Observable
         Session.Stop();
     }
 
+    public ActivityLog Activity { get; } = new();
+
     public Dialog? Dialog { get => dialog; private set { if (Set(ref dialog, value)) Raise(nameof(HasDialog)); } }
     public bool HasDialog => dialog is not null;
 
@@ -141,6 +144,17 @@ sealed class ShellViewModel : Observable
     {
         if (dialog is { IsWorking: true }) return;
         next.ShowError = ShowError;
+        IDisposable? working = null;
+        next.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Dialog.Progress) && next.Progress is { } step) Activity.Note(step);
+            else if (e.PropertyName == nameof(Dialog.IsWorking))
+            {
+                if (next.IsWorking) working ??= Activity.Working(next.Title);
+                else { working?.Dispose(); working = null; }
+            }
+        };
+        next.Closed += () => working?.Dispose();
         next.Closed += () => { if (Dialog == next) Dialog = null; };
         Dialog = next;
     }
@@ -197,6 +211,7 @@ sealed class ShellViewModel : Observable
 
     void Show(Toast toast)
     {
+        Activity.Note(toast.Message);
         Toasts.Add(toast);
         DispatcherTimer.RunOnce(() => Toasts.Remove(toast), TimeSpan.FromSeconds(6));
     }

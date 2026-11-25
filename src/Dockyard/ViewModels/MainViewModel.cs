@@ -198,6 +198,11 @@ sealed class MainViewModel : Observable
     public bool IsBusy => busy is not null;
     public string Status { get => status; private set => Set(ref status, value); }
     public string LogText => log.ToString();
+    // The log stays out of the way: the footer shows the step at hand, and a click on it opens the rest.
+    bool showLog;
+    public bool ShowLog { get => showLog; set => Set(ref showLog, value); }
+    public Command ToggleLogCommand => toggleLog ??= new Command(() => { ShowLog = !ShowLog; return Task.CompletedTask; });
+    Command? toggleLog;
 
     public bool StopOtherOnSwitch
     {
@@ -522,6 +527,7 @@ sealed class MainViewModel : Observable
             return;
         }
         log.AppendLine(line);
+        if (Busy is not null) Status = line;
         Raise(nameof(LogText));
     }
 

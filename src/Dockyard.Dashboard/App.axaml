@@ -173,6 +173,7 @@
 
   <Application.Styles>
     <FluentTheme />
+    <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
 
     <Style Selector="Window">
       <Setter Property="Background" Value="{DynamicResource Bg}" />

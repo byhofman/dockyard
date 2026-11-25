@@ -62,6 +62,7 @@ abstract class SectionViewModel : Observable, ISearchable
     protected async Task Run(string what, Func<Task> action)
     {
         Busy = what;
+        using var working = Shell.Activity.Working(what);
         try { await action(); }
         catch (Exception ex) { Shell.ShowError(ex.Message); }
         finally { Busy = null; }
