@@ -45,7 +45,7 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm)
         log($"{Paths.AppName} starts at login ({MacLayout.LaunchAgent})");
     }
 
-    public async Task Uninstall(Action<string> log, bool removeData, IEngineHost host)
+    public async Task Uninstall(Action<string> log, bool removeData, bool silent, IEngineHost host)
     {
         await vm.Stop();
         var bundles = MacLayout.InstalledBundles(File.Exists(MacLayout.LaunchAgent) ? await File.ReadAllTextAsync(MacLayout.LaunchAgent) : null, MacLayout.UserApplications);
@@ -59,7 +59,7 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm)
             await runner.Run(MacLayout.DockerCli, "context", "use", MacLayout.ContextToRestore(previous));
             await runner.Run(MacLayout.DockerCli, "context", "rm", "-f", MacLayout.Context);
         }
-        await Https.Disable(host, log);
+        await Https.Disable(host, log, silent);
         await CredentialStore.Forget(MacLayout.CredentialStoreMarker, MacLayout.CredentialHelper, log);
         await EngineConfig.ApplyClientProxy("unix://" + MacLayout.DockerSocket, null);
         UnlinkUserSocket();

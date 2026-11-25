@@ -86,7 +86,7 @@ sealed class MainViewModel : Observable
         }));
         DisableHttpsCommand = Cmd(() => Run("Turning off HTTPS for container domains", async () =>
         {
-            await Https.Disable(host, Log);
+            await Https.Disable(host, Log, silent: false);
             settings.HttpsEnabled = false;
             Raise(nameof(HttpsEnabled), nameof(HttpsDisabled));
         }));
@@ -463,7 +463,7 @@ sealed class MainViewModel : Observable
 
     Task Uninstall() => Run("Uninstalling", async () =>
     {
-        await host.Uninstall(Log, RemoveData);
+        await host.Uninstall(Log, RemoveData, silent: false);
         IsInstalled = false;
         Log(RemoveData ? "Dockyard was removed, with its images and containers." : "Dockyard was removed. Images and containers were kept.");
         if (!IsSetupMode) ShutdownRequested?.Invoke();

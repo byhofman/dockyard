@@ -14,7 +14,7 @@ static class TrayLink
 
     public static async Task<bool> ShowSettings(IEngineHost host, TimeSpan wait)
     {
-        var settings = new TrayCommand(TrayCommandKind.Settings).ToString();
+        var settings = new TrayCommand(TrayCommandKind.Settings, Assets: Updates.LocalAssets is { } folder ? Path.GetFullPath(folder) : null).ToString();
         if (await Task.Run(() => LocalPipe.TrySend(LocalPipe.TrayName, settings))) return true;
         host.StartApp();
         var until = DateTime.UtcNow + wait;

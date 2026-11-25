@@ -115,10 +115,10 @@ sealed class LinuxHost : IEngineHost
 
     public string DoneMessage(bool reboot) => "Done. Dockyard and the docker command are ready.";
 
-    public Task Uninstall(Action<string> log, bool removeData) => setup.Uninstall(log, removeData, this);
+    public Task Uninstall(Action<string> log, bool removeData, bool silent) => setup.Uninstall(log, removeData, silent, this);
 
     public void ReleaseResources() { }
 
     public Task<bool> TrustCa(Action<string> log, string certificateFile, bool silent) => trust.TrustCa(log, certificateFile);
-    public Task UntrustCa(Action<string> log, string certificateFile) => trust.UntrustCa(log, certificateFile);
+    public Task UntrustCa(Action<string> log, string certificateFile, bool silent) => trust.UntrustCa(log, certificateFile);
 }

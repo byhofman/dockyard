@@ -52,7 +52,7 @@ sealed class FakeHost : IEngineHost
         return Task.FromResult(false);
     }
 
-    public Task Uninstall(Action<string> log, bool removeData)
+    public Task Uninstall(Action<string> log, bool removeData, bool silent)
     {
         Calls.Add($"uninstall data={removeData}");
         Installed = false;

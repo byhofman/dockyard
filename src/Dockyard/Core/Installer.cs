@@ -16,7 +16,7 @@ static class Installer
         {
             if (options.Action == SetupAction.Uninstall)
             {
-                await host.Uninstall(log, options.RemoveData);
+                await host.Uninstall(log, options.RemoveData, silent: true);
                 log(options.RemoveData ? "Dockyard was removed, with its images and containers." : "Dockyard was removed. Images and containers were kept.");
                 return Ok;
             }

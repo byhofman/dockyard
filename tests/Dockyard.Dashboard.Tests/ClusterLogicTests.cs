@@ -52,6 +52,16 @@ public sealed class ClusterLogicTests
     }
 
     [Fact]
+    public void A_cluster_starts_with_its_control_plane_and_offers_start_until_every_node_runs()
+    {
+        var cluster = new KindCluster("dev", [new("dev-worker", "worker", "exited"), new("dev-control-plane", "control-plane", "exited"), new("dev-worker2", "worker", "running")], "v1.34.0", 6443);
+
+        Assert.Equal(["dev-control-plane", "dev-worker", "dev-worker2"], cluster.StartOrder.Select(n => n.Name));
+        Assert.Equal("Start", cluster.ToggleText);
+        Assert.Equal("Stop", (cluster with { Nodes = cluster.Nodes.Select(n => n with { State = "running" }).ToList() }).ToggleText);
+    }
+
+    [Fact]
     public void A_stopped_node_makes_the_cluster_not_running_and_without_an_api_server()
     {
         var cluster = KindClusters.From([Node("dev", "control-plane", state: "exited"), Node("dev", "worker")]).Single();

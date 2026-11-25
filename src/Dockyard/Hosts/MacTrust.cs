@@ -20,13 +20,20 @@ sealed class MacTrust(ICommandRunner runner)
         return true;
     }
 
-    public async Task UntrustCa(Action<string> log, string certificateFile)
+    public async Task UntrustCa(Action<string> log, string certificateFile, bool silent)
     {
         if (!File.Exists(certificateFile)) return;
         var thumbprint = LocalCa.Thumbprint(await File.ReadAllTextAsync(certificateFile));
-        // Asking to remove what is not there can still raise an approval dialog, so it is looked up first. Only the certificate
-        // goes: remove-trusted-cert waits for an approval dialog, even as root and without a screen, so it hung every headless
-        // uninstall. The trust setting left behind is for this certificate's hash alone, and it and its key are gone.
+        // Changing trust settings waits for an approval dialog, even as root and without a screen, which hung every headless
+        // uninstall. So they go only where a person can answer; silently only the certificate goes, and the setting left
+        // behind names a certificate and key that are gone.
+        if (silent)
+        {
+            if (await TrustedIn(admin: true) || await TrustedIn(admin: false))
+                log("macOS keeps a trust setting for the removed certificate: removing it needs a person to approve. It vouches for nothing now.");
+        }
+        else await RemoveTrustSettings(certificateFile);
+        // Asking to remove what is not there can still raise an approval dialog, so it is looked up first.
         if (await Holds(MacLayout.LoginKeychain, thumbprint))
         {
             await runner.Run("/usr/bin/security", "delete-certificate", "-Z", thumbprint, MacLayout.LoginKeychain);
@@ -43,6 +50,23 @@ sealed class MacTrust(ICommandRunner runner)
                 throw new InvalidOperationException($"Dockyard's certificate is still in {keychain}. Nothing was removed, so this can be tried again.");
         log("Dockyard's certificate is out of this Mac's trust store");
     }
+
+    // Trust settings live apart from the certificate, keyed by its hash, so they go first while the file still names them. What
+    // is still trusted afterwards, because nobody approved, stops here before anything else goes.
+    async Task RemoveTrustSettings(string certificateFile)
+    {
+        foreach (var admin in new[] { true, false })
+            if (await TrustedIn(admin))
+                await runner.RunWithin(PromptLimit, "/usr/bin/security", admin ? ["remove-trusted-cert", "-d", certificateFile] : ["remove-trusted-cert", certificateFile]);
+        foreach (var admin in new[] { true, false })
+            if (await TrustedIn(admin))
+                throw new InvalidOperationException($"macOS still trusts Dockyard's certificate in the {(admin ? "administrator's" : "user's")} trust settings, as removing it was not approved. Nothing was removed, so this can be tried again.");
+    }
+
+    static readonly TimeSpan PromptLimit = TimeSpan.FromMinutes(2);
+
+    async Task<bool> TrustedIn(bool admin) =>
+        (await runner.Run("/usr/bin/security", admin ? ["dump-trust-settings", "-d"] : ["dump-trust-settings"])).Output.Contains(LocalCa.SubjectName, StringComparison.Ordinal);
 
     async Task<bool> Holds(string keychain, string thumbprint) =>
         (await runner.Run("/usr/bin/security", "find-certificate", "-a", "-Z", "-c", LocalCa.SubjectName, keychain)).Output.Contains(thumbprint, StringComparison.OrdinalIgnoreCase);

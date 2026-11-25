@@ -77,10 +77,12 @@ public sealed class PrototypeScreens
             Call(vm, "Recompute");
             vm.Selected = vm.Rows[0];
             Set(vm, "Files", new FileBrowserViewModel(VolumeFiles(), _ => { }));
+            vm.SelectedTab = VolumesViewModel.FilesTab;
             Call(vm, "Recompute");
             Assert.True(vm.HasFiles);
             vm.Selected = vm.Rows[1];
             Assert.False(vm.HasFiles);
+            Assert.Equal(0, vm.SelectedTab);
 
             var images = new ImagesViewModel(new ShellViewModel(), Session("dockyard", "unix:///nonexistent.sock"));
             Set(images, "images", new List<ImageSummary> { new() { Id = "sha256:" + new string('a', 64), RepoTags = ["contoso/web:2.4"] }, new() { Id = "sha256:" + new string('b', 64), RepoTags = ["fabrikam/worker:1.0"] } });
@@ -151,6 +153,7 @@ public sealed class PrototypeScreens
                 {
                     var files = new FileBrowserViewModel(VolumeFiles(), _ => { }, () => Task.CompletedTask);
                     Set(vm, "Files", files);
+                    vm.SelectedTab = VolumesViewModel.FilesTab;
                     files.EnsureLoaded();
                     Dispatcher.UIThread.RunJobs();
                 }

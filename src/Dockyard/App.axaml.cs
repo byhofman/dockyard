@@ -98,7 +98,14 @@ public partial class App : Application
         switch (command.Kind)
         {
             case TrayCommandKind.Show: OpenDashboardOrWindow(); break;
-            case TrayCommandKind.Settings: ShowWindow(); break;
+            case TrayCommandKind.Settings:
+                if (command.Assets is { } folder && Directory.Exists(folder) && Updates.LocalAssets != folder)
+                {
+                    Updates.LocalAssets = folder;
+                    vm.Note($"Installs and updates use the files in {folder}, as setup was given them");
+                }
+                ShowWindow();
+                break;
             case TrayCommandKind.Start: _ = vm.StartEngine(command.Engine!); break;
             case TrayCommandKind.Switch: _ = SwitchAndReport(command.Engine!); break;
         }

@@ -45,7 +45,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
     public string CaDirectory => Path.Combine(MacLayout.DataDir, "ca");
     public ICaKeyStore CaKeys => new KeychainCaKey(MacLayout.LoginKeychain);
     public Task<bool> TrustCa(Action<string> log, string certificateFile, bool silent) => trust.TrustCa(log, certificateFile, silent);
-    public Task UntrustCa(Action<string> log, string certificateFile) => trust.UntrustCa(log, certificateFile);
+    public Task UntrustCa(Action<string> log, string certificateFile, bool silent) => trust.UntrustCa(log, certificateFile, silent);
 
     public bool HasEngineConfiguration => true;
     public string? OwnSocket => MacLayout.DockerSocket;
@@ -117,7 +117,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
 
     public string DoneMessage(bool reboot) => "Done. Dockyard runs in the menu bar.";
 
-    public Task Uninstall(Action<string> log, bool removeData) => Setup.Uninstall(log, removeData, this);
+    public Task Uninstall(Action<string> log, bool removeData, bool silent) => Setup.Uninstall(log, removeData, silent, this);
 
     public void ReleaseResources() => vm.ReleaseResources();
 }

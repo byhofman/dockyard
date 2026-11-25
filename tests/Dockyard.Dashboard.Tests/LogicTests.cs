@@ -95,6 +95,13 @@ public sealed class LogicTests
     }
 
     [Theory]
+    [InlineData("\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mgraphical.target\x1b[0m - Graphical Interface.", "  OK  ] Reached target graphical.target - Graphical Interface.")]
+    [InlineData("\x1b]0;my title\x07ready\x1b[2K\r", "ready")]
+    [InlineData("plain\ttext", "plain\ttext")]
+    public void Log_lines_lose_the_terminals_colours_and_control_characters(string line, string shown) =>
+        Assert.Equal(shown, TerminalText.Plain(line));
+
+    [Theory]
     [InlineData("show", "Show", null)]
     [InlineData("settings", "Settings", null)]
     [InlineData("start linux", "Start", "linux")]
@@ -113,6 +120,17 @@ public sealed class LogicTests
     [InlineData("start mac")]
     [InlineData("rm -rf /")]
     public void Rejects_invalid_tray_commands(string line) => Assert.Null(TrayCommand.Parse(line));
+
+    [Fact]
+    public void Settings_carries_setups_assets_folder_spaces_and_all_but_only_a_full_path()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "my assets");
+        var line = new TrayCommand(TrayCommandKind.Settings, Assets: folder).ToString();
+
+        Assert.Equal($"settings {folder}", line);
+        Assert.Equal(new TrayCommand(TrayCommandKind.Settings, Assets: folder), TrayCommand.Parse(line));
+        Assert.Null(TrayCommand.Parse("settings assets"));
+    }
 
     [Fact]
     public void Tray_command_from_args()
