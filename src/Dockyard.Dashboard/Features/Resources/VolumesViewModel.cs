@@ -111,7 +111,9 @@ sealed class VolumesViewModel : SelectableSection<VolumeRow>
 
     void OpenLocation()
     {
-        if (Location?.Path is not { } path || Selected is not { } volume) return;
+        if (Location?.Path is not { } root || Selected is not { } volume) return;
+        var path = FolderFor(root, Files?.Directory);
+        if (!Features.Files.FileManager.CanOpen(path)) path = root;
         if (!Features.Files.FileManager.CanOpen(path))
         {
             Shell.ShowError(Host == HostOs.Linux
@@ -121,6 +123,14 @@ sealed class VolumesViewModel : SelectableSection<VolumeRow>
         }
         try { Features.Files.FileManager.Open(path); }
         catch (Exception e) when (e is IOException or System.ComponentModel.Win32Exception or InvalidOperationException) { Shell.ShowError($"{volume.DisplayName}: {e.Message}"); }
+    }
+
+    // The folder the files viewer is in, under the volume's own folder on this computer.
+    internal static string FolderFor(string location, string? browsing)
+    {
+        if (browsing is null || !browsing.StartsWith(Mount, StringComparison.Ordinal)) return location;
+        var relative = browsing[Mount.Length..].Trim('/');
+        return relative.Length == 0 ? location : Path.Combine([location, .. relative.Split('/')]);
     }
 
     // Into a new folder inside the one picked, never over anything already there; then shown in the file manager.

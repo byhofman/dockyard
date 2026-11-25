@@ -106,5 +106,16 @@ public sealed class VolumeAndImageLogicTests
         Assert.DoesNotContain(';', string.Concat(command.Args));
     }
 
+    [Fact]
+    public void From_the_files_viewer_the_file_manager_opens_the_folder_being_looked_at()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "volumes", "contoso-db", "_data");
+
+        Assert.Equal(root, VolumesViewModel.FolderFor(root, null));
+        Assert.Equal(root, VolumesViewModel.FolderFor(root, "/volume"));
+        Assert.Equal(Path.Combine(root, "pg", "base"), VolumesViewModel.FolderFor(root, "/volume/pg/base"));
+        Assert.Equal(root, VolumesViewModel.FolderFor(root, "/elsewhere/pg"));
+    }
+
     static string Decode(string base64) => System.Text.Encoding.Unicode.GetString(Convert.FromBase64String(base64));
 }

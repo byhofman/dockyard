@@ -59,9 +59,11 @@
             BorderBrush="{DynamicResource Line}" BorderThickness="1,0,0,0">
       <Panel>
       <DockPanel IsVisible="{Binding HasFiles}">
-        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="16,14,16,0">
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto" Margin="16,14,16,0">
           <TextBlock Classes="title" Text="{Binding Selected.DisplayName, FallbackValue=''}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-          <Button Grid.Column="1" Classes="iconbtn" Command="{Binding CloseFilesCommand}" ToolTip.Tip="Close the files">
+          <Button Grid.Column="1" IsVisible="{Binding CanOpenLocation}" Command="{Binding OpenLocationCommand}" Content="{Binding OpenLocationText}"
+                  Margin="8,0,6,0" ToolTip.Tip="The folder you are looking at, where it is, in your file manager" />
+          <Button Grid.Column="2" Classes="iconbtn" Command="{Binding CloseFilesCommand}" ToolTip.Tip="Close the files">
             <PathIcon Data="{StaticResource IconClose}" />
           </Button>
         </Grid>
