@@ -32,6 +32,11 @@
             <Button Classes="primary" Content="{Binding UpdateText}" AutomationProperties.AutomationId="{Binding UpdateId}" Command="{Binding UpdateCommand}" IsVisible="{Binding IsAvailable}" />
             <Button Classes="primary" Content="Add" AutomationProperties.AutomationId="{Binding AddId}" Command="{Binding AddCommand}" IsVisible="{Binding CanAdd}" />
             <Button Classes="danger" Content="Remove" AutomationProperties.AutomationId="{Binding RemoveId}" Command="{Binding RemoveCommand}" IsVisible="{Binding CanRemove}" />
+            <Panel IsVisible="{Binding IsApp}">
+              <Button Classes="danger" Content="Uninstall…" Flyout="{StaticResource ConfirmUninstall}"
+                      DataContext="{Binding $parent[Window].DataContext}" x:DataType="vm:MainViewModel" IsVisible="{Binding ShowManage}"
+                      ToolTip.Tip="Removes Dockyard with its engines" />
+            </Panel>
           </StackPanel>
         </Grid>
                     </Border>
@@ -120,10 +125,12 @@
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
-              <CheckBox IsChecked="{Binding UsePackageManager}" ToolTip.Tip="Off: Dockyard keeps its own copies, at the versions it was tested with, and updates them itself.">
-                <TextBlock Text="{x:Static vm:MainViewModel.PackageManagerText}" TextWrapping="Wrap" />
-              </CheckBox>
-              <CheckBox IsChecked="{Binding KubectlShell}" ToolTip.Tip="A marked block in your shell's profile, which Dockyard takes out again when this is off.">
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBlock Text="Install docker, kind, kubectl and helm with" VerticalAlignment="Center" />
+                <ComboBox ItemsSource="{x:Static vm:MainViewModel.ToolSources}" SelectedIndex="{Binding ToolSource}" MinWidth="160"
+                          ToolTip.Tip="A package manager updates them with everything else. Direct download: Dockyard keeps its own copies, at the versions it was tested with, and updates them itself." />
+              </StackPanel>
+              <CheckBox IsChecked="{Binding KubectlShell}" ToolTip.Tip="{x:Static vm:MainViewModel.ShellProfilesText}">
                 <TextBlock Text="Set up kubectl in my shell: k, completion, $do for --dry-run=client -o yaml and $now for --force --grace-period 0" TextWrapping="Wrap" />
               </CheckBox>
               <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="{Binding RequiredSummary}" />
@@ -208,10 +215,7 @@
                 <TextBlock Grid.Column="3" Classes="muted" FontSize="12" Text="Status" />
               </Grid>
               <Border BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="18,12,18,6">
-                <Grid ColumnDefinitions="*,Auto">
-                  <TextBlock Classes="h2" Text="DOCKYARD" VerticalAlignment="Center" />
-                  <Button Grid.Column="1" Classes="danger" Content="Uninstall Dockyard…" Flyout="{StaticResource ConfirmUninstall}" IsVisible="{Binding ShowManage}" />
-                </Grid>
+                <TextBlock Classes="h2" Text="DOCKYARD" />
               </Border>
               <ItemsControl ItemsSource="{Binding DockyardComponents}" ItemTemplate="{StaticResource ComponentRow}" />
               <Border BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="18,12,18,6">
@@ -237,9 +241,12 @@
               <ToggleSwitch IsChecked="{Binding StopOtherOnSwitch}" IsVisible="{Binding HasEngineSwitch}"
                             OnContent="Stop the other engine when switching" OffContent="Stop the other engine when switching" />
               <ToggleSwitch Grid.Row="1" IsChecked="{Binding StartActiveAtLogon}" OnContent="Start the active engine at logon" OffContent="Start the active engine at logon" />
-              <ToggleSwitch Grid.Row="2" IsChecked="{Binding UsePackageManager}" ToolTip.Tip="Applies the next time a tool is added or updated, or when the wizard runs again."
-                            OnContent="{x:Static vm:MainViewModel.PackageManagerText}" OffContent="{x:Static vm:MainViewModel.PackageManagerText}" />
-              <ToggleSwitch Grid.Row="3" IsChecked="{Binding KubectlShell}" ToolTip.Tip="A marked block in your shell's profile: k, completion, $do and $now. Off takes it out."
+              <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="0,4"
+                    ToolTip.Tip="Applies the next time a tool is added or updated, or when the wizard runs again.">
+                <TextBlock Text="Install docker, kind, kubectl and helm with" VerticalAlignment="Center" />
+                <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:MainViewModel.ToolSources}" SelectedIndex="{Binding ToolSource}" MinWidth="160" />
+              </Grid>
+              <ToggleSwitch Grid.Row="3" IsChecked="{Binding KubectlShell}" ToolTip.Tip="{x:Static vm:MainViewModel.ShellProfilesText}"
                             OnContent="Set up kubectl in my shell" OffContent="Set up kubectl in my shell" />
             </Grid>
           </Border>

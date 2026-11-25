@@ -218,7 +218,7 @@ sealed class MainViewModel : Observable
         {
             settings.UsePackageManager = value;
             if (IsInstalled) settings.Save();
-            Raise(nameof(UsePackageManager));
+            Raise(nameof(UsePackageManager), nameof(ToolSource));
         }
     }
 
@@ -237,8 +237,22 @@ sealed class MainViewModel : Observable
         }
     }
 
-    public static string PackageManagerText =>
-        $"Install docker, kind, kubectl and helm with {(OperatingSystem.IsWindows() ? "winget" : OperatingSystem.IsMacOS() ? "Homebrew" : "apt or dnf")}, so they update with everything else";
+    public static string ShellProfilesText =>
+        "A marked block with k, completion, $do and $now, which Dockyard takes out again when this is off; in " +
+        (OperatingSystem.IsWindows() ? "your PowerShell 7 and Windows PowerShell profiles, and Git Bash's .bashrc when you have one"
+            : OperatingSystem.IsMacOS() ? "your .zshrc" : "your .bashrc, and .zshrc when you have one");
+
+    public static string[] ToolSources { get; } =
+    [
+        OperatingSystem.IsWindows() ? "winget" : OperatingSystem.IsMacOS() ? "Homebrew" : "apt / dnf",
+        "Direct download",
+    ];
+
+    public int ToolSource
+    {
+        get => UsePackageManager ? 0 : 1;
+        set { UsePackageManager = value == 0; Raise(nameof(ToolSource)); }
+    }
 
     public bool StartActiveAtLogon
     {
