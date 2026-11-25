@@ -9,10 +9,10 @@ fail() { printf '  FAIL %s\n' "$1"; exit 1; }
 
 echo "== start"
 start=$(date +%s)
-"$dir/dockyard-vm" run > /tmp/dockyard-vm.log 2>&1 &
+"$dir/dockyard-host" run > /tmp/dockyard-host.log 2>&1 &
 vm=$!
 until $docker version >/dev/null 2>&1; do
-  [ $(( $(date +%s) - start )) -lt 60 ] || fail "engine not ready after 60 s (see /tmp/dockyard-vm.log, ~/.dockyard/logs/vm-console.log)"
+  [ $(( $(date +%s) - start )) -lt 60 ] || fail "engine not ready after 60 s (see /tmp/dockyard-host.log, ~/.dockyard/logs/vm-console.log)"
   sleep 0.5
 done
 elapsed=$(( $(date +%s) - start ))

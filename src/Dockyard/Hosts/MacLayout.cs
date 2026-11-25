@@ -57,11 +57,54 @@ static class MacLayout
         : Path.Combine(InstallLocation(AppContext.BaseDirectory, UserApplications), "Contents", "MacOS");
 
     public static string InstalledExe => Path.Combine(AppBase, "Dockyard");
-    public static string Helper => Path.Combine(AppBase, "dockyard-vm");
+    public static string Helper => Path.Combine(AppBase, "dockyard-host");
     public static string Assets => Directory.Exists(Path.Combine(AppBase, "..", "Resources", "vm"))
         ? Path.GetFullPath(Path.Combine(AppBase, "..", "Resources", "vm"))
         : Path.Combine(AppBase, "vm");
     public static string LaunchAgent => Path.Combine(Home, "Library", "LaunchAgents", LaunchAgentLabel + ".plist");
+
+    // dockyard-host runs the VM under launchd, so the engine does not depend on the Toolbox being open. It is started on
+    // demand, or at login when the active engine starts then, and launchd restarts it only when it failed: a stop exits 0.
+    public const string HostLabel = "com.byhofman.dockyard.host";
+    public static string HostAgent => Path.Combine(Home, "Library", "LaunchAgents", HostLabel + ".plist");
+    public static string HostLog => Path.Combine(Home, ".dockyard", "logs", "host.log");
+
+    public static string HostAgentPlist(string helper, string config, bool atLogin) => $"""
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>Label</key>
+            <string>{HostLabel}</string>
+            <key>ProgramArguments</key>
+            <array>
+                <string>{Escape(helper)}</string>
+                <string>run</string>
+                <string>--config</string>
+                <string>{Escape(config)}</string>
+            </array>
+            <key>RunAtLoad</key>
+            <{(atLogin ? "true" : "false")}/>
+            <key>KeepAlive</key>
+            <dict>
+                <key>SuccessfulExit</key>
+                <false/>
+            </dict>
+            <key>StandardErrorPath</key>
+            <string>{Escape(HostLog)}</string>
+            <key>ProcessType</key>
+            <string>Interactive</string>
+        </dict>
+        </plist>
+        """;
+
+    // bootout first only when the plist changed: a loaded job keeps the definition it was loaded with.
+    public static string StartHost(bool changed) =>
+        (changed ? $"launchctl bootout gui/$(id -u)/{HostLabel} 2>/dev/null; " : "")
+        + $"launchctl bootstrap gui/$(id -u) {Quote(HostAgent)} 2>/dev/null; launchctl kickstart gui/$(id -u)/{HostLabel}";
+    public static string RemoveHost => $"launchctl bootout gui/$(id -u)/{HostLabel} 2>/dev/null; rm -f {Quote(HostAgent)}";
+
+    static string Quote(string s) => "'" + s.Replace("'", "'\\''") + "'";
 
     public static string LaunchAgentPlist(string exe) => $"""
         <?xml version="1.0" encoding="UTF-8"?>

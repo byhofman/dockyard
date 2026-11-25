@@ -49,6 +49,7 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
     public async Task Uninstall(Action<string> log, bool removeData, bool silent, IEngineHost host)
     {
         await vm.Stop();
+        await runner.Run("/bin/sh", "-c", MacLayout.RemoveHost);
         var bundles = MacLayout.InstalledBundles(File.Exists(MacLayout.LaunchAgent) ? await File.ReadAllTextAsync(MacLayout.LaunchAgent) : null, MacLayout.UserApplications);
         var own = MacLayout.Bundle(AppContext.BaseDirectory);
         foreach (var bundle in bundles.Where(b => b != own))

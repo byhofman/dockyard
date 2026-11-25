@@ -64,7 +64,7 @@ if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
   grep -qx "nameserver $upstream" /etc/dockyard/dns-upstreams && ok "in place of the server it named, which the agent asks" || fail "kept servers: $(cat /etc/dockyard/dns-upstreams 2>&1)"
   docker version >/dev/null
   sleep 2
-  systemctl is-active --quiet dockyard-agent.service && ok "the agent runs with the engine" || fail "agent: $(systemctl status --no-pager dockyard-agent.service 2>&1 | tail -5)"
+  systemctl is-active --quiet dockyard-host.service && ok "the agent runs with the engine" || fail "agent: $(systemctl status --no-pager dockyard-host.service 2>&1 | tail -5)"
   sudo iptables -S DOCKYARD-INPUT >/dev/null 2>&1 && ok "the agent's chain is in place" || fail "no DOCKYARD-INPUT chain"
   ip addr show lo | grep -q 198.19.250.1 && ok "and its address on lo" || fail "lo: $(ip addr show lo)"
   d="$(mktemp -d)"; echo from-the-host > "$d/marker"
@@ -106,6 +106,9 @@ if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
   docker run -d --name e2e-web nginx:alpine >/dev/null
   docker run -d --name e2e-custom -l dockyard.port=8099 alpine:3.24 sh -c 'while :; do printf "HTTP/1.0 200 OK\r\n\r\nfrom-8099" | nc -l -p 8099 >/dev/null; done' >/dev/null
   sleep 3
+  for service in dockyard-dns dockyard-proxy dockyard-etcd; do
+    [ "$(docker inspect -f '{{.State.Running}} {{index .Config.Labels "dockyard.service"}}' "$service" 2>/dev/null)" = "true ${service#dockyard-}" ] && ok "$service runs in the Dockyard group" || fail "$service: $(docker ps -a --filter name=$service 2>&1 | tail -1)"
+  done
   resolvectl query e2e-web.dockyard.internal | grep -q 127.77.0.1 && ok "the name resolves on this machine" || fail "resolve: $(resolvectl query e2e-web.dockyard.internal 2>&1)"
   [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 http://e2e-web.dockyard.internal/)" = 200 ] && ok "http reaches it by name" || fail "http by name"
   [ "$(curl -s --max-time 15 http://e2e-custom.dockyard.internal/)" = from-8099 ] && ok "the label picks the port" || fail "label port"
@@ -225,7 +228,7 @@ run --silent --uninstall
 check "app removed" missing "$app_dir/dockyard-toolbox"
 check "setup undone" missing "$marker"
 if [ "$container" -eq 0 ]; then
-  check "the agent is gone" missing /etc/systemd/system/dockyard-agent.service
+  check "the agent is gone" missing /etc/systemd/system/dockyard-host.service
   [ -n "${WIZARD:-}" ] && check "kind is gone" missing /usr/local/bin/kind
   check "the CA is out of the trust store" missing /usr/local/share/ca-certificates/dockyard-local-ca.crt
   if grep -rl "Dockyard Local CA" /etc/ssl/certs >/dev/null 2>&1; then fail "the CA stayed in the system's bundle"; else ok "and out of the system's bundle"; fi

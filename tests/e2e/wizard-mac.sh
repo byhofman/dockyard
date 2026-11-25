@@ -30,7 +30,7 @@ stop_engine() {
   while [ -S "$home/.dockyard/run/vm.sock" ] && [ $i -lt 60 ]; do i=$((i+1)); sleep 1; done
 }
 start_engine() {
-  "$macos/dockyard-vm" run --config "$home/.dockyard/vm.json" >/dev/null 2>&1 &
+  "$macos/dockyard-host" run --config "$home/.dockyard/vm.json" >/dev/null 2>&1 &
   i=0
   until "$docker" version >/dev/null 2>&1; do
     i=$((i+1)); [ $i -lt 120 ] || fail "the engine did not start"; sleep 1
@@ -76,7 +76,7 @@ mkdir -p "$home/.config/Dockyard"
 printf '{"UsePackageManager": false}\n' > "$home/.config/Dockyard/settings.json"
 run --silent --no-dashboard --no-start
 check "app in place" test -x "$macos/Dockyard"
-check "the VM helper too" test -x "$macos/dockyard-vm"
+check "the VM helper too" test -x "$macos/dockyard-host"
 check "no dashboard" missing "$macos/Dockyard Dashboard"
 check "no dashboard libraries" sh -c "! ls '$macos'/*.dylib >/dev/null 2>&1"
 check "docker CLI" test -x "$docker"
@@ -84,7 +84,7 @@ check "VM prepared" test -f "$home/.dockyard/vm.json"
 if sed 's#\\/#/#g' "$home/.dockyard/vm.json" | grep -q "$app/Contents/Resources/vm/kernel"; then ok "vm.json points at the installed app, not at the download"; else fail "vm.json: $(cat "$home/.dockyard/vm.json")"; fi
 if grep -q "$macos/Dockyard" "$home/Library/LaunchAgents/com.byhofman.dockyard.plist"; then ok "login item points at the installed app"; else fail "login item"; fi
 if [ "$("$docker" context show)" = dockyard ]; then ok "docker context selected"; else fail "docker context"; fi
-if codesign -d --entitlements - "$macos/dockyard-vm" 2>/dev/null | grep -q com.apple.security.virtualization; then ok "the helper kept its entitlement"; else fail "entitlement"; fi
+if codesign -d --entitlements - "$macos/dockyard-host" 2>/dev/null | grep -q com.apple.security.virtualization; then ok "the helper kept its entitlement"; else fail "entitlement"; fi
 if "$macos/Dockyard" --version >/dev/null; then ok "the installed app still starts after re-signing"; else fail "--version"; fi
 
 if [ -n "${BOOT:-}" ]; then

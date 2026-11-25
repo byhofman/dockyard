@@ -37,12 +37,12 @@ sealed class MacVm(ICommandRunner runner, Func<bool>? ping = null, Func<bool>? h
                 // Keeps vm.json on this app's kernel after the app moved, and the root image's modules matching that kernel after an update.
                 await Prepare(_ => { });
                 await WriteEngineConfig();
-                vm = runner.Spawn(MacLayout.Helper, "run", "--config", MacLayout.VmConfig);
+                if (!await StartHost()) vm = runner.Spawn(MacLayout.Helper, "run", "--config", MacLayout.VmConfig);
             }
             var process = vm;
             try
             {
-                await Wait.For(ping, HelperPatience, "Linux engine", failed: () => process.HasExited);
+                await Wait.For(ping, HelperPatience, "Linux engine", failed: () => process?.HasExited == true);
                 return;
             }
             // A stop from elsewhere can arrive while this start waits, which ends the helper it was waiting for.
@@ -94,6 +94,8 @@ sealed class MacVm(ICommandRunner runner, Func<bool>? ping = null, Func<bool>? h
         if (restart) await Start();
     }
 
+    // The engine belongs to dockyard-host under launchd and outlives the Toolbox; only a helper this process started
+    // itself, when launchd would not, goes with it.
     public void ReleaseResources()
     {
         if (vm is { HasExited: false })
@@ -120,6 +122,19 @@ sealed class MacVm(ICommandRunner runner, Func<bool>? ping = null, Func<bool>? h
         await File.WriteAllTextAsync(MacLayout.EngineConfigFile, EngineConfig.WithDockyard(EngineSettings.Load(EngineSettings.Linux, Settings.Load()), proxy));
         await EngineConfig.ApplyClientProxy("unix://" + MacLayout.DockerSocket, proxy);
         if (proxy is { IsEmpty: false }) log?.Invoke("The engine and containers use this Mac's proxy");
+    }
+
+    async Task<bool> StartHost()
+    {
+        var plist = MacLayout.HostAgentPlist(MacLayout.Helper, MacLayout.VmConfig, Settings.Load().StartActiveAtLogon);
+        var changed = !File.Exists(MacLayout.HostAgent) || await File.ReadAllTextAsync(MacLayout.HostAgent) != plist;
+        if (changed)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(MacLayout.HostAgent)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(MacLayout.HostLog)!);
+            await File.WriteAllTextAsync(MacLayout.HostAgent, plist);
+        }
+        return (await runner.Run("/bin/sh", "-c", MacLayout.StartHost(changed))).ExitCode == 0;
     }
 
     async Task Prepare(Action<string> log)

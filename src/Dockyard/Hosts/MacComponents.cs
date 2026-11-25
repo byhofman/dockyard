@@ -85,7 +85,7 @@ sealed class MacComponents(ICommandRunner runner)
         log("Removed the dashboard");
     }
 
-    // Only the bundle's own seal changes: signing it without --deep leaves dockyard-vm and its entitlements alone.
+    // Only the bundle's own seal changes: signing it without --deep leaves dockyard-host and its entitlements alone.
     async Task SealBundle()
     {
         if (MacLayout.Bundle(MacLayout.AppBase + Path.DirectorySeparatorChar) is { } bundle)

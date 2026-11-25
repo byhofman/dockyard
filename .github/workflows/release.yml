@@ -261,7 +261,7 @@ jobs:
             dotnet publish src/Dockyard.Dashboard/Dockyard.Dashboard.csproj -c Release -r osx-arm64 -o dist/macos -p:Version="$VERSION" -warnaserror
             cp dist/cli/dockyard-cli dist/macos/dockyard-cli
             swift build -c release --package-path macos/DockyardVM
-            cp macos/DockyardVM/.build/release/dockyard-vm dist/macos/
+            cp macos/DockyardVM/.build/release/dockyard-host dist/macos/
             mkdir -p dist/macos/vm && tar -xzf vm-image/dockyard-vm-*-aarch64.tar.gz -C dist/macos/vm
             rm -f dist/macos/*.pdb
             sh packaging/macos/build-app.sh "$VERSION" dist/macos out

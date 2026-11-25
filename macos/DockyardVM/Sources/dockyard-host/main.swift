@@ -5,8 +5,8 @@ import Foundation
 import AppKit
 import Virtualization
 
-// dockyard-vm prepare --assets <dir> [--config <path>]   settings, root image clone, data disk
-// dockyard-vm run [--config <path>]                       boots the VM in the foreground until SIGTERM or "stop"
+// dockyard-host prepare --assets <dir> [--config <path>]   settings, root image clone, data disk
+// dockyard-host run [--config <path>]                       boots the VM in the foreground until SIGTERM or "stop"
 
 // $HOME first, like the .NET app that starts this helper: the two must agree on where ~/.dockyard is.
 let home = ProcessInfo.processInfo.environment["HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? FileManager.default.homeDirectoryForCurrentUser.path
@@ -18,7 +18,7 @@ func option(_ name: String) -> String? {
 let configPath = option("--config") ?? home + "/.dockyard/vm.json"
 
 func log(_ line: String) {
-    FileHandle.standardError.write(Data("dockyard-vm: \(line)\n".utf8))
+    FileHandle.standardError.write(Data("dockyard-host: \(line)\n".utf8))
 }
 
 func fail(_ message: String) -> Never {
@@ -281,10 +281,10 @@ case "run", nil:
     machine.start()
     withExtendedLifetime((machine, signalSources)) { RunLoop.main.run() }
 default:
-    fail("usage: dockyard-vm prepare --assets <dir> | run [--config <path>]")
+    fail("usage: dockyard-host prepare --assets <dir> | run [--config <path>]")
 }
 
 #else
-FileHandle.standardError.write(Data("dockyard-vm runs on macOS only\n".utf8))
+FileHandle.standardError.write(Data("dockyard-host runs on macOS only\n".utf8))
 exit(1)
 #endif
