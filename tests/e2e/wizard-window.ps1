@@ -95,7 +95,7 @@ try {
         Click $window 'Check for updates'
         Click $window 'Update'
         # The release that is out may still name it as before 0.9.0.
-        $named = $Dashboard, (Join-Path (Split-Path $Dashboard) 'Dockyard.Dashboard.exe')
+        $named = $Dashboard, (Join-Path (Split-Path $Dashboard) 'Dockyard Dashboard.exe'), (Join-Path (Split-Path $Dashboard) 'Dockyard.Dashboard.exe')
         Wait-For 'the dashboard to be updated' { $named | Where-Object { (Test-Path $_) -and (Get-Item $_).VersionInfo.ProductVersion -notlike '0.0.0*' } | Select-Object -First 1 } | Out-Null
         Wait-For 'the Remove button' { Find-Button $window 'Remove' } | Out-Null
         Shot 'updated'
@@ -103,7 +103,7 @@ try {
     }
 
     Click $window 'Remove'
-    Wait-For 'the dashboard to go' { -not (Test-Path $Dashboard) } | Out-Null
+    Wait-For 'the dashboard to go' { -not ($Dashboard, (Join-Path (Split-Path $Dashboard) 'Dockyard Dashboard.exe'), (Join-Path (Split-Path $Dashboard) 'Dockyard.Dashboard.exe') | Where-Object { Test-Path $_ }) } | Out-Null
     Wait-For 'the Add button' { Find-Button $window 'Add' } | Out-Null
     Shot 'removed'
     Write-Host '  ok   Remove takes it away again'
