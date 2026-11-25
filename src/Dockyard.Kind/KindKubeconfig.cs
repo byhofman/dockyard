@@ -1,6 +1,6 @@
 using YamlDotNet.RepresentationModel;
 
-namespace Dockyard.Dashboard.Features.Clusters;
+namespace Dockyard.Kind;
 
 // A kind cluster's three entries in a kubeconfig, all named kind-<cluster> as kind names them. Everything else in the
 // file is left as it was read.

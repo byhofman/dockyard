@@ -40,6 +40,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Dockyard.Engine\Dockyard.Engine.csproj" />
+    <ProjectReference Include="..\Dockyard.Kind\Dockyard.Kind.csproj" />
   </ItemGroup>
 
   <ItemGroup>

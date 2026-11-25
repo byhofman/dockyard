@@ -1,4 +1,4 @@
-namespace Dockyard.Dashboard.Features.Clusters;
+namespace Dockyard.Kind;
 
 sealed record KindCluster(string Name, IReadOnlyList<KindNode> Nodes, string? KubernetesVersion, int? ApiPort, bool HasSharedStorage = false)
 {

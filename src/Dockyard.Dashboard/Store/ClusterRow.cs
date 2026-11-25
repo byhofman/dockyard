@@ -1,7 +1,7 @@
 namespace Dockyard.Dashboard.Store;
 
 // A kind cluster in the containers list: its nodes and the load balancer proxies for its services, under one row.
-sealed record ClusterRow(Features.Clusters.KindCluster Cluster, bool IsExpanded)
+sealed record ClusterRow(KindCluster Cluster, bool IsExpanded)
 {
     public const string KeyPrefix = "kind:";
     public string Name => Cluster.Name;

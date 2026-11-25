@@ -1,7 +1,7 @@
 using YamlDotNet.Core;
 using YamlDotNet.RepresentationModel;
 
-namespace Dockyard.Dashboard.Features.Clusters;
+namespace Dockyard.Kind;
 
 // How a cluster was made, so it can be made again: kind keeps no copy of the config it was given.
 sealed record ClusterDefinition(string Yaml, bool SharedStorage, IReadOnlyList<string> Addons)

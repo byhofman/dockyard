@@ -1,4 +1,4 @@
-namespace Dockyard.Dashboard.Features.Clusters;
+namespace Dockyard.Kind;
 
 // The files kubectl and kind read, chosen the way both of them choose.
 static class KubeconfigPaths

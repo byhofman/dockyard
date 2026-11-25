@@ -1,4 +1,4 @@
-namespace Dockyard.Dashboard.Features.Containers;
+namespace Dockyard.Kind;
 
 static class DockerCli
 {

@@ -11,7 +11,9 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="Dockyard.Kind" />
     <ProjectReference Include="..\..\src\Dockyard.Dashboard\Dockyard.Dashboard.csproj" />
+    <ProjectReference Include="..\..\src\Dockyard.Kind\Dockyard.Kind.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,4 +1,4 @@
-namespace Dockyard.Dashboard.Features.Clusters;
+namespace Dockyard.Kind;
 
 sealed record KindNode(string Name, string Role, string State)
 {

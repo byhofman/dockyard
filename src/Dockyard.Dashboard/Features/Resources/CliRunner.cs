@@ -7,7 +7,7 @@ static class CliRunner
 {
     public static async Task<int> Run(IReadOnlyList<string> args, Action<string> onLine)
     {
-        var psi = new ProcessStartInfo(Containers.DockerCli.Path())
+        var psi = new ProcessStartInfo(DockerCli.Path())
         {
             UseShellExecute = false,
             CreateNoWindow = true,

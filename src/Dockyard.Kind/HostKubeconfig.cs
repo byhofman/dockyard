@@ -1,4 +1,4 @@
-namespace Dockyard.Dashboard.Features.Clusters;
+namespace Dockyard.Kind;
 
 // The host's kubeconfig, which follows the clusters the dashboard creates and deletes. kind runs against a file of
 // its own, so the user's is only ever written here.

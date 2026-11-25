@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:clu="using:Dockyard.Dashboard.Features.Clusters"
+             xmlns:kind="using:Dockyard.Kind"
              xmlns:store="using:Dockyard.Dashboard.Store"
              x:Class="Dockyard.Dashboard.Features.Clusters.ClustersView"
              x:DataType="clu:ClustersViewModel">
@@ -38,7 +39,7 @@
       </StackPanel>
       <ListBox x:Name="List" Classes="rows" ItemsSource="{Binding Rows}" SelectionMode="Multiple" SelectedItems="{Binding SelectedItems}" Padding="0,4">
         <ListBox.ItemTemplate>
-          <DataTemplate DataType="clu:KindCluster">
+          <DataTemplate DataType="kind:KindCluster">
             <Grid ColumnDefinitions="Auto,*,120,110,Auto">
               <CheckBox Classes="pick" IsChecked="{Binding $parent[ListBoxItem].IsSelected}" AutomationProperties.Name="{Binding Name}" />
               <StackPanel Grid.Column="1">
@@ -155,7 +156,7 @@
           <TextBlock Classes="section" Text="NODES" Margin="0,8,0,0" />
           <ItemsControl ItemsSource="{Binding Selected.Nodes, FallbackValue={x:Null}}">
             <ItemsControl.ItemTemplate>
-              <DataTemplate DataType="clu:KindNode">
+              <DataTemplate DataType="kind:KindNode">
                 <Grid ColumnDefinitions="*,Auto" Margin="0,2">
                   <StackPanel>
                     <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />

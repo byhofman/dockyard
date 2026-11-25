@@ -1,6 +1,6 @@
 using YamlDotNet.RepresentationModel;
 
-namespace Dockyard.Dashboard.Features.Clusters;
+namespace Dockyard.Kind;
 
 // The user's kubeconfig is someone else's file: it is backed up before Dockyard first changes it, changed under the
 // lock kubectl and kind take, and replaced in one step with its permissions kept, so a crash leaves the old or the new

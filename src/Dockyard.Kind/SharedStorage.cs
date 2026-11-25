@@ -1,8 +1,7 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
-using Dockyard.Dashboard.Features.Resources;
 
-namespace Dockyard.Dashboard.Features.Clusters;
+namespace Dockyard.Kind;
 
 // One folder on the engine that every node of a cluster made with it mounts. A second instance of the local-path
 // provisioner kind ships, with the images kind already loaded on the nodes, offers it as the storage class "shared":
@@ -12,6 +11,7 @@ static partial class SharedStorage
     public const string HostPath = "/var/lib/dockyard/shared";
     public const string NodePath = "/var/dockyard-shared";
     public const string ClassName = "shared";
+    const string WslDistro = "dockyard";
     const string AdminConfig = "/etc/kubernetes/admin.conf";
 
     public static string NodeMounts => $"  extraMounts:\n  - hostPath: {HostPath}\n    containerPath: {NodePath}\n";
@@ -24,7 +24,7 @@ static partial class SharedStorage
     }
 
     public static string? WindowsFolder(bool linuxEngineOnWsl) =>
-        linuxEngineOnWsl ? $@"\\wsl.localhost\{VolumeLocation.WslDistro}" + HostPath.Replace('/', '\\') : null;
+        linuxEngineOnWsl ? $@"\\wsl.localhost\{WslDistro}" + HostPath.Replace('/', '\\') : null;
 
     public static string[] ImagesArgs(string context, string node) =>
     [
@@ -58,7 +58,7 @@ static partial class SharedStorage
 
     internal static async Task<(int ExitCode, string Output, string Error)> Docker(IReadOnlyList<string> args)
     {
-        var psi = new ProcessStartInfo(Containers.DockerCli.Path())
+        var psi = new ProcessStartInfo(DockerCli.Path())
         {
             UseShellExecute = false,
             CreateNoWindow = true,

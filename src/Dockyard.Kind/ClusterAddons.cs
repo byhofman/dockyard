@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace Dockyard.Dashboard.Features.Clusters;
+namespace Dockyard.Kind;
 
 // A Helm chart the dashboard can put in a new cluster, at a pinned version like everything else Dockyard installs.
 sealed record ClusterAddon(string Title, string Release, string Chart, string Repo, string Version, string Namespace, IReadOnlyList<string> Values);

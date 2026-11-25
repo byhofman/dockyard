@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace Dockyard.Dashboard.Features.Clusters;
+namespace Dockyard.Kind;
 
 static class KindCli
 {
@@ -53,7 +53,7 @@ static class KindCli
             StandardErrorEncoding = System.Text.Encoding.UTF8,
         };
         foreach (var a in args) psi.ArgumentList.Add(a);
-        foreach (var (key, value) in Environment(context, Containers.DockerCli.Path(), System.Environment.GetEnvironmentVariable("PATH")))
+        foreach (var (key, value) in Environment(context, DockerCli.Path(), System.Environment.GetEnvironmentVariable("PATH")))
             psi.Environment[key] = value;
 
         using var process = Process.Start(psi) ?? throw new InvalidOperationException("Could not start kind");

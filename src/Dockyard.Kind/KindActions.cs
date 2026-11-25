@@ -1,4 +1,4 @@
-namespace Dockyard.Dashboard.Features.Clusters;
+namespace Dockyard.Kind;
 
 // What the Clusters section does with kind, with the host's kubeconfig following along.
 sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
