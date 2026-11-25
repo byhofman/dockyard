@@ -13,6 +13,7 @@ sealed class MainViewModel : Observable
 
     readonly Settings settings;
     readonly IEngineHost host;
+    public IEngineHost Host => host;
     readonly List<Command> commands = [];
     readonly StringBuilder log = new();
     readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromSeconds(10) };
@@ -43,6 +44,7 @@ sealed class MainViewModel : Observable
         {
             ToggleCommand = Cmd(() => Toggle(e.Id)),
             UseCommand = Cmd(() => Switch(e.Id)),
+            SettingsCommand = new Command(() => { EngineSettingsRequested?.Invoke(e); return Task.CompletedTask; }),
         }).ToList();
 
         var catalog = host.Components.Any(c => c.Id == ComponentRules.DashboardId)
@@ -72,7 +74,6 @@ sealed class MainViewModel : Observable
         InstallCommand = Cmd(Install);
         UninstallCommand = Cmd(Uninstall);
         RebootCommand = Cmd(() => { host.Reboot(); return Task.CompletedTask; });
-        ApplyEngineConfigurationCommand = Cmd(ApplyEngineConfiguration);
         ImportCommand = Cmd(() => Run("Importing from Docker Desktop", async () =>
         {
             await host.Start(host.Engines[0].Id);
@@ -90,9 +91,6 @@ sealed class MainViewModel : Observable
             settings.HttpsEnabled = false;
             Raise(nameof(HttpsEnabled), nameof(HttpsDisabled));
         }));
-        registryMirrors = settings.RegistryMirrors ?? "";
-        insecureRegistries = settings.InsecureRegistries ?? "";
-        addressPools = settings.AddressPools ?? "";
 
         timer.Tick += async (_, _) =>
         {
@@ -112,32 +110,35 @@ sealed class MainViewModel : Observable
     public IReadOnlyList<EngineViewModel> EngineCards { get; }
     public ObservableCollection<ComponentViewModel> Components { get; } = [];
     public IReadOnlyList<ComponentViewModel> DockyardComponents => Components.Where(c => c.IsDockyard).OrderBy(c => c == Dashboard).ToList();
-    public IReadOnlyList<ComponentViewModel> DockerComponents => Components.Where(c => !c.IsDockyard).ToList();
+    public IReadOnlyList<ComponentViewModel> DockerComponents => Components.Where(c => !c.IsDockyard && !c.IsKubernetes).ToList();
+    public IReadOnlyList<ComponentViewModel> KubernetesComponents => Components.Where(c => c.IsKubernetes).ToList();
 
     public Command CheckUpdatesCommand { get; }
     public Command UpdateAllCommand { get; }
     public Command InstallCommand { get; }
     public Command UninstallCommand { get; }
     public Command RebootCommand { get; }
-    public Command ApplyEngineConfigurationCommand { get; }
     public Command ImportCommand { get; }
     public Command EnableHttpsCommand { get; }
     public Command DisableHttpsCommand { get; }
     public bool HttpsEnabled => settings.HttpsEnabled;
     public bool HttpsDisabled => !settings.HttpsEnabled;
+    // A switch under Settings: the commands do the work, and a declined approval puts it back.
+    public bool HttpsSwitch
+    {
+        get => settings.HttpsEnabled;
+        set
+        {
+            if (value == settings.HttpsEnabled) return;
+            _ = (value ? EnableHttpsCommand : DisableHttpsCommand).ExecuteAsync().ContinueWith(_ => Raise(nameof(HttpsSwitch)), TaskScheduler.FromCurrentSynchronizationContext());
+        }
+    }
     public bool ShowImport => ShowManage && DockerDesktop.IsInstalled;
     public ComponentViewModel Dashboard { get; }
 
-    string registryMirrors;
-    string insecureRegistries;
-    string addressPools;
-    string engineConfigurationProblem = "";
-    public string RegistryMirrors { get => registryMirrors; set => Set(ref registryMirrors, value); }
-    public string InsecureRegistries { get => insecureRegistries; set => Set(ref insecureRegistries, value); }
-    public string AddressPools { get => addressPools; set => Set(ref addressPools, value); }
-    public string EngineConfigurationProblem { get => engineConfigurationProblem; private set { if (Set(ref engineConfigurationProblem, value)) Raise(nameof(HasEngineConfigurationProblem)); } }
-    public bool HasEngineConfigurationProblem => engineConfigurationProblem.Length > 0;
-    public bool ShowEngineConfiguration => ShowManage && host.HasEngineConfiguration;
+    public bool ShowEngineConfiguration => ShowManage;
+    // The window that edits an engine's daemon.json, opened from its card.
+    public event Action<EngineInfo>? EngineSettingsRequested;
 
     public bool IncludeDashboard { get => Dashboard.Include; set { Dashboard.Include = value; Raise(nameof(IncludeDashboard)); } }
     public IEnumerable<ComponentViewModel> OptionalChoices => Components.Where(c => c.IsOptional);
@@ -196,11 +197,61 @@ sealed class MainViewModel : Observable
     public bool IsBusy => busy is not null;
     public string Status { get => status; private set => Set(ref status, value); }
     public string LogText => log.ToString();
+    public bool HasLog => log.Length > 0;
+    // The log stays out of the way: the footer shows the step at hand, and a click on it opens the rest.
+    bool showLog;
+    public bool ShowLog { get => showLog; set => Set(ref showLog, value); }
+    public Command ToggleLogCommand => toggleLog ??= new Command(() => { ShowLog = !ShowLog; return Task.CompletedTask; });
+    Command? toggleLog;
 
     public bool StopOtherOnSwitch
     {
         get => settings.StopOtherOnSwitch;
         set { settings.StopOtherOnSwitch = value; settings.Save(); Raise(nameof(StopOtherOnSwitch)); }
+    }
+
+    // Read by the hosts from the saved settings, so a new install saves it with the rest just before installing.
+    public bool UsePackageManager
+    {
+        get => settings.UsePackageManager;
+        set
+        {
+            settings.UsePackageManager = value;
+            if (IsInstalled) settings.Save();
+            Raise(nameof(UsePackageManager), nameof(ToolSource));
+        }
+    }
+
+    public bool KubectlShell
+    {
+        get => settings.KubectlShell;
+        set
+        {
+            settings.KubectlShell = value;
+            if (IsInstalled)
+            {
+                settings.Save();
+                ShellSetup.Apply(settings, Log);
+            }
+            Raise(nameof(KubectlShell));
+        }
+    }
+
+    public static string ShellProfilesText =>
+        "A marked block with k, completion, $do and $now, which Dockyard takes out again when this is off; in " +
+        (OperatingSystem.IsWindows() ? "your PowerShell 7 and Windows PowerShell profiles, and Git Bash's .bashrc when you have one"
+            : OperatingSystem.IsMacOS() ? "your .zshrc" : "your .bashrc, and .zshrc when you have one");
+
+    public static string[] ToolSources { get; } =
+    [
+        OperatingSystem.IsWindows() ? "winget" : OperatingSystem.IsMacOS() ? "Homebrew" : "apt / dnf",
+        "Direct download",
+    ];
+
+    public int ToolSource
+    {
+        get => UsePackageManager ? 0 : 1;
+        set { UsePackageManager = value == 0; Raise(nameof(ToolSource)); }
     }
 
     public bool StartActiveAtLogon
@@ -334,6 +385,7 @@ sealed class MainViewModel : Observable
         {
             var installed = await host.Installed(c.Id);
             c.Installed = installed?.ToString() ?? "–";
+            c.Source = installed is null ? null : await host.Source(c.Id);
             if (c.Id == nameof(Component.App)) InstalledVersion = c.Installed;
             c.IsPresent = c == Dashboard ? host.HasDashboard : installed is not null;
             var latest = await host.Latest(c.Id);
@@ -382,34 +434,30 @@ sealed class MainViewModel : Observable
         foreach (var item in items) await Check(item);
     });
 
-    Task ApplyEngineConfiguration()
-    {
-        var problems = EngineOptions.Problems(RegistryMirrors, InsecureRegistries, AddressPools);
-        EngineConfigurationProblem = string.Join('\n', problems);
-        if (problems.Count > 0) return Task.CompletedTask;
-        settings.RegistryMirrors = RegistryMirrors;
-        settings.InsecureRegistries = InsecureRegistries;
-        settings.AddressPools = AddressPools;
-        settings.Save();
-        return Run("Applying the engine configuration", () => host.ApplyEngineConfiguration(Log));
-    }
-
     Task Install() => Run("Installing", InstallCore);
 
     async Task InstallCore()
     {
         var dashboard = IsInstalled ? DashboardChoice.Resolve(options.Dashboard, true, host.HasDashboard, host.RunsFromInstallLocation) : IncludeDashboard;
+        if (options.KubectlShell is { } shell && shell != settings.KubectlShell)
+        {
+            settings.KubectlShell = shell;
+            settings.Save();
+        }
+        if (options.PackageManager is { } use && use != settings.UsePackageManager)
+        {
+            settings.UsePackageManager = use;
+            settings.Save();
+        }
         if (!IsInstalled)
         {
             var left = Components.Where(c => c.IsOptional && !c.Include && c != Dashboard).Select(c => c.Id).Order().ToList();
             if (ComponentRules.Problems(host.Components, [], [], left) is { Count: > 0 } problems) throw new InvalidOperationException(problems[0]);
-            if (!left.SequenceEqual(settings.RemovedComponents))
-            {
-                settings.RemovedComponents = left;
-                settings.Save();
-            }
+            settings.RemovedComponents = left;
+            settings.Save();
         }
         var reboot = await host.Install(Log, new InstallRequest(dashboard) { Without = settings.RemovedComponents });
+        ShellSetup.Apply(settings, Log);
         IsInstalled = true;
         NeedsReboot = reboot;
         RefreshDashboard();
@@ -454,6 +502,7 @@ sealed class MainViewModel : Observable
                 if (installed) settings.RemovedComponents.Remove(item.Id);
                 else if (!settings.RemovedComponents.Contains(item.Id)) settings.RemovedComponents.Add(item.Id);
                 settings.Save();
+                if (item.Id == nameof(Component.Kubectl)) ShellSetup.Apply(settings, Log);
             }
             await Check(item);
             RefreshDashboard();
@@ -463,6 +512,7 @@ sealed class MainViewModel : Observable
 
     Task Uninstall() => Run("Uninstalling", async () =>
     {
+        ShellSetup.Apply(false, Log);
         await host.Uninstall(Log, RemoveData, silent: false);
         IsInstalled = false;
         Log(RemoveData ? "Dockyard was removed, with its images and containers." : "Dockyard was removed. Images and containers were kept.");
@@ -503,7 +553,8 @@ sealed class MainViewModel : Observable
             return;
         }
         log.AppendLine(line);
-        Raise(nameof(LogText));
+        if (Busy is not null) Status = line;
+        Raise(nameof(LogText), nameof(HasLog));
     }
 
     Command Cmd(Func<Task> run, Func<bool>? canRun = null)

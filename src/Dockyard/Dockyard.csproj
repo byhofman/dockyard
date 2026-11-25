@@ -34,20 +34,33 @@
     <EmbeddedResource Include="..\..\image\versions.env" LogicalName="versions.env" />
     <EmbeddedResource Include="..\..\image\versions.sha256" LogicalName="versions.sha256" />
     <EmbeddedResource Condition="'$(GuestBundle)' != ''" Include="$(GuestBundle)" LogicalName="guest.tar.gz" />
+    <EmbeddedResource Condition="'$(HostExe)' != ''" Include="$(HostExe)" LogicalName="dockyard-host.exe" />
     <Compile Include="..\Shared\*.cs" LinkBase="Shared" />
     <InternalsVisibleTo Include="Dockyard.Tests" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Dockyard.Engine\Dockyard.Engine.csproj" />
+    <ProjectReference Include="..\Dockyard.Kind\Dockyard.Kind.csproj" />
   </ItemGroup>
+
 
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.5" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.5" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.5" />
+    <PackageReference Include="Avalonia.AvaloniaEdit" Version="12.0.0" />
     <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.14" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.14" />
   </ItemGroup>
+
+  <!-- The published Toolbox is dockyard-toolbox, next to dockyard-dashboard and dockyard-cli. Only the published file:
+       resources are found by assembly name. -->
+  <Target Name="NameTheToolbox" AfterTargets="Publish">
+    <PropertyGroup>
+      <ExeExtension Condition="$(RuntimeIdentifier.StartsWith('win'))">.exe</ExeExtension>
+    </PropertyGroup>
+    <Move SourceFiles="$(PublishDir)$(AssemblyName)$(ExeExtension)" DestinationFiles="$(PublishDir)dockyard-toolbox$(ExeExtension)" />
+  </Target>
 
 </Project>

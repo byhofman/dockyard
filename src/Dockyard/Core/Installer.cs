@@ -10,12 +10,15 @@ static class Installer
     public const int WrongArguments = 2;
     public const int RebootRequired = 3010;
 
-    public static async Task<int> RunSilent(IEngineHost host, SetupOptions options, Action<string> log, Action<string> error)
+    // settings and shell: the user's own unless a caller, such as a test, gives others.
+    public static async Task<int> RunSilent(IEngineHost host, SetupOptions options, Action<string> log, Action<string> error,
+        Settings? settings = null, Action<bool, Action<string>>? shell = null)
     {
         try
         {
             if (options.Action == SetupAction.Uninstall)
             {
+                (shell ?? ShellSetup.TryApply)(false, log);
                 await host.Uninstall(log, options.RemoveData, silent: true);
                 log(options.RemoveData ? "Dockyard was removed, with its images and containers." : "Dockyard was removed. Images and containers were kept.");
                 return Ok;
@@ -36,7 +39,7 @@ static class Installer
                 return Ok;
             }
 
-            var settings = Settings.Load();
+            settings ??= Settings.Load();
             if (ComponentRules.Problems(host.Components, options.With, options.Without, settings.RemovedComponents) is { Count: > 0 } problems)
             {
                 foreach (var problem in problems) error(problem);
@@ -44,11 +47,10 @@ static class Installer
             }
             var removedBefore = settings.RemovedComponents.ToList();
             var removed = ComponentRules.Removed(host.Components, removedBefore, options.With, options.Without);
-            if (!removed.SequenceEqual(settings.RemovedComponents))
-            {
-                settings.RemovedComponents = removed;
-                settings.Save();
-            }
+            settings.RemovedComponents = removed;
+            settings.UsePackageManager = options.PackageManager ?? settings.UsePackageManager;
+            settings.KubectlShell = options.KubectlShell ?? settings.KubectlShell;
+            settings.Save();
 
             var dashboard = DashboardChoice.Resolve(options.Dashboard, host.IsInstalled, host.HasDashboard, host.RunsFromInstallLocation);
             var reboot = await host.Install(log, new InstallRequest(dashboard, options.Image, Silent: true, TrustHttps: options.TrustHttps) { Without = removed });
@@ -59,6 +61,7 @@ static class Installer
             foreach (var flag in options.Without)
                 if (ComponentRules.ByFlag(host.Components, flag) is { } gone && await host.Installed(gone.Id) is not null)
                     await host.SetComponent(log, gone.Id, installed: false, options.RemoveData);
+            if (Environment.UserName != "root") (shell ?? ShellSetup.TryApply)(settings.KubectlShell && !settings.RemovedComponents.Contains(nameof(Component.Kubectl)), log);
             // Installing never fails halfway unnoticed: a step that quietly did nothing would otherwise report success.
             if (!reboot && !host.IsInstalled) throw new InvalidOperationException("Setup finished, but Dockyard is not installed");
             if (host.HasDashboard != dashboard)

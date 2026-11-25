@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -20,7 +21,31 @@ public partial class MainWindow : Window
                 {
                     if (e.PropertyName == nameof(ShellViewModel.HasDialog) && vm.HasDialog) Dispatcher.UIThread.Post(FocusDialog, DispatcherPriority.Loaded);
                 };
+            if (DataContext is ShellViewModel shell)
+            {
+                shell.Activity.Lines.CollectionChanged += (_, _) => ScrollActivityToEnd();
+                shell.Activity.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(ActivityLog.IsOpen) && shell.Activity.IsOpen) ScrollActivityToEnd(); };
+            }
         };
+    }
+
+    // The activity list is in a tab's template, in one place or side by side, so it is found rather than named.
+    void ScrollActivityToEnd() => Dispatcher.UIThread.Post(() =>
+    {
+        foreach (var list in this.GetVisualDescendants().OfType<ListBox>().Where(l => l.Classes.Contains("activitylist")))
+            if (list.ItemCount > 0) list.ScrollIntoView(list.ItemCount - 1);
+    }, DispatcherPriority.Background);
+
+    void ResizeLogs(object? sender, VectorEventArgs e)
+    {
+        if (DataContext is ShellViewModel shell)
+            shell.Logs.Height = Math.Clamp(shell.Logs.Height - e.Vector.Y, 120, Math.Max(120, Bounds.Height - 220));
+    }
+
+    async void CopyActivity(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is ShellViewModel shell && TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
+            await clipboard.SetTextAsync(shell.Logs.Selected.Text);
     }
 
     // The first field, or else the button that confirms, so Enter and Escape work without the mouse.

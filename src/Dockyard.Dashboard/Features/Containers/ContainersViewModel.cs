@@ -27,24 +27,29 @@ sealed class ContainersViewModel : Observable, ISearchable
         Session = session;
         sampler = new StatsSampler(session);
 
-        ToggleCommand = new Command<ContainerItem>(i => Act(i, c => i.IsRunning ? c.StopContainerAsync(i.Id) : c.StartContainerAsync(i.Id)));
-        RestartCommand = new Command<ContainerItem>(i => Act(i, c => c.RestartContainerAsync(i.Id)));
-        AskRemoveCommand = new Command<ContainerItem>(i => { AskRemove([i]); return Task.CompletedTask; });
+        ToggleCommand = new Command<ContainerItem>(i => i.IsSystem ? Task.CompletedTask : Act(i, c => i.IsRunning ? c.StopContainerAsync(i.Id) : c.StartContainerAsync(i.Id)));
+        RestartCommand = new Command<ContainerItem>(i => i.IsSystem ? Task.CompletedTask : Act(i, c => c.RestartContainerAsync(i.Id)));
+        AskRemoveCommand = new Command<ContainerItem>(i => { if (!i.IsSystem) AskRemove([i]); return Task.CompletedTask; });
         ExecCommand = new Command<ContainerItem>(Exec);
         OpenPortCommand = new Command<PublishedPort>(OpenPort);
         ToggleProjectCommand = new Command<ProjectRow>(p => { Store.ToggleProject(p.Name); return Task.CompletedTask; });
         ProjectStartStopCommand = new Command<ProjectRow>(p => WithProject(p, d => d.StartOrStop()));
         ProjectRestartCommand = new Command<ProjectRow>(p => WithProject(p, d => d.RestartCommand.CanExecute(null) ? Run(d.RestartCommand) : Task.CompletedTask));
         ProjectDownCommand = new Command<ProjectRow>(p => { AskDown(p.Project); return Task.CompletedTask; });
+        ToggleClusterCommand = new Command<ClusterRow>(k => { Store.ToggleProject(k.Key); return Task.CompletedTask; });
+        ToggleSystemCommand = new Command<SystemRow>(_ => { Store.ToggleProject(SystemRow.Key); return Task.CompletedTask; });
+        ClusterStartStopCommand = new Command<ClusterRow>(k => shell.Clusters?.StartOrStop(k.Cluster) ?? Task.CompletedTask);
+        OpenClusterCommand = new Command<ClusterRow>(k => { shell.Reveal("Clusters", k.Cluster); return Task.CompletedTask; });
 
-        StartPickedCommand = new Command(() => Bulk("Starting", PickedContainers.Where(c => !c.IsRunning).ToList(), (c, i) => c.StartContainerAsync(i.Id)), () => PickedContainers.Any(c => !c.IsRunning));
-        StopPickedCommand = new Command(() => Bulk("Stopping", PickedContainers.Where(c => c.IsRunning).ToList(), (c, i) => c.StopContainerAsync(i.Id)), () => PickedContainers.Any(c => c.IsRunning));
+        StartPickedCommand = new Command(() => StartOrStopPicked(stop: false), () => PickedContainers.Any(c => !c.IsRunning) || PickedClusters.Any(c => !c.IsRunning));
+        StopPickedCommand = new Command(() => StartOrStopPicked(stop: true), () => PickedContainers.Any(c => c.IsRunning) || PickedClusters.Any(c => c.Nodes.Any(n => n.IsRunning)));
         RestartPickedCommand = new Command(() => Bulk("Restarting", PickedContainers, (c, i) => c.RestartContainerAsync(i.Id)), () => PickedContainers.Count > 0);
         RemovePickedCommand = new Command(() => { AskRemove(PickedContainers); return Task.CompletedTask; }, () => PickedContainers.Count > 0);
         ClearSelectionCommand = new Command(() => { SelectedRow = null; return Task.CompletedTask; });
 
         SelectedItems.CollectionChanged += (_, _) => { if (!rebuilding && !syncing) OnPicked(); };
         Store.SetRecents(settings.RecentCompose);
+        Store.ShowSystem = settings.ShowSystemContainers;
         Store.RowsChanging += () =>
         {
             rebuilding = true;
@@ -74,6 +79,10 @@ sealed class ContainersViewModel : Observable, ISearchable
     public Command<ProjectRow> ProjectStartStopCommand { get; }
     public Command<ProjectRow> ProjectRestartCommand { get; }
     public Command<ProjectRow> ProjectDownCommand { get; }
+    public Command<ClusterRow> ToggleClusterCommand { get; }
+    public Command<SystemRow> ToggleSystemCommand { get; }
+    public Command<ClusterRow> ClusterStartStopCommand { get; }
+    public Command<ClusterRow> OpenClusterCommand { get; }
     public Command StartPickedCommand { get; }
     public Command StopPickedCommand { get; }
     public Command RestartPickedCommand { get; }
@@ -95,20 +104,55 @@ sealed class ContainersViewModel : Observable, ISearchable
 
     public bool? AllSelected
     {
-        get => SelectionCount == 0 ? false : SelectionCount == Store.Rows.Count ? true : null;
-        set => Pick(value == true ? Store.Rows.ToList() : []);
+        get => SelectionCount == 0 ? false : SelectionCount == Pickable.Count ? true : null;
+        set => Pick(value == true ? Pickable : []);
     }
+
+    List<object> Pickable => Store.Rows.Where(r => r is not SystemRow and not ContainerItem { IsSystem: true }).ToList();
 
     // A picked project stands for all of its containers.
     public IReadOnlyList<ContainerItem> PickedContainers => SelectedItems
         .SelectMany(r => r switch
         {
-            ContainerItem c => [c],
+            ContainerItem { IsSystem: false } c => [c],
             ProjectRow p => p.Project.Services.SelectMany(s => s.Containers),
             _ => [],
         })
         .DistinctBy(c => c.Id)
         .ToList();
+
+    public bool ShowSystem
+    {
+        get => Store.ShowSystem;
+        set
+        {
+            if (Store.ShowSystem == value) return;
+            Store.ShowSystem = value;
+            settings.ShowSystemContainers = value;
+            settings.Save();
+            Raise(nameof(ShowSystem));
+        }
+    }
+
+    IReadOnlyList<KindCluster> PickedClusters => SelectedItems.OfType<ClusterRow>().Select(r => r.Cluster).ToList();
+
+    // A cluster's nodes start control plane first, and its load balancer proxies go with it, so clusters go through Clusters.
+    async Task StartOrStopPicked(bool stop)
+    {
+        if (shell.Clusters is { } clusters)
+            foreach (var cluster in PickedClusters.Where(c => stop ? c.Nodes.Any(n => n.IsRunning) : !c.IsRunning))
+                await (stop ? clusters.Stop(cluster) : clusters.Start(cluster));
+        var containers = PickedContainers.Where(c => c.IsRunning == stop).ToList();
+        if (containers.Count > 0)
+            await Bulk(stop ? "Stopping" : "Starting", containers, (c, i) => stop ? c.StopContainerAsync(i.Id) : c.StartContainerAsync(i.Id));
+    }
+
+    public ToolCheck Tools => shell.Tools;
+
+    public void OpenLogs(string key, string title, IReadOnlyList<LogSource> sources)
+    {
+        if (Session.Client is { } client) shell.Logs.Open(key, title, client, sources);
+    }
 
     public string? Busy { get => busy; private set { if (Set(ref busy, value)) Raise(nameof(IsBusy)); } }
     public bool IsBusy => busy is not null;
@@ -193,6 +237,8 @@ sealed class ContainersViewModel : Observable, ISearchable
     {
         ContainerItem c => "c:" + c.Id,
         ProjectRow p => "p:" + p.Name,
+        ClusterRow k => k.Key,
+        SystemRow => SystemRow.Key,
         _ => "",
     };
 
@@ -228,7 +274,7 @@ sealed class ContainersViewModel : Observable, ISearchable
         Detail = row switch
         {
             ContainerItem item => new ContainerDetailViewModel(this, Session, item, shell.ShowError),
-            ProjectRow p => new ComposeDetailViewModel(this, Session, p.Project, shell.ShowError),
+            ProjectRow p => new ComposeDetailViewModel(this, Session, p.Project, shell.ShowError, shell.Activity, shell.Tools),
             _ => null,
         };
     }
@@ -326,7 +372,7 @@ sealed class ContainersViewModel : Observable, ISearchable
     {
         var context = Session.ContextName.Length > 0 ? Session.ContextName : "default";
         dialog.Report($"docker compose down {project.Name}…");
-        var exit = await CliRunner.Run(ComposeCli.Args(context, project, "down"), line => { if (line.Trim().Length > 0) dialog.Report(line.Trim()); });
+        var exit = await CliRunner.Run(ComposeCli.Args(context, project, "down"), line => { if (line.Trim().Length > 0) dialog.Report(line.Trim()); }, Session.IsWindowsEngine);
         if (exit != 0) throw new InvalidOperationException($"docker compose down failed for {project.Name} (exit code {exit}). {dialog.Progress}");
     }
 

@@ -16,7 +16,9 @@ static class Program
             return 0;
         }
         Shell.StartupTrace.Mark("main");
-        if (LocalPipe.TrySend(LocalPipe.DashboardName, "show")) return 0;
+        var section = args.SkipWhile(a => a != "--section").Skip(1).FirstOrDefault();
+        if (LocalPipe.TrySend(LocalPipe.DashboardName, section is null ? "show" : $"show {section}")) return 0;
+        Shell.ShellViewModel.InitialSection = section;
         if (!DisplayGate.WaitUntilUsable(TimeSpan.FromMinutes(10))) return 0;
         return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args, ShutdownMode.OnMainWindowClose);
     }

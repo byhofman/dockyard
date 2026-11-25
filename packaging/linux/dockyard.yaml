@@ -10,10 +10,17 @@ description: |
 homepage: https://github.com/byhofman/dockyard
 license: MIT
 contents:
-  - src: dist/linux/tray/Dockyard
-    dst: /usr/lib/dockyard/Dockyard
+  - src: dist/linux/tray/dockyard-toolbox
+    dst: /usr/lib/dockyard/dockyard-toolbox
     file_info: { mode: 0755 }
-  - src: /usr/lib/dockyard/Dockyard
+  # The name before 0.9.0, which autostart entries written then still start.
+  - src: /usr/lib/dockyard/dockyard-toolbox
+    dst: /usr/lib/dockyard/Dockyard
+    type: symlink
+  - src: dist/linux/cli/dockyard-cli
+    dst: /usr/lib/dockyard/dockyard-cli
+    file_info: { mode: 0755 }
+  - src: /usr/lib/dockyard/dockyard-cli
     dst: /usr/bin/dockyard
     type: symlink
   - src: packaging/linux/dockyard.desktop

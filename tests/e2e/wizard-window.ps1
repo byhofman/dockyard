@@ -51,7 +51,7 @@ function Click($window, $name) {
     $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
 }
 
-$appExe = Join-Path $env:ProgramFiles 'Dockyard\Dockyard.exe'
+$appExes = 'dockyard-toolbox.exe', 'Dockyard.exe' | ForEach-Object { Join-Path $env:ProgramFiles "Dockyard\$_" }
 $process = if ($Assets) { Start-Process $Exe -ArgumentList '--assets', $Assets -PassThru } else { Start-Process $Exe -PassThru }
 $handedOver = $false
 try {
@@ -60,7 +60,7 @@ try {
         if (-not $process.HasExited -and $process.MainWindowHandle -ne 0) { return $auto::FromHandle($process.MainWindowHandle) }
         if ($process.HasExited) {
             if ($process.ExitCode -ne 0) { throw "FAIL the exe exited with $($process.ExitCode)" }
-            $tray = Get-Process Dockyard -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $appExe -and $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+            $tray = Get-Process dockyard-toolbox, Dockyard -ErrorAction SilentlyContinue | Where-Object { $_.Path -in $appExes -and $_.MainWindowHandle -ne 0 } | Select-Object -First 1
             if ($tray) { $script:handedOver = $true; $auto::FromHandle($tray.MainWindowHandle) }
         }
     }
@@ -94,14 +94,16 @@ try {
     if ($version -like '0.0.0*') {
         Click $window 'Check for updates'
         Click $window 'Update'
-        Wait-For 'the dashboard to be updated' { (Get-Item $Dashboard).VersionInfo.ProductVersion -notlike '0.0.0*' } | Out-Null
+        # The release that is out may still name it as before 0.9.0.
+        $named = $Dashboard, (Join-Path (Split-Path $Dashboard) 'Dockyard Dashboard.exe'), (Join-Path (Split-Path $Dashboard) 'Dockyard.Dashboard.exe')
+        Wait-For 'the dashboard to be updated' { $named | Where-Object { (Test-Path $_) -and (Get-Item $_).VersionInfo.ProductVersion -notlike '0.0.0*' } | Select-Object -First 1 } | Out-Null
         Wait-For 'the Remove button' { Find-Button $window 'Remove' } | Out-Null
         Shot 'updated'
-        Write-Host "  ok   Update brings the dashboard to $((Get-Item $Dashboard).VersionInfo.ProductVersion) and it stays removable"
+        Write-Host "  ok   Update brings the dashboard to $((Get-Item ($named | Where-Object { Test-Path $_ } | Select-Object -First 1)).VersionInfo.ProductVersion) and it stays removable"
     }
 
     Click $window 'Remove'
-    Wait-For 'the dashboard to go' { -not (Test-Path $Dashboard) } | Out-Null
+    Wait-For 'the dashboard to go' { -not ($Dashboard, (Join-Path (Split-Path $Dashboard) 'Dockyard Dashboard.exe'), (Join-Path (Split-Path $Dashboard) 'Dockyard.Dashboard.exe') | Where-Object { Test-Path $_ }) } | Out-Null
     Wait-For 'the Add button' { Find-Button $window 'Add' } | Out-Null
     Shot 'removed'
     Write-Host '  ok   Remove takes it away again'

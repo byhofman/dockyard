@@ -44,7 +44,9 @@ public sealed class PinnedTests : IDisposable
         Pinned.Docker("linux", "aarch64", "tgz").DownloadUrl!, Pinned.Compose("docker-compose-linux-aarch64").DownloadUrl!, Pinned.Buildx("linux-arm64").DownloadUrl!,
         MacLayout.Cli.DownloadUrl!, MacLayout.Compose.DownloadUrl!, MacLayout.Buildx.DownloadUrl!, MacLayout.CredentialHelperRelease.DownloadUrl!,
         Pinned.CredentialHelper("wincred", "windows-amd64.exe").DownloadUrl!, Pinned.CredentialHelper("secretservice", "linux-amd64").DownloadUrl!,
-        Pinned.Kind("kind-windows-amd64").DownloadUrl!, Pinned.Kind("kind-darwin-arm64").DownloadUrl!, Pinned.Kind("kind-linux-amd64").DownloadUrl!);
+        Pinned.Kind("kind-windows-amd64").DownloadUrl!, Pinned.Kind("kind-darwin-arm64").DownloadUrl!, Pinned.Kind("kind-linux-amd64").DownloadUrl!,
+        Pinned.Kubectl("windows/amd64/kubectl.exe").DownloadUrl!, Pinned.Kubectl("darwin/arm64/kubectl").DownloadUrl!, Pinned.Kubectl("linux/amd64/kubectl").DownloadUrl!,
+        Pinned.Helm("windows-amd64.zip").DownloadUrl!, Pinned.Helm("darwin-arm64.tar.gz").DownloadUrl!, Pinned.Helm("linux-amd64.tar.gz").DownloadUrl!);
 
     [Theory]
     [MemberData(nameof(Downloads))]
@@ -67,8 +69,11 @@ public sealed class PinnedTests : IDisposable
         Assert.Equal("https://github.com/docker/buildx/releases/download/v0.38.1/buildx-v0.38.1.linux-amd64", Updates.LinuxBuildx.DownloadUrl);
         Assert.Equal("https://download.docker.com/win/static/stable/x86_64/docker-29.9.2.zip", Updates.WindowsDocker.DownloadUrl);
         Assert.Equal(new Version(29, 9, 2), Updates.WindowsDocker.Version);
-        Assert.Equal($"https://github.com/kubernetes-sigs/kind/releases/download/{Kind.Tag}/{Kind.Asset}", Kind.Release.DownloadUrl);
-        Assert.Equal(Kind.Version, Updates.ParseVersion(Kind.Tag));
+        var kind = Tools.Pinned(Tools.Kind);
+        Assert.Matches(@"^https://github.com/kubernetes-sigs/kind/releases/download/v[\d.]+/kind-(windows|darwin|linux)-(amd64|arm64)$", kind.DownloadUrl);
+        Assert.Equal("https://dl.k8s.io/release/v1.37.2/bin/linux/amd64/kubectl", Pinned.Kubectl("linux/amd64/kubectl").DownloadUrl);
+        Assert.Equal("https://get.helm.sh/helm-v4.3.2-windows-amd64.zip", Pinned.Helm("windows-amd64.zip").DownloadUrl);
+        Assert.Equal(kind.Version, Updates.ParseVersion(kind.Tag));
     }
 
     [Fact]
@@ -114,26 +119,32 @@ public sealed class PinnedTests : IDisposable
         Assert.Equal(["kind"], Directory.GetFiles(dir).Select(Path.GetFileName));
     }
 
-    [Fact]
-    public void Kind_is_a_component_with_a_flag_on_every_platform()
+    [Theory]
+    [InlineData("kind")]
+    [InlineData("kubectl")]
+    [InlineData("helm")]
+    public void The_kubernetes_tools_are_components_with_a_flag_on_every_platform(string flag)
     {
-        Assert.Contains("kind", ComponentRules.KnownFlags);
-        Assert.Contains("kind", SetupOptions.Usage);
-        Assert.Equal(["kind"], SetupOptions.Parse(["--silent", "--with", "kind"]).With);
+        var tool = Tools.Standalone.Single(t => t.Flag == flag);
+        Assert.Contains(flag, ComponentRules.KnownFlags);
+        Assert.Contains(flag, SetupOptions.Usage);
+        Assert.Equal([flag], SetupOptions.Parse(["--silent", "--with", flag]).With);
 #pragma warning disable CA1416 // Only the catalogs, which are plain data on any system.
-        var mac = MacHost.Catalog.Single(c => c.Id == Kind.Id);
-        Assert.Equal("kind", mac.Flag);
+        var mac = MacHost.Catalog.Single(c => c.Id == tool.Id);
+        Assert.Equal(flag, mac.Flag);
         Assert.True(mac.IsOptional);
-        Assert.Contains(WindowsHost.Catalog, c => c.Id == Kind.Id && c.Flag == "kind");
-        Assert.Contains(LinuxHost.Catalog, c => c.Id == Kind.Id && c.Flag == "kind");
+        Assert.Contains(WindowsHost.Catalog, c => c.Id == tool.Id && c.Flag == flag);
+        Assert.Contains(LinuxHost.Catalog, c => c.Id == tool.Id && c.Flag == flag);
 #pragma warning restore CA1416
     }
 
     [Fact]
-    public void Removing_the_Windows_engine_keeps_kind_with_the_CLI()
+    public void Removing_the_Windows_engine_keeps_the_tools_with_the_CLI()
     {
         Assert.True(WindowsEngineFiles.Keep("docker.exe"));
         Assert.True(WindowsEngineFiles.Keep("kind.exe"));
+        Assert.True(WindowsEngineFiles.Keep("kubectl.exe"));
+        Assert.True(WindowsEngineFiles.Keep("helm.exe"));
         Assert.True(WindowsEngineFiles.Keep("docker-credential-wincred.exe"));
         Assert.False(WindowsEngineFiles.Keep("dockerd.exe"));
     }

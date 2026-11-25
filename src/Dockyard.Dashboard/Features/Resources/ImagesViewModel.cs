@@ -33,6 +33,7 @@ sealed class ImagesViewModel : SelectableSection<ImageRow>
         TerminalCommand = new Command(() => OpenTerminal(Selected), () => Selected is not null);
         TerminalRowCommand = new Command<ImageRow>(OpenTerminal);
         session.Connected += () => _ = Reload();
+        Usage.Changed += ApplyFilter;
         session.ResourceChanged += r => { if (r.Kind == RouteKind.Images) ScheduleReload(); };
         session.Containers.RowsChanged += Recompute;
     }
@@ -68,8 +69,13 @@ sealed class ImagesViewModel : SelectableSection<ImageRow>
     void Recompute()
     {
         all = ImageUsage.Rows(images, Session.Containers.Items);
+        Usage.Count(all.Select(r => r.InUse));
         ApplyFilter();
     }
+
+    public UsageFilter Usage { get; } = new();
+    protected override bool Shows(ImageRow row) => Usage.Shows(row.InUse);
+    protected override void ShowEverything() => Usage.Current = UsageFilter.Kind.All;
 
     protected override IEnumerable<ImageRow> All => all;
     protected override string?[] Words(ImageRow row) => [row.Reference, row.ShortId];

@@ -1,6 +1,6 @@
 #!/bin/sh
 # build-app.sh <version> <dist> <out>: Dockyard.app from the published files in <dist> (Dockyard, Dockyard Dashboard
-# and its dylibs, dockyard-vm, vm/), ad-hoc signed (no certificate needed), as Dockyard-<version>-macos.zip,
+# and its dylibs, dockyard-host, vm/), ad-hoc signed (no certificate needed), as Dockyard-<version>-macos.zip,
 # -macos-engine-only.zip and Dockyard-<version>-macos.dmg.
 set -eu
 version="$1"; dist="$2"; out="$3"
@@ -12,18 +12,21 @@ bundle() {
   app="$1/Dockyard.app"; with_dashboard="$2"
   mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
   sed "s/VERSION/$version/g" "$here/Info.plist" > "$app/Contents/Info.plist"
-  cp "$dist/Dockyard" "$dist/dockyard-vm" "$app/Contents/MacOS/"
+  # Inside the bundle the Toolbox and the dashboard keep the app's name.
+  cp "$dist/dockyard-toolbox" "$app/Contents/MacOS/Dockyard"
+  cp "$dist/dockyard-host" "$dist/dockyard-cli" "$app/Contents/MacOS/"
   if [ "$with_dashboard" = 1 ]; then
-    cp "$dist/Dockyard Dashboard" "$dist"/*.dylib "$app/Contents/MacOS/"
+    cp "$dist/dockyard-dashboard" "$app/Contents/MacOS/Dockyard Dashboard"
+    cp "$dist"/*.dylib "$app/Contents/MacOS/"
   fi
   cp -R "$dist/vm" "$app/Contents/Resources/vm"
   cp "$work/Dockyard.icns" "$app/Contents/Resources/Dockyard.icns"
 
   for f in "$app"/Contents/MacOS/*; do
-    [ "$(basename "$f")" = dockyard-vm ] && continue
+    [ "$(basename "$f")" = dockyard-host ] && continue
     codesign --force --sign - "$f"
   done
-  codesign --force --sign - --entitlements "$root/macos/DockyardVM/dockyard-vm.entitlements" "$app/Contents/MacOS/dockyard-vm"
+  codesign --force --sign - --entitlements "$root/macos/DockyardVM/dockyard-host.entitlements" "$app/Contents/MacOS/dockyard-host"
   codesign --force --sign - "$app"
   codesign --verify --strict "$app"
 }
@@ -51,5 +54,5 @@ for attempt in 1 2 3 4 5; do
   [ "$attempt" -eq 5 ] && exit 1
   sleep 5
 done
-codesign -d --entitlements - "$work/full/Dockyard.app/Contents/MacOS/dockyard-vm" | grep -q com.apple.security.virtualization
+codesign -d --entitlements - "$work/full/Dockyard.app/Contents/MacOS/dockyard-host" | grep -q com.apple.security.virtualization
 ls -la "$out"

@@ -21,6 +21,10 @@ sealed class ComponentViewModel(ComponentInfo info) : Observable
     public Release? LatestRelease { get => latestRelease; set { latestRelease = value; Raise(nameof(NotesUrl), nameof(HasNotes)); } }
 
     public string Installed { get => installed; set => Set(ref installed, value); }
+    string? source;
+    // Where the installed version came from: winget, Homebrew, apt, dnf, or Dockyard itself.
+    public string? Source { get => source; set { if (Set(ref source, value)) Raise(nameof(HasSource)); } }
+    public bool HasSource => source is not null;
     public string Latest { get => latest; set { if (Set(ref latest, value)) Raise(nameof(UpdateText)); } }
     public string UpdateText => $"Update to {Latest}";
     public string? NotesUrl => UpdateOffers.NotesUrl(Id, LatestRelease);
@@ -49,6 +53,8 @@ sealed class ComponentViewModel(ComponentInfo info) : Observable
     public bool Include { get => include; set => Set(ref include, value); }
     public bool IsOptional => Info.IsOptional;
     public bool IsDockyard => Id is nameof(Core.Component.App) or Core.ComponentRules.DashboardId;
+    public bool IsApp => Id is nameof(Core.Component.App);
+    public bool IsKubernetes => Core.Tools.Standalone.Any(t => t.Id == Id);
     public string AddId => "Add-" + Id;
     public string RemoveId => "Remove-" + Id;
     public string UpdateId => "Update-" + Id;

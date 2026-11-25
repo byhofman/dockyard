@@ -6,6 +6,7 @@ sealed class DialogField : Observable
 {
     string text;
     string? choice;
+    bool isChecked;
 
     public DialogField(string label, string text = "", string placeholder = "", IReadOnlyList<string>? choices = null)
     {
@@ -16,17 +17,57 @@ sealed class DialogField : Observable
         choice = choices?.FirstOrDefault();
     }
 
+    DialogField(string label, bool isChecked) : this(label)
+    {
+        IsCheck = true;
+        this.isChecked = isChecked;
+    }
+
+    public static DialogField Check(string label, bool isChecked = false) => new(label, isChecked);
+
+    // A YAML or JSON text in the code editor; problem says what is wrong with it as it is typed.
+    public static DialogField Code(string label, string text, Shared.CodeLanguage language, Func<string, string?>? problem = null) =>
+        new(label, text) { IsCode = true, Language = language, problemOf = problem };
+
+    Func<string, string?>? problemOf;
+    Func<string, string?>? warningOf;
+    bool isShown = true;
+
+    public Func<string, string?>? Validate { init => problemOf = value; }
+    public Func<string, string?>? Warn { init => warningOf = value; }
+    public string? Warning => warningOf?.Invoke(text);
+    public bool HasWarning => Warning is not null && !HasProblem;
+
+    public bool IsShown { get => isShown; set => Set(ref isShown, value); }
+
     public string Label { get; }
     public string Placeholder { get; }
     public IReadOnlyList<string>? Choices { get; }
+    public bool IsCheck { get; }
+    public bool IsCode { get; private init; }
+    public Shared.CodeLanguage Language { get; private init; }
     public bool IsChoice => Choices is not null;
-    public bool IsText => Choices is null;
+    public bool IsText => Choices is null && !IsCheck && !IsCode;
+    public string? Problem => problemOf?.Invoke(text);
+    public bool HasProblem => Problem is not null;
+    public bool HasLabel => !IsCheck;
     public event Action? Changed;
+
+    public bool IsChecked
+    {
+        get => isChecked;
+        set { if (Set(ref isChecked, value)) Changed?.Invoke(); }
+    }
 
     public string Text
     {
         get => text;
-        set { if (Set(ref text, value ?? "")) Changed?.Invoke(); }
+        set
+        {
+            if (!Set(ref text, value ?? "")) return;
+            Raise(nameof(Problem), nameof(HasProblem), nameof(Warning), nameof(HasWarning));
+            Changed?.Invoke();
+        }
     }
 
     public string? Choice
@@ -75,6 +116,7 @@ sealed class Dialog : Observable
     public bool IsDanger { get; }
     public bool IsPrimary => !IsDanger;
     public IReadOnlyList<DialogField> Fields { get; }
+    public double Width => Fields.Any(f => f.IsCode) ? 720 : 460;
     public string? OptionText { get; }
     public bool HasOption => OptionText is not null;
     public Command ConfirmCommand { get; }

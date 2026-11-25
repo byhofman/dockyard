@@ -4,7 +4,7 @@ namespace Dockyard.Agent;
 
 static class DomainNames
 {
-    public const string Zone = "dockyard.test";
+    public const string Zone = "dockyard.internal";
     public const string PortLabel = "dockyard.port";
     // People moving from OrbStack have this label in their Compose files already.
     public const string OrbStackPortLabel = "dev.orbstack.http-port";
@@ -19,7 +19,15 @@ static class DomainNames
 
     public static bool InZone(string name) => name == Zone || name.EndsWith("." + Zone, StringComparison.Ordinal);
 
-    // A flat name on purpose: a certificate's wildcard covers exactly one label, so web.shop.dockyard.test would need a
+    // <host>.<cluster>.dockyard.internal is for a kind cluster's ingress: the cluster's own Ingress rules pick the service.
+    // A container's name has one label, so the two never meet.
+    // Matched against the clusters there are, longest first: a cluster's name may have a dot in it itself.
+    public static string? ClusterOf(string name, IEnumerable<string> clusters) => clusters
+        .Where(c => name.EndsWith($".{c}.{Zone}", StringComparison.Ordinal) && name.Length > c.Length + Zone.Length + 2 && name[0] != '.')
+        .OrderByDescending(c => c.Length)
+        .FirstOrDefault();
+
+    // A flat name on purpose: a certificate's wildcard covers exactly one label, so web.shop.dockyard.internal would need a
     // new certificate per project and the app holding the CA to answer for each.
     public static IEnumerable<string> For(string containerName, string? project, string? service)
     {

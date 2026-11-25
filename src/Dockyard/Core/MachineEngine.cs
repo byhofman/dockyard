@@ -38,7 +38,8 @@ static class MachineEngine
         var root = Path.GetDirectoryName(Paths.DockerDir)!;
         ExtractDockerZip(zip, archive =>
         {
-            foreach (var entry in archive.Entries.Where(e => e.Name.Length > 0))
+            // The CLI is its own component, which winget may have brought.
+            foreach (var entry in archive.Entries.Where(e => e.Name.Length > 0 && !e.Name.Equals("docker.exe", StringComparison.OrdinalIgnoreCase)))
             {
                 var target = Path.GetFullPath(Path.Combine(root, entry.FullName.Replace('/', '\\')));
                 if (!target.StartsWith(Paths.DockerDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
@@ -70,6 +71,13 @@ static class MachineEngine
             InUseFiles.MoveAside(Paths.DockerExe);
             entry.ExtractToFile(Paths.DockerExe);
         });
+    }
+
+    public static void RemoveCli(Action<string> log)
+    {
+        if (!File.Exists(Paths.DockerExe)) return;
+        InUseFiles.MoveAside(Paths.DockerExe);
+        log($"Removed Dockyard's own docker.exe from {Paths.DockerDir}");
     }
 
     // Into Program Files, which only administrators can write: in this user's temp folder a process without elevation
@@ -164,6 +172,40 @@ static class MachineEngine
             sc.Start();
             await Task.Run(() => sc.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(60)));
         }
+    }
+
+    public static string DaemonJsonFile => Path.Combine(Paths.DaemonConfigDir, "daemon.json");
+
+    // The user's edit, with the pipe and its access put back. A running engine restarts with it; one that will not is given
+    // back the file it had.
+    public static async Task ApplyDaemonJson(Action<string> log, string json, string userSid, string userName)
+    {
+        if (EngineSettings.Problem(json) is { } problem) throw new InvalidOperationException(problem);
+        Directory.CreateDirectory(Paths.DaemonConfigDir);
+        var previous = File.Exists(DaemonJsonFile) ? File.ReadAllText(DaemonJsonFile) : null;
+        File.WriteAllText(DaemonJsonFile, DaemonJson.WithAccessFor(json, Paths.WindowsHost, ResolvesTo(userName, userSid) ? userName : null));
+        log($"Wrote {DaemonJsonFile}");
+        if (!ServiceExists() || ServiceStatus() != ServiceControllerStatus.Running) return;
+        try
+        {
+            await RestartService();
+            log("The Windows engine restarted with it");
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.ServiceProcess.TimeoutException)
+        {
+            if (previous is null) File.Delete(DaemonJsonFile);
+            else File.WriteAllText(DaemonJsonFile, previous);
+            await RestartService();
+            throw new InvalidOperationException($"The Windows engine did not start with these settings, so it has the previous ones again ({e.Message})");
+        }
+    }
+
+    static async Task RestartService()
+    {
+        await StopService();
+        using var sc = new ServiceController(Paths.ServiceName);
+        sc.Start();
+        await Task.Run(() => sc.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(60)));
     }
 
     // dockerd refuses to start when it cannot resolve a name in "group", so only a name that resolves goes in.

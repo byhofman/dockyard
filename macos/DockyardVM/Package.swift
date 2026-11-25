@@ -6,7 +6,7 @@ let package = Package(
     platforms: [.macOS(.v14)],
     targets: [
         .target(name: "DockyardVMCore"),
-        .executableTarget(name: "dockyard-vm", dependencies: ["DockyardVMCore"]),
+        .executableTarget(name: "dockyard-host", dependencies: ["DockyardVMCore"]),
         .testTarget(name: "DockyardVMCoreTests", dependencies: ["DockyardVMCore"]),
     ]
 )

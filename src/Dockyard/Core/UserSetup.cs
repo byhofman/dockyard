@@ -10,6 +10,7 @@ namespace Dockyard.Core;
 static partial class UserSetup
 {
     const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    const string HostRunValue = "Dockyard Host";
     const string RunOnceKey = @"Software\Microsoft\Windows\CurrentVersion\RunOnce";
     // Windows 11 22H2; older builds ignore the setting and warn at every WSL start.
     const int MirroredNetworkingBuild = 22621;
@@ -34,6 +35,8 @@ static partial class UserSetup
 
         using (var key = Registry.CurrentUser.CreateSubKey(RunKey))
             key.SetValue(Paths.AppName, $"\"{Paths.AppExe}\"");
+        using (var key = Registry.CurrentUser.CreateSubKey(RunKey))
+            if (File.Exists(Paths.HostExe)) key.SetValue(HostRunValue, $"\"{Paths.HostExe}\"");
         log($"{Paths.AppName} autostarts at logon");
     }
 
@@ -42,6 +45,7 @@ static partial class UserSetup
         await using var bundle = typeof(UserSetup).Assembly.GetManifestResourceStream(GuestBundle.ResourceName);
         if (bundle is not null) await distro.ApplyGuest(bundle, log);
         await distro.WriteFile(WslEngineGate.TokenPath, WslEngineGate.Token(Paths.EngineTokenFile), secret: true);
+        await distro.LinkDrives();
         await WriteEngineConfig(distro, log);
     }
 
@@ -56,7 +60,7 @@ static partial class UserSetup
     public static async Task WriteEngineConfig(WslDistro distro, Action<string> log)
     {
         var proxy = await ReachableProxy(distro, HostProxy(), log);
-        await distro.WriteFile("/etc/docker/daemon.json", EngineConfig.Render(proxy, Settings.Load()));
+        await distro.WriteFile("/etc/docker/daemon.json", EngineConfig.WithDockyard(EngineSettings.Load(EngineSettings.Linux, Settings.Load()), proxy));
         await EngineConfig.ApplyClientProxy(Paths.LinuxHost, proxy);
         if (proxy is { IsEmpty: false }) log("The Linux engine and its containers use this PC's proxy");
     }
@@ -99,16 +103,19 @@ static partial class UserSetup
         using (var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true))
         {
             key?.DeleteValue(Paths.AppName, throwOnMissingValue: false);
+            key?.DeleteValue(HostRunValue, throwOnMissingValue: false);
             key?.DeleteValue(Paths.LegacyName, throwOnMissingValue: false);
         }
+        foreach (var host in System.Diagnostics.Process.GetProcessesByName(Paths.HostProcess))
+            using (host) try { host.Kill(); } catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception) { }
 
         await CredentialStore.Forget(Paths.CredentialStoreMarker, Paths.CredentialHelper, log);
         await EngineConfig.ApplyClientProxy(Paths.LinuxHost, null);
         await EngineConfig.ApplyClientProxy(Paths.LegacyLinuxHost, null);
-        if (File.Exists(Paths.DockerExe))
+        if (File.Exists(Paths.DockerCli))
         {
-            await Shell.Run(Paths.DockerExe, "context", "use", "default");
-            await Shell.Run(Paths.DockerExe, "context", "rm", "-f", "linux", "win");
+            await Shell.Run(Paths.DockerCli, "context", "use", "default");
+            await Shell.Run(Paths.DockerCli, "context", "rm", "-f", "linux", "win");
             log("Removed docker contexts");
         }
         var tc = Path.Combine(Paths.UserProfile, ".testcontainers.properties");
@@ -204,27 +211,27 @@ static partial class UserSetup
         else await RemoveContext("linux", "win", log);
         if (withWindows) await AddContext("win", Paths.WindowsHost);
         else await RemoveContext("win", "linux", log);
-        var current = (await Shell.Check(Paths.DockerExe, "context", "show")).Trim();
-        if (current is not ("linux" or "win")) await Shell.Check(Paths.DockerExe, "context", "use", withLinux ? "linux" : "win");
+        var current = (await Shell.Check(Paths.DockerCli, "context", "show")).Trim();
+        if (current is not ("linux" or "win")) await Shell.Check(Paths.DockerCli, "context", "use", withLinux ? "linux" : "win");
         log(withLinux && withWindows ? "Docker contexts: linux (default), win" : $"Docker context: {(withLinux ? "linux" : "win")}");
     }
 
     public static async Task AddContext(string name, string host)
     {
-        var exists = (await Shell.Run(Paths.DockerExe, "context", "inspect", name)).ExitCode == 0;
-        await Shell.Check(Paths.DockerExe, "context", exists ? "update" : "create", name, "--docker", $"host={host}");
+        var exists = (await Shell.Run(Paths.DockerCli, "context", "inspect", name)).ExitCode == 0;
+        await Shell.Check(Paths.DockerCli, "context", exists ? "update" : "create", name, "--docker", $"host={host}");
     }
 
     // The docker command must not be left pointing at an engine that is gone.
     public static async Task RemoveContext(string name, string fallback, Action<string> log)
     {
-        if (!File.Exists(Paths.DockerExe)) return;
-        if ((await Shell.Run(Paths.DockerExe, "context", "show")).Output.Trim() == name)
+        if (!File.Exists(Paths.DockerCli)) return;
+        if ((await Shell.Run(Paths.DockerCli, "context", "show")).Output.Trim() == name)
         {
-            await Shell.Run(Paths.DockerExe, "context", "use", fallback);
+            await Shell.Run(Paths.DockerCli, "context", "use", fallback);
             log($"The docker context is now {fallback}");
         }
-        await Shell.Run(Paths.DockerExe, "context", "rm", "-f", name);
+        await Shell.Run(Paths.DockerCli, "context", "rm", "-f", name);
     }
 
     public static async Task EnableLinuxEngine(Action<string> log)

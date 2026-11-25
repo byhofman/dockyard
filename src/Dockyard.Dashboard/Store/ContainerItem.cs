@@ -31,6 +31,12 @@ sealed class ContainerItem(string id) : Observable
     public string Service { get => service; private set => Set(ref service, value); }
     public IReadOnlyList<PublishedPort> Ports { get => ports; private set => Set(ref ports, value); }
     public bool InProject => Project.Length > 0;
+    // Shown under a row of its own: a compose project, or a kind cluster with its load balancer proxies.
+    public bool IsGrouped => InProject || IsSystem || Labels.ContainsKey(KindLabels.Cluster) || Labels.ContainsKey(KindLabels.LoadBalancerCluster) || Labels.ContainsKey(KindLabels.ForwarderCluster);
+
+    // Dockyard runs it for something of its own, such as kind's cloud provider or the NFS server: shown, not managed here.
+    public bool IsSystem => Labels.ContainsKey(SystemRow.HelperLabel) || Labels.ContainsKey(SystemRow.ServiceLabel);
+    public bool IsManaged => !IsSystem;
     public string PortsText => string.Join("  ", Ports.Select(p => p.Text));
 
     public string State
@@ -63,7 +69,7 @@ sealed class ContainerItem(string id) : Observable
         State = s.State;
         Status = s.Status;
         Project = s.Labels?.GetValueOrDefault(ProjectLabel) ?? "";
-        Raise(nameof(InProject));
+        Raise(nameof(InProject), nameof(IsGrouped), nameof(IsSystem), nameof(IsManaged));
         Service = s.Labels?.GetValueOrDefault(ServiceLabel) ?? "";
         var newPorts = PortsOf(s);
         if (!newPorts.SequenceEqual(Ports))

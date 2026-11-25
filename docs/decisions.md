@@ -406,3 +406,11 @@ DOK-23. `MacHost`, `LinuxHost`, `WindowsHost` and `MachineSetup` were 450 to 650
 - **Windows:** `WslEngine` (the distro's keep-alive and the pipes), `WindowsServiceEngine` (the Windows engine's service), `WindowsTrayServices` (published ports, domain relay), `WindowsSetup` (machine steps in or out of elevation). `MachineSetup` keeps only the order of install, update and uninstall, over `MachineEngine`, `MachineApps` and `MachineTrust`.
 
 Separate classes, not partial classes: a partial class keeps one set of fields that every part can touch, which is the coupling the split is meant to remove. No behaviour changed. The code moved as it was, and the unit tests and the three e2e runs are the check.
+
+## 2026-11-25: Container names move to dockyard.internal, without an alias
+
+The owner chose `.internal`, the name space ICANN reserved for private use, over `.test`, which is meant for testing. `*.dockyard.test` stops answering in 0.9.0: no alias. Setup takes out the old NRPT rule on Windows and `/etc/resolver/dockyard.test` on macOS, and the local CA is replaced, because its name constraint names the zone. The machine is asked to trust the new one once.
+
+## 2026-11-25: All installation logic is in the Toolbox; the one-liners only fetch it
+
+The owner: the Toolbox is meant for installing all components and features, and the scripts the one-liners download stay minimal. Each script finds the release, downloads the Toolbox, checks it against `SHA256SUMS` and starts it with its arguments. `install.ps1` lost `-Build` (`gh run download` and `--assets` do the same by hand), the `-EngineOnly` and `-NoStart` aliases, the clean-up of earlier downloads and the Defender exclusion it added when the Toolbox was blocked; it now says how to allow it. DNS routing rules and trusting the CA stay in the Toolbox's setup, not in dockyard-host, which only runs what has to run while the engine does.

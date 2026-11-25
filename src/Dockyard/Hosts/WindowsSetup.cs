@@ -8,15 +8,24 @@ namespace Dockyard.Hosts;
 [SupportedOSPlatform("windows")]
 static class WindowsSetup
 {
+    // The user's choice is read here and handed on: the administrator step may run under another account's settings.
+    static bool UsePackageManager => Settings.Load().UsePackageManager;
+    static string[] PackageManagerArgs => ["--package-manager", UsePackageManager ? "on" : "off"];
+
     public static async Task<bool> MachineInstall(Action<string> log, bool dashboard, IReadOnlyCollection<string> without)
     {
         if (!Elevation.IsElevated)
         {
-            string[] extra = [.. dashboard ? Array.Empty<string>() : ["--engine-only"], .. without.Count > 0 ? new[] { "--without", string.Join(',', without) } : []];
+            string[] extra =
+            [
+                .. dashboard ? Array.Empty<string>() : ["--engine-only"],
+                .. without.Count > 0 ? new[] { "--without", string.Join(',', without) } : [],
+                .. PackageManagerArgs,
+            ];
             return await Elevation.Run(log, "--machine-install", extra);
         }
         var (sid, name) = Elevation.CurrentUser;
-        return await MachineSetup.Install(log, sid, name, Environment.ProcessId, engineOnly: !dashboard, without);
+        return await MachineSetup.Install(log, sid, name, Environment.ProcessId, engineOnly: !dashboard, without, UsePackageManager);
     }
 
     public static async Task MachineUninstall(Action<string> log)
@@ -30,10 +39,13 @@ static class WindowsSetup
         if (Elevation.IsElevated)
         {
             var (sid, name) = Elevation.CurrentUser;
-            await MachineSetup.SetComponent(log, Enum.Parse<Component>(component), installed, sid, name);
+            await MachineSetup.SetComponent(log, Enum.Parse<Component>(component), installed, sid, name, UsePackageManager);
         }
-        else await Elevation.Run(log, "--machine-component", component, installed ? "add" : "remove");
+        else await Elevation.Run(log, "--machine-component", [component, installed ? "add" : "remove", .. PackageManagerArgs]);
     }
+
+    public static Task MachineUpdate(Action<string> log, IReadOnlyCollection<Component> components) =>
+        Elevation.Run(log, "--machine-update", [string.Join(',', components), .. PackageManagerArgs]);
 
     public static async Task SetDashboard(Action<string> log, bool installed)
     {

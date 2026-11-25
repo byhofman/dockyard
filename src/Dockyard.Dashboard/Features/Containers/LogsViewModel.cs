@@ -60,7 +60,7 @@ sealed class LogsViewModel : Observable, IDisposable
         {
             await foreach (var line in client.LogsAsync(source.Id, new LogOptions(Follow: true, Tail: 1000, Tty: source.Tty), ct).ConfigureAwait(false))
             {
-                var text = TerminalText.Plain(line.Text);
+                var text = line.Text;
                 var entry = line with { Text = source.Prefix is null ? text : $"{source.Prefix} | {text}" };
                 lock (incoming) incoming.Add(entry);
             }
@@ -98,7 +98,7 @@ sealed class LogsViewModel : Observable, IDisposable
     }
 
     LogRow ToRow(LogLine line) => new(
-        ShowTimestamps && line.Time is { } t ? $"{t.ToLocalTime():HH:mm:ss.fff}  {line.Text}" : line.Text,
+        AnsiLine.From(ShowTimestamps && line.Time is { } t ? $"{t.ToLocalTime():HH:mm:ss.fff}  {line.Text}" : line.Text),
         line.Stream == LogStream.Stderr);
 
     public void Dispose()

@@ -17,7 +17,10 @@ static class MacLayout
     public static string DataDir => Path.Combine(Home, ".dockyard");
     public static string BinDir => Path.Combine(DataDir, "bin");
     public static string DockerCli => Path.Combine(BinDir, "docker");
-    public static string KindCli => Path.Combine(BinDir, "kind");
+    // Dockyard's own docker where it put one, otherwise Homebrew's.
+    public static string Docker => File.Exists(DockerCli) ? DockerCli
+        : Homebrew.FindPrefix() is { } prefix && File.Exists(Path.Combine(prefix, "bin", "docker")) ? Path.Combine(prefix, "bin", "docker")
+        : DockerCli;
     public static string PluginDir => Path.Combine(Home, ".docker", "cli-plugins");
     public static string DockerSocket => Path.Combine(DataDir, "docker.sock");
     public static string ControlSocket => Path.Combine(DataDir, "run", "vm.sock");
@@ -30,7 +33,8 @@ static class MacLayout
     public static string CredentialHelper => Path.Combine(BinDir, "docker-credential-osxkeychain");
     public const string SystemSocket = "/var/run/docker.sock";
     public static string LoginKeychain => Path.Combine(Home, "Library", "Keychains", "login.keychain-db");
-    public const string DomainResolver = "/etc/resolver/dockyard.test";
+    public const string DomainResolver = "/etc/resolver/dockyard.internal";
+    public const string LegacyDomainResolver = "/etc/resolver/dockyard.test";
     public const int DomainDnsPort = 15353;
     public const string SocketDaemonLabel = "com.byhofman.dockyard.socket";
     public const string SocketDaemon = "/Library/LaunchDaemons/" + SocketDaemonLabel + ".plist";
@@ -53,11 +57,54 @@ static class MacLayout
         : Path.Combine(InstallLocation(AppContext.BaseDirectory, UserApplications), "Contents", "MacOS");
 
     public static string InstalledExe => Path.Combine(AppBase, "Dockyard");
-    public static string Helper => Path.Combine(AppBase, "dockyard-vm");
+    public static string Helper => Path.Combine(AppBase, "dockyard-host");
     public static string Assets => Directory.Exists(Path.Combine(AppBase, "..", "Resources", "vm"))
         ? Path.GetFullPath(Path.Combine(AppBase, "..", "Resources", "vm"))
         : Path.Combine(AppBase, "vm");
     public static string LaunchAgent => Path.Combine(Home, "Library", "LaunchAgents", LaunchAgentLabel + ".plist");
+
+    // dockyard-host runs the VM under launchd, so the engine does not depend on the Toolbox being open. It is started on
+    // demand, or at login when the active engine starts then, and launchd restarts it only when it failed: a stop exits 0.
+    public const string HostLabel = "com.byhofman.dockyard.host";
+    public static string HostAgent => Path.Combine(Home, "Library", "LaunchAgents", HostLabel + ".plist");
+    public static string HostLog => Path.Combine(Home, ".dockyard", "logs", "host.log");
+
+    public static string HostAgentPlist(string helper, string config, bool atLogin) => $"""
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>Label</key>
+            <string>{HostLabel}</string>
+            <key>ProgramArguments</key>
+            <array>
+                <string>{Escape(helper)}</string>
+                <string>run</string>
+                <string>--config</string>
+                <string>{Escape(config)}</string>
+            </array>
+            <key>RunAtLoad</key>
+            <{(atLogin ? "true" : "false")}/>
+            <key>KeepAlive</key>
+            <dict>
+                <key>SuccessfulExit</key>
+                <false/>
+            </dict>
+            <key>StandardErrorPath</key>
+            <string>{Escape(HostLog)}</string>
+            <key>ProcessType</key>
+            <string>Interactive</string>
+        </dict>
+        </plist>
+        """;
+
+    // bootout first only when the plist changed: a loaded job keeps the definition it was loaded with.
+    public static string StartHost(bool changed) =>
+        (changed ? $"launchctl bootout gui/$(id -u)/{HostLabel} 2>/dev/null; " : "")
+        + $"launchctl bootstrap gui/$(id -u) {Quote(HostAgent)} 2>/dev/null; launchctl kickstart gui/$(id -u)/{HostLabel}";
+    public static string RemoveHost => $"launchctl bootout gui/$(id -u)/{HostLabel} 2>/dev/null; rm -f {Quote(HostAgent)}";
+
+    static string Quote(string s) => "'" + s.Replace("'", "'\\''") + "'";
 
     public static string LaunchAgentPlist(string exe) => $"""
         <?xml version="1.0" encoding="UTF-8"?>
@@ -124,7 +171,7 @@ static class MacLayout
         + $"if [ \"$(readlink {SystemSocket})\" = {Shell.ShQuote(ourSocket)} ]; then rm -f {SystemSocket}; fi";
 
     public static string InstallDomainResolver =>
-        $"mkdir -p /etc/resolver && printf 'nameserver 127.0.0.1\\nport {DomainDnsPort}\\n' > {DomainResolver}";
+        $"mkdir -p /etc/resolver && printf 'nameserver 127.0.0.1\\nport {DomainDnsPort}\\n' > {DomainResolver} && rm -f {LegacyDomainResolver}";
 
     // One administrator prompt: AppleScript runs the shell command with administrator privileges.
     public static string[] AdminShell(string command) =>
@@ -133,15 +180,21 @@ static class MacLayout
     // /etc/paths.d is read by every account's shells, root's too, and ~/.dockyard/bin is this user's to change. So the PATH
     // gets a folder only root can write, with a small script per command that runs this user's copy for this user alone.
     public const string SharedBinDir = "/usr/local/dockyard/bin";
-    public static readonly string[] SharedCommands = ["docker", "kind", "docker-credential-osxkeychain"];
+    public static readonly string[] SharedCommands = ["docker", "kind", "kubectl", "helm", "docker-credential-osxkeychain", "dockyard"];
 
-    public static string Wrapper(string uid, string binDir, string command) =>
-        $"#!/bin/sh\n[ \"$(id -u)\" = {uid} ] || {{ echo \"{command}: this is Dockyard for another account on this Mac\" >&2; exit 127; }}\nexec {Shell.ShQuote($"{binDir}/{command}")} \"$@\"\n";
+    // brewBin: where Homebrew's copy is, for when the tool came from there and this user has no copy of Dockyard's.
+    public static string Wrapper(string uid, string binDir, string command, string? brewBin = null) =>
+        $"#!/bin/sh\n[ \"$(id -u)\" = {uid} ] || {{ echo \"{command}: this is Dockyard for another account on this Mac\" >&2; exit 127; }}\n"
+        + (brewBin is null ? "" : $"[ -x {Shell.ShQuote($"{binDir}/{command}")} ] || exec {Shell.ShQuote($"{brewBin}/{command}")} \"$@\"\n")
+        + $"exec {Shell.ShQuote($"{binDir}/{command}")} \"$@\"\n";
 
-    public static string PathsEntry(string uid, string binDir) =>
+    public static string PathsEntry(string uid, string binDir, string? brewBin = null) =>
         $"mkdir -p {SharedBinDir} && chown root:wheel /usr/local/dockyard {SharedBinDir} && chmod 755 /usr/local/dockyard {SharedBinDir} && "
-        + string.Concat(SharedCommands.Select(c => $"printf '%s' {Shell.ShQuote(Wrapper(uid, binDir, c))} > {SharedBinDir}/{c} && chmod 755 {SharedBinDir}/{c} && "))
+        + string.Concat(SharedCommands.Select(c => $"printf '%s' {Shell.ShQuote(Wrapper(uid, binDir, c, brewBin))} > {SharedBinDir}/{c} && chmod 755 {SharedBinDir}/{c} && "))
         + $"echo {SharedBinDir} > /etc/paths.d/dockyard && chmod 644 /etc/paths.d/dockyard";
+
+    public static bool WrappersAreCurrent(string uid, string binDir, string? brewBin, string sharedBinDir = SharedBinDir) =>
+        SharedCommands.All(c => File.Exists(Path.Combine(sharedBinDir, c)) && File.ReadAllText(Path.Combine(sharedBinDir, c)) == Wrapper(uid, binDir, c, brewBin));
 
     public const string RemovePathsEntry = "rm -f /etc/paths.d/dockyard; rm -rf /usr/local/dockyard";
 

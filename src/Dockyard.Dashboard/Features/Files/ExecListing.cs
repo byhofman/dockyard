@@ -25,7 +25,7 @@ static class ExecListing
     // Null when the container cannot answer this way (stopped, no shell, no stat): the caller reads the archive instead.
     public static async Task<IReadOnlyList<FileEntry>?> ListAsync(string context, string container, string directory, CancellationToken ct)
     {
-        var psi = new ProcessStartInfo(Containers.DockerCli.Path())
+        var psi = new ProcessStartInfo(DockerCli.Path())
         {
             UseShellExecute = false,
             CreateNoWindow = true,

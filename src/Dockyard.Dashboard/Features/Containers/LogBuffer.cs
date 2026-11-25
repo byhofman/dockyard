@@ -29,5 +29,5 @@ sealed class LogBuffer(int capacity = 10_000)
         : lines.Where(l => Matches(l, search)).ToList();
 
     public static bool Matches(LogLine line, string? search) =>
-        string.IsNullOrEmpty(search) || line.Text.Contains(search, StringComparison.OrdinalIgnoreCase);
+        string.IsNullOrEmpty(search) || TerminalText.Plain(line.Text).Contains(search, StringComparison.OrdinalIgnoreCase);
 }

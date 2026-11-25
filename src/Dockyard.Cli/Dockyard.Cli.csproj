@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The dockyard command: kind clusters itself, and what the Toolbox owns (engines, their settings, HTTPS, updates)
+       through the Toolbox. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>dockyard-cli</AssemblyName>
+    <RootNamespace>Dockyard.Cli</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <Product>Dockyard</Product>
+    <Company>Thomas Hofman</Company>
+    <Copyright>Copyright (c) 2026 Thomas Hofman</Copyright>
+    <Version>0.0.0</Version>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">$(NETCoreSdkRuntimeIdentifier)</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <PublishTrimmed>true</PublishTrimmed>
+    <!-- Spectre.Console.Cli reads the commands' settings by reflection: only the framework's own assemblies are trimmed. -->
+    <TrimMode>partial</TrimMode>
+    <SuppressTrimAnalysisWarnings>true</SuppressTrimAnalysisWarnings>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Dockyard.Cli.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\LocalPipe.cs" LinkBase="Shared" />
+    <Compile Include="..\Shared\TrayCommand.cs" LinkBase="Shared" />
+    <Compile Include="..\Shared\TrayCommandKind.cs" LinkBase="Shared" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Spectre.Console.Cli" Version="0.57.2" />
+    <ProjectReference Include="..\Dockyard.Kind\Dockyard.Kind.csproj" />
+  </ItemGroup>
+
+</Project>

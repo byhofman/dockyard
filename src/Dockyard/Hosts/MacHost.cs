@@ -11,7 +11,8 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
     readonly MacVm vm = new(runner, ping, helperAnswers);
     readonly MacComponents parts = new(runner);
     readonly MacTrust trust = new(runner);
-    MacSetup Setup => new(runner, parts, vm);
+    ToolComponents Tools => new(new Homebrew(runner), new MacOwnCopies(runner, parts), () => Settings.Load().UsePackageManager);
+    MacSetup Setup => new(runner, parts, vm, Tools);
 
     public IReadOnlyList<EngineInfo> Engines { get; } =
         [new(Engine, "Linux", "Linux containers", "Dockyard VM (Virtualization.framework)", MacLayout.Context, "unix://" + MacLayout.DockerSocket)];
@@ -24,12 +25,14 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         new("Cli", "Docker CLI", RequiredBecause: "the engine, Compose and Buildx are used through it.", RequiredFlag: "cli"),
         new("Compose", "Docker Compose", Flag: "compose", Note: "Needs the Docker CLI. The dashboard's Compose actions use it."),
         new("Buildx", "Docker Buildx", Flag: "buildx", Note: "Needs the Docker CLI. docker build uses it."),
-        Kind.Component,
+        Core.Tools.Kind.Component,
+        Core.Tools.Kubectl.Component,
+        Core.Tools.Helm.Component,
         new("App", "Dockyard", RequiredBecause: "it is what runs everything here. Uninstall removes it."),
         new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard", Note: "Optional. Opens from the menu bar."),
     ];
 
-    public bool IsInstalled => File.Exists(MacLayout.VmConfig) && File.Exists(MacLayout.DockerCli);
+    public bool IsInstalled => File.Exists(MacLayout.VmConfig) && File.Exists(MacLayout.Docker);
 
     public Task<bool> IsRunning(string engine) => vm.IsRunning();
     public Task Start(string engine) => vm.Start();
@@ -37,10 +40,11 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
 
     public string ActiveEngine() => Engine;
 
-    public Task UseContext(string engine) => runner.Check(MacLayout.DockerCli, "context", "use", MacLayout.Context);
+    public Task UseContext(string engine) => runner.Check(MacLayout.Docker, "context", "use", MacLayout.Context);
 
-    public Task<Version?> Installed(string component) => parts.Installed(component);
-    public Task<Release?> Latest(string component) => MacComponents.Latest(component);
+    public Task<Version?> Installed(string component) => Core.Tools.Find(component) is { } tool ? Tools.Installed(tool) : parts.Installed(component);
+    public Task<Release?> Latest(string component) => Core.Tools.Find(component) is { } tool ? Tools.Latest(tool) : MacComponents.Latest(component);
+    public Task<string?> Source(string component) => Core.Tools.Find(component) is { } tool ? Tools.Source(tool) : Task.FromResult<string?>("Dockyard");
 
     public string CaDirectory => Path.Combine(MacLayout.DataDir, "ca");
     public ICaKeyStore CaKeys => new KeychainCaKey(MacLayout.LoginKeychain);
@@ -52,16 +56,21 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
 
     public Task ApplyEngineConfiguration(Action<string> log) => vm.ApplyEngineConfiguration(log);
 
+    public Task<string?> ReadEngineSettings(string engine) => Task.FromResult<string?>(RenderedEngineSettings.Read());
+    public Task ApplyEngineSettings(Action<string> log, string engine, string json) => RenderedEngineSettings.Apply(log, json, vm.ApplyEngineConfiguration);
+
     public async Task<bool> Update(Action<string> log, IReadOnlyList<(string Component, Release? Release)> components)
     {
+        var tools = Tools;
         foreach (var (component, release) in components)
         {
+            if (Core.Tools.Find(component) is { } tool)
+            {
+                await tools.Install(log, tool);
+                continue;
+            }
             switch (component)
             {
-                case "Cli" when release is not null: await parts.InstallCli(log, release); break;
-                case "Compose" when release is not null: await MacComponents.InstallPlugin(log, "docker-compose", release); break;
-                case "Buildx" when release is not null: await MacComponents.InstallPlugin(log, "docker-buildx", release); break;
-                case Kind.Id: await MacComponents.InstallKind(log); break;
                 case ComponentRules.DashboardId when release is not null: await parts.AddDashboard(log, release.Tag); break;
                 case "LinuxEngine": await vm.Update(log); break;
                 case "App":
@@ -69,6 +78,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
                     return true;
             }
         }
+        await MacSetup.FindBrewPlugins(log, tools);
         return false;
     }
 
@@ -85,21 +95,11 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
 
     public async Task<bool> SetComponent(Action<string> log, string component, bool installed, bool removeData = false)
     {
-        var plugin = component switch { "Compose" => "docker-compose", "Buildx" => "docker-buildx", _ => null };
         if (component == ComponentRules.DashboardId) return await SetDashboard(log, installed);
-        if (component == Kind.Id)
-        {
-            if (installed) await MacComponents.InstallKind(log);
-            else MacComponents.RemoveKind(log);
-            return false;
-        }
-        if (plugin is null) throw new InvalidOperationException($"{component} cannot be changed here");
-        if (!installed)
-        {
-            MacComponents.RemovePlugin(plugin);
-            log($"Removed {plugin}");
-        }
-        else await MacComponents.InstallPlugin(log, plugin, (await Latest(component))!);
+        if (Core.Tools.Find(component) is not { } tool) throw new InvalidOperationException($"{component} cannot be changed here");
+        var tools = Tools;
+        if (!installed) await tools.Remove(log, tool);
+        else if (await tools.Install(log, tool)) await MacSetup.FindBrewPlugins(log, tools);
         return false;
     }
 

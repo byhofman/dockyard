@@ -15,7 +15,7 @@ static class Https
             // A CA from before the IP and usage limits is replaced, which asks for trust once more.
             if (await LocalCa.Load(host.CaDirectory, host.CaKeys) is { } earlier && !LocalCa.IsConstrainedRoot(earlier.Certificate))
             {
-                log("Replacing Dockyard's certificate authority with one that can only vouch for web servers under dockyard.test");
+                log("Replacing Dockyard's certificate authority with one that can only vouch for web servers under dockyard.internal");
                 await Disable(host, log, silent);
             }
             ca = await LocalCa.LoadOrCreate(host.CaDirectory, host.CaKeys);

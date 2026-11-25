@@ -30,7 +30,7 @@ stop_engine() {
   while [ -S "$home/.dockyard/run/vm.sock" ] && [ $i -lt 60 ]; do i=$((i+1)); sleep 1; done
 }
 start_engine() {
-  "$macos/dockyard-vm" run --config "$home/.dockyard/vm.json" >/dev/null 2>&1 &
+  "$macos/dockyard-host" run --config "$home/.dockyard/vm.json" >/dev/null 2>&1 &
   i=0
   until "$docker" version >/dev/null 2>&1; do
     i=$((i+1)); [ $i -lt 120 ] || fail "the engine did not start"; sleep 1
@@ -69,9 +69,14 @@ if [ "$rc" -eq 2 ]; then ok "exit 2"; else fail "--typo exits $rc"; fi
 check "and nothing was installed" missing "$app"
 
 echo "== first install, no dashboard"
-run --silent --no-dashboard --no-start
+# Homebrew installs for the whole Mac, outside this throwaway home, so Dockyard keeps its own copies here. As a setting
+# and not --no-package-manager: the one-liner may run a release from before it.
+unset XDG_CONFIG_HOME
+mkdir -p "$home/.config/Dockyard"
+printf '{"UsePackageManager": false}\n' > "$home/.config/Dockyard/settings.json"
+if [ -n "${ONELINER:-}" ]; then run --silent --no-dashboard --no-start; else run --silent --no-dashboard --no-start --no-package-manager; fi
 check "app in place" test -x "$macos/Dockyard"
-check "the VM helper too" test -x "$macos/dockyard-vm"
+check "the VM helper too" test -x "$macos/dockyard-host"
 check "no dashboard" missing "$macos/Dockyard Dashboard"
 check "no dashboard libraries" sh -c "! ls '$macos'/*.dylib >/dev/null 2>&1"
 check "docker CLI" test -x "$docker"
@@ -79,7 +84,7 @@ check "VM prepared" test -f "$home/.dockyard/vm.json"
 if sed 's#\\/#/#g' "$home/.dockyard/vm.json" | grep -q "$app/Contents/Resources/vm/kernel"; then ok "vm.json points at the installed app, not at the download"; else fail "vm.json: $(cat "$home/.dockyard/vm.json")"; fi
 if grep -q "$macos/Dockyard" "$home/Library/LaunchAgents/com.byhofman.dockyard.plist"; then ok "login item points at the installed app"; else fail "login item"; fi
 if [ "$("$docker" context show)" = dockyard ]; then ok "docker context selected"; else fail "docker context"; fi
-if codesign -d --entitlements - "$macos/dockyard-vm" 2>/dev/null | grep -q com.apple.security.virtualization; then ok "the helper kept its entitlement"; else fail "entitlement"; fi
+if codesign -d --entitlements - "$macos/dockyard-host" 2>/dev/null | grep -q com.apple.security.virtualization; then ok "the helper kept its entitlement"; else fail "entitlement"; fi
 if "$macos/Dockyard" --version >/dev/null; then ok "the installed app still starts after re-signing"; else fail "--version"; fi
 
 if [ -n "${BOOT:-}" ]; then
@@ -112,16 +117,16 @@ if [ -n "${ADMIN:-}" ]; then
   as_runner security default-keychain -d user -s "$real_home/e2e.keychain"
   as_runner security unlock-keychain -p e2e "$real_home/e2e.keychain"
   as_runner security set-keychain-settings "$real_home/e2e.keychain"
-  printf '{"ServerURL":"e2e.dockyard.test","Username":"me","Secret":"s3cret"}' | as_runner "$helper" store
-  if printf 'e2e.dockyard.test' | as_runner "$helper" get | grep -q s3cret; then ok "a login round-trips through the Keychain"; else fail "keychain round trip"; fi
+  printf '{"ServerURL":"e2e.dockyard.internal","Username":"me","Secret":"s3cret"}' | as_runner "$helper" store
+  if printf 'e2e.dockyard.internal' | as_runner "$helper" get | grep -q s3cret; then ok "a login round-trips through the Keychain"; else fail "keychain round trip"; fi
   if grep -q s3cret "$home/.docker/config.json"; then fail "the secret reached config.json"; else ok "the secret is not in config.json"; fi
-  printf 'e2e.dockyard.test' | as_runner "$helper" erase
+  printf 'e2e.dockyard.internal' | as_runner "$helper" erase
 fi
 check "tools that look in ~/.docker/run find it" test -L "$home/.docker/run/docker.sock"
 
 if [ -n "${ADMIN:-}" ]; then
   echo "== container domains and trusted HTTPS"
-  if grep -q 'port 15353' /etc/resolver/dockyard.test; then ok "this Mac asks Dockyard about the name space"; else fail "resolver: $(cat /etc/resolver/dockyard.test 2>&1)"; fi
+  if grep -q 'port 15353' /etc/resolver/dockyard.internal; then ok "this Mac asks Dockyard about the name space"; else fail "resolver: $(cat /etc/resolver/dockyard.internal 2>&1)"; fi
   # Dockyard uses the login keychain by its path, so this home needs one; made here and unlocked, as a login does.
   mkdir -p "$home/Library/Keychains"
   security create-keychain -p e2e "$home/Library/Keychains/login.keychain-db"
@@ -133,7 +138,7 @@ if [ -n "${ADMIN:-}" ]; then
   check "no file holds the key, /Users being shared with the engine" missing "$home/.dockyard/ca/ca.key"
   if security find-generic-password -s "Dockyard Local CA key" "$home/Library/Keychains/login.keychain-db" >/dev/null; then ok "the key is in the keychain"; else fail "the key is not in the keychain"; fi
   if security find-certificate -c "Dockyard Local CA" /Library/Keychains/System.keychain >/dev/null; then ok "the CA is in the trust store"; else fail "not in the trust store"; fi
-  if openssl x509 -in "$ca" -noout -text | grep -A2 'Name Constraints: critical' | grep -q 'DNS:dockyard.test'; then ok "the CA is name constrained"; else fail "name constraint"; fi
+  if openssl x509 -in "$ca" -noout -text | grep -A2 'Name Constraints: critical' | grep -q 'DNS:dockyard.internal'; then ok "the CA is name constrained"; else fail "name constraint"; fi
 fi
 
 date > "$home/.dockyard/marker"
@@ -168,6 +173,8 @@ if [ -z "${ONELINER:-}" ]; then
   check "it stays gone on a rerun" missing "$kind"
   run --silent --dashboard --no-start --with kind
   check "it is back" test -x "$kind"
+  "$home/.dockyard/bin/kubectl" version --client >/dev/null && ok "kubectl is Dockyard's own and runs" || fail "kubectl"
+  "$home/.dockyard/bin/helm" version --short >/dev/null && ok "helm comes out of its archive and runs" || fail "helm"
 fi
 rc=0; run --silent --no-start --without linux-engine >/dev/null 2>&1 || rc=$?
 if [ "$rc" -eq 2 ]; then ok "the engine is required here"; else fail "--without linux-engine exits $rc"; fi
@@ -198,7 +205,7 @@ if [ -f "$home/.docker/config.json" ] && grep -q credsStore "$home/.docker/confi
 if [ -n "${ADMIN:-}" ]; then
   check "/var/run/docker.sock is gone" missing /var/run/docker.sock
   check "the daemon is gone" missing /Library/LaunchDaemons/com.byhofman.dockyard.socket.plist
-  check "the resolver entry is gone" missing /etc/resolver/dockyard.test
+  check "the resolver entry is gone" missing /etc/resolver/dockyard.internal
   if security find-certificate -c "Dockyard Local CA" /Library/Keychains/System.keychain >/dev/null 2>&1; then fail "the CA stayed in the trust store"; else ok "the CA is out of the trust store"; fi
 fi
 

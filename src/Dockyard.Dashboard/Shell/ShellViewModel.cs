@@ -11,6 +11,10 @@ namespace Dockyard.Dashboard.Shell;
 
 sealed class ShellViewModel : Observable
 {
+    public static string Version { get; } = "v" + (System.Reflection.Assembly.GetEntryAssembly()?
+        .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+        .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion ?? "0.0.0").Split('+')[0];
+
     ContextWatcher? watcher;
     Section currentSection;
     string search = "";
@@ -28,10 +32,12 @@ sealed class ShellViewModel : Observable
             new Section("Images", new ImagesViewModel(this, Session), Section.Resource("IconImages")),
             new Section("Volumes", new VolumesViewModel(this, Session), Section.Resource("IconVolumes")),
             new Section("Networks", new NetworksViewModel(this, Session), Section.Resource("IconNetworks")),
+            new Section("Builds", new Features.Builds.BuildsViewModel(this, Session), Section.Resource("IconBuilds")),
             new Section("Clusters", new ClustersViewModel(this, Session), Section.Resource("IconClusters")),
             new Section("Disk", new DiskViewModel(this, Session), Section.Resource("IconDisk")),
         ];
         currentSection = Sections[0];
+        _ = Tools.Refresh();
 
         HasEngineSwitch = OperatingSystem.IsWindows() && DockerContext.Exists("linux") && DockerContext.Exists("win");
         SwitchLinuxCommand = new Command(() => { AskSwitch("linux"); return Task.CompletedTask; });
@@ -54,6 +60,13 @@ sealed class ShellViewModel : Observable
     public IReadOnlyList<Section> Sections { get; }
     public ObservableCollection<Toast> Toasts { get; } = [];
 
+    public void ShowSection(string title)
+    {
+        if (Sections.FirstOrDefault(s => s.Title.Equals(title, StringComparison.OrdinalIgnoreCase)) is { } section) CurrentSection = section;
+    }
+
+    public static string? InitialSection { get; set; }
+
     public Section CurrentSection
     {
         get => currentSection;
@@ -62,6 +75,7 @@ sealed class ShellViewModel : Observable
             if (value is null || !Set(ref currentSection, value)) return;
             ApplySearch();
             (value.Content as SectionViewModel)?.OnShown();
+            _ = Tools.Refresh();
         }
     }
 
@@ -101,6 +115,15 @@ sealed class ShellViewModel : Observable
         HitIndex = i;
     }
 
+    public Features.Clusters.ClustersViewModel? Clusters => Sections.Select(s => s.Content).OfType<Features.Clusters.ClustersViewModel>().FirstOrDefault();
+
+    public void Reveal(string sectionTitle, object row)
+    {
+        if (Sections.FirstOrDefault(s => s.Title == sectionTitle) is not { } section) return;
+        CurrentSection = section;
+        if (section.Content is ISearchable searchable) searchable.Reveal(row);
+    }
+
     public void OpenHit(SearchHit? hit = null)
     {
         hit ??= HitIndex >= 0 && HitIndex < Hits.Count ? Hits[HitIndex] : null;
@@ -134,6 +157,11 @@ sealed class ShellViewModel : Observable
         Session.Stop();
     }
 
+    public ActivityLog Activity { get; } = new();
+    public ToolCheck Tools { get; } = new();
+    public LogPanel Logs => logs ??= new LogPanel(Activity);
+    LogPanel? logs;
+
     public Dialog? Dialog { get => dialog; private set { if (Set(ref dialog, value)) Raise(nameof(HasDialog)); } }
     public bool HasDialog => dialog is not null;
 
@@ -141,6 +169,17 @@ sealed class ShellViewModel : Observable
     {
         if (dialog is { IsWorking: true }) return;
         next.ShowError = ShowError;
+        IDisposable? working = null;
+        next.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Dialog.Progress) && next.Progress is { } step) Activity.Note(step);
+            else if (e.PropertyName == nameof(Dialog.IsWorking))
+            {
+                if (next.IsWorking) working ??= Activity.Working(next.Title);
+                else { working?.Dispose(); working = null; }
+            }
+        };
+        next.Closed += () => working?.Dispose();
         next.Closed += () => { if (Dialog == next) Dialog = null; };
         Dialog = next;
     }
@@ -197,6 +236,7 @@ sealed class ShellViewModel : Observable
 
     void Show(Toast toast)
     {
+        Activity.Note(toast.Message, toast.IsError ? ActivityKind.Error : ActivityKind.Info);
         Toasts.Add(toast);
         DispatcherTimer.RunOnce(() => Toasts.Remove(toast), TimeSpan.FromSeconds(6));
     }

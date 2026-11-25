@@ -14,6 +14,11 @@ static class Program
     public static int Main(string[] args)
     {
         if (OperatingSystem.IsWindows() && Elevation.IsWorker(args)) return Elevation.Worker(args);
+        if (Cli.IsCommand(args))
+        {
+            if (OperatingSystem.IsWindows()) NativeConsole.AttachConsole(-1);
+            return Cli.RunFromTerminal(args);
+        }
 
         SetupOptions options;
         try

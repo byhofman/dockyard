@@ -62,6 +62,7 @@ abstract class SectionViewModel : Observable, ISearchable
     protected async Task Run(string what, Func<Task> action)
     {
         Busy = what;
+        using var working = Shell.Activity.Working(what);
         try { await action(); }
         catch (Exception ex) { Shell.ShowError(ex.Message); }
         finally { Busy = null; }
@@ -147,7 +148,10 @@ abstract class SelectableSection<TRow> : SectionViewModel, ISearchable where TRo
     protected abstract string?[] Words(TRow row);
     protected abstract SearchResult Describe(TRow row);
 
-    protected override void ApplyFilter() => ReplaceRows(All.Where(r => Matches(Filter, Words(r))));
+    protected virtual bool Shows(TRow row) => true;
+    protected virtual void ShowEverything() { }
+
+    protected override void ApplyFilter() => ReplaceRows(All.Where(r => Shows(r) && Matches(Filter, Words(r))));
 
     public IEnumerable<SearchResult> Find(string text) => All.Where(r => Matches(text, Words(r))).Select(Describe);
 
@@ -155,6 +159,7 @@ abstract class SelectableSection<TRow> : SectionViewModel, ISearchable where TRo
     {
         if (row is not TRow wanted) return;
         var key = Key(wanted);
+        if (!Rows.Any(r => Equals(Key(r), key))) ShowEverything();
         Pick(Rows.Where(r => Equals(Key(r), key)).ToList());
     }
 

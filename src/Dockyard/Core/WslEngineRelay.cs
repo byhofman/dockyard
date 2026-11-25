@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Runtime.Versioning;
 using System.Text;
+using Dockyard.Shared;
 
 namespace Dockyard.Core;
 
@@ -24,15 +25,15 @@ sealed class WslEngineRelay(IPAddress gate, string token) : IDisposable
         var pipes = new List<NamedPipeServerStream>();
         try
         {
-            foreach (var name in new[] { Paths.LinuxPipeName, Paths.LinuxAgentPipeName }) pipes.Add(Create(name, first: true));
+            foreach (var name in new[] { WslPaths.LinuxPipeName, WslPaths.LinuxAgentPipeName }) pipes.Add(Create(name, first: true));
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             foreach (var pipe in pipes) pipe.Dispose();
             return false;
         }
-        _ = Serve(pipes[0], Paths.LinuxPipeName, "engine");
-        _ = Serve(pipes[1], Paths.LinuxAgentPipeName, "api");
+        _ = Serve(pipes[0], WslPaths.LinuxPipeName, "engine");
+        _ = Serve(pipes[1], WslPaths.LinuxAgentPipeName, "api");
         return true;
     }
 
@@ -50,7 +51,7 @@ sealed class WslEngineRelay(IPAddress gate, string token) : IDisposable
         {
             try
             {
-                await engine.ConnectAsync(Gate, Paths.LinuxPort, lifetime.Token);
+                await engine.ConnectAsync(Gate, WslPaths.LinuxPort, lifetime.Token);
                 await engine.SendAsync(Encoding.ASCII.GetBytes($"{token} {service}\n"), lifetime.Token);
                 await TcpRelay.Carry(pipe, engine, lifetime.Token);
             }
@@ -58,7 +59,7 @@ sealed class WslEngineRelay(IPAddress gate, string token) : IDisposable
         }
     }
 
-    public bool EngineAnswers(int timeoutMs = 500) => Answers(Gate, Paths.LinuxPort, timeoutMs);
+    public bool EngineAnswers(int timeoutMs = 500) => Answers(Gate, WslPaths.LinuxPort, timeoutMs);
 
     public static bool Answers(IPAddress address, int port, int timeoutMs)
     {

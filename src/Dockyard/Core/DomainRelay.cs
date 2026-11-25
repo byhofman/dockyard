@@ -12,6 +12,7 @@ sealed class DomainRelay(Action<string> log) : IDisposable
     const int HttpTarget = 2382;
     const int HttpsTarget = 2383;
     const int DnsTarget = 2353;
+    const int SioUdpConnReset = unchecked((int)0x9800000C);
 
     readonly List<Socket> sockets = [];
     readonly CancellationTokenSource lifetime = new();
@@ -34,6 +35,9 @@ sealed class DomainRelay(Action<string> log) : IDisposable
         {
             var dns = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
             sockets.Add(dns);
+            // Windows reports an ICMP "port unreachable" for an earlier reply as a reset on the next receive, which would
+            // end the loop: a client that gave up before its answer came would leave DNS dead until a restart.
+            if (OperatingSystem.IsWindows()) dns.IOControl(SioUdpConnReset, [0, 0, 0, 0], null);
             dns.Bind(new IPEndPoint(Address, 53));
             _ = ServeDns(dns);
         }
@@ -62,12 +66,18 @@ sealed class DomainRelay(Action<string> log) : IDisposable
         {
             while (true)
             {
-                var received = await socket.ReceiveFromAsync(buffer, any, lifetime.Token);
+                SocketReceiveFromResult received;
+                try { received = await socket.ReceiveFromAsync(buffer, any, lifetime.Token); }
+                catch (SocketException e) when (e.SocketErrorCode == SocketError.ConnectionReset) { continue; }
                 var query = buffer[..received.ReceivedBytes];
                 var client = received.RemoteEndPoint;
                 _ = Task.Run(async () =>
                 {
-                    if (await AskOverTcp(query, DnsTarget, lifetime.Token) is { } reply) await socket.SendToAsync(reply, client);
+                    try
+                    {
+                        if (await AskOverTcp(query, DnsTarget, lifetime.Token) is { } reply) await socket.SendToAsync(reply, client);
+                    }
+                    catch (Exception e) when (e is SocketException or ObjectDisposedException) { }
                 });
             }
         }

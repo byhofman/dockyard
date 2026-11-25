@@ -1,9 +1,11 @@
 name: build
 
+# One workflow for every component. Pull requests and main build and test everything; a tag <component>/<version>
+# builds, tests and releases only that component. See docs/design/components-and-releases.md.
 on:
   push:
     branches: [main]
-    tags: ['v*']
+    tags: ['toolbox/*', 'dashboard/*', 'cli/*', 'engine/*']
   pull_request:
 
 # Read only, except for the job that publishes the release.
@@ -14,8 +16,30 @@ env:
   DOTNET_NOLOGO: true
 
 jobs:
-  # The agent and scripts for an engine that already exists; Dockyard itself carries them.
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      component: ${{ steps.plan.outputs.component }}
+      version: ${{ steps.plan.outputs.version }}
+      toolbox: ${{ steps.plan.outputs.toolbox }}
+      dashboard: ${{ steps.plan.outputs.dashboard }}
+      cli: ${{ steps.plan.outputs.cli }}
+      engine: ${{ steps.plan.outputs.engine }}
+    steps:
+      - id: plan
+        run: |
+          component=all; version=0.0.0
+          if [ "$GITHUB_REF_TYPE" = tag ]; then component="${GITHUB_REF_NAME%%/*}"; version="${GITHUB_REF_NAME#*/}"; fi
+          echo "component=$component" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          for c in toolbox dashboard cli engine; do
+            if [ "$component" = all ] || [ "$component" = "$c" ]; then echo "$c=true"; else echo "$c=false"; fi >> "$GITHUB_OUTPUT"
+          done
+
+  # The agent and scripts for an engine that already exists; the Toolbox carries them.
   guest:
+    needs: [plan]
+    if: needs.plan.outputs.toolbox == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -26,7 +50,8 @@ jobs:
           path: out/dockyard-guest-*.tar.gz
 
   windows:
-    needs: [guest]
+    needs: [plan, guest]
+    if: ${{ !cancelled() && (needs.plan.outputs.engine != 'true' || needs.plan.outputs.component == 'all') }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -34,6 +59,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: needs.plan.outputs.toolbox == 'true'
         with:
           name: guest
           path: guest
@@ -42,23 +68,40 @@ jobs:
         shell: pwsh
         run: dotnet test --solution Dockyard.slnx
 
-      - name: Publish
+      - name: Toolbox
+        if: needs.plan.outputs.toolbox == 'true'
         shell: pwsh
         run: |
-          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME.TrimStart('v') } else { '0.0.0' }
-          dotnet publish src/Dockyard/Dockyard.csproj -c Release -r win-x64 -o out -p:Version=$version -p:GuestBundle="$PWD/guest/dockyard-guest-guest-x86_64.tar.gz" -warnaserror
-          dotnet publish src/Dockyard.Dashboard/Dockyard.Dashboard.csproj -c Release -r win-x64 -o out/dashboard -p:Version=$version -warnaserror
+          dotnet publish src/Dockyard.Host/Dockyard.Host.csproj -c Release -r win-x64 -o out/host -p:Version=${{ needs.plan.outputs.version }} -warnaserror
+          dotnet publish src/Dockyard/Dockyard.csproj -c Release -r win-x64 -o out -p:Version=${{ needs.plan.outputs.version }} -p:GuestBundle="$PWD/guest/dockyard-guest-guest-x86_64.tar.gz" -p:HostExe="$PWD/out/host/dockyard-host.exe" -warnaserror
+          Copy-Item out/dockyard-toolbox.exe out/Dockyard.exe
+
+      - name: Dashboard
+        if: needs.plan.outputs.dashboard == 'true'
+        shell: pwsh
+        run: |
+          dotnet publish src/Dockyard.Dashboard/Dockyard.Dashboard.csproj -c Release -r win-x64 -o out/dashboard -p:Version=${{ needs.plan.outputs.version }} -warnaserror
           Compress-Archive -Path out/dashboard/*.exe, out/dashboard/*.dll -DestinationPath out/Dockyard.Dashboard.zip
+
+      - name: CLI
+        if: needs.plan.outputs.cli == 'true'
+        shell: pwsh
+        run: |
+          dotnet publish src/Dockyard.Cli/Dockyard.Cli.csproj -c Release -r win-x64 -o out/cli -p:Version=${{ needs.plan.outputs.version }} -warnaserror
+          Copy-Item out/cli/dockyard-cli.exe out/dockyard-windows-x64.exe
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: windows
+          if-no-files-found: ignore
           path: |
             out/Dockyard.exe
             out/Dockyard.Dashboard.zip
+            out/dockyard-windows-x64.exe
 
   linux:
-    needs: [guest]
+    needs: [plan, guest]
+    if: ${{ !cancelled() && (needs.plan.outputs.engine != 'true' || needs.plan.outputs.component == 'all') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -66,11 +109,12 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: needs.plan.outputs.toolbox == 'true'
         with:
           name: guest
           path: guest
 
-      # The pinned kind, for the dashboard's cluster test on this runner's engine.
+      # The pinned kind, for the cluster tests on this runner's engine.
       - name: kind
         run: |
           kind_tag="v$(sed -n 's/^KIND=//p' image/versions.env)"
@@ -85,38 +129,59 @@ jobs:
         run: DOCKYARD_TEST_KIND="$RUNNER_TEMP/kind" dotnet test --solution Dockyard.slnx
 
       - name: Publish and package
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+          TOOLBOX: ${{ needs.plan.outputs.toolbox }}
+          DASHBOARD: ${{ needs.plan.outputs.dashboard }}
+          CLI: ${{ needs.plan.outputs.cli }}
         run: |
-          version=0.0.0; [ "$GITHUB_REF_TYPE" = tag ] && version="${GITHUB_REF_NAME#v}"
-          dotnet publish src/Dockyard/Dockyard.csproj -c Release -r linux-x64 -o dist/linux/tray -p:Version=$version -p:GuestBundle="$PWD/guest/dockyard-guest-guest-x86_64.tar.gz" -warnaserror
-          dotnet publish src/Dockyard.Dashboard/Dockyard.Dashboard.csproj -c Release -r linux-x64 -o dist/linux/dashboard -p:Version=$version -warnaserror
-          rm -f dist/linux/*/*.pdb
-          mkdir -p out/Dockyard && cp dist/linux/tray/* dist/linux/dashboard/* out/Dockyard/
-          cp dist/linux/tray/Dockyard out/Dockyard-linux-x64
-          tar -czf "out/Dockyard-$version-linux-x64.tar.gz" -C out Dockyard
-          for config in dockyard dockyard-dashboard; do
-            for packager in deb rpm; do
-              docker run --rm -v "$PWD:/work" -w /work -e VERSION="$version" goreleaser/nfpm:v2.49.0@sha256:9ea46a59c4d055ef7071b22f3520b53e8dad98e18043b2f881b53bd7ffec634e \
-                pkg --config "packaging/linux/$config.yaml" --packager "$packager" --target out/
-            done
-          done
+          nfpm() {
+            docker run --rm -v "$PWD:/work" -w /work -e VERSION="$VERSION" goreleaser/nfpm:v2.49.0@sha256:9ea46a59c4d055ef7071b22f3520b53e8dad98e18043b2f881b53bd7ffec634e \
+              pkg --config "packaging/linux/$1.yaml" --packager "$2" --target out/
+          }
+          mkdir -p out
+          # The Toolbox's package carries the dockyard command and its tarball the dashboard, until both are split out.
+          if [ "$TOOLBOX" = true ] || [ "$DASHBOARD" = true ]; then
+            dotnet publish src/Dockyard.Dashboard/Dockyard.Dashboard.csproj -c Release -r linux-x64 -o dist/linux/dashboard -p:Version="$VERSION" -warnaserror
+          fi
+          if [ "$TOOLBOX" = true ] || [ "$CLI" = true ]; then
+            dotnet publish src/Dockyard.Cli/Dockyard.Cli.csproj -c Release -r linux-x64 -o dist/linux/cli -p:Version="$VERSION" -warnaserror
+          fi
+          if [ "$TOOLBOX" = true ]; then
+            dotnet publish src/Dockyard/Dockyard.csproj -c Release -r linux-x64 -o dist/linux/tray -p:Version="$VERSION" -p:GuestBundle="$PWD/guest/dockyard-guest-guest-x86_64.tar.gz" -warnaserror
+            rm -f dist/linux/*/*.pdb
+            mkdir -p out/Dockyard && cp dist/linux/tray/* dist/linux/dashboard/* out/Dockyard/ && cp dist/linux/cli/dockyard-cli out/Dockyard/dockyard-cli
+            cp dist/linux/tray/dockyard-toolbox out/Dockyard-linux-x64
+            tar -czf "out/Dockyard-$VERSION-linux-x64.tar.gz" -C out Dockyard
+            for packager in deb rpm; do nfpm dockyard "$packager"; done
+          fi
+          if [ "$DASHBOARD" = true ]; then
+            rm -f dist/linux/dashboard/*.pdb
+            for packager in deb rpm; do nfpm dockyard-dashboard "$packager"; done
+          fi
+          if [ "$CLI" = true ]; then cp dist/linux/cli/dockyard-cli out/dockyard-linux-x64; fi
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: linux
+          if-no-files-found: ignore
           path: |
             out/Dockyard-*-linux-x64.tar.gz
             out/Dockyard-linux-x64
+            out/dockyard-linux-x64
             out/*.deb
             out/*.rpm
 
   image:
+    needs: [plan]
+    if: needs.plan.outputs.engine == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Build and test the Linux engine image
         run: |
-          version=0.0.0; [ "$GITHUB_REF_TYPE" = tag ] && version="${GITHUB_REF_NAME#v}"
+          version="${{ needs.plan.outputs.version }}"
           sh image/build.sh x86_64 "$version"
           pwsh image/test.ps1 -Tarball "out/dockyard-linux-$version-x86_64.tar.gz"
 
@@ -126,6 +191,8 @@ jobs:
           path: out/dockyard-linux-*.tar.gz
 
   vm-test:
+    needs: [plan]
+    if: needs.plan.outputs.engine == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -140,14 +207,14 @@ jobs:
             sh /test-vm.sh /out/dockyard-vm-0.0.0-x86_64.tar.gz
 
   vm-image:
+    needs: [plan]
+    if: needs.plan.outputs.engine == 'true'
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Build the aarch64 VM assets
-        run: |
-          version=0.0.0; [ "$GITHUB_REF_TYPE" = tag ] && version="${GITHUB_REF_NAME#v}"
-          sh image/build.sh aarch64 "$version" vm
+        run: sh image/build.sh aarch64 "${{ needs.plan.outputs.version }}" vm
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -155,7 +222,8 @@ jobs:
           path: out/dockyard-vm-*-aarch64.tar.gz
 
   macos:
-    needs: [vm-image]
+    needs: [plan, vm-image]
+    if: ${{ !cancelled() && (needs.plan.outputs.toolbox == 'true' || needs.plan.outputs.cli == 'true') }}
     runs-on: macos-15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -169,30 +237,48 @@ jobs:
           swift test --package-path macos/DockyardVM
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: needs.vm-image.result == 'success'
         with:
           name: vm-image
           path: vm-image
 
+      # A Toolbox release bundles the VM of the latest engine release.
+      - name: The engine's VM image
+        if: needs.vm-image.result != 'success' && needs.plan.outputs.toolbox == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: sh scripts/component-assets.sh engine vm-image 'dockyard-vm-*-aarch64.tar.gz'
+
       - name: Publish and bundle
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
         run: |
-          version=0.0.0; [ "$GITHUB_REF_TYPE" = tag ] && version="${GITHUB_REF_NAME#v}"
-          dotnet publish src/Dockyard/Dockyard.csproj -c Release -r osx-arm64 -o dist/macos -p:Version=$version -warnaserror
-          dotnet publish src/Dockyard.Dashboard/Dockyard.Dashboard.csproj -c Release -r osx-arm64 -o dist/macos -p:Version=$version -warnaserror
-          swift build -c release --package-path macos/DockyardVM
-          cp macos/DockyardVM/.build/release/dockyard-vm dist/macos/
-          mkdir -p dist/macos/vm && tar -xzf vm-image/dockyard-vm-*-aarch64.tar.gz -C dist/macos/vm
-          rm -f dist/macos/*.pdb
-          sh packaging/macos/build-app.sh "$version" dist/macos out
+          dotnet publish src/Dockyard.Cli/Dockyard.Cli.csproj -c Release -r osx-arm64 -o dist/cli -p:Version="$VERSION" -warnaserror
+          mkdir -p out
+          if [ "${{ needs.plan.outputs.cli }}" = true ]; then cp dist/cli/dockyard-cli out/dockyard-macos-arm64; fi
+          if [ "${{ needs.plan.outputs.toolbox }}" = true ]; then
+            dotnet publish src/Dockyard/Dockyard.csproj -c Release -r osx-arm64 -o dist/macos -p:Version="$VERSION" -warnaserror
+            dotnet publish src/Dockyard.Dashboard/Dockyard.Dashboard.csproj -c Release -r osx-arm64 -o dist/macos -p:Version="$VERSION" -warnaserror
+            cp dist/cli/dockyard-cli dist/macos/dockyard-cli
+            swift build -c release --package-path macos/DockyardVM
+            cp macos/DockyardVM/.build/release/dockyard-host dist/macos/
+            mkdir -p dist/macos/vm && tar -xzf vm-image/dockyard-vm-*-aarch64.tar.gz -C dist/macos/vm
+            rm -f dist/macos/*.pdb
+            sh packaging/macos/build-app.sh "$VERSION" dist/macos out
+          fi
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: macos
+          if-no-files-found: ignore
           path: |
             out/Dockyard-*-macos*.zip
             out/Dockyard-*-macos*.dmg
+            out/dockyard-macos-arm64
 
   wizard-windows:
-    needs: [windows, image]
+    needs: [plan, windows, image]
+    if: ${{ !cancelled() && needs.plan.outputs.toolbox == 'true' && needs.windows.result == 'success' }}
     runs-on: windows-latest
     timeout-minutes: 40
     steps:
@@ -202,9 +288,19 @@ jobs:
           name: windows
           path: wizard
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: needs.image.result == 'success'
         with:
           name: image
           path: wizard
+      - name: The engine's image and the dashboard and CLI of their latest releases
+        if: needs.plan.outputs.component == 'toolbox'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sh scripts/component-assets.sh engine wizard 'dockyard-linux-*-x86_64.tar.gz'
+          sh scripts/component-assets.sh dashboard wizard Dockyard.Dashboard.zip
+          sh scripts/component-assets.sh cli wizard dockyard-windows-x64.exe
 
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
@@ -224,7 +320,8 @@ jobs:
           path: screenshots
 
   wizard-mac:
-    needs: [macos]
+    needs: [plan, macos]
+    if: ${{ !cancelled() && needs.plan.outputs.toolbox == 'true' && needs.macos.result == 'success' }}
     runs-on: macos-15
     timeout-minutes: 15
     steps:
@@ -241,7 +338,8 @@ jobs:
         run: ADMIN=1 WIZARD_ZIP="$(ls wizard/Dockyard-*-macos.zip)" sh tests/e2e/wizard-mac.sh
 
   wizard-linux:
-    needs: [linux]
+    needs: [plan, linux]
+    if: ${{ !cancelled() && needs.plan.outputs.toolbox == 'true' && needs.linux.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -289,7 +387,8 @@ jobs:
           done
 
   release-assets:
-    needs: [windows, linux, image, macos, vm-image]
+    needs: [plan, windows, linux, image, macos, vm-image]
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -297,19 +396,27 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      - name: Everything the one-liners and the wizard download is there
+      - name: The dashboard's assets that ride along with a Toolbox release
+        if: needs.plan.outputs.component == 'toolbox'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: sh scripts/component-assets.sh dashboard dist Dockyard.Dashboard.zip 'dockyard-dashboard_*_amd64.deb' 'dockyard-dashboard-*-1.x86_64.rpm'
+      - name: Everything the one-liners and the Toolbox download is there
         run: |
-          version=0.0.0; [ "$GITHUB_REF_TYPE" = tag ] && version="${GITHUB_REF_NAME#v}"
           rm -f dist/*.png
-          (cd dist && sha256sum * > SHA256SUMS)
-          sh scripts/check-release-assets.sh "$version" "$(ls dist)"
+          (cd dist && sha256sum -- * > SHA256SUMS)
+          sh scripts/check-release-assets.sh "${{ needs.plan.outputs.component }}" "${{ needs.plan.outputs.version }}" "$(ls dist)"
 
   # A draft is invisible to releases/latest and to anyone downloading, so the one-liners keep getting the previous
-  # release, with all its assets, until this one has all of its own. No moment exists with a partial latest release.
+  # release, with all its assets, until this one has all of its own. Only the Toolbox's release becomes the latest;
+  # the others are found through components.json.
   release:
-    if: github.ref_type == 'tag'
-    needs: [windows, linux, image, vm-test, macos, wizard-windows, wizard-linux, wizard-mac, release-assets]
+    if: ${{ !cancelled() && github.ref_type == 'tag' && needs.release-assets.result == 'success' && !contains(needs.*.result, 'failure') }}
+    needs: [plan, windows, linux, image, vm-test, macos, vm-image, wizard-windows, wizard-linux, wizard-mac, release-assets]
     runs-on: ubuntu-latest
+    concurrency:
+      group: component-index
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:
@@ -322,11 +429,19 @@ jobs:
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
+          COMPONENT: ${{ needs.plan.outputs.component }}
+          VERSION: ${{ needs.plan.outputs.version }}
         run: |
           # The wizard's screenshots are for looking at in the run, not for the release.
           rm -f dist/*.png
-          (cd dist && sha256sum * > SHA256SUMS)
-          gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "$GITHUB_REF_NAME" --generate-notes
+          if [ "$COMPONENT" = toolbox ]; then
+            sh scripts/component-assets.sh dashboard dist Dockyard.Dashboard.zip 'dockyard-dashboard_*_amd64.deb' 'dockyard-dashboard-*-1.x86_64.rpm'
+          fi
+          (cd dist && sha256sum -- * > SHA256SUMS)
+          # The release notes are the annotated tag's message.
+          gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "$COMPONENT $VERSION" --notes-from-tag
           gh release upload "$GITHUB_REF_NAME" dist/*
-          sh scripts/check-release-assets.sh "${GITHUB_REF_NAME#v}" "$(gh release view "$GITHUB_REF_NAME" --json assets -q '.assets[].name')"
-          gh release edit "$GITHUB_REF_NAME" --draft=false --latest
+          sh scripts/check-release-assets.sh "$COMPONENT" "$VERSION" "$(gh release view "$GITHUB_REF_NAME" --json assets -q '.assets[].name')"
+          if [ "$COMPONENT" = toolbox ]; then latest=--latest; else latest=--latest=false; fi
+          gh release edit "$GITHUB_REF_NAME" --draft=false "$latest"
+          sh scripts/update-index.sh "$COMPONENT" "$VERSION"

@@ -15,7 +15,6 @@ sealed class ContainerDetailViewModel : Observable, IDisposable
     bool https;
     string domainPort = "";
     string domainPortNote = "";
-    bool logsExpanded;
     int selectedTab;
     bool? tty;
     bool disposed;
@@ -28,6 +27,7 @@ sealed class ContainerDetailViewModel : Observable, IDisposable
         Item = item;
         AskRemoveCommand = new Command(() => { actions.AskRemove([item]); return Task.CompletedTask; });
         CloseCommand = new Command(() => { actions.CloseDetail(); return Task.CompletedTask; });
+        OpenLogsCommand = new Command(() => { actions.OpenLogs(item.Id, item.Name, [new LogSource(item.Id, tty ?? false, null)]); return Task.CompletedTask; });
         ApplyDomainPortCommand = new Command(ApplyDomainPort);
         OpenDomainCommand = new Command(() =>
         {
@@ -44,6 +44,7 @@ sealed class ContainerDetailViewModel : Observable, IDisposable
     public LogsViewModel Logs { get; } = new();
     public Command AskRemoveCommand { get; }
     public Command CloseCommand { get; }
+    public Command OpenLogsCommand { get; }
 
     // Made when the tab is opened: Avalonia only sets a tab's content then, and that is what starts the first listing.
     public Features.Files.FileBrowserViewModel? Files => files ??= session.Client is { } client
@@ -103,7 +104,6 @@ sealed class ContainerDetailViewModel : Observable, IDisposable
     }
 
     public InspectViewModel? Inspect { get => inspect; private set => Set(ref inspect, value); }
-    public bool LogsExpanded { get => logsExpanded; set => Set(ref logsExpanded, value); }
     public int SelectedTab { get => selectedTab; set => Set(ref selectedTab, value); }
 
     async Task Load()

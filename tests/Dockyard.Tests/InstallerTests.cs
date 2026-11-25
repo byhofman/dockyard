@@ -63,13 +63,16 @@ sealed class FakeHost : IEngineHost
     public void ReleaseResources() { }
 }
 
-public sealed class InstallerTests
+public sealed class InstallerTests : IDisposable
 {
     readonly List<string> output = [];
     readonly List<string> errors = [];
+    readonly TempSettings settings = new();
+
+    public void Dispose() => settings.Dispose();
 
     Task<int> Run(FakeHost host, params string[] args) =>
-        Installer.RunSilent(host, SetupOptions.Parse(args), output.Add, errors.Add);
+        Installer.RunSilent(host, SetupOptions.Parse(args), output.Add, errors.Add, settings.Settings, (_, _) => { });
 
     [Fact]
     public async Task Fresh_silent_install_gets_the_dashboard_and_starts()

@@ -10,14 +10,14 @@ description: |
 homepage: https://github.com/byhofman/dockyard
 license: MIT
 depends:
-  - dockyard (= ${VERSION})
+  - dockyard
 overrides:
   rpm:
     depends:
-      - dockyard = ${VERSION}
+      - dockyard
 contents:
-  - src: dist/linux/dashboard/Dockyard Dashboard
-    dst: /usr/lib/dockyard/Dockyard Dashboard
+  - src: dist/linux/dashboard/dockyard-dashboard
+    dst: /usr/lib/dockyard/dockyard-dashboard
     file_info: { mode: 0755 }
   - src: dist/linux/dashboard/libSkiaSharp.so
     dst: /usr/lib/dockyard/libSkiaSharp.so

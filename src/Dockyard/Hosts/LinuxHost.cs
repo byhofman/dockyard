@@ -15,15 +15,20 @@ sealed class LinuxHost : IEngineHost
     readonly LinuxComponents components;
     readonly LinuxSetup setup;
     readonly LinuxTrust trust;
+    readonly ToolComponents tools;
 
     public LinuxHost(ICommandRunner runner)
     {
         this.runner = runner;
         var root = new LinuxRoot(runner);
         components = new LinuxComponents(runner, root);
-        setup = new LinuxSetup(root, components);
+        tools = new ToolComponents(new LinuxPackages(root), new LinuxOwnCopies(runner, root), () => Settings.Load().UsePackageManager);
+        setup = new LinuxSetup(root, components, tools);
         trust = new LinuxTrust(root);
     }
+
+    // Docker's own pieces are the Engine package's business here; the other tools are each their own.
+    static CliTool? Tool(string component) => Core.Tools.Standalone.FirstOrDefault(t => t.Id == component);
 
     public IReadOnlyList<EngineInfo> Engines { get; } =
         [new(Engine, "Linux", "Docker Engine", "system dockerd, started on demand", "default", "unix:///var/run/docker.sock")];
@@ -35,7 +40,9 @@ sealed class LinuxHost : IEngineHost
         new("Engine", "Docker Engine & CLI", RequiredBecause: "it is what Dockyard starts and stops. It stays yours to remove with your package manager, also after uninstalling Dockyard.", RequiredFlag: "linux-engine"),
         new("Compose", "Docker Compose", Flag: "compose", Note: "Needs Docker. The dashboard's Compose actions use it."),
         new("Buildx", "Docker Buildx", Flag: "buildx", Note: "Needs Docker. docker build uses it."),
-        Core.Kind.Component,
+        Core.Tools.Kind.Component,
+        Core.Tools.Kubectl.Component,
+        Core.Tools.Helm.Component,
         new("App", "Dockyard", RequiredBecause: "it is what runs everything here. Uninstall removes it."),
         new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard", Note: "Optional. Its package is versioned with Dockyard, so updating it updates both."),
     ];
@@ -59,16 +66,66 @@ sealed class LinuxHost : IEngineHost
 
     public Task UseContext(string engine) => runner.Check("docker", "context", "use", "default");
 
-    public Task<Version?> Installed(string component) => components.Installed(component);
-    public Task<Release?> Latest(string component) => LinuxComponents.Latest(component);
+    const string DaemonJson = "/etc/docker/daemon.json";
+
+    public async Task<string?> ReadEngineSettings(string engine) => File.Exists(DaemonJson) ? await File.ReadAllTextAsync(DaemonJson) : "{}";
+
+    public async Task<string?> ValidateEngineSettings(string engine, string json)
+    {
+        if (EngineSettings.Problem(json) is { } problem) return problem;
+        var temp = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}.json");
+        try
+        {
+            await File.WriteAllTextAsync(temp, json);
+            var r = await runner.Run("dockerd", "--validate", "--config-file", temp);
+            return r.ExitCode == 0 ? null : (r.Error + r.Output).Trim() is { Length: > 0 } text ? text : $"dockerd refused it ({r.ExitCode})";
+        }
+        catch (System.ComponentModel.Win32Exception) { return null; }
+        finally { File.Delete(temp); }
+    }
+
+    // The agent's DNS stays in a file that names it; the rest is the system's Docker's, as the user wrote it.
+    public async Task ApplyEngineSettings(Action<string> log, string engine, string json)
+    {
+        if (EngineSettings.Problem(json) is { } problem) throw new InvalidOperationException(problem);
+        var existing = File.Exists(DaemonJson) ? await File.ReadAllTextAsync(DaemonJson) : null;
+        var content = EngineConfig.NamesTheAgent(existing) ? EngineConfig.WithDockyard(json, HostProxySettings.FromEnvironment(Environment.GetEnvironmentVariable)) : json;
+        var dir = Directory.CreateTempSubdirectory("dockyard-daemon-json").FullName;
+        try
+        {
+            var file = Path.Combine(dir, "daemon.json");
+            await File.WriteAllTextAsync(file, content);
+            File.SetUnixFileMode(dir, (UnixFileMode)0b111_101_101);
+            await new LinuxRoot(runner).RunSetup(log, "daemon-json", "", file);
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
+    // Docker's own pieces come from the distribution's package manager, Dockyard too where there is apt or dnf.
+    public async Task<string?> Source(string component)
+    {
+        if (Tool(component) is { } tool) return await tools.Source(tool);
+        var os = File.Exists("/etc/os-release") ? OsRelease.Parse(await File.ReadAllTextAsync("/etc/os-release")) : null;
+        var family = os?.PackageManager ?? (os is null ? null : new[] { os.Id }.Concat(os.IdLike).Select(id => id switch
+        {
+            "arch" => "pacman",
+            "opensuse" or "suse" or "sles" => "zypper",
+            _ => id.StartsWith("opensuse", StringComparison.Ordinal) ? "zypper" : null,
+        }).FirstOrDefault(f => f is not null));
+        return component is "Engine" or "Compose" or "Buildx" ? family
+            : LinuxLayout.InstallDir == LinuxLayout.PackageDir ? family : "Dockyard";
+    }
+
+    public Task<Version?> Installed(string component) => Tool(component) is { } tool ? tools.Installed(tool) : components.Installed(component);
+    public Task<Release?> Latest(string component) => Tool(component) is { } tool ? tools.Latest(tool) : LinuxComponents.Latest(component);
 
     public async Task<bool> SetComponent(Action<string> log, string component, bool installed, bool removeData = false)
     {
         if (component == ComponentRules.DashboardId) return await SetDashboard(log, installed);
-        if (component == Core.Kind.Id)
+        if (Tool(component) is { } tool)
         {
-            if (installed) await components.InstallKind(log);
-            else await components.RemoveKind(log);
+            if (installed) await tools.Install(log, tool);
+            else await tools.Remove(log, tool);
             return false;
         }
         if (component is not ("Compose" or "Buildx")) throw new InvalidOperationException($"{component} cannot be changed here");
@@ -79,7 +136,8 @@ sealed class LinuxHost : IEngineHost
     public async Task<bool> Update(Action<string> log, IReadOnlyList<(string Component, Release? Release)> components)
     {
         if (components.Any(c => c.Component is "Engine" or "Compose" or "Buildx")) await this.components.UpdateDockerPackages(log);
-        if (components.Any(c => c.Component == Core.Kind.Id)) await this.components.InstallKind(log);
+        foreach (var (component, _) in components)
+            if (Tool(component) is { } tool) await tools.Install(log, tool);
         if (components.FirstOrDefault(c => c.Component is "App" or ComponentRules.DashboardId) is { Release: { } app })
         {
             await this.components.StopDashboard();

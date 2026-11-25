@@ -4,7 +4,7 @@ using Dockyard.Core;
 namespace Dockyard.Hosts;
 
 // What Dockyard installs on a Linux host: its own app and dashboard (as packages, or a tarball where there is no apt or
-// dnf), the Docker packages it keeps up to date, their plugins, and kind.
+// dnf), the Docker packages it keeps up to date and their plugins.
 [SupportedOSPlatform("linux")]
 sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
 {
@@ -13,14 +13,13 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
     public static bool RunsFromInstallLocation => string.Equals(
         Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory), LinuxLayout.InstallDir, StringComparison.Ordinal);
 
-    public static bool HasDashboard => File.Exists(LinuxLayout.Dashboard) || File.Exists(LinuxLayout.LegacyDashboard);
+    public static bool HasDashboard => File.Exists(LinuxLayout.Dashboard);
 
     public async Task<Version?> Installed(string component) => component switch
     {
         "Engine" => Updates.ParseVersion((await runner.Run("dockerd", "--version")).Output),
         "Compose" => Updates.ParseVersion((await runner.Run("docker", "compose", "version", "--short")).Output),
         "Buildx" => Updates.ParseVersion((await runner.Run("docker", "buildx", "version")).Output),
-        Core.Kind.Id => File.Exists(LinuxLayout.Kind) ? Updates.ParseVersion((await runner.Run(LinuxLayout.Kind, "version")).Output) : null,
         "App" => await InstalledAppVersion(),
         ComponentRules.DashboardId => await InstalledDashboardVersion(),
         _ => null,
@@ -48,8 +47,8 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
         "Engine" => Updates.LinuxDocker,
         "Compose" => Updates.LinuxCompose,
         "Buildx" => Updates.LinuxBuildx,
-        Core.Kind.Id => Core.Kind.Release,
-        "App" or ComponentRules.DashboardId => await Updates.LatestApp(LinuxLayout.AppAsset),
+        "App" => await Updates.LatestApp(LinuxLayout.AppAsset),
+        ComponentRules.DashboardId => await Updates.LatestComponentAsset(Updates.DashboardComponent, LinuxLayout.DashboardPackage("apt")),
         _ => null,
     };
 
@@ -101,7 +100,7 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
         log($"Removed {package}");
     }
 
-    public async Task StopDashboard() => await root.TryRun("pkill", "-f", "/Dockyard[. ]Dashboard$");
+    public async Task StopDashboard() => await root.TryRun("pkill", "-f", "/(dockyard-dashboard|Dockyard[. ]Dashboard)$");
 
     public async Task SetDashboard(Action<string> log, bool installed)
     {
@@ -150,7 +149,7 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
             List<string> packages = [];
             log("Downloading Dockyard");
             if (app) packages.Add(await Updates.ReleaseAssetOrLocal(LinuxLayout.AppPackage(packageManager), dir, tag));
-            if (dashboard) packages.Add(await Updates.ReleaseAssetOrLocal(LinuxLayout.DashboardPackage(packageManager), dir, tag));
+            if (dashboard) packages.Add(await Updates.DownloadComponentAsset(Updates.DashboardComponent, LinuxLayout.DashboardPackage(packageManager), dir));
             // apt hands local packages to its unprivileged _apt user.
             File.SetUnixFileMode(dir, (UnixFileMode)0b111_101_101);
             foreach (var package in packages) File.SetUnixFileMode(package, (UnixFileMode)0b110_100_100);
@@ -194,13 +193,14 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
                 var name = Path.GetFileName(file);
                 if (dashboard || !LinuxLayout.DashboardFiles.Contains(name)) File.Move(file, Path.Combine(LinuxLayout.HomeDir, name), overwrite: true);
             }
-            File.Delete(Path.Combine(LinuxLayout.HomeDir, "Dockyard.Dashboard"));
+            foreach (var old in LinuxLayout.ToolboxNames.Skip(1).Concat(LinuxLayout.DashboardNames.Skip(1)))
+                File.Delete(Path.Combine(LinuxLayout.HomeDir, old));
             if (!dashboard)
                 foreach (var name in LinuxLayout.DashboardFiles) File.Delete(Path.Combine(LinuxLayout.HomeDir, name));
             await File.WriteAllTextAsync(LinuxLayout.VersionFile, Updates.ParseVersion(Path.GetFileName(tarball))?.ToString() ?? "");
             Directory.CreateDirectory(Path.GetDirectoryName(LinuxLayout.HomeLink)!);
             File.Delete(LinuxLayout.HomeLink);
-            File.CreateSymbolicLink(LinuxLayout.HomeLink, Path.Combine(LinuxLayout.HomeDir, "Dockyard"));
+            File.CreateSymbolicLink(LinuxLayout.HomeLink, Path.Combine(LinuxLayout.HomeDir, LinuxLayout.Cli));
             log($"Installed {LinuxLayout.HomeDir}");
         }
         finally
@@ -208,22 +208,4 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
             if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
         }
     }
-
-    // Root puts it in /usr/local/bin, where every shell finds it, and only over a kind that Dockyard put there.
-    public async Task InstallKind(Action<string> log)
-    {
-        var dir = Directory.CreateTempSubdirectory("dockyard-kind").FullName;
-        try
-        {
-            var file = Path.Combine(dir, "kind");
-            await Core.Kind.Download(file);
-            await root.RunSetup(log, "add-kind", "", file);
-        }
-        finally
-        {
-            Directory.Delete(dir, recursive: true);
-        }
-    }
-
-    public Task RemoveKind(Action<string> log) => root.RunSetup(log, "remove-kind");
 }

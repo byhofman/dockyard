@@ -30,6 +30,17 @@ interface IEngineHost
     // Puts the settings in place, restarting the engine if it runs: it reads them only when it starts.
     Task ApplyEngineConfiguration(Action<string> log) => Task.CompletedTask;
 
+    // Where an installed component came from, as people know it: winget, Homebrew, apt, dnf, or Dockyard for its own copy.
+    Task<string?> Source(string component) => Task.FromResult<string?>(null);
+
+    // An engine's daemon.json as the user edits it, without what Dockyard adds; null where it cannot be edited here.
+    Task<string?> ReadEngineSettings(string engine) => Task.FromResult<string?>(null);
+    // Null when the engine accepts them, otherwise why not.
+    Task<string?> ValidateEngineSettings(string engine, string json) => Task.FromResult(Core.EngineSettings.Problem(json));
+    // Puts them in place, restarting the engine if it runs. Settings it does not start with are taken back.
+    Task ApplyEngineSettings(Action<string> log, string engine, string json) =>
+        throw new InvalidOperationException($"The {engine} engine's settings cannot be changed here");
+
     // Where Linux containers imported from another engine go, started if need be; and the socket Dockyard itself links, if any.
     string ImportTarget => Engines[0].Endpoint;
     string? OwnSocket => null;

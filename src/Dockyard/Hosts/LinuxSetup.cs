@@ -7,7 +7,7 @@ namespace Dockyard.Hosts;
 // Installing and uninstalling on a Linux host: the app, the agent and daemon.json through setup-linux.sh, the tray's
 // autostart, the credential store and kind.
 [SupportedOSPlatform("linux")]
-sealed class LinuxSetup(LinuxRoot root, LinuxComponents components)
+sealed class LinuxSetup(LinuxRoot root, LinuxComponents components, ToolComponents tools)
 {
     const string DaemonJson = "/etc/docker/daemon.json";
 
@@ -30,11 +30,18 @@ sealed class LinuxSetup(LinuxRoot root, LinuxComponents components)
             log($"{Paths.AppName} autostarts at login ({AutostartFile})");
         }
         await SetUpCredentialStore(log);
-        if (request.Without.Contains(Core.Kind.Id))
+        foreach (var tool in Core.Tools.Standalone)
         {
-            if (File.Exists(LinuxLayout.KindMarker)) await components.RemoveKind(log);
+            try
+            {
+                if (request.Without.Contains(tool.Id)) await tools.RemoveOwn(log, tool);
+                else await tools.Ensure(log, tool);
+            }
+            catch (Exception e) when (e is HttpRequestException or InvalidOperationException or IOException)
+            {
+                log($"{tool.Title} was not installed ({e.Message}); running the wizard again retries it");
+            }
         }
-        else if (await components.Installed(Core.Kind.Id) != Core.Kind.Version) await components.InstallKind(log);
         if (request.TrustHttps) await Https.Enable(host, log, request.Silent);
         await root.TryRun("gnome-extensions", "enable", "appindicatorsupport@rgcjonas.gmail.com");
         if ((await root.TryRun("docker", "context", "show"))?.Output.Trim() is { Length: > 0 } current && current != "default")

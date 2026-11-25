@@ -20,8 +20,8 @@ static class NetworkRules
         foreach (var (from, to) in new[] { (80, GuestAddresses.DomainHttpPort), (443, GuestAddresses.DomainHttpsPort) })
         {
             foreach (var iface in new[] { "docker+", "br-+" })
-                yield return ["iptables", "-t", "nat", "-I", "PREROUTING", "-i", iface, "-d", dns, "-p", "tcp", "--dport", from.ToString(), "-j", "REDIRECT", "--to-ports", to.ToString()];
-            yield return ["iptables", "-t", "nat", "-I", "OUTPUT", "-d", dns, "-p", "tcp", "--dport", from.ToString(), "-j", "REDIRECT", "--to-ports", to.ToString()];
+                yield return ["iptables", "-t", "nat", "-I", "PREROUTING", "-i", iface, "-d", dns, "-p", "tcp", "--dport", from.ToString(), "-j", "DNAT", "--to-destination", $"{dns}:{to}"];
+            yield return ["iptables", "-t", "nat", "-I", "OUTPUT", "-d", dns, "-p", "tcp", "--dport", from.ToString(), "-j", "DNAT", "--to-destination", $"{dns}:{to}"];
         }
     }
 
@@ -55,7 +55,7 @@ static class NetworkRules
     public static IEnumerable<string[]> VmCommands(IPAddress mac)
     {
         foreach (var (from, to) in new[] { (80, GuestAddresses.DomainHttpPort), (443, GuestAddresses.DomainHttpsPort) })
-            yield return ["iptables", "-t", "nat", "-I", "PREROUTING", "-i", "eth0", "-s", mac.ToString(), "-p", "tcp", "--dport", from.ToString(), "-j", "REDIRECT", "--to-ports", to.ToString()];
+            yield return ["iptables", "-t", "nat", "-I", "PREROUTING", "-i", "eth0", "-s", mac.ToString(), "-p", "tcp", "--dport", from.ToString(), "-j", "DNAT", "--to-destination", $"{GuestAddresses.Dns}:{to}"];
     }
 
     // Mirrored WSL: Windows' 127.0.0.1 arrives on loopback0, not lo. Docker drops that in raw for ports published on
@@ -78,6 +78,8 @@ static class NetworkRules
         await Iptables("-F", "DOCKYARD-INPUT");
         foreach (var iface in new[] { "lo", "docker+", "br-+" })
             await Iptables("-A", "DOCKYARD-INPUT", "-i", iface, "-j", "ACCEPT");
+        // What Dockyard's own rules sent here, such as the Mac's port 80 on the VM's address.
+        await Iptables("-A", "DOCKYARD-INPUT", "-m", "conntrack", "--ctstate", "DNAT", "-j", "ACCEPT");
         await Iptables("-A", "DOCKYARD-INPUT", "-j", "DROP");
 
         foreach (var command in Commands().Concat(vmHost is not null ? VmCommands(vmHost) : []).Concat(linuxHost ? HostCommands() : []).Concat(mirroredWsl ? MirroredWslCommands() : []))

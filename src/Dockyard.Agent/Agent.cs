@@ -65,7 +65,7 @@ sealed partial class Agent(ITransport transport, Action<string> log, AgentApi? a
 
     static Task ProxyDocker(IConnection client, CancellationToken ct) => ProxyDocker(client, DockerSocket, ct);
 
-    internal static async Task ProxyDocker(IConnection client, string dockerSocket, CancellationToken ct)
+    internal static async Task ProxyDocker(IConnection client, string dockerSocket, CancellationToken ct, bool windowsPaths = false)
     {
         for (var attempt = 0; ; attempt++)
         {
@@ -86,7 +86,8 @@ sealed partial class Agent(ITransport transport, Action<string> log, AgentApi? a
                 throw;
             }
             using var engine = new SocketConnection(docker);
-            await Pump.Both(client, engine, ct);
+            if (windowsPaths) await Pump.Both(client, engine, (from, to) => WindowsPaths.CopyRequests(from, to, ct), ct);
+            else await Pump.Both(client, engine, ct);
             return;
         }
     }

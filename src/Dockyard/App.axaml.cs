@@ -37,7 +37,7 @@ public partial class App : Application
     }
 
     // The old name counts until the next wizard run replaces it: a tray that updated itself from before the rename can find it there.
-    static readonly string[] DashboardFiles = OperatingSystem.IsWindows() ? ["Dockyard Dashboard.exe", "Dockyard.Dashboard.exe"] : ["Dockyard Dashboard", "Dockyard.Dashboard"];
+    static readonly string[] DashboardFiles = OperatingSystem.IsWindows() ? ["dockyard-dashboard.exe", "Dockyard Dashboard.exe", "Dockyard.Dashboard.exe"] : ["dockyard-dashboard", "Dockyard Dashboard", "Dockyard.Dashboard"];
     static string DashboardExe => DashboardFiles.Select(f => Path.Combine(AppContext.BaseDirectory, f)).FirstOrDefault(File.Exists) ?? Path.Combine(AppContext.BaseDirectory, DashboardFiles[0]);
     static bool HasDashboard => File.Exists(DashboardExe);
 
@@ -108,6 +108,24 @@ public partial class App : Application
                 break;
             case TrayCommandKind.Start: _ = vm.StartEngine(command.Engine!); break;
             case TrayCommandKind.Switch: _ = SwitchAndReport(command.Engine!); break;
+            case TrayCommandKind.Run: _ = Task.Run(() => RunAndReply(command.Reply!, command.Args!)); break;
+        }
+    }
+
+    async Task RunAndReply(string reply, IReadOnlyList<string> args)
+    {
+        StreamWriter writer;
+        try { writer = LocalPipe.OpenReply(reply); }
+        catch (Exception e) when (e is IOException or TimeoutException or UnauthorizedAccessException) { return; }
+        using (writer)
+        {
+            void Write(string line)
+            {
+                try { lock (writer) writer.WriteLine(line); }
+                catch (IOException) { }
+            }
+            var code = await Cli.Execute(vm.Host, args, Write, Write);
+            Write(LocalPipe.ExitLine + code);
         }
     }
 
@@ -290,12 +308,12 @@ public partial class App : Application
         else ShowWindow();
     }
 
-    void OpenDashboard()
+    void OpenDashboard(string? section = null)
     {
-        if (LocalPipe.TrySend(LocalPipe.DashboardName, "show")) return;
+        if (LocalPipe.TrySend(LocalPipe.DashboardName, section is null ? "show" : $"show {section}")) return;
         try
         {
-            Process.Start(new ProcessStartInfo(DashboardExe) { UseShellExecute = false })?.Dispose();
+            Process.Start(new ProcessStartInfo(DashboardExe, section is null ? [] : ["--section", section]) { UseShellExecute = false })?.Dispose();
         }
         catch (Exception)
         {

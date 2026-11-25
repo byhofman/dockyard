@@ -9,10 +9,28 @@ param([string]$Wizard, [string]$OneLiner, [string]$Screenshots = (Join-Path $PSS
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 $appDir = Join-Path $env:ProgramFiles 'Dockyard'
-$appExe = Join-Path $appDir 'Dockyard.exe'
+$appExe = Join-Path $appDir 'dockyard-toolbox.exe'
+# What the Toolbox was called before 0.9.0.
+$legacyExe = Join-Path $appDir 'Dockyard.exe'
 # Either name: the one-liner test runs the release that is out, and the rename reaches it with the next release.
-$dashboard = Join-Path $appDir 'Dockyard*Dashboard.exe'
-$docker = Join-Path $env:ProgramFiles 'Docker\docker.exe'
+$dashboard = Join-Path $appDir 'dockyard-dashboard.exe'
+$ownDocker = Join-Path $env:ProgramFiles 'Docker\docker.exe'
+
+# winget's copy where it brought one, otherwise Dockyard's own in Program Files. Found again after every run of the wizard.
+# Dockyard installs winget's tools for all users, whose links are in Program Files; a user's own are in LocalAppData.
+function Tool($name, $own) {
+    $links = (Join-Path $env:ProgramFiles "WinGet\Links\$name.exe"), (Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\$name.exe")
+    $found = $links | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if ($found) { $found } else { $own }
+}
+function Find-Tools {
+    $script:docker = Tool 'docker' $ownDocker
+    $script:kind = Tool 'kind' (Join-Path $env:ProgramFiles 'Docker\kind.exe')
+    $script:kubectl = Tool 'kubectl' (Join-Path $env:ProgramFiles 'Docker\kubectl.exe')
+    $script:helm = Tool 'helm' (Join-Path $env:ProgramFiles 'Docker\helm.exe')
+    $script:compose = Tool 'docker-compose' (Join-Path $env:ProgramFiles 'Docker\cli-plugins\docker-compose.exe')
+}
+Find-Tools
 
 function Ok($text) { Write-Host "  ok   $text" }
 function Check($text, $condition) { if ($condition) { Ok $text } else { throw "FAIL $text" } }
@@ -21,12 +39,15 @@ function Section($text) { Write-Host "== $text" -ForegroundColor Cyan }
 function Run {
     if ($OneLiner) {
         & ([scriptblock]::Create((Invoke-RestMethod $OneLiner))) @args
-        return $global:LASTEXITCODE
+        $exit = $global:LASTEXITCODE
+        Find-Tools
+        return $exit
     }
     $out = New-TemporaryFile; $err = New-TemporaryFile
     # The image and dashboard built next to the wizard, which a build before its release cannot download.
     $p = Start-Process (Resolve-Path $Wizard) -ArgumentList (@($args) + '--assets', (Split-Path (Resolve-Path $Wizard))) -Wait -PassThru -NoNewWindow -RedirectStandardOutput $out -RedirectStandardError $err
     Get-Content $out, $err | Write-Host
+    Find-Tools
     return $p.ExitCode
 }
 
@@ -85,18 +106,20 @@ if ($OneLiner) {
 
 Section 'over v0.1.0, as the owner has it: update, the skipped dashboard stays skipped'
 New-Item -ItemType Directory -Force $appDir | Out-Null
-Invoke-WebRequest https://github.com/byhofman/dockyard/releases/download/v0.1.0/Dockyard.exe -OutFile $appExe
-Check 'really v0.1.0 to start from' ((Get-Item $appExe).VersionInfo.ProductVersion -like '0.1.0*')
+Invoke-WebRequest https://github.com/byhofman/dockyard/releases/download/v0.1.0/Dockyard.exe -OutFile $legacyExe
+Check 'really v0.1.0 to start from' ((Get-Item $legacyExe).VersionInfo.ProductVersion -like '0.1.0*')
 New-Item -ItemType Directory -Force "$env:APPDATA\Dockyard" | Out-Null
 '{"StopOtherOnSwitch":false,"StartActiveAtLogon":false}' | Set-Content "$env:APPDATA\Dockyard\settings.json"
 if (-not $OneLiner) { Window -LookOnly 'manage-over-v0.1.0' }
 $code = Run --silent --no-start
 Check "exit 0 (was $code)" ($code -eq 0)
 Check 'no longer v0.1.0' ((Get-Item $appExe).VersionInfo.ProductVersion -notlike '0.1.0*')
+Check 'the old name is gone' (-not (Test-Path $legacyExe))
 Check 'no dashboard' (-not (Test-Path $dashboard))
 Check 'settings kept' ((Get-Content "$env:APPDATA\Dockyard\settings.json" -Raw) -match '"StopOtherOnSwitch":\s*false')
 $distros = (wsl.exe -l -q | Out-String) -replace "`0", ''
 Check 'the dockyard distro is there' ($distros -match 'dockyard')
+Find-Tools
 Check 'docker contexts' ((& $docker context ls -q) -contains 'linux')
 if ($Wizard) { Check 'no mirrored networking on Windows Server, where it cuts the engine off' (-not ((Test-Path "$env:USERPROFILE\.wslconfig") -and ((Get-Content "$env:USERPROFILE\.wslconfig" -Raw) -match 'networkingMode=mirrored'))) }
 
@@ -183,7 +206,7 @@ if ($Wizard) {
     # The relay holds 80 and 443 on 127.77.0.1, which must not keep a web server from taking those ports on every address.
     if ($free80) { Check 'a web server can still listen on port 80 next to the tray' (Can-Listen-On-80) }
     else { Write-Host '  something on this runner already holds port 80, so this says nothing here'; netstat -ano | Select-String ':80\s' | Write-Host }
-    Get-Process Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
+    Get-Process dockyard-toolbox, Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
     & $docker --context linux rm -f e2e-localhost | Out-Null
 
     Section "a proxy only on Windows' loopback, out of reach with NAT networking, is not given to the engine"
@@ -240,16 +263,16 @@ if ($Wizard) {
     Section 'engine configuration from the settings reaches the engine'
     $saved = Get-Content "$env:APPDATA\Dockyard\settings.json" -Raw
     $settings = $saved | ConvertFrom-Json
-    $settings | Add-Member -Force RegistryMirrors 'https://mirror.dockyard.test'
-    $settings | Add-Member -Force InsecureRegistries 'registry.dockyard.test:5000'
+    $settings | Add-Member -Force RegistryMirrors 'https://mirror.dockyard.internal'
+    $settings | Add-Member -Force InsecureRegistries 'registry.dockyard.internal:5000'
     $settings | Add-Member -Force AddressPools '10.123.0.0/16 24'
     $settings | ConvertTo-Json | Set-Content "$env:APPDATA\Dockyard\settings.json"
     Check 'exit 0' ((Run --silent --no-start) -eq 0)
     wsl.exe -d dockyard -u root -- sh -c 'kill -TERM $(pidof dockerd); while pidof dockerd >/dev/null; do sleep 0.2; done'
     Linux-Engine
     $info = & $docker --context linux info --format '{{json .RegistryConfig}}' | Out-String
-    Check 'the mirror applies' ($info -match 'mirror\.dockyard\.test')
-    Check 'the insecure registry applies' ($info -match 'registry\.dockyard\.test:5000')
+    Check 'the mirror applies' ($info -match 'mirror\.dockyard\.internal')
+    Check 'the insecure registry applies' ($info -match 'registry\.dockyard\.internal:5000')
     & $docker --context linux network create e2e-pool | Out-Null
     $subnet = & $docker --context linux network inspect e2e-pool --format '{{(index .IPAM.Config 0).Subnet}}' | Out-String
     Check "a new network comes from the pool (got $subnet)" ($subnet -match '^10\.123\.')
@@ -257,14 +280,14 @@ if ($Wizard) {
     $saved | Set-Content "$env:APPDATA\Dockyard\settings.json"
 
     Section 'container domains and trusted HTTPS, without publishing a port'
-    Check 'windows sends the name space to Dockyard' ((Get-DnsClientNrptRule | Where-Object { $_.Namespace -contains '.dockyard.test' }) -ne $null)
+    Check 'windows sends the name space to Dockyard' ((Get-DnsClientNrptRule | Where-Object { $_.Namespace -contains '.dockyard.internal' }) -ne $null)
     & $docker --context linux run -d --name e2e-web nginx:alpine | Out-Null
     $tray = Start-Process $appExe -ArgumentList '--tray' -PassThru
     Start-Sleep 8
-    Check 'the name resolves' ((Resolve-DnsName e2e-web.dockyard.test -Type A -ErrorAction SilentlyContinue).IPAddress -contains '127.77.0.1')
-    $code = (curl.exe -s -o NUL -w '%{http_code}' --max-time 15 http://e2e-web.dockyard.test/ | Out-String).Trim()
+    Check 'the name resolves' ((Resolve-DnsName e2e-web.dockyard.internal -Type A -ErrorAction SilentlyContinue).IPAddress -contains '127.77.0.1')
+    $code = (curl.exe -s -o NUL -w '%{http_code}' --max-time 15 http://e2e-web.dockyard.internal/ | Out-String).Trim()
     Check "http reaches it by name (got $code)" ($code -eq '200')
-    Get-Process Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
+    Get-Process dockyard-toolbox, Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
     Check 'exit 0 with --trust-https' ((Run --silent --no-start --trust-https) -eq 0)
     $root = Get-ChildItem Cert:\LocalMachine\Root | Where-Object Subject -like '*Dockyard Local CA*'
     Check 'the CA is in the trust store' ($root -ne $null)
@@ -273,10 +296,10 @@ if ($Wizard) {
     Start-Sleep 15
     # --ssl-no-revoke: this curl asks Windows to check revocation and fails when a private CA publishes no such list, as this
     # one does not need to. Browsers do not fail on that; a certificate that is not trusted still fails here.
-    $code = (curl.exe -s --ssl-no-revoke -o NUL -w '%{http_code}' --max-time 15 https://e2e-web.dockyard.test/ | Out-String).Trim()
-    if ($code -ne '200') { curl.exe -sS -v --ssl-no-revoke -o NUL --max-time 15 https://e2e-web.dockyard.test/ 2>&1 | Select-Object -Last 15 | Write-Host; Resolve-DnsName e2e-web.dockyard.test -Type A -ErrorAction SilentlyContinue | Out-String | Write-Host }
+    $code = (curl.exe -s --ssl-no-revoke -o NUL -w '%{http_code}' --max-time 15 https://e2e-web.dockyard.internal/ | Out-String).Trim()
+    if ($code -ne '200') { curl.exe -sS -v --ssl-no-revoke -o NUL --max-time 15 https://e2e-web.dockyard.internal/ 2>&1 | Select-Object -Last 15 | Write-Host; Resolve-DnsName e2e-web.dockyard.internal -Type A -ErrorAction SilentlyContinue | Out-String | Write-Host }
     Check "https is trusted by Windows (got $code)" ($code -eq '200')
-    Get-Process Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
+    Get-Process dockyard-toolbox, Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
     $caDir = "$env:APPDATA\Dockyard\ca"
     Check 'no plain key on disk, C: being visible from WSL' (-not (Test-Path "$caDir\ca.key"))
     Check 'what is there is encrypted' ([Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes("$caDir\ca.key.dpapi")) -notmatch 'PRIVATE KEY')
@@ -326,10 +349,10 @@ if ($Wizard) {
     Check 'the helper is there' (Test-Path (Join-Path $env:ProgramFiles 'Docker\docker-credential-wincred.exe'))
     Check 'the store is set' ((Get-Content "$env:USERPROFILE\.docker\config.json" -Raw) -match '"credsStore":\s*"wincred"')
     $helper = Join-Path $env:ProgramFiles 'Docker\docker-credential-wincred.exe'
-    '{"ServerURL":"e2e.dockyard.test","Username":"me","Secret":"s3cret"}' | & $helper store
-    Check 'a login round-trips through the store' (('e2e.dockyard.test' | & $helper get | Out-String) -match 's3cret')
+    '{"ServerURL":"e2e.dockyard.internal","Username":"me","Secret":"s3cret"}' | & $helper store
+    Check 'a login round-trips through the store' (('e2e.dockyard.internal' | & $helper get | Out-String) -match 's3cret')
     Check 'the secret is not in config.json' ((Get-Content "$env:USERPROFILE\.docker\config.json" -Raw) -notmatch 's3cret')
-    'e2e.dockyard.test' | & $helper erase
+    'e2e.dockyard.internal' | & $helper erase
 }
 
 Section 'the Windows engine: no sign-out needed'
@@ -369,12 +392,12 @@ if ($Wizard) {
     Check 'exit 0' ((Run --silent --no-start) -eq 0)
     Check 'the old process was stopped' ($old.HasExited)
     Check 'the old file is gone' (-not (Test-Path $oldExe))
-    $newExe = Join-Path $appDir 'Dockyard Dashboard.exe'
+    $newExe = Join-Path $appDir 'dockyard-dashboard.exe'
     Check 'the new file is there' (Test-Path $newExe)
     Check 'the description Task Manager shows' ((Get-Item $newExe).VersionInfo.FileDescription -eq 'Dockyard Dashboard')
     $new = Start-Process $newExe -PassThru
     Start-Sleep 5
-    Check 'the process is called Dockyard Dashboard' ((Get-Process -Id $new.Id).ProcessName -eq 'Dockyard Dashboard')
+    Check 'the process is called dockyard-dashboard' ((Get-Process -Id $new.Id).ProcessName -eq 'dockyard-dashboard')
     Check 'exit 0 with it running' ((Run --silent --no-dashboard --no-start) -eq 0)
     Check 'removing it stops it' ($new.HasExited)
 }
@@ -385,9 +408,23 @@ Check 'dashboard added' (Test-Path $dashboard)
 Check 'with its libraries' (Test-Path (Join-Path $appDir 'dashboard.files'))
 
 if ($Wizard) {
+    Section 'the tools: from winget where it is there, in place of the copies an earlier Dockyard put in Program Files'
+    if ($docker -ne $ownDocker) {
+        Ok "docker is winget's: $docker"
+        Check "Dockyard's own docker.exe went" (-not (Test-Path $ownDocker))
+        & $docker compose version
+        Check 'docker compose finds the plugin winget brought' ($LASTEXITCODE -eq 0)
+        & $docker buildx version
+        Check 'and docker buildx' ($LASTEXITCODE -eq 0)
+    }
+    else { Ok 'no winget here: the tools are Dockyard''s own copies' }
+    foreach ($tool in @{ Name = 'kubectl'; Path = $kubectl; Args = @('version', '--client') }, @{ Name = 'helm'; Path = $helm; Args = @('version', '--short') }) {
+        Check "$($tool.Name) is installed: $($tool.Path)" (Test-Path $tool.Path)
+        Check "it runs: $(& $tool.Path @($tool.Args) | Select-Object -First 1)" ($LASTEXITCODE -eq 0)
+    }
+
     Section 'kind: installed, and a cluster from create to delete on the Linux engine'
-    $kind = Join-Path $env:ProgramFiles 'Docker\kind.exe'
-    Check 'kind.exe is next to docker.exe' (Test-Path $kind)
+    Check "kind is installed: $kind" (Test-Path $kind)
     Check "it runs: $(& $kind version)" ($LASTEXITCODE -eq 0)
     & $docker --context linux version *> $null
     if ($LASTEXITCODE -ne 0) { Linux-Engine }
@@ -453,7 +490,6 @@ if ($Wizard) {
     Check 'it is back' (Test-Path $kind)
 
     Section 'any component can go and come back, and required ones refuse'
-    $compose = Join-Path $env:ProgramFiles 'Docker\cli-plugins\docker-compose.exe'
     Check 'exit 0 without compose' ((Run --silent --no-start --without compose) -eq 0)
     Check 'compose is gone' (-not (Test-Path $compose))
     Check 'exit 0 on a rerun' ((Run --silent --no-start) -eq 0)
@@ -473,7 +509,7 @@ if ($Wizard) {
     Check 'exit 0 with the Windows engine' ((Run --silent --no-start --with windows-engine) -eq 0)
     Check 'dockerd is back' (Test-Path (Join-Path $env:ProgramFiles 'Docker\dockerd.exe'))
     Check 'the win context is back' ((& $docker context ls -q) -contains 'win')
-    $routed = { (Get-DnsClientNrptRule | Where-Object { $_.Namespace -contains '.dockyard.test' }) -ne $null }
+    $routed = { (Get-DnsClientNrptRule | Where-Object { $_.Namespace -contains '.dockyard.internal' }) -ne $null }
     Check 'exit 0 without the Linux engine' ((Run --silent --no-start --without linux-engine) -eq 0)
     Check 'names no longer go to Dockyard' (-not (& $routed))
     Check 'the linux context is gone' ((& $docker context ls -q) -notcontains 'linux')
@@ -501,17 +537,17 @@ $id = [Security.Principal.WindowsIdentity]::GetCurrent()
 $p = Start-Process $appExe -ArgumentList "--machine-update App --source `"$source`" --user-sid $($id.User.Value) --user-name `"$($id.Name)`" --log `"$log`" --keep-pid 0" -Wait -PassThru
 Get-Content $log | Write-Host
 Check "worker exit 0 (was $($p.ExitCode))" ($p.ExitCode -eq 0)
-Get-Process Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-Process dockyard-toolbox, Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force
 
 Section 'uninstall keeps the data'
 if ($Wizard) {
-    '{"ServerURL":"e2e.dockyard.test","Username":"me","Secret":"s3cret"}' | & (Join-Path $env:ProgramFiles 'Docker\docker-credential-wincred.exe') store
+    '{"ServerURL":"e2e.dockyard.internal","Username":"me","Secret":"s3cret"}' | & (Join-Path $env:ProgramFiles 'Docker\docker-credential-wincred.exe') store
     $said = New-TemporaryFile
     $p = Start-Process (Resolve-Path $Wizard) -ArgumentList '--silent', '--uninstall' -Wait -PassThru -NoNewWindow -RedirectStandardOutput $said
     Get-Content $said | Write-Host
     Check 'exit 0' ($p.ExitCode -eq 0)
-    Check 'it says which login stays in the store' ((Get-Content $said -Raw) -match 'e2e\.dockyard\.test.*Windows Credential Manager')
-    cmdkey /delete:e2e.dockyard.test | Out-Null
+    Check 'it says which login stays in the store' ((Get-Content $said -Raw) -match 'e2e\.dockyard\.internal.*Windows Credential Manager')
+    cmdkey /delete:e2e.dockyard.internal | Out-Null
 } else {
     Check 'exit 0' ((Run --silent --uninstall) -eq 0)
 }
@@ -520,7 +556,7 @@ $distros = (wsl.exe -l -q | Out-String) -replace "`0", ''
 Check 'the dockyard distro is kept' ($distros -match 'dockyard')
 if ($Wizard) {
     Check 'the CA is out of the trust store' ((Get-ChildItem Cert:\LocalMachine\Root | Where-Object Subject -like '*Dockyard Local CA*') -eq $null)
-    Check 'and names no longer go to Dockyard' ((Get-DnsClientNrptRule | Where-Object { $_.Namespace -contains '.dockyard.test' }) -eq $null)
+    Check 'and names no longer go to Dockyard' ((Get-DnsClientNrptRule | Where-Object { $_.Namespace -contains '.dockyard.internal' }) -eq $null)
 }
 Check 'no credential store left in the config' (-not ((Test-Path "$env:USERPROFILE\.docker\config.json") -and ((Get-Content "$env:USERPROFILE\.docker\config.json" -Raw) -match 'credsStore')))
 Check 'our .wslconfig line is gone' (-not ((Test-Path "$env:USERPROFILE\.wslconfig") -and ((Get-Content "$env:USERPROFILE\.wslconfig" -Raw) -match 'networkingMode=mirrored')))

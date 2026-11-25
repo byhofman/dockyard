@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:clu="using:Dockyard.Dashboard.Features.Clusters"
+             xmlns:kind="using:Dockyard.Kind"
              xmlns:store="using:Dockyard.Dashboard.Store"
              x:Class="Dockyard.Dashboard.Features.Clusters.ClustersView"
              x:DataType="clu:ClustersViewModel">
@@ -11,8 +12,6 @@
           <CheckBox Classes="pick" IsChecked="{Binding AllSelected}" ToolTip.Tip="Select all" AutomationProperties.Name="Select all clusters" />
           <TextBlock Grid.Column="1" Classes="section" Text="CLUSTERS" VerticalAlignment="Center" />
           <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12">
-            <ToggleSwitch IsChecked="{Binding LoadBalancersEnabled}" IsVisible="{Binding HasKind}" OnContent="Load balancers" OffContent="Load balancers"
-                          VerticalAlignment="Center" ToolTip.Tip="kind's cloud provider: LoadBalancer services get an address on 127.0.0.1" />
             <Button Classes="primary" Command="{Binding CreateCommand}" IsVisible="{Binding HasKind}">
               <StackPanel Classes="label"><PathIcon Data="{StaticResource IconPlus}" /><TextBlock Text="Create cluster…" /></StackPanel>
             </Button>
@@ -36,21 +35,9 @@
           <TextBlock Classes="muted small" Text="{Binding Busy}" />
         </StackPanel>
       </StackPanel>
-      <Border DockPanel.Dock="Bottom" IsVisible="{Binding HasOutput}" MaxHeight="180" Margin="16,4,16,12"
-              Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="6">
-        <ScrollViewer>
-          <ItemsControl ItemsSource="{Binding Output}" Margin="10,6">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="x:String">
-                <SelectableTextBlock Classes="mono small" Text="{Binding}" TextWrapping="Wrap" />
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-        </ScrollViewer>
-      </Border>
       <ListBox x:Name="List" Classes="rows" ItemsSource="{Binding Rows}" SelectionMode="Multiple" SelectedItems="{Binding SelectedItems}" Padding="0,4">
         <ListBox.ItemTemplate>
-          <DataTemplate DataType="clu:KindCluster">
+          <DataTemplate DataType="kind:KindCluster">
             <Grid ColumnDefinitions="Auto,*,120,110,Auto">
               <CheckBox Classes="pick" IsChecked="{Binding $parent[ListBoxItem].IsSelected}" AutomationProperties.Name="{Binding Name}" />
               <StackPanel Grid.Column="1">
@@ -107,6 +94,12 @@
             <Button Command="{Binding CopyKubeconfigCommand}" ToolTip.Tip="kind get kubeconfig, onto the clipboard">
               <StackPanel Classes="label"><PathIcon Data="{StaticResource IconCopy}" /><TextBlock Text="Copy kubeconfig" /></StackPanel>
             </Button>
+            <Button Command="{Binding DuplicateCommand}" ToolTip.Tip="A new cluster from this one's definition">
+              <StackPanel Classes="label"><PathIcon Data="{StaticResource IconCopy}" /><TextBlock Text="Duplicate…" /></StackPanel>
+            </Button>
+            <Button Command="{Binding RecreateCommand}" ToolTip.Tip="Its definition, to change and make the cluster again from">
+              <StackPanel Classes="label"><PathIcon Data="{StaticResource IconRestart}" /><TextBlock Text="Definition…" /></StackPanel>
+            </Button>
             <Button Classes="danger" Command="{Binding DeleteCommand}" ToolTip.Tip="Delete (Del)">
               <StackPanel Classes="label"><PathIcon Data="{StaticResource IconDelete}" /><TextBlock Text="Delete…" /></StackPanel>
             </Button>
@@ -124,7 +117,11 @@
           <Button Content="Open the shared folder" Command="{Binding OpenSharedFolderCommand}" IsVisible="{Binding HasSharedFolder}"
                   HorizontalAlignment="Left" ToolTip.Tip="{Binding SharedFolder}" />
 
-          <TextBlock Classes="section" Text="LOAD BALANCERS" Margin="0,8,0,0" />
+          <Grid ColumnDefinitions="*,Auto" Margin="0,8,0,0">
+            <TextBlock Classes="section" Text="LOAD BALANCER" VerticalAlignment="Center" />
+            <Button Grid.Column="1" Classes="link" Content="Change…" Command="{Binding LoadBalancerCommand}" ToolTip.Tip="On or off for this cluster, and its ports on 127.0.0.1" />
+          </Grid>
+          <SelectableTextBlock Classes="mono" Text="{Binding ForwardsText}" TextWrapping="Wrap" IsVisible="{Binding HasForwards}" />
           <ItemsControl ItemsSource="{Binding LoadBalancerRows}" IsVisible="{Binding HasLoadBalancers}">
             <ItemsControl.ItemTemplate>
               <DataTemplate DataType="clu:LoadBalancer">
@@ -156,12 +153,12 @@
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
-          <TextBlock Classes="muted small" Text="{Binding LoadBalancerHint}" TextWrapping="Wrap" IsVisible="{Binding !HasLoadBalancers}" />
+          <TextBlock Classes="muted small" Text="{Binding LoadBalancerHint}" TextWrapping="Wrap" />
 
           <TextBlock Classes="section" Text="NODES" Margin="0,8,0,0" />
           <ItemsControl ItemsSource="{Binding Selected.Nodes, FallbackValue={x:Null}}">
             <ItemsControl.ItemTemplate>
-              <DataTemplate DataType="clu:KindNode">
+              <DataTemplate DataType="kind:KindNode">
                 <Grid ColumnDefinitions="*,Auto" Margin="0,2">
                   <StackPanel>
                     <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />

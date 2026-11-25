@@ -5,7 +5,9 @@ namespace Dockyard.Dashboard.Shell;
 
 static class TrayClient
 {
-    static string TrayExe => Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "Dockyard.exe" : "Dockyard");
+    // The Toolbox, by its name since 0.9.0 or the one before.
+    public static string TrayExe => (OperatingSystem.IsWindows() ? new[] { "dockyard-toolbox.exe", "Dockyard.exe" } : ["dockyard-toolbox", "Dockyard"])
+        .Select(n => Path.Combine(AppContext.BaseDirectory, n)).FirstOrDefault(File.Exists) ?? Path.Combine(AppContext.BaseDirectory, "dockyard-toolbox");
 
     public static bool Send(TrayCommand command)
     {

@@ -27,6 +27,7 @@ public partial class App : Application
         }
         var vm = new ShellViewModel();
         var window = new MainWindow { DataContext = vm };
+        if (ShellViewModel.InitialSection is { } first) vm.ShowSection(first);
         StartupTrace.Mark("main window built");
         desktop.MainWindow = window;
         desktop.Exit += (_, _) => vm.Stop();
@@ -53,6 +54,7 @@ public partial class App : Application
                 desktop.Shutdown();
                 return;
             }
+            if (line.StartsWith("show ", StringComparison.Ordinal)) vm.ShowSection(line[5..]);
             window.Show();
             if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
             window.Activate();

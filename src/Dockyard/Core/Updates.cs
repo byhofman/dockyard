@@ -28,7 +28,9 @@ static partial class Updates
         Component.Buildx => "Docker Buildx",
         Component.LinuxEngine => "Docker Engine (Linux, WSL)",
         Component.App => "Dockyard",
-        Component.Kind => Kind.Title,
+        Component.Kind => Tools.Kind.Title,
+        Component.Kubectl => Tools.Kubectl.Title,
+        Component.Helm => Tools.Helm.Title,
         _ => c.ToString(),
     };
 
@@ -37,25 +39,25 @@ static partial class Updates
     {
         Component.Engine => File.Exists(Paths.DockerdExe) ? ParseVersion(await Shell.Check(Paths.DockerdExe, "--version")) : null,
         Component.Cli => File.Exists(Paths.DockerExe) ? ParseVersion((await Shell.Run(Paths.DockerExe, "--version")).Output) : null,
-        Component.Dashboard => new[] { Paths.DashboardExe, Paths.LegacyDashboardExe }.FirstOrDefault(File.Exists) is { } dashboard ? ParseVersion(System.Diagnostics.FileVersionInfo.GetVersionInfo(dashboard).ProductVersion) : null,
+        Component.Dashboard => Paths.AnyDashboardExe.FirstOrDefault(File.Exists) is { } dashboard ? ParseVersion(System.Diagnostics.FileVersionInfo.GetVersionInfo(dashboard).ProductVersion) : null,
         Component.Compose => await PluginVersion("docker-compose.exe", "version", "--short"),
         Component.Buildx => await PluginVersion("docker-buildx.exe", "version"),
-        Component.Kind => File.Exists(Paths.KindExe) ? ParseVersion((await Shell.Run(Paths.KindExe, "version")).Output) : null,
+        Component.Kind or Component.Kubectl or Component.Helm => await OwnToolVersion(Tools.Find(c.ToString())!),
         Component.LinuxEngine => Settings.Load().RemovedComponents.Contains(nameof(Component.LinuxEngine)) ? null : await new WslDistro(ProcessRunner.Instance).DockerVersion(),
         // The wizard runs from elsewhere and can be newer than what is installed, so not this process's own version.
-        Component.App => File.Exists(Paths.AppExe) ? ParseVersion(System.Diagnostics.FileVersionInfo.GetVersionInfo(Paths.AppExe).ProductVersion) : null,
+        Component.App => File.Exists(Paths.InstalledAppExe) ? ParseVersion(System.Diagnostics.FileVersionInfo.GetVersionInfo(Paths.InstalledAppExe).ProductVersion) : null,
         _ => null,
     };
 
     public static async Task<Release?> Latest(Component c) => c switch
     {
         Component.Engine or Component.Cli => WindowsDocker,
-        Component.Dashboard => await LatestApp(@"^Dockyard\.Dashboard\.zip$"),
+        Component.Dashboard => await LatestComponentAsset(DashboardComponent, @"^Dockyard\.Dashboard\.zip$"),
         Component.Compose => WindowsCompose,
         Component.Buildx => WindowsBuildx,
         Component.LinuxEngine => LinuxDocker,
         Component.App => await LatestApp(WindowsAppAsset),
-        Component.Kind => Kind.Release,
+        Component.Kind or Component.Kubectl or Component.Helm => Tools.Pinned(Tools.Find(c.ToString())!),
         _ => null,
     };
 
@@ -115,7 +117,11 @@ static partial class Updates
 
     // A repository without releases redirects to its release list instead.
     internal static string? TagOfLatestRedirect(Uri target) =>
-        ReleaseTagPath().Match(target.AbsolutePath) is { Success: true } m ? m.Groups["tag"].Value : null;
+        ReleaseTagPath().Match(target.AbsolutePath) is { Success: true } m ? Uri.UnescapeDataString(m.Groups["tag"].Value) : null;
+
+    [SupportedOSPlatform("windows")]
+    static async Task<Version?> OwnToolVersion(CliTool tool) =>
+        File.Exists(Paths.ToolExe(tool)) ? ParseVersion((await Shell.Run(Paths.ToolExe(tool), tool.VersionArgs)).Output) : null;
 
     static async Task<Version?> PluginVersion(string exe, params string[] args)
     {
@@ -137,15 +143,91 @@ static partial class Updates
         var dir = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
         Directory.CreateDirectory(dir);
         var exe = await DownloadReleaseAsset(Path.GetFileName(new Uri(release.DownloadUrl!).LocalPath), dir, tag: release.Tag);
-        if (File.Exists(Paths.DashboardExe) || File.Exists(Paths.LegacyDashboardExe)) await DownloadReleaseAsset(Paths.DashboardZipName, dir, tag: release.Tag);
+        if (Paths.HasDashboard) await DownloadComponentAsset(DashboardComponent, DashboardZipPattern, dir);
+        await DownloadComponentAsset(CliComponent, CliAssetPattern, dir);
         return exe;
     }
 
-    public static Task<string> DownloadImage(string targetDir) => DownloadReleaseAsset(ImageAsset, targetDir, isPattern: true);
+    public static Task<string> DownloadImage(string targetDir) => DownloadComponentAsset(EngineComponent, ImageAsset, targetDir);
+
+    // Components are released on their own, tagged <component>/<version>; components.json on the release tagged index
+    // names each one's latest. See docs/design/components-and-releases.md.
+    public const string DashboardZipPattern = @"^Dockyard\.Dashboard\.zip$";
+    public const string CliAssetPattern = @"^dockyard-windows-x64\.exe$";
+    public const string ToolboxComponent = "toolbox";
+    public const string DashboardComponent = "dashboard";
+    public const string CliComponent = "cli";
+    public const string EngineComponent = "engine";
+
+    public static string ComponentTag(string component, string version) => $"{component}/{version}";
+
+    internal sealed record ComponentEntry(string Tag, Version Version, IReadOnlyDictionary<string, Version> Requires);
+
+    internal static Dictionary<string, ComponentEntry> ParseIndex(string json)
+    {
+        var entries = new Dictionary<string, ComponentEntry>();
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            foreach (var p in doc.RootElement.EnumerateObject())
+            {
+                if (p.Value.ValueKind != System.Text.Json.JsonValueKind.Object) continue;
+                var tag = p.Value.TryGetProperty("tag", out var t) ? t.GetString() : null;
+                var version = ParseVersion(p.Value.TryGetProperty("version", out var v) ? v.GetString() : null);
+                if (tag is null || version is null) continue;
+                var requires = new Dictionary<string, Version>();
+                if (p.Value.TryGetProperty("requires", out var r) && r.ValueKind == System.Text.Json.JsonValueKind.Object)
+                    foreach (var q in r.EnumerateObject())
+                        if (ParseVersion(q.Value.GetString()) is { } min) requires[q.Name] = min;
+                entries[p.Name] = new ComponentEntry(tag, version, requires);
+            }
+        }
+        catch (System.Text.Json.JsonException) { }
+        return entries;
+    }
+
+    static async Task<Dictionary<string, ComponentEntry>> Index() =>
+        await GetTextIfFound(AssetUrl(Paths.Repo, "index", "components.json")) is { } json ? ParseIndex(json) : [];
+
+    // A component that needs a newer Toolbox waits for the Toolbox's own update, which comes first. A development build
+    // (0.0.0) is taken as meeting every requirement.
+    internal static bool RequirementsMet(ComponentEntry entry, Version? toolbox) =>
+        !entry.Requires.TryGetValue(ToolboxComponent, out var needed) || toolbox is null || toolbox == new Version(0, 0, 0) || toolbox >= needed;
+
+    // A component's latest release, or null when the index does not name it (a release from before the split).
+    internal static async Task<ComponentEntry?> LatestComponent(string component) =>
+        (await Index()).GetValueOrDefault(component);
+
+    public static async Task<Release?> LatestComponentAsset(string component, string assetPattern)
+    {
+        if (await LatestComponent(component) is not { } entry) return await LatestApp(assetPattern);
+        if (!RequirementsMet(entry, ParseVersion(Paths.AppVersion))) return null;
+        if (await GetTextIfFound(AssetUrl(Paths.Repo, entry.Tag, "SHA256SUMS")) is not { } sums) return null;
+        return Checksums.Names(sums).FirstOrDefault(n => Regex.IsMatch(n, assetPattern)) is { } asset
+            ? new Release(entry.Version, entry.Tag, AssetUrl(Paths.Repo, entry.Tag, asset))
+            : null;
+    }
+
+    // --assets wins; then the component's own latest release; then, before the split, the Toolbox's release.
+    public static async Task<string> DownloadComponentAsset(string component, string assetPattern, string targetDir)
+    {
+        if (LocalAsset(assetPattern) is { } local)
+        {
+            Directory.CreateDirectory(targetDir);
+            var copy = Path.Combine(targetDir, Path.GetFileName(local));
+            File.Copy(local, copy, overwrite: true);
+            return copy;
+        }
+        var entry = await LatestComponent(component);
+        // Since 0.9.0 only the index says where a component other than the Toolbox is; the Toolbox's release does not carry it.
+        if (entry is null && component != ToolboxComponent && Paths.AppVersion != "0.0.0" && ParseVersion(Paths.AppVersion) >= new Version(0, 9, 0))
+            throw new InvalidOperationException($"Could not read which {component} release is the latest (components.json on the release tagged index); check the connection to github.com, or pass the files with --assets");
+        return await DownloadReleaseAsset(assetPattern, targetDir, isPattern: true, tag: entry?.Tag);
+    }
 
     // From the given release; without one, the release of this build, or the latest for development builds.
     internal static string? ReleaseTag(string appVersion, string? tag) =>
-        tag ?? (appVersion == "0.0.0" ? null : $"v{appVersion}");
+        tag ?? (appVersion == "0.0.0" ? null : ComponentTag(ToolboxComponent, appVersion));
 
     // --assets: Dockyard's own files from a folder the user named, for offline installs and for testing a build before its
     // release. Never the installer's own folder by itself: that is usually Downloads, where any web page can leave a file.
@@ -233,6 +315,6 @@ static partial class Updates
     [GeneratedRegex(@"\d+\.\d+\.\d+")]
     private static partial Regex VersionNumber();
 
-    [GeneratedRegex(@"/releases/tag/(?<tag>[^/]+)$")]
+    [GeneratedRegex(@"/releases/tag/(?<tag>.+)$")]
     private static partial Regex ReleaseTagPath();
 }

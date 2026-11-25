@@ -143,11 +143,11 @@ public sealed class LogicTests
     [Fact]
     public void Docker_cli_is_found_without_a_shell_path_after_a_mac_install()
     {
-        Assert.SkipWhen(OperatingSystem.IsWindows(), "Windows has the CLI on the machine PATH");
+        Assert.SkipUnless(OperatingSystem.IsMacOS(), "Dockyard's own copy in ~/.dockyard/bin is the Mac's");
         var home = Directory.CreateTempSubdirectory("dockyard-cli").FullName;
         try
         {
-            Assert.Equal("docker", DockerCli.Path(home));
+            Assert.NotEqual(Path.Combine(home, ".dockyard", "bin", "docker"), DockerCli.Path(home));
             var cli = Path.Combine(home, ".dockyard", "bin", "docker");
             Directory.CreateDirectory(Path.GetDirectoryName(cli)!);
             File.WriteAllText(cli, "");

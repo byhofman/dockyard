@@ -1,3 +1,3 @@
 namespace Dockyard.Shared;
 
-enum TrayCommandKind { Show, Settings, Start, Switch }
+enum TrayCommandKind { Show, Settings, Start, Switch, Run }

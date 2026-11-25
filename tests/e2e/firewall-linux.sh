@@ -19,7 +19,7 @@ reach() {
   for net in bridge e2e-fw; do
     reply="$(docker run --rm --network "$net" alpine:3.24 wget -qO- -T 15 http://host.docker.internal:18081/marker || true)"
     [ "$reply" = from-the-host ] && ok "$1: host.docker.internal on $net" || { diagnose; fail "$1: host.docker.internal on $net: '$reply'"; }
-    docker run --rm --network "$net" alpine:3.24 wget -qO /dev/null -T 15 http://e2e-web.dockyard.test/ && ok "$1: a domain on $net" || { diagnose; fail "$1: a domain on $net"; }
+    docker run --rm --network "$net" alpine:3.24 wget -qO /dev/null -T 15 http://e2e-web.dockyard.internal/ && ok "$1: a domain on $net" || { diagnose; fail "$1: a domain on $net"; }
   done
 }
 diagnose() {

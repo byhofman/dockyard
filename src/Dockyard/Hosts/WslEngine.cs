@@ -1,82 +1,42 @@
 using System.Diagnostics;
 using System.Runtime.Versioning;
 using Dockyard.Core;
+using Dockyard.Shared;
 
 namespace Dockyard.Hosts;
 
-// The Linux engine in the WSL distro: the process that keeps the distro up, and the pipes Windows reaches the engine by.
+// The Linux engine in the WSL distro. The Toolbox sets it up; dockyard-host keeps it running and carries Windows'
+// traffic to it, so the engine stays up and reachable whether the Toolbox runs or not.
 [SupportedOSPlatform("windows")]
-sealed class WslEngine(ICommandRunner runner, WslDistro distro)
+sealed class WslEngine(WslDistro distro)
 {
-    Process? keepAlive;
-    WslEngineRelay? relay;
-    DateTime lastNatLook;
+    static readonly TimeSpan Quick = TimeSpan.FromSeconds(5);
 
-    // Windows reaches the engine only through this process's pipes, so the agent behind them is what has to answer.
-    public bool IsRunning()
-    {
-        if (relay is not { } active) return false;
-        if (active.EngineAnswers(300)) return true;
-        active.Dispose();
-        relay = null;
-        return false;
-    }
+    public bool IsRunning() => HostPipe.Ask("status", Quick).GetAwaiter().GetResult() == HostPipe.Running;
 
-    // Only asked while the distro runs: running anything in it would otherwise start it.
-    public async Task<bool> RelayToEngine()
-    {
-        if (relay is not null) return true;
-        var running = await runner.Run("wsl.exe", "-l", "--running", "-q");
-        if (!running.Output.Split('\n').Select(l => l.Trim().Trim('\0')).Contains(distro.Name, StringComparer.OrdinalIgnoreCase)) return false;
-        var ip = await runner.Run("wsl.exe", "-d", distro.Name, "-u", "root", "--", "sh", "-c", "[ -d /sys/class/net/loopback0 ] && echo mirrored || ip -4 -o addr show eth0");
-        if (WslEngineGate.AddressFromIp(ip.Output) is not { } address || !WslEngineRelay.Answers(address, Paths.LinuxPort, 500)) return false;
-        var candidate = new WslEngineRelay(address, WslEngineGate.Token(Paths.EngineTokenFile));
-        if (!candidate.Start())
-        {
-            candidate.Dispose();
-            return false;
-        }
-        relay = candidate;
-        return true;
-    }
-
-    bool Ready()
-    {
-        if (IsRunning()) return true;
-        if (DateTime.UtcNow - lastNatLook < TimeSpan.FromSeconds(2)) return false;
-        lastNatLook = DateTime.UtcNow;
-        return RelayToEngine().GetAwaiter().GetResult();
-    }
+    // Only dockyard-host's pipes reach the engine; an engine that already runs gets them without being started again.
+    public async Task<bool> RelayToEngine() => await EnsureHost() && await HostPipe.Ask("attach", TimeSpan.FromSeconds(30)) == HostPipe.Running;
 
     public async Task Start()
     {
-        if (keepAlive is { HasExited: false } && IsRunning()) return;
-        // Started by something else, such as a tray that was replaced: a second dockyard-init would take its socket away.
-        if ((keepAlive is null || keepAlive.HasExited) && await RelayToEngine()) return;
-        if (keepAlive is null || keepAlive.HasExited)
-        {
-            keepAlive?.Dispose();
-            await UserSetup.ApplyGuest(distro, _ => { });
-            keepAlive = runner.Spawn("wsl.exe", distro.KeepAliveArgs());
-        }
-        var proc = keepAlive;
-        lastNatLook = DateTime.MinValue;
-        await Wait.For(Ready, TimeSpan.FromSeconds(90), "Linux engine", failed: () => proc.HasExited);
+        if (await RelayToEngine()) return;
+        await UserSetup.ApplyGuest(distro, _ => { });
+        if (!await EnsureHost()) throw new InvalidOperationException($"{Paths.HostExe} is not installed or does not start; run the Dockyard Toolbox's setup again");
+        var answer = await HostPipe.Ask("start", TimeSpan.FromSeconds(120));
+        if (answer != HostPipe.Ok) throw new InvalidOperationException(answer is null ? "dockyard-host did not answer" : answer.StartsWith("error ", StringComparison.Ordinal) ? answer[6..] : answer);
     }
 
-    public async Task Stop()
-    {
-        if (keepAlive is { HasExited: false } || IsRunning()) await distro.StopEngine();
-        ReleaseResources();
-    }
+    public async Task Stop() => await HostPipe.Ask("stop", TimeSpan.FromSeconds(60));
 
-    public void ReleaseResources()
+    public void ReleaseResources() { }
+
+    public static async Task<bool> EnsureHost()
     {
-        relay?.Dispose();
-        relay = null;
-        if (keepAlive is { HasExited: false }) keepAlive.Kill(entireProcessTree: true);
-        keepAlive?.Dispose();
-        keepAlive = null;
+        if (HostPipe.IsListening) return true;
+        if (!File.Exists(Paths.HostExe)) return false;
+        Process.Start(new ProcessStartInfo(Paths.HostExe) { UseShellExecute = false, CreateNoWindow = true })?.Dispose();
+        for (var i = 0; i < 50 && !HostPipe.IsListening; i++) await Task.Delay(100);
+        return HostPipe.IsListening;
     }
 
     public async Task ApplyEngineConfiguration(Action<string> log)

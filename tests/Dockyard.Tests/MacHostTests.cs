@@ -32,7 +32,7 @@ public sealed class MacHostTests
 
         Assert.EndsWith("echo /usr/local/dockyard/bin > /etc/paths.d/dockyard && chmod 644 /etc/paths.d/dockyard", script);
         Assert.Contains("chown root:wheel /usr/local/dockyard /usr/local/dockyard/bin", script);
-        foreach (var command in new[] { "docker", "kind", "docker-credential-osxkeychain" })
+        foreach (var command in new[] { "docker", "kind", "docker-credential-osxkeychain", "dockyard" })
             Assert.Contains($"> /usr/local/dockyard/bin/{command} && chmod 755 /usr/local/dockyard/bin/{command}", script);
     }
 
@@ -44,6 +44,34 @@ public sealed class MacHostTests
         Assert.StartsWith("#!/bin/sh\n[ \"$(id -u)\" = 501 ] || {", wrapper);
         Assert.Contains("exit 127", wrapper);
         Assert.EndsWith("exec '/Users/O'\\''Brien/.dockyard/bin/docker' \"$@\"\n", wrapper);
+    }
+
+    [Fact]
+    public void A_command_that_Homebrew_brought_runs_from_Homebrew_when_this_user_has_no_copy_of_Dockyard_s()
+    {
+        var wrapper = MacLayout.Wrapper("501", "/Users/me/.dockyard/bin", "kubectl", "/opt/homebrew/bin");
+
+        Assert.Contains("[ -x '/Users/me/.dockyard/bin/kubectl' ] || exec '/opt/homebrew/bin/kubectl' \"$@\"\n", wrapper);
+        Assert.EndsWith("exec '/Users/me/.dockyard/bin/kubectl' \"$@\"\n", wrapper);
+        foreach (var command in new[] { "kubectl", "helm" })
+            Assert.Contains($"> /usr/local/dockyard/bin/{command} && chmod 755", MacLayout.PathsEntry("501", "/Users/me/.dockyard/bin", "/opt/homebrew/bin"));
+    }
+
+    [Fact]
+    public void Wrappers_written_before_Homebrew_or_before_kubectl_are_written_again()
+    {
+        var shared = Directory.CreateTempSubdirectory("dockyard-wrappers").FullName;
+        try
+        {
+            foreach (var command in MacLayout.SharedCommands)
+                File.WriteAllText(Path.Combine(shared, command), MacLayout.Wrapper("501", "/Users/me/.dockyard/bin", command));
+            Assert.True(MacLayout.WrappersAreCurrent("501", "/Users/me/.dockyard/bin", null, shared));
+            Assert.False(MacLayout.WrappersAreCurrent("501", "/Users/me/.dockyard/bin", "/opt/homebrew/bin", shared));
+
+            File.Delete(Path.Combine(shared, "helm"));
+            Assert.False(MacLayout.WrappersAreCurrent("501", "/Users/me/.dockyard/bin", null, shared));
+        }
+        finally { Directory.Delete(shared, recursive: true); }
     }
 
     [Theory]
@@ -225,7 +253,7 @@ public sealed class MacInstallTests : IDisposable
     public void Dashboard_files_are_the_dashboard_and_its_libraries_only()
     {
         var dir = Directory.CreateTempSubdirectory().FullName;
-        foreach (var name in new[] { "Dockyard", "dockyard-vm", "Dockyard Dashboard", "Dockyard.Dashboard", "libSkiaSharp.dylib" }) File.WriteAllText(Path.Combine(dir, name), "");
+        foreach (var name in new[] { "Dockyard", "dockyard-host", "Dockyard Dashboard", "Dockyard.Dashboard", "libSkiaSharp.dylib" }) File.WriteAllText(Path.Combine(dir, name), "");
         Assert.Equal(["Dockyard Dashboard", "Dockyard.Dashboard", "libSkiaSharp.dylib"], MacLayout.DashboardFiles(dir).Select(Path.GetFileName).Order());
         Directory.Delete(dir, recursive: true);
         Assert.Empty(MacLayout.DashboardFiles(dir));
@@ -235,7 +263,7 @@ public sealed class MacInstallTests : IDisposable
     public void Self_update_downloads_the_offered_release_not_the_running_one()
     {
         Assert.Equal("v2.0.0", Updates.ReleaseTag("1.0.0", "v2.0.0"));
-        Assert.Equal("v1.0.0", Updates.ReleaseTag("1.0.0", null));
+        Assert.Equal("toolbox/1.0.0", Updates.ReleaseTag("1.0.0", null));
         Assert.Null(Updates.ReleaseTag("0.0.0", null));
     }
 
@@ -325,7 +353,7 @@ public sealed class MacInstallTests : IDisposable
     [Fact]
     public void The_resolver_entry_names_the_relay_on_a_port_that_needs_no_privileges()
     {
-        Assert.Contains("/etc/resolver/dockyard.test", MacLayout.InstallDomainResolver);
+        Assert.Contains("/etc/resolver/dockyard.internal", MacLayout.InstallDomainResolver);
         Assert.Contains("port 15353", MacLayout.InstallDomainResolver.Replace("\\n", " "));
     }
 

@@ -6,17 +6,30 @@ static class Paths
 {
     public static readonly string DockerDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Docker");
     public static readonly string DockerExe = Path.Combine(DockerDir, "docker.exe");
+    // Dockyard's own copy where there is one, which a choice against winget or a winget copy Windows will not run leaves.
+    public static string DockerCli => File.Exists(DockerExe) ? DockerExe : (OperatingSystem.IsWindows() ? Hosts.Winget.Command(Tools.Docker) : null) ?? DockerExe;
     public static readonly string CredentialHelper = Path.Combine(DockerDir, "docker-credential-wincred.exe");
     public static readonly string DockerdExe = Path.Combine(DockerDir, "dockerd.exe");
     public static readonly string PluginDir = Path.Combine(DockerDir, "cli-plugins");
-    public static readonly string KindExe = Path.Combine(DockerDir, "kind.exe");
+    // Where Dockyard puts its own copy of a tool that winget did not bring.
+    public static string ToolExe(CliTool tool) => Path.Combine(DockerDir, tool.FileName);
     public static readonly string AppDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Dockyard");
-    public static readonly string AppExe = Path.Combine(AppDir, "Dockyard.exe");
+    public const string AppProcess = "dockyard-toolbox";
+    public const string HostProcess = "dockyard-host";
+    public static readonly string HostExe = Path.Combine(AppDir, HostProcess + ".exe");
+    public static readonly string AppExe = Path.Combine(AppDir, AppProcess + ".exe");
+    public const string DashboardProcess = "dockyard-dashboard";
     public static readonly string DashboardExe = Path.Combine(AppDir, DashboardProcess + ".exe");
-    public static readonly string LegacyDashboardExe = Path.Combine(AppDir, LegacyDashboardProcess + ".exe");
-    public const string DashboardProcess = "Dockyard Dashboard";
-    // What installs up to v0.2.1 have, running or not.
-    public const string LegacyDashboardProcess = "Dockyard.Dashboard";
+    // What earlier installs have, running or not: the Toolbox was Dockyard.exe before 0.9.0, and the dashboard
+    // "Dockyard Dashboard.exe", and Dockyard.Dashboard.exe up to 0.2.1.
+    public const string LegacyAppProcess = "Dockyard";
+    public static readonly string LegacyAppExe = Path.Combine(AppDir, LegacyAppProcess + ".exe");
+    // The Toolbox as installed: an install from before 0.9.0 has it under its old name until this version replaces it.
+    public static string InstalledAppExe => File.Exists(AppExe) || !File.Exists(LegacyAppExe) ? AppExe : LegacyAppExe;
+    public static readonly string[] LegacyDashboardProcesses = ["Dockyard Dashboard", "Dockyard.Dashboard"];
+    public static IEnumerable<string> LegacyDashboardExes => LegacyDashboardProcesses.Select(p => Path.Combine(AppDir, p + ".exe"));
+    public static IEnumerable<string> AnyDashboardExe => LegacyDashboardExes.Prepend(DashboardExe);
+    public static bool HasDashboard => AnyDashboardExe.Any(File.Exists);
     // The asset keeps its name: scripts and trays already out there ask for it.
     public const string DashboardZipName = "Dockyard.Dashboard.zip";
     public static readonly string DaemonConfigDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "docker", "config");
@@ -32,14 +45,13 @@ static class Paths
 
     public const string WindowsPipeName = "docker_windows";
     public const string WindowsHost = "npipe:////./pipe/" + WindowsPipeName;
-    // Where dockyard-agent serves the Linux engine to Windows, to the tray's token only.
-    public const int LinuxPort = 2375;
-    public const string LinuxPipeName = "dockyard_linux";
-    public const string LinuxAgentPipeName = "dockyard_linux_agent";
-    public const string LinuxHost = "npipe:////./pipe/" + LinuxPipeName;
+    public const int LinuxPort = Shared.WslPaths.LinuxPort;
+    public const string LinuxPipeName = Shared.WslPaths.LinuxPipeName;
+    public const string LinuxAgentPipeName = Shared.WslPaths.LinuxAgentPipeName;
+    public const string LinuxHost = Shared.WslPaths.LinuxHost;
     // What the linux context pointed at up to v0.4: an open port every Windows user and web page could reach.
     public const string LegacyLinuxHost = "tcp://127.0.0.1:2375";
-    public static readonly string EngineTokenFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Dockyard", "engine.token");
+    public static string EngineTokenFile => Shared.WslPaths.EngineTokenFile;
     public const string ServiceName = "docker";
     public const string Repo = "byhofman/dockyard";
     public const string AppName = "Dockyard";

@@ -16,12 +16,16 @@ sealed class WindowsHost : IEngineHost
     readonly WslDistro distro;
     readonly WslEngine wsl;
     readonly WindowsTrayServices tray = new();
+    readonly Winget winget;
+    readonly ToolComponents tools;
 
     public WindowsHost(ICommandRunner runner)
     {
         this.runner = runner;
         distro = new WslDistro(runner);
-        wsl = new WslEngine(runner, distro);
+        wsl = new WslEngine(distro);
+        winget = new Winget(runner);
+        tools = new ToolComponents(winget, new WindowsOwnCopies(), () => Settings.Load().UsePackageManager);
     }
 
     public IReadOnlyList<EngineInfo> Engines { get; } =
@@ -39,12 +43,14 @@ sealed class WindowsHost : IEngineHost
         new(nameof(Component.LinuxEngine), Updates.Title(Component.LinuxEngine), CheckNeedsEngine: Linux, Flag: "linux-engine", Note: "Linux containers. Its images stay when you remove it. One engine has to stay.", IsEngine: true),
         new(nameof(Component.Compose), Updates.Title(Component.Compose), Flag: "compose", Note: "Needs the Docker CLI. The dashboard's Compose actions use it."),
         new(nameof(Component.Buildx), Updates.Title(Component.Buildx), Flag: "buildx", Note: "Needs the Docker CLI. docker build uses it."),
-        Kind.Component with { Note = "Local Kubernetes clusters in containers. Needs the Linux engine; the dashboard's Clusters section uses it." },
+        Tools.Kind.Component with { Note = "Local Kubernetes clusters in containers. Needs the Linux engine; the dashboard's Clusters section uses it." },
+        Tools.Kubectl.Component,
+        Tools.Helm.Component,
         new(nameof(Component.App), Updates.Title(Component.App), RequiredBecause: "it is what runs everything here. Uninstall removes it."),
         new(nameof(Component.Dashboard), Updates.Title(Component.Dashboard), Flag: "dashboard", Note: "Optional. Opens from the tray."),
     ];
 
-    public bool IsInstalled => File.Exists(Paths.AppExe);
+    public bool IsInstalled => File.Exists(Paths.InstalledAppExe);
     public ICaKeyStore CaKeys => new DpapiCaKey(((IEngineHost)this).CaDirectory);
 
     public Task<bool> IsRunning(string engine) => Task.Run(() => engine == Linux ? wsl.IsRunning() : WindowsServiceEngine.IsRunning());
@@ -63,18 +69,24 @@ sealed class WindowsHost : IEngineHost
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException) { return Linux; }
     }
 
-    public Task UseContext(string engine) => runner.Check(Paths.DockerExe, "context", "use", engine == Windows ? "win" : "linux");
+    public Task UseContext(string engine) => runner.Check(Paths.DockerCli, "context", "use", engine == Windows ? "win" : "linux");
 
-    public Task<Version?> Installed(string component) => Updates.Installed(Enum.Parse<Component>(component));
-    public Task<Release?> Latest(string component) => Updates.Latest(Enum.Parse<Component>(component));
+    public Task<Version?> Installed(string component) =>
+        Tools.Find(component) is { } tool ? tools.Installed(tool) : Updates.Installed(Enum.Parse<Component>(component));
+    public Task<Release?> Latest(string component) =>
+        Tools.Find(component) is { } tool ? tools.Latest(tool) : Updates.Latest(Enum.Parse<Component>(component));
+    public Task<string?> Source(string component) => Tools.Find(component) is { } tool ? tools.Source(tool) : Task.FromResult<string?>("Dockyard");
 
     public async Task<bool> Update(Action<string> log, IReadOnlyList<(string Component, Release? Release)> components)
     {
         var parsed = components.Select(c => (Component: Enum.Parse<Component>(c.Component), c.Release)).ToList();
 
-        var machine = parsed.Where(c => c.Component is Component.Engine or Component.Cli or Component.Compose or Component.Buildx or Component.Kind).ToList();
+        var machine = parsed.Select(c => c.Component).Where(c => c == Component.Engine || Tools.Find(c.ToString()) is not null).ToList();
         if (machine.Count > 0)
-            await Elevation.Run(log, "--machine-update", string.Join(',', machine.Select(m => m.Component)));
+        {
+            await WindowsSetup.MachineUpdate(log, machine);
+            await FindWingetPlugins(log);
+        }
 
         if (parsed.FirstOrDefault(c => c.Component == Component.LinuxEngine) is { Release: { } linux })
             await wsl.Update(log, linux);
@@ -116,6 +128,13 @@ sealed class WindowsHost : IEngineHost
                 await UserSetup.RemoveContext("win", "linux", log);
                 break;
         }
+        if (Tools.Find(component) is { } tool)
+        {
+            if (installed) await RemoveUserCopy(log, tool);
+            await WindowsSetup.MachineComponent(log, component, installed);
+            if (installed) await FindWingetPlugins(log);
+            return false;
+        }
         await WindowsSetup.MachineComponent(log, component, installed);
         if (component == nameof(Component.Engine) && installed) await UserSetup.AddContext("win", Paths.WindowsHost);
         return false;
@@ -129,9 +148,51 @@ sealed class WindowsHost : IEngineHost
 
     public Task ApplyEngineConfiguration(Action<string> log) => wsl.ApplyEngineConfiguration(log);
 
+    public async Task<string?> ReadEngineSettings(string engine) => engine == Linux
+        ? RenderedEngineSettings.Read()
+        : File.Exists(MachineEngine.DaemonJsonFile) ? await File.ReadAllTextAsync(MachineEngine.DaemonJsonFile) : "{}";
+
+    // dockerd checks a file without starting: the Linux one in the distro, the Windows one next to the engine.
+    public async Task<string?> ValidateEngineSettings(string engine, string json)
+    {
+        if (EngineSettings.Problem(json) is { } problem) return problem;
+        if (engine == Linux)
+        {
+            const string file = "/tmp/dockyard-validate.json";
+            await distro.WriteFile(file, EngineConfig.WithDockyard(json));
+            return Answer(await runner.Run("wsl.exe", "-d", distro.Name, "-u", "root", "--", "dockerd", "--validate", "--config-file", file));
+        }
+        if (!File.Exists(Paths.DockerdExe)) return null;
+        var temp = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}.json");
+        try
+        {
+            await File.WriteAllTextAsync(temp, DaemonJson.WithAccessFor(json, Paths.WindowsHost, null));
+            return Answer(await runner.Run(Paths.DockerdExe, "--validate", "--config-file", temp));
+        }
+        finally { File.Delete(temp); }
+    }
+
+    static string? Answer(ShellResult r) => r.ExitCode == 0 ? null : (r.Error + r.Output).Trim() is { Length: > 0 } text ? text : $"dockerd refused it ({r.ExitCode})";
+
+    public async Task ApplyEngineSettings(Action<string> log, string engine, string json)
+    {
+        if (engine == Linux)
+        {
+            await RenderedEngineSettings.Apply(log, json, wsl.ApplyEngineConfiguration);
+            return;
+        }
+        if (EngineSettings.Problem(json) is { } problem) throw new InvalidOperationException(problem);
+        if (Elevation.IsElevated)
+        {
+            var (sid, name) = Elevation.CurrentUser;
+            await MachineEngine.ApplyDaemonJson(log, json, sid, name);
+        }
+        else await Elevation.Run(log, "--machine-daemon-json", MachineTrust.EncodeCertificate(json));
+    }
+
     public bool RunsFromInstallLocation => Paths.IsInstalledCopy;
 
-    public bool HasDashboard => File.Exists(Paths.DashboardExe) || File.Exists(Paths.LegacyDashboardExe);
+    public bool HasDashboard => Paths.HasDashboard;
 
     public async Task<bool> SetDashboard(Action<string> log, bool installed)
     {
@@ -141,6 +202,7 @@ sealed class WindowsHost : IEngineHost
 
     public async Task<bool> Install(Action<string> log, InstallRequest request)
     {
+        foreach (var tool in Tools.All.Where(t => !request.Without.Contains(t.Id))) await RemoveUserCopy(log, tool);
         log("Administrator step");
         var reboot = await WindowsSetup.MachineInstall(log, request.Dashboard, request.Without);
         log("User step");
@@ -157,9 +219,25 @@ sealed class WindowsHost : IEngineHost
             UserSetup.ResumeAfterReboot(request.Silent, log);
             return true;
         }
+        await FindWingetPlugins(log);
         if (hadDistro) await UpdateLinuxEngineIfNewer(log);
         if (request.TrustHttps) await Https.Enable(this, log, request.Silent);
         return reboot;
+    }
+
+    // A copy winget installed for the user would keep winget from installing the machine's, and only a process without
+    // administrator rights may remove it.
+    async Task RemoveUserCopy(Action<string> log, CliTool tool)
+    {
+        if (tools.Packages is null || Winget.UserCommand(tool) is null || !await winget.IsAvailable()) return;
+        await winget.RemoveUserCopy(log, tool);
+    }
+
+    static async Task FindWingetPlugins(Action<string> log)
+    {
+        // Each in its own package folder where winget could not link them.
+        foreach (var plugin in new[] { Tools.Compose, Tools.Buildx })
+            if (Winget.Command(plugin) is { } command) await DockerPlugins.AddExtraDir(log, Path.GetDirectoryName(command)!);
     }
 
     public async Task Resume(Action<string> log)

@@ -88,6 +88,14 @@ sealed class WslDistro(ICommandRunner runner, string name = WslDistro.DefaultNam
     }
 
     // Readable by root alone with secret, which is everyone who could run the engine anyway.
+    // docker compose with COMPOSE_CONVERT_WINDOWS_PATHS turns C:\x into /c/x, so each drive needs /<letter>. A bind mount
+    // of a /c/... the engine did not have yet made docker create empty folders there; only those give way to the link.
+    public const string DriveLinksScript =
+        "for m in /mnt/?; do [ -d \"$m\" ] || continue; d=\"/${m#/mnt/}\"; [ -L \"$d\" ] && continue; " +
+        "[ -d \"$d\" ] && find \"$d\" -depth -type d -empty -delete 2>/dev/null; [ -e \"$d\" ] || ln -s \"$m\" \"$d\"; done";
+
+    public Task<ShellResult> LinkDrives() => runner.Run("wsl.exe", "-d", Name, "-u", "root", "--", "sh", "-c", DriveLinksScript);
+
     public async Task WriteFile(string path, string content, bool secret = false)
     {
         var temp = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");

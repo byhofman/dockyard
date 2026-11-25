@@ -53,8 +53,15 @@ sealed class DomainProxy(DomainTable table, Action<string> log)
 
     async Task ServeTls(SocketConnection connection, CancellationToken ct)
     {
+        var hello = await ReadClientHello(connection.Stream, ct);
+        if (hello is null) return;
+        if (TlsClientHello.ServerName(hello) is { } name && table.Find(name) is null && table.Ingress(name) is { } ingress)
+        {
+            if (ingress.Https is { } address) await Pass(connection, connection.Stream, address, 443, hello, ct);
+            return;
+        }
         if (certificate is not { } current) return;
-        await using var tls = new SslStream(connection.Stream, leaveInnerStreamOpen: true);
+        await using var tls = new SslStream(new ReplayStream(hello, connection.Stream), leaveInnerStreamOpen: true);
         await tls.AuthenticateAsServerAsync(new SslServerAuthenticationOptions
         {
             ServerCertificate = current,
@@ -68,6 +75,12 @@ sealed class DomainProxy(DomainTable table, Action<string> log)
         var head = await ReadHead(stream, ct);
         if (head is null) return;
         var host = HttpHead.Host(head);
+        if (host is not null && table.Find(host) is null && table.Ingress(host) is { } ingress)
+        {
+            if (ingress.Http is { } clusterAddress) await Pass(connection, stream, clusterAddress, 80, HttpHead.WithForwarded(head, scheme, host), ct);
+            else await Respond(stream, 503, $"Cluster {ingress.Cluster} has no LoadBalancer service on port 80, such as an ingress controller's.\n", ct);
+            return;
+        }
         if (host is null || table.Find(host) is not { } target)
         {
             await Respond(stream, 404, $"No running container is called {host}.\n", ct);
@@ -107,6 +120,51 @@ sealed class DomainProxy(DomainTable table, Action<string> log)
         catch (Exception e) when (e is IOException or SocketException or ObjectDisposedException) { }
         connection.ShutdownSend();
         await toServer;
+    }
+
+    // What was read goes first, then both ways until either side closes.
+    static async Task Pass(SocketConnection connection, Stream stream, IPAddress address, int port, byte[] first, CancellationToken ct)
+    {
+        var upstream = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+        try { await upstream.ConnectAsync(address, port, ct); }
+        catch (SocketException)
+        {
+            upstream.Dispose();
+            return;
+        }
+        using var server = new SocketConnection(upstream);
+        await server.Stream.WriteAsync(first, ct);
+        var toServer = Task.Run(async () =>
+        {
+            try { await stream.CopyToAsync(server.Stream, 16 * 1024, ct); }
+            catch (Exception e) when (e is IOException or SocketException or ObjectDisposedException) { }
+            server.ShutdownSend();
+        }, ct);
+        try { await server.Stream.CopyToAsync(stream, 16 * 1024, ct); }
+        catch (Exception e) when (e is IOException or SocketException or ObjectDisposedException) { }
+        connection.ShutdownSend();
+        await toServer;
+    }
+
+    static async Task<byte[]?> ReadClientHello(Stream stream, CancellationToken ct)
+    {
+        var header = new byte[TlsClientHello.RecordHeader];
+        if (!await Fill(stream, header, ct) || TlsClientHello.RecordLength(header) is not { } length || length > MaxHead) return null;
+        var record = new byte[length];
+        header.CopyTo(record, 0);
+        return await Fill(stream, record.AsMemory(TlsClientHello.RecordHeader), ct) ? record : null;
+    }
+
+    static async Task<bool> Fill(Stream stream, Memory<byte> buffer, CancellationToken ct)
+    {
+        var read = 0;
+        while (read < buffer.Length)
+        {
+            var n = await stream.ReadAsync(buffer[read..], ct);
+            if (n == 0) return false;
+            read += n;
+        }
+        return true;
     }
 
     static async Task<byte[]?> ReadHead(Stream stream, CancellationToken ct)

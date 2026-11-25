@@ -8,7 +8,7 @@ static partial class HostProxySettings
 {
     // The engine's Linux reaches the host's loopback here (see GuestAddresses in the agent).
     public const string HostFromEngine = "198.19.250.254";
-    static readonly string[] AlwaysDirect = ["localhost", "127.0.0.1", "::1", "host.docker.internal", "gateway.docker.internal", "198.19.250.0/24", ".dockyard.test"];
+    static readonly string[] AlwaysDirect = ["localhost", "127.0.0.1", "::1", "host.docker.internal", "gateway.docker.internal", "198.19.250.0/24", ".dockyard.internal"];
 
     public static ProxySettings? FromEnvironment(Func<string, string?> env)
     {

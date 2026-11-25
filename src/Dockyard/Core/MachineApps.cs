@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 using Dockyard.Hosts;
 
 namespace Dockyard.Core;
@@ -36,21 +37,23 @@ static class MachineApps
         log($"Removed {plugin.File}");
     }
 
-    public static async Task InstallKind(Action<string> log)
+    public static async Task InstallTool(Action<string> log, CliTool tool)
     {
         Directory.CreateDirectory(Paths.DockerDir);
-        var incoming = Paths.KindExe + ".new";
-        await Kind.Download(incoming);
-        InUseFiles.MoveAside(Paths.KindExe);
-        File.Move(incoming, Paths.KindExe);
-        log($"kind {Kind.Tag}");
+        var target = Paths.ToolExe(tool);
+        var incoming = target + ".new";
+        await Tools.Download(tool, incoming);
+        InUseFiles.MoveAside(target);
+        File.Move(incoming, target);
+        log($"{tool.Command} {Tools.Pinned(tool).Tag}");
     }
 
-    public static void RemoveKind(Action<string> log)
+    public static void RemoveTool(Action<string> log, CliTool tool)
     {
-        if (!File.Exists(Paths.KindExe)) return;
-        InUseFiles.MoveAside(Paths.KindExe);
-        log("Removed kind");
+        var target = Paths.ToolExe(tool);
+        if (!File.Exists(target)) return;
+        InUseFiles.MoveAside(target);
+        log($"Removed Dockyard's own {tool.Command} from {Paths.DockerDir}");
     }
 
     // Not worth failing an install over: without it docker login just keeps working the way it did.
@@ -72,8 +75,8 @@ static class MachineApps
     // Only files in Program Files, which only administrators can write: an exclusion goes by path and exempts whatever is
     // there from every ASR rule. Earlier versions also excluded the installer wherever it ran, and the one-liner asks for
     // its own download path when Defender blocks it, so uninstall takes those back too.
-    static IEnumerable<string> ExcludedFromAsr => new[] { Paths.AppExe, Paths.DashboardExe };
-    public static IEnumerable<string> EverExcludedFromAsr => ExcludedFromAsr.Append(Paths.LegacyDashboardExe).Append(Paths.OneLinerExe);
+    static IEnumerable<string> ExcludedFromAsr => new[] { Paths.AppExe, Paths.DashboardExe, Paths.HostExe, CommandExe };
+    public static IEnumerable<string> EverExcludedFromAsr => ExcludedFromAsr.Concat(Paths.LegacyDashboardExes).Append(Paths.LegacyAppExe).Append(Paths.OneLinerExe).Concat(WingetToolFiles);
 
     // Defender's prevalence/age rule (event 1121) blocks every new build, and an exclusion goes by path because a hash changes with each build.
     public static async Task AddDefenderExclusions(Action<string> log)
@@ -83,6 +86,17 @@ static class MachineApps
             $"Add-MpPreference -AttackSurfaceReductionOnlyExclusions {string.Join(',', paths)}");
         log(r.ExitCode == 0 ? "Defender: Dockyard is excluded from the prevalence rule" : "Defender exclusions were not added (managed device?); ask your administrator if Defender blocks Dockyard");
     }
+
+    // winget's tools in Program Files: a new release would not run until Defender found it common.
+    public static void ExcludeFromAsr(IReadOnlyList<string> files)
+    {
+        var inProgramFiles = files.Where(f => Path.GetFullPath(f).StartsWith(Hosts.Winget.MachinePackages + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (inProgramFiles.Count == 0) return;
+        Shell.Run("powershell.exe", "-NoProfile", "-Command",
+            $"Add-MpPreference -AttackSurfaceReductionOnlyExclusions {string.Join(',', inProgramFiles.Select(Shell.PsQuote))}").GetAwaiter().GetResult();
+    }
+
+    public static IEnumerable<string> WingetToolFiles => Tools.All.SelectMany(Hosts.Winget.MachineFiles);
 
     public static async Task InstallApp(Action<string> log, string source, int keepPid, bool engineOnly, string? dashboardDir)
     {
@@ -94,9 +108,69 @@ static class MachineApps
             ReplaceAppExe(source);
             log($"Installed {Paths.AppExe}");
         }
+        InstallHost(log, keepPid);
+        if (File.Exists(Paths.LegacyAppExe))
+        {
+            InUseFiles.MoveAside(Paths.LegacyAppExe);
+            log($"Removed {Paths.LegacyAppExe}, the Toolbox's name before 0.9.0");
+        }
         if (!engineOnly) await InstallDashboard(log, dashboardDir);
-        else if (File.Exists(Paths.DashboardExe) || File.Exists(Paths.LegacyDashboardExe)) RemoveDashboard(log);
+        else if (Paths.HasDashboard) RemoveDashboard(log);
         else log("The dashboard is not installed");
+        await InstallCommand(log, dashboardDir);
+    }
+
+    // dockyard-host, which keeps the Linux engine running and reachable from Windows; the Toolbox carries it. A running
+    // one is stopped to be replaced: the engine keeps running, and the new one takes it on.
+    static void InstallHost(Action<string> log, int keepPid)
+    {
+        using var embedded = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("dockyard-host.exe");
+        if (embedded is null) return;
+        foreach (var p in Process.GetProcessesByName(Paths.HostProcess)) Kill(p, keepPid);
+        var incoming = Paths.HostExe + ".new";
+        using (var file = File.Create(incoming)) embedded.CopyTo(file);
+        InUseFiles.MoveAside(Paths.HostExe);
+        File.Move(incoming, Paths.HostExe);
+        log($"Installed {Paths.HostExe}");
+    }
+
+    // The dockyard command, its own component: a console program, so cmd and PowerShell wait for it and get its output.
+    // In a folder of its own, where it is the only dockyard on the PATH.
+    public static string CommandDir => Path.Combine(Paths.AppDir, "bin");
+    public static string CommandExe => Path.Combine(CommandDir, "dockyard.exe");
+
+    // From the given folder, or the CLI's own release. Without it Dockyard works, so a failed download is said, not fatal.
+    public static async Task InstallCommand(Action<string> log, string? sourceDir)
+    {
+        string? local;
+        string? downloaded = null;
+        var download = Path.Combine(Paths.AppDir, $".download-{Guid.NewGuid():N}");
+        try
+        {
+            local = sourceDir is null ? null : Directory.EnumerateFiles(sourceDir).FirstOrDefault(f => Regex.IsMatch(Path.GetFileName(f), Updates.CliAssetPattern));
+            if (local is null)
+            {
+                log("Downloading the dockyard command");
+                local = downloaded = await Updates.DownloadComponentAsset(Updates.CliComponent, Updates.CliAssetPattern, download);
+            }
+        }
+        catch (Exception e) when (e is HttpRequestException or InvalidOperationException or IOException or TaskCanceledException or UnauthorizedAccessException)
+        {
+            log($"The dockyard command was not installed: {e.Message}");
+            if (Directory.Exists(download)) Directory.Delete(download, recursive: true);
+            return;
+        }
+        Directory.CreateDirectory(CommandDir);
+        var incoming = CommandExe + ".new";
+        File.Copy(local, incoming, overwrite: true);
+        if (downloaded is not null) Directory.Delete(Path.GetDirectoryName(downloaded)!, recursive: true);
+        InUseFiles.MoveAside(CommandExe);
+        File.Move(incoming, CommandExe);
+        log($"Installed {CommandExe}");
+        File.Delete(Path.Combine(CommandDir, "dockyard.cmd"));
+        File.Delete(Path.Combine(Paths.AppDir, "dockyard.cmd"));
+        RemoveFromMachinePath(Paths.AppDir);
+        AddToMachinePath(CommandDir);
     }
 
     // A running exe cannot be overwritten but can be renamed, and the worker doing this may be running from that very
@@ -126,11 +200,11 @@ static class MachineApps
         if (zip is null || !File.Exists(zip))
         {
             log("Downloading the dashboard");
-            zip = downloaded = await Updates.DownloadReleaseAsset(Paths.DashboardZipName, Path.Combine(Paths.AppDir, $".download-{Guid.NewGuid():N}"));
+            zip = downloaded = await Updates.DownloadComponentAsset(Updates.DashboardComponent, Updates.DashboardZipPattern, Path.Combine(Paths.AppDir, $".download-{Guid.NewGuid():N}"));
         }
         try
         {
-            DashboardFiles.Extract(zip, Paths.AppDir, Path.GetFileName(Paths.LegacyDashboardExe));
+            DashboardFiles.Extract(zip, Paths.AppDir, [.. Paths.LegacyDashboardExes.Select(Path.GetFileName).OfType<string>()]);
             log($"Installed {Paths.DashboardExe}");
         }
         finally
@@ -141,7 +215,7 @@ static class MachineApps
 
     public static void RemoveDashboard(Action<string> log)
     {
-        DashboardFiles.Remove(Paths.AppDir, [Path.GetFileName(Paths.DashboardExe), Path.GetFileName(Paths.LegacyDashboardExe)], log);
+        DashboardFiles.Remove(Paths.AppDir, [.. Paths.AnyDashboardExe.Select(Path.GetFileName).OfType<string>()], log);
         log("Removed the dashboard");
     }
 
@@ -155,14 +229,14 @@ static class MachineApps
 
     public static void StopApps(int keepPid, bool dashboardOnly = false)
     {
-        var processes = Process.GetProcessesByName(Paths.DashboardProcess).Concat(Process.GetProcessesByName(Paths.LegacyDashboardProcess));
-        if (!dashboardOnly) processes = processes.Concat(Process.GetProcessesByName(Paths.AppName));
+        var processes = Paths.LegacyDashboardProcesses.Prepend(Paths.DashboardProcess).SelectMany(Process.GetProcessesByName);
+        if (!dashboardOnly) processes = processes.Concat(Process.GetProcessesByName(Paths.AppProcess)).Concat(Process.GetProcessesByName(Paths.LegacyAppProcess));
         foreach (var p in processes)
         {
             try
             {
                 var file = p.MainModule?.FileName;
-                if (new[] { Paths.AppExe, Paths.DashboardExe, Paths.LegacyDashboardExe }.Contains(file, StringComparer.OrdinalIgnoreCase)) Kill(p, keepPid);
+                if (Paths.AnyDashboardExe.Append(Paths.AppExe).Append(Paths.LegacyAppExe).Contains(file, StringComparer.OrdinalIgnoreCase)) Kill(p, keepPid);
             }
             // Gone by now, or another user's process whose file cannot be read: not one of ours to stop.
             catch (Exception e) when (e is Win32Exception or InvalidOperationException) { }

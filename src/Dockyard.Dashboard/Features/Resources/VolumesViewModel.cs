@@ -30,6 +30,7 @@ sealed class VolumesViewModel : SelectableSection<VolumeRow>
         OpenFilesCommand = new Command(() => { SelectedTab = FilesTab; return Task.CompletedTask; }, () => Selected is not null);
         OpenLocationCommand = new Command(() => { OpenLocation(); return Task.CompletedTask; }, () => Location?.Path is not null);
         session.Connected += () => _ = Reload();
+        Usage.Changed += ApplyFilter;
         session.ResourceChanged += r => { if (r.Kind == RouteKind.Volumes) ScheduleReload(); };
         session.Containers.RowsChanged += Recompute;
     }
@@ -194,8 +195,13 @@ sealed class VolumesViewModel : SelectableSection<VolumeRow>
     void Recompute()
     {
         all = VolumeRows.Rows(volumes, Session.Containers.Items, sizes);
+        Usage.Count(all.Select(r => r.InUse));
         ApplyFilter();
     }
+
+    public UsageFilter Usage { get; } = new();
+    protected override bool Shows(VolumeRow row) => Usage.Shows(row.InUse);
+    protected override void ShowEverything() => Usage.Current = UsageFilter.Kind.All;
 
     protected override IEnumerable<VolumeRow> All => all;
     protected override string?[] Words(VolumeRow row) => [row.Name, row.Driver, row.UsageText];

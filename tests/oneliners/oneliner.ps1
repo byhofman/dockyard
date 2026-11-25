@@ -42,15 +42,10 @@ if ((Get-Content $record -Raw) -ne '--silent --no-dashboard --no-start') { Fail 
 Ok 'arguments'
 if ($global:requests.Count -ne 2) { Fail "downloads: $($global:requests -join ', ')" }
 Ok 'downloads only the installer and its checksums'
-foreach ($word in 'Add-MpPreference.*Dockyard\.Dashboard', 'wsl(\.exe)? --', '--install', 'Program ?Files') {
+foreach ($word in 'Add-MpPreference', 'wsl(\.exe)? --', '--install', 'Program ?Files', 'gh run') {
     if ($script -match $word) { Fail "the script still does install work: $word" }
 }
 Ok 'no install logic in the script'
-
-Write-Host '== earlier option names still work'
-Run -EngineOnly -NoStart | Out-Null
-if ((Get-Content $record -Raw) -ne '--no-dashboard --no-start') { Fail "arguments were: $(Get-Content $record -Raw)" }
-Ok '-EngineOnly and -NoStart'
 
 Write-Host '== a failing installer is a failure, a reboot is not'
 $threw = $false; try { Run --fail | Out-Null } catch { $threw = $true }

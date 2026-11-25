@@ -22,7 +22,7 @@ else
   app_dir=/usr/lib/dockyard
 fi
 # Either name: the one-liner test runs the release that is out, and the rename reaches it with the next release.
-dash() { for f in "$app_dir/Dockyard Dashboard" "$app_dir/Dockyard.Dashboard"; do [ -e "$f" ] && { echo "$f"; return; }; done; echo "$app_dir/Dockyard Dashboard"; }
+dash() { for f in "$app_dir/dockyard-dashboard" "$app_dir/Dockyard Dashboard" "$app_dir/Dockyard.Dashboard"; do [ -e "$f" ] && { echo "$f"; return; }; done; echo "$app_dir/dockyard-dashboard"; }
 marker=/etc/dockyard/installed
 
 echo "== wrong arguments are refused"
@@ -42,13 +42,13 @@ fi
 
 echo "== first install, no dashboard"
 run --silent --no-dashboard --no-start
-check "app in place" test -x "$app_dir/Dockyard"
+check "app in place" test -x "$app_dir/dockyard-toolbox"
 check "no dashboard" missing "$(dash)"
 check "setup ran" test -f "$marker"
 check "docker installed" command -v dockerd
 if [ "$container" -eq 0 ]; then
   check "tray autostarts" test -f "$HOME/.config/autostart/dockyard.desktop"
-  grep -q "Exec=\"$app_dir/Dockyard\" --tray" "$HOME/.config/autostart/dockyard.desktop" && ok "autostart points at the installed app" || fail "autostart target"
+  grep -q "Exec=\"$app_dir/dockyard-toolbox\" --tray" "$HOME/.config/autostart/dockyard.desktop" && ok "autostart points at the installed app" || fail "autostart target"
 
   echo "== docker works in this session, without signing out"
   sudo systemctl stop docker.service docker.socket
@@ -64,7 +64,7 @@ if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
   grep -qx "nameserver $upstream" /etc/dockyard/dns-upstreams && ok "in place of the server it named, which the agent asks" || fail "kept servers: $(cat /etc/dockyard/dns-upstreams 2>&1)"
   docker version >/dev/null
   sleep 2
-  systemctl is-active --quiet dockyard-agent.service && ok "the agent runs with the engine" || fail "agent: $(systemctl status --no-pager dockyard-agent.service 2>&1 | tail -5)"
+  systemctl is-active --quiet dockyard-host.service && ok "the agent runs with the engine" || fail "agent: $(systemctl status --no-pager dockyard-host.service 2>&1 | tail -5)"
   sudo iptables -S DOCKYARD-INPUT >/dev/null 2>&1 && ok "the agent's chain is in place" || fail "no DOCKYARD-INPUT chain"
   ip addr show lo | grep -q 198.19.250.1 && ok "and its address on lo" || fail "lo: $(ip addr show lo)"
   d="$(mktemp -d)"; echo from-the-host > "$d/marker"
@@ -90,7 +90,7 @@ if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
   grep -q 'http://198.19.250.254:18888' /etc/docker/daemon.json && ok "daemon.json has the proxy, through the agent" || fail "daemon.json: $(cat /etc/docker/daemon.json)"
   docker version >/dev/null; sleep 2
   docker pull -q busybox:1.37 >/dev/null || fail "pull through the proxy"
-  sudo grep -q 'CONNECT.*docker' /var/log/tinyproxy/tinyproxy.log && ok "the pull went through the proxy" || fail "not in the proxy's log: $(sudo tail -5 /var/log/tinyproxy/tinyproxy.log)"
+  sudo grep -q 'CONNECT.*docker' /var/log/tinyproxy/tinyproxy.log && ok "the pull went through the proxy" || fail "not in the proxy's log: $(sudo tail -5 /var/log/tinyproxy/tinyproxy.log); docker uses: $(docker info --format '{{.HTTPProxy}} {{.HTTPSProxy}}' 2>&1); docker.service since $(systemctl show -p ActiveEnterTimestamp --value docker.service)"
   run --silent --no-start >/dev/null
   if grep -q 18888 /etc/docker/daemon.json; then fail "the proxy stayed after the machine stopped using it"; else ok "gone once the machine stops using it"; fi
   sudo systemctl stop tinyproxy || true
@@ -106,27 +106,33 @@ if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
   docker run -d --name e2e-web nginx:alpine >/dev/null
   docker run -d --name e2e-custom -l dockyard.port=8099 alpine:3.24 sh -c 'while :; do printf "HTTP/1.0 200 OK\r\n\r\nfrom-8099" | nc -l -p 8099 >/dev/null; done' >/dev/null
   sleep 3
-  resolvectl query e2e-web.dockyard.test | grep -q 127.77.0.1 && ok "the name resolves on this machine" || fail "resolve: $(resolvectl query e2e-web.dockyard.test 2>&1)"
-  [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 http://e2e-web.dockyard.test/)" = 200 ] && ok "http reaches it by name" || fail "http by name"
-  [ "$(curl -s --max-time 15 http://e2e-custom.dockyard.test/)" = from-8099 ] && ok "the label picks the port" || fail "label port"
-  [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 --resolve gone.dockyard.test:80:127.77.0.1 http://gone.dockyard.test/)" = 404 ] && ok "a name nothing answers to says so" || fail "unknown name"
-  [ "$(docker run --rm alpine:3.24 wget -qO- -T 10 http://e2e-custom.dockyard.test/)" = from-8099 ] && ok "the name works inside containers too" || fail "from a container"
+  for service in dockyard-dns dockyard-proxy dockyard-etcd; do
+    [ "$(docker inspect -f '{{.State.Running}} {{index .Config.Labels "dockyard.service"}}' "$service" 2>/dev/null)" = "true ${service#dockyard-}" ] && ok "$service runs in the Dockyard group" || fail "$service: $(docker ps -a --filter name=$service 2>&1 | tail -1)"
+  done
+  resolvectl query e2e-web.dockyard.internal | grep -q 127.77.0.1 && ok "the name resolves on this machine" || fail "resolve: $(resolvectl query e2e-web.dockyard.internal 2>&1)"
+  i=0; while [ $i -lt 15 ] && [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://e2e-web.dockyard.internal/)" != 200 ]; do i=$((i+1)); sleep 1; done
+  [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 http://e2e-web.dockyard.internal/)" = 200 ] && ok "http reaches it by name" || fail "http by name"
+  # A new name reaches dockyard-proxy through the agent's two-second loop and Traefik's reload.
+  i=0; while [ $i -lt 15 ] && [ "$(curl -s --max-time 5 http://e2e-custom.dockyard.internal/)" != from-8099 ]; do i=$((i+1)); sleep 1; done
+  [ "$(curl -s --max-time 15 http://e2e-custom.dockyard.internal/)" = from-8099 ] && ok "the label picks the port" || fail "label port: $(curl -s -i --max-time 5 http://e2e-custom.dockyard.internal/ 2>&1 | head -3)"
+  [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 --resolve gone.dockyard.internal:80:127.77.0.1 http://gone.dockyard.internal/)" = 404 ] && ok "a name nothing answers to says so" || fail "unknown name"
+  [ "$(docker run --rm alpine:3.24 wget -qO- -T 10 http://e2e-custom.dockyard.internal/)" = from-8099 ] && ok "the name works inside containers too" || fail "from a container"
   if ss -ltn | grep -E ':(80|443|53)[[:space:]]' | grep -vE '127\.0\.0\.5[34]' >/dev/null; then fail "Dockyard holds port 80, 443 or 53: $(ss -ltn | grep -E ':(80|443|53)[[:space:]]')"; else ok "no port 80, 443 or 53 taken on this machine"; fi
   docker run -d --name e2e-published -p 80:80 nginx:alpine >/dev/null && ok "a container can still publish port 80" || fail "port 80 cannot be published"
-  [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 http://e2e-web.dockyard.test/)" = 200 ] && ok "and domains keep working next to it" || fail "domain next to a published port 80"
+  [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 http://e2e-web.dockyard.internal/)" = 200 ] && ok "and domains keep working next to it" || fail "domain next to a published port 80"
   docker rm -f e2e-published >/dev/null
 
   echo "  agent RSS $(awk '/VmRSS/{print $2}' /proc/$(pidof dockyard-agent)/status) kB, for the record"
 
   echo "== trusted HTTPS"
-  [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 https://e2e-web.dockyard.test/ || true)" = 000 ] && ok "without trusting, no HTTPS" || fail "HTTPS before it was turned on"
+  [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 https://e2e-web.dockyard.internal/ || true)" = 000 ] && ok "without trusting, no HTTPS" || fail "HTTPS before it was turned on"
   run --silent --no-start --trust-https
   # Setup restarted the agent and the resolver, and the agent looks containers up again when it starts.
-  i=0; while [ $i -lt 20 ] && [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 https://e2e-web.dockyard.test/ || true)" != 200 ]; do i=$((i+1)); sleep 1; done
-  [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://e2e-web.dockyard.test/)" = 200 ] && ok "https is trusted by the system" || fail "https: $(curl -v --max-time 15 https://e2e-web.dockyard.test/ 2>&1 | tail -5)"
+  i=0; while [ $i -lt 20 ] && [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 https://e2e-web.dockyard.internal/ || true)" != 200 ]; do i=$((i+1)); sleep 1; done
+  [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://e2e-web.dockyard.internal/)" = 200 ] && ok "https is trusted by the system" || fail "https: $(curl -v --max-time 15 https://e2e-web.dockyard.internal/ 2>&1 | tail -5)"
   key="$HOME/.config/Dockyard/ca/ca.key"
   [ "$(stat -c %a "$key")" = 600 ] && ok "the key is the owner's only" || fail "key mode $(stat -c %a "$key")"
-  openssl x509 -in "$HOME/.config/Dockyard/ca/ca.pem" -noout -text | grep -A2 'Name Constraints: critical' | grep -q 'DNS:dockyard.test' && ok "the CA is name constrained" || fail "name constraint"
+  openssl x509 -in "$HOME/.config/Dockyard/ca/ca.pem" -noout -text | grep -A2 'Name Constraints: critical' | grep -q 'DNS:dockyard.internal' && ok "the CA is name constrained" || fail "name constraint"
   rogue="$(mktemp -d)"
   openssl req -new -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -keyout "$rogue/k" -out "$rogue/r" -subj /CN=www.example.com 2>/dev/null
   printf 'subjectAltName=DNS:www.example.com\n' > "$rogue/x"
@@ -137,6 +143,18 @@ if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
 fi
 
 if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
+  echo "== kubectl and helm: from their apt or dnf repositories"
+  for tool in kubectl helm; do
+    if command -v dpkg-query >/dev/null 2>&1; then
+      dpkg-query -W -f '${db:Status-Status}' "$tool" 2>/dev/null | grep -qx installed && ok "$tool is a package" || fail "$tool package"
+    else
+      rpm -q "$tool" >/dev/null && ok "$tool is a package" || fail "$tool package"
+    fi
+    check "and not a copy of Dockyard's" missing "/etc/dockyard/$tool"
+  done
+  /usr/bin/kubectl version --client >/dev/null && ok "kubectl runs" || fail "kubectl version"
+  /usr/bin/helm version --short >/dev/null && ok "helm runs" || fail "helm version"
+
   echo "== kind: installed, and a cluster from create to delete"
   check "kind is on the PATH" test -x /usr/local/bin/kind
   check "marked as Dockyard's" test -f /etc/dockyard/kind
@@ -181,9 +199,9 @@ check "with its libraries" test -f "$app_dir/libSkiaSharp.so"
 
 if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
   echo "== the process name"
-  check "the new file name" test -x "$app_dir/Dockyard Dashboard"
+  check "the new file name" test -x "$app_dir/dockyard-dashboard"
   check "no old file" missing "$app_dir/Dockyard.Dashboard"
-  echo "  for the record, /proc comm of that file name is 15 characters: $(printf 'Dockyard Dashboard' | cut -c1-15)"
+  echo "  for the record, /proc comm of that file name is 15 characters: $(printf 'dockyard-dashboard' | cut -c1-15)"
 fi
 
 if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
@@ -206,14 +224,14 @@ check "dashboard kept" test -x "$(dash)"
 echo "== remove the dashboard"
 run --silent --no-dashboard --no-start
 check "dashboard removed" missing "$(dash)"
-check "app stays" test -x "$app_dir/Dockyard"
+check "app stays" test -x "$app_dir/dockyard-toolbox"
 
 echo "== uninstall keeps docker's data"
 run --silent --uninstall
-check "app removed" missing "$app_dir/Dockyard"
+check "app removed" missing "$app_dir/dockyard-toolbox"
 check "setup undone" missing "$marker"
 if [ "$container" -eq 0 ]; then
-  check "the agent is gone" missing /etc/systemd/system/dockyard-agent.service
+  check "the agent is gone" missing /etc/systemd/system/dockyard-host.service
   [ -n "${WIZARD:-}" ] && check "kind is gone" missing /usr/local/bin/kind
   check "the CA is out of the trust store" missing /usr/local/share/ca-certificates/dockyard-local-ca.crt
   if grep -rl "Dockyard Local CA" /etc/ssl/certs >/dev/null 2>&1; then fail "the CA stayed in the system's bundle"; else ok "and out of the system's bundle"; fi

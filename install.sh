@@ -9,14 +9,14 @@ asset=Dockyard-linux-x64
 [ "$(uname -m)" = x86_64 ] || { echo "Dockyard for Linux is built for x86_64" >&2; exit 1; }
 
 if [ -n "${DOCKYARD_VERSION:-}" ]; then
-  tag="v$DOCKYARD_VERSION"
+  tag="toolbox/$DOCKYARD_VERSION"
 else
   # The redirect names one release, so the file and its checksum come from the same one, and it has no API rate limit.
   tag="$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$repo/releases/latest")"
-  tag="${tag##*/}"
+  tag="$(printf '%s' "${tag#*/releases/tag/}" | sed 's#%2[Ff]#/#g')"
 fi
 case "$tag" in
-  v[0-9]*) ;;
+  v[0-9]* | toolbox/[0-9]*) ;;
   *) echo "No Dockyard release found" >&2; exit 1 ;;
 esac
 

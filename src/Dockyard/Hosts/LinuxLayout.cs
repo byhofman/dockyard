@@ -8,10 +8,16 @@ static class LinuxLayout
     public const string PackageDir = "/usr/lib/dockyard";
     public static string HomeDir => Path.Combine(Paths.UserProfile, ".local", "lib", "dockyard");
     public static string HomeLink => Path.Combine(Paths.UserProfile, ".local", "bin", "dockyard");
-    public static string InstallDir => File.Exists(Path.Combine(PackageDir, "Dockyard")) ? PackageDir : HomeDir;
-    public static string InstalledExe => Path.Combine(InstallDir, "Dockyard");
-    public static string Dashboard => Path.Combine(InstallDir, "Dockyard Dashboard");
-    public static string LegacyDashboard => Path.Combine(InstallDir, "Dockyard.Dashboard");
+    // dockyard-toolbox and dockyard-dashboard since 0.9.0; Dockyard and "Dockyard Dashboard" (Dockyard.Dashboard before that) earlier.
+    public static readonly string[] ToolboxNames = ["dockyard-toolbox", "Dockyard"];
+    public static readonly string[] DashboardNames = ["dockyard-dashboard", "Dockyard Dashboard", "Dockyard.Dashboard"];
+    public static string InstallDir => ToolboxNames.Any(n => File.Exists(Path.Combine(PackageDir, n))) ? PackageDir : HomeDir;
+    public static string InstalledExe => FirstIn(InstallDir, ToolboxNames);
+    public static string Dashboard => FirstIn(InstallDir, DashboardNames);
+    public const string Cli = "dockyard-cli";
+
+    static string FirstIn(string dir, string[] names) =>
+        names.Select(n => Path.Combine(dir, n)).FirstOrDefault(File.Exists) ?? Path.Combine(dir, names[0]);
     public static string VersionFile => Path.Combine(HomeDir, "version");
 
     public static string DashboardPackage(string? packageManager) =>
@@ -20,12 +26,9 @@ static class LinuxLayout
         packageManager == "dnf" ? @"^dockyard-[\d.]+-1\.x86_64\.rpm$" : @"^dockyard_[\d.]+_amd64\.deb$";
     public const string Tarball = @"^Dockyard-[\d.]+-linux-x64\.tar\.gz$";
     public const string CredentialHelper = "/usr/local/bin/docker-credential-secretservice";
-    public const string Kind = "/usr/local/bin/kind";
-    // Written by setup-linux.sh next to a kind it installed; one without it is the user's own.
-    public const string KindMarker = "/etc/dockyard/kind";
     public const string AppAsset = @"^Dockyard-linux-x64$";
 
-    public static readonly string[] DashboardFiles = ["Dockyard Dashboard", "Dockyard.Dashboard", "libSkiaSharp.so", "libHarfBuzzSharp.so"];
+    public static readonly string[] DashboardFiles = [.. DashboardNames, "libSkiaSharp.so", "libHarfBuzzSharp.so"];
 
     public static bool HasDisplay(string? display, string? waylandDisplay) =>
         !string.IsNullOrEmpty(display) || !string.IsNullOrEmpty(waylandDisplay);
