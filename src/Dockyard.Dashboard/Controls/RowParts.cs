@@ -108,3 +108,78 @@ sealed class RowLabel : StackPanel
         else if (change.Property == IsDetailMonoProperty) detail.Classes.Set("mono", IsDetailMono);
     }
 }
+
+// Start or stop: the stop icon while it runs, play while it does not.
+sealed class StartStopButton : Button
+{
+    public static readonly StyledProperty<bool> IsRunningProperty = AvaloniaProperty.Register<StartStopButton, bool>(nameof(IsRunning));
+
+    public bool IsRunning { get => GetValue(IsRunningProperty); set => SetValue(IsRunningProperty, value); }
+
+    protected override Type StyleKeyOverride => typeof(Button);
+
+    readonly PathIcon stop = new();
+    readonly PathIcon play = new();
+
+    public StartStopButton()
+    {
+        Classes.Add("iconbtn");
+        Content = new Panel { Children = { stop, play } };
+        AttachedToVisualTree += (_, _) =>
+        {
+            stop.Data = this.FindResource("IconStop") as Geometry;
+            play.Data = this.FindResource("IconPlay") as Geometry;
+            Show();
+        };
+    }
+
+    void Show()
+    {
+        stop.IsVisible = IsRunning;
+        play.IsVisible = !IsRunning;
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == IsRunningProperty) Show();
+    }
+}
+
+// What a section shows with nothing in it: its icon, large and muted, and a line on what to do.
+sealed class EmptyState : StackPanel
+{
+    public static readonly StyledProperty<string?> IconProperty = AvaloniaProperty.Register<EmptyState, string?>(nameof(Icon));
+    public static readonly StyledProperty<string?> TextProperty = AvaloniaProperty.Register<EmptyState, string?>(nameof(Text));
+
+    public string? Icon { get => GetValue(IconProperty); set => SetValue(IconProperty, value); }
+    public string? Text { get => GetValue(TextProperty); set => SetValue(TextProperty, value); }
+
+    protected override Type StyleKeyOverride => typeof(StackPanel);
+
+    readonly PathIcon icon = new() { Width = 40, Height = 40 };
+    readonly TextBlock text = new() { TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center };
+
+    public EmptyState()
+    {
+        Spacing = 10;
+        HorizontalAlignment = HorizontalAlignment.Center;
+        VerticalAlignment = VerticalAlignment.Center;
+        MaxWidth = 460;
+        text.Classes.Add("muted");
+        Children.Add(icon);
+        Children.Add(text);
+        AttachedToVisualTree += (_, _) =>
+        {
+            if (this.FindResource("Muted") is IBrush muted) icon.Foreground = muted;
+            if (Icon is { } key) icon.Data = this.FindResource(key) as Geometry;
+        };
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == TextProperty) text.Text = Text;
+        else if (change.Property == IconProperty && Icon is { } key && this.FindResource(key) is Geometry g) icon.Data = g;
+    }
+}

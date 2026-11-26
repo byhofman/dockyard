@@ -73,13 +73,8 @@
                 <ctl:RowLabel Grid.Column="3" Title="{Binding Name}" Detail="{Binding Location}" />
                 <TextBlock Grid.Column="4" Classes="muted small" Text="{Binding Summary}" VerticalAlignment="Center" Margin="12,0" />
                 <StackPanel Grid.Column="5" Classes="rowactions" Orientation="Horizontal" VerticalAlignment="Center">
-                  <Button Classes="iconbtn" ToolTip.Tip="Start or stop the project"
-                          Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).ProjectStartStopCommand}" CommandParameter="{Binding}">
-                    <Panel>
-                      <PathIcon Data="{StaticResource IconStop}" IsVisible="{Binding IsRunning}" />
-                      <PathIcon Data="{StaticResource IconPlay}" IsVisible="{Binding !IsRunning}" />
-                    </Panel>
-                  </Button>
+                  <ctl:StartStopButton IsRunning="{Binding IsRunning}" ToolTip.Tip="Start or stop the project"
+                          Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).ProjectStartStopCommand}" CommandParameter="{Binding}" />
                   <Button Classes="iconbtn" ToolTip.Tip="Restart"
                           Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).ProjectRestartCommand}" CommandParameter="{Binding}">
                     <PathIcon Data="{StaticResource IconRestart}" />
@@ -100,13 +95,8 @@
                 <ctl:RowLabel Grid.Column="3" Title="{Binding Name}" Detail="{Binding Location}" />
                 <TextBlock Grid.Column="4" Classes="muted small" Text="{Binding Summary}" VerticalAlignment="Center" Margin="12,0" />
                 <StackPanel Grid.Column="5" Classes="rowactions" Orientation="Horizontal" VerticalAlignment="Center">
-                  <Button Classes="iconbtn" ToolTip.Tip="Start or stop the cluster; everything in it stays"
-                          Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).ClusterStartStopCommand}" CommandParameter="{Binding}">
-                    <Panel>
-                      <PathIcon Data="{StaticResource IconStop}" IsVisible="{Binding IsRunning}" />
-                      <PathIcon Data="{StaticResource IconPlay}" IsVisible="{Binding !IsRunning}" />
-                    </Panel>
-                  </Button>
+                  <ctl:StartStopButton IsRunning="{Binding IsRunning}" ToolTip.Tip="Start or stop the cluster; everything in it stays"
+                          Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).ClusterStartStopCommand}" CommandParameter="{Binding}" />
                   <Button Classes="iconbtn" ToolTip.Tip="Open in Kubernetes"
                           Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).OpenClusterCommand}" CommandParameter="{Binding}">
                     <PathIcon Data="{StaticResource IconOpenExternal}" />
@@ -158,13 +148,8 @@
                           Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).RestartCommand}" CommandParameter="{Binding}">
                     <PathIcon Data="{StaticResource IconRestart}" />
                   </Button>
-                  <Button Classes="iconbtn" ToolTip.Tip="Start or stop (S)"
-                          Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).ToggleCommand}" CommandParameter="{Binding}">
-                    <Panel>
-                      <PathIcon Data="{StaticResource IconStop}" IsVisible="{Binding IsRunning}" />
-                      <PathIcon Data="{StaticResource IconPlay}" IsVisible="{Binding IsStopped}" />
-                    </Panel>
-                  </Button>
+                  <ctl:StartStopButton IsRunning="{Binding IsRunning}" ToolTip.Tip="Start or stop (S)"
+                          Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).ToggleCommand}" CommandParameter="{Binding}" />
                   <Button Classes="iconbtn" ToolTip.Tip="Terminal (E)" IsEnabled="{Binding IsRunning}" IsVisible="{Binding IsManaged}"
                           Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).ExecCommand}" CommandParameter="{Binding}">
                     <PathIcon Data="{StaticResource IconTerminal}" />
@@ -179,10 +164,7 @@
           </ListBox.DataTemplates>
         </ListBox>
 
-        <StackPanel Spacing="10" HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding IsEmpty}">
-          <PathIcon Data="{StaticResource IconContainers}" Width="40" Height="40" Foreground="{DynamicResource Muted}" />
-          <TextBlock Classes="muted" Text="No containers yet. Run one with docker run, or open a compose file." />
-        </StackPanel>
+        <ctl:EmptyState IsVisible="{Binding IsEmpty}" Icon="IconContainers" Text="No containers yet. Run one with docker run, or open a compose file." />
 
         <StackPanel Spacing="14" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="460"
                     IsVisible="{Binding Session.IsUnavailable}">

@@ -54,13 +54,8 @@
                   <TextBlock Classes="muted small" Text="{Binding NodesText}" TextAlignment="Right" />
                 </StackPanel>
                 <StackPanel Grid.Column="5" Classes="rowactions" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
-                  <Button Classes="iconbtn" ToolTip.Tip="{Binding ToggleText}"
-                          Command="{Binding $parent[UserControl].((clu:ClustersViewModel)DataContext).ToggleRowCommand}" CommandParameter="{Binding}">
-                    <Panel>
-                      <PathIcon Data="{StaticResource IconStop}" IsVisible="{Binding IsRunning}" />
-                      <PathIcon Data="{StaticResource IconPlay}" IsVisible="{Binding !IsRunning}" />
-                    </Panel>
-                  </Button>
+                  <ctl:StartStopButton IsRunning="{Binding IsRunning}" ToolTip.Tip="{Binding ToggleText}"
+                          Command="{Binding $parent[UserControl].((clu:ClustersViewModel)DataContext).ToggleRowCommand}" CommandParameter="{Binding}" />
                   <Button Classes="iconbtn danger" ToolTip.Tip="Delete (Del)"
                           Command="{Binding $parent[UserControl].((clu:ClustersViewModel)DataContext).DeleteRowCommand}" CommandParameter="{Binding}">
                     <PathIcon Data="{StaticResource IconDelete}" />
