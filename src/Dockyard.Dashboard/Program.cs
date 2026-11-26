@@ -9,7 +9,7 @@ static class Program
     [STAThread]
     public static int Main(string[] args)
     {
-        // Asked by the wizard on macOS and Linux to learn which version is installed, so this comes before anything with a window.
+        // Asked by setup on macOS and Linux to learn which version is installed, so this comes before anything with a window.
         if (args.Contains("--version"))
         {
             Console.WriteLine((System.Reflection.Assembly.GetEntryAssembly()?.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false).OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion ?? "0.0.0").Split('+')[0]);
@@ -24,8 +24,9 @@ static class Program
         return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args, ShutdownMode.OnMainWindowClose);
     }
 
-    // An error on the UI thread that nothing caught is logged and shown, and the dashboard stays up: it only reads and
-    // asks the engine, so there is no half-written state to protect by ending it. Elsewhere it is at least logged.
+    // An error on the UI thread that nothing caught is logged and shown, and the dashboard stays up: what it changes goes
+    // through the engine or the setup facade, which keep their own state, so ending it protects nothing. Elsewhere it is
+    // at least logged.
     static void WatchFailures()
     {
         AppDomain.CurrentDomain.UnhandledException += (_, e) => { if (e.ExceptionObject is Exception ex) Shell.Failures.Write(ex, "crash"); };

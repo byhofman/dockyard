@@ -101,45 +101,6 @@ public sealed class LogicTests
     public void Log_lines_lose_the_terminals_colours_and_control_characters(string line, string shown) =>
         Assert.Equal(shown, TerminalText.Plain(line));
 
-    [Theory]
-    [InlineData("show", "Show", null)]
-    [InlineData("settings", "Settings", null)]
-    [InlineData("start linux", "Start", "linux")]
-    [InlineData("switch win", "Switch", "win")]
-    public void Parses_tray_commands(string line, string kindName, string? engine)
-    {
-        var kind = Enum.Parse<TrayCommandKind>(kindName);
-        var cmd = TrayCommand.Parse(line);
-        Assert.Equal(new TrayCommand(kind, engine), cmd);
-        Assert.Equal(line, cmd!.Value.ToString());
-    }
-
-    [Theory]
-    [InlineData("")]
-    [InlineData("start")]
-    [InlineData("start mac")]
-    [InlineData("rm -rf /")]
-    public void Rejects_invalid_tray_commands(string line) => Assert.Null(TrayCommand.Parse(line));
-
-    [Fact]
-    public void Settings_carries_setups_assets_folder_spaces_and_all_but_only_a_full_path()
-    {
-        var folder = Path.Combine(Path.GetTempPath(), "my assets");
-        var line = new TrayCommand(TrayCommandKind.Settings, Assets: folder).ToString();
-
-        Assert.Equal($"settings {folder}", line);
-        Assert.Equal(new TrayCommand(TrayCommandKind.Settings, Assets: folder), TrayCommand.Parse(line));
-        Assert.Null(TrayCommand.Parse("settings assets"));
-    }
-
-    [Fact]
-    public void Tray_command_from_args()
-    {
-        Assert.Equal(new TrayCommand(TrayCommandKind.Settings), TrayCommand.FromArgs(["--tray", "--settings"]));
-        Assert.Equal(new TrayCommand(TrayCommandKind.Start, "win"), TrayCommand.FromArgs(["--start", "win"]));
-        Assert.Equal(new TrayCommand(TrayCommandKind.Show), TrayCommand.FromArgs(["--start", "bogus"]));
-    }
-
     [Fact]
     public void Docker_cli_is_found_without_a_shell_path_after_a_mac_install()
     {

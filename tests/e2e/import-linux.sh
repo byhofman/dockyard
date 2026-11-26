@@ -1,6 +1,6 @@
 #!/bin/sh
-# Imports from a second engine that plays Docker Desktop, on a Linux runner with the wizard already installed:
-#   WIZARD=<the wizard binary> sh import-linux.sh
+# Imports from a second engine that plays Docker Desktop, on a Linux runner with Dockyard already installed:
+#   DOCKYARD=<the dockyard command> sh import-linux.sh
 set -eu
 ok() { echo "  ok   $1"; }
 fail() { echo "  FAIL $1" >&2; exit 1; }
@@ -24,7 +24,7 @@ $src create --name e2e-app --network e2e-net --network-alias app --restart alway
 sudo systemctl reset-failed docker.service docker.socket || true
 sudo systemctl restart docker.service
 docker version >/dev/null
-"$WIZARD" --silent --import-from "unix://$sock"
+"$DOCKYARD" import --from "unix://$sock"
 
 docker image inspect e2e-tagged:1 >/dev/null && ok "image with its tag" || fail "image"
 [ "$(docker run --rm -v e2e-data:/d alpine:3.24 cat /d/file)" = from-source ] && ok "volume contents" || fail "volume contents"
@@ -41,7 +41,7 @@ $src container inspect e2e-app >/dev/null && ok "the source still has its contai
 [ -z "$($src ps -aq --filter label=dockyard.helper=1)" ] && ok "no helper left on the source" || fail "helper left on the source"
 if $src images --format '{{.Repository}}' | grep -q dockyard-; then fail "temporary images left on the source"; else ok "no temporary image left on the source"; fi
 
-"$WIZARD" --silent --import-from "unix://$sock" | grep -q "Skipped container e2e-app" && ok "a second import skips what is there" || fail "second import"
+"$DOCKYARD" import --from "unix://$sock" | grep -q "Skipped container e2e-app" && ok "a second import skips what is there" || fail "second import"
 
 docker rm -f e2e-app e2e-writer >/dev/null; docker volume rm e2e-data >/dev/null; docker network rm e2e-net >/dev/null
 docker image rm -f e2e-tagged:1 e2e-check dockyard-import/e2e-app:latest dockyard-import/e2e-writer:latest >/dev/null 2>&1 || true

@@ -79,6 +79,7 @@ sealed class NetworksViewModel : SelectableSection<NetworkRow>
     });
 
     protected override IEnumerable<NetworkRow> All => all;
+    public override string Summary => Count(all.Count, "network", "networks");
     protected override string?[] Words(NetworkRow row) => [row.Name, row.Driver, row.Subnet];
     protected override SearchResult Describe(NetworkRow row) => new(row.Name, row.Subnet.Length > 0 ? $"{row.Driver}  {row.Subnet}" : row.Driver, row);
 

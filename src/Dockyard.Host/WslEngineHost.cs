@@ -8,8 +8,8 @@ using Dockyard.Shared;
 namespace Dockyard.Host;
 
 // The Linux engine in WSL as Windows needs it: the process that keeps the distro up, the pipes the docker CLI reaches it
-// by, the relay for container domains on 127.77.0.1, and published ports on Windows' loopback. The Toolbox sets the engine
-// up and asks for it to start or stop; this keeps it running whether the Toolbox is open or not.
+// by, the relay for container domains on 127.77.0.1, and published ports on Windows' loopback. Dockyard.Setup sets the
+// engine up and asks for it to start or stop; this keeps it running whether the tray or the dashboard is open or not.
 [SupportedOSPlatform("windows")]
 sealed class WslEngineHost(Action<string> log) : IDisposable
 {
@@ -50,7 +50,7 @@ sealed class WslEngineHost(Action<string> log) : IDisposable
         return false;
     }
 
-    // An engine that runs already, started before this one or by an older Toolbox, gets its pipes.
+    // An engine that runs already, started before this one or by an older Dockyard, gets its pipes.
     public async Task<bool> Attach()
     {
         if (Answers()) return true;
@@ -105,7 +105,7 @@ sealed class WslEngineHost(Action<string> log) : IDisposable
     }
 
     // Kept on disk: a dockyard-host started again (an update, a crash, the next logon) relays at once, without waiting for
-    // the Toolbox to say so again, which it may have said to the one that was replaced.
+    // Dockyard.Setup to say so again, which it may have said to the one that was replaced.
     public static readonly string DomainsMarker = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Dockyard", "domains.on");
 
     string StartDomains()

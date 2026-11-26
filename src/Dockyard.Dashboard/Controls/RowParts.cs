@@ -241,12 +241,9 @@ sealed class UsageFilterBar : Border
         Padding = new Thickness(3);
         HorizontalAlignment = HorizontalAlignment.Left;
         VerticalAlignment = VerticalAlignment.Center;
+        Classes.Add("filter");
         Child = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, Children = { all, used, unused } };
-        AttachedToVisualTree += (_, _) =>
-        {
-            if (this.FindResource("Bg") is IBrush bg) Background = bg;
-            if (this.FindResource("Line") is IBrush line) BorderBrush = line;
-        };
+        this.Token(BackgroundProperty, "Bg").Token(BorderBrushProperty, "Line");
     }
 
     protected override void OnDataContextChanged(EventArgs e)
@@ -338,11 +335,8 @@ sealed class FilterSwitch : Border
         segment.Content = label;
         segment.Click += (_, _) => IsChecked = !IsChecked;
         Child = segment;
-        AttachedToVisualTree += (_, _) =>
-        {
-            if (this.FindResource("Bg") is IBrush bg) Background = bg;
-            if (this.FindResource("Line") is IBrush line) BorderBrush = line;
-        };
+        Classes.Add("filter");
+        this.Token(BackgroundProperty, "Bg").Token(BorderBrushProperty, "Line");
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -352,5 +346,48 @@ sealed class FilterSwitch : Border
         else if (change.Property == TextProperty) { text.Text = Text; Avalonia.Automation.AutomationProperties.SetName(segment, Text); }
         else if (change.Property == IconProperty) { icon.Data = Icon; icon.IsVisible = Icon is not null; }
         else if (change.Property == ToolTip.TipProperty) ToolTip.SetTip(segment, ToolTip.GetTip(this));
+    }
+}
+
+// A tool that is missing, and the way to Tools: the same warning wherever it shows, above every section or in one.
+sealed class ToolNotice : Border
+{
+    public static readonly StyledProperty<string?> TextProperty = AvaloniaProperty.Register<ToolNotice, string?>(nameof(Text));
+    public static readonly StyledProperty<System.Windows.Input.ICommand?> CommandProperty = AvaloniaProperty.Register<ToolNotice, System.Windows.Input.ICommand?>(nameof(Command));
+
+    public string? Text { get => GetValue(TextProperty); set => SetValue(TextProperty, value); }
+    public System.Windows.Input.ICommand? Command { get => GetValue(CommandProperty); set => SetValue(CommandProperty, value); }
+
+    protected override Type StyleKeyOverride => typeof(Border);
+
+    readonly TextBlock text = new() { TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+    readonly Button link = new() { Content = "Open Tools", Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+
+    public ToolNotice()
+    {
+        Classes.Add("notice");
+        link.Classes.Add("link");
+        text.Token(TextBlock.ForegroundProperty, "Warn");
+        var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
+        var icon = new PathIcon { Width = 14, Height = 14, Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center }.Token(PathIcon.ForegroundProperty, "Warn");
+        AttachedToVisualTree += (_, _) => { if (this.FindResource("IconTools") is Geometry g) icon.Data = g; };
+        row.Children.Add(icon);
+        Grid.SetColumn(text, 1);
+        row.Children.Add(text);
+        Grid.SetColumn(link, 2);
+        row.Children.Add(link);
+        Child = row;
+        this.Token(BackgroundProperty, "WarnBg");
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == TextProperty) text.Text = Text;
+        else if (change.Property == CommandProperty)
+        {
+            link.Command = Command;
+            link.IsVisible = Command is not null;
+        }
     }
 }

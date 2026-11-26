@@ -6,13 +6,15 @@
     <Project Path="src/Dockyard.Dashboard/Dockyard.Dashboard.csproj" />
     <Project Path="src/Dockyard.Engine/Dockyard.Engine.csproj" />
     <Project Path="src/Dockyard.Kind/Dockyard.Kind.csproj" />
-    <Project Path="src/Dockyard/Dockyard.csproj" />
+    <Project Path="src/Dockyard.Setup/Dockyard.Setup.csproj" />
+    <Project Path="src/Dockyard.Tray/Dockyard.Tray.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Dockyard.Agent.Tests/Dockyard.Agent.Tests.csproj" />
     <Project Path="tests/Dockyard.Cli.Tests/Dockyard.Cli.Tests.csproj" />
     <Project Path="tests/Dockyard.Dashboard.Tests/Dockyard.Dashboard.Tests.csproj" />
     <Project Path="tests/Dockyard.Engine.Tests/Dockyard.Engine.Tests.csproj" />
-    <Project Path="tests/Dockyard.Tests/Dockyard.Tests.csproj" />
+    <Project Path="tests/Dockyard.Setup.Tests/Dockyard.Setup.Tests.csproj" />
+    <Project Path="tests/Dockyard.Tray.Tests/Dockyard.Tray.Tests.csproj" />
   </Folder>
 </Solution>

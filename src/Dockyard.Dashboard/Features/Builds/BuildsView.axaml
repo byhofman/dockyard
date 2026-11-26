@@ -24,10 +24,10 @@
 
   <Grid x:Name="Layout" ColumnDefinitions="*,5,460">
     <DockPanel>
-      <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="16,12,16,4">
+      <StackPanel DockPanel.Dock="Top" Spacing="10" Margin="16,14,16,6">
         <Grid ColumnDefinitions="Auto,*,Auto">
           <CheckBox Classes="pick" IsChecked="{Binding AllSelected}" ToolTip.Tip="Select all" AutomationProperties.Name="Select all builds" />
-          <TextBlock Grid.Column="1" Classes="section" Text="BUILDS" VerticalAlignment="Center" />
+          <StackPanel Grid.Column="1" Classes="pagehead"><TextBlock Classes="title" Text="Builds" /><TextBlock Classes="muted small" Text="{Binding Summary}" TextTrimming="CharacterEllipsis" /></StackPanel>
           <Button Grid.Column="2" Command="{Binding RefreshCommand}" ToolTip.Tip="Read the build history again">
             <StackPanel Classes="label"><PathIcon Data="{StaticResource IconRefresh}" /><TextBlock Text="Refresh" /></StackPanel>
           </Button>

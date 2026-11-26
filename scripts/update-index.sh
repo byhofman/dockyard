@@ -1,6 +1,6 @@
 #!/bin/sh
-# update-index.sh <component> <version> [<requires as JSON, e.g. {"toolbox":"0.9.0"}>]: records a component's release in
-# components.json on the release tagged index, which the Toolbox reads to find each component's latest release.
+# update-index.sh <component> <version> [<requires as JSON, e.g. {"cli":"0.9.0"}>]: records a component's release in
+# components.json on the release tagged index, which dockyard and the one-liners read to find each component's latest release.
 # Workflows run this under one concurrency group, so two releases never write the file at once. Needs gh and jq.
 set -eu
 component="$1"; version="$2"; requires="${3:-}"

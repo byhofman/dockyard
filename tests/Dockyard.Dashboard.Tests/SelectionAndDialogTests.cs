@@ -219,32 +219,6 @@ public sealed class SelectionAndDialogTests
         Assert.Null(vm.Detail);
     }
 
-    [Theory]
-    [InlineData("switched win", "win", null)]
-    [InlineData("switch-failed linux The Linux engine did not start", "linux", "The Linux engine did not start")]
-    [InlineData("switch-failed win", "win", "the tray gave no reason")]
-    public void The_trays_answer_to_a_switch_is_read_from_the_pipe(string line, string engine, string? error) =>
-        Assert.Equal((engine, error), EngineSwitch.ParseResult(line));
-
-    [Theory]
-    [InlineData("show")]
-    [InlineData("")]
-    [InlineData("switched")]
-    public void Other_lines_on_the_pipe_are_not_a_switch_result(string line) => Assert.Null(EngineSwitch.ParseResult(line));
-
-    [Fact]
-    public void Whether_the_other_engine_stops_comes_from_the_trays_setting_and_defaults_to_yes()
-    {
-        var file = Path.Combine(Directory.CreateTempSubdirectory("dy-settings").FullName, "settings.json");
-        Assert.True(EngineSwitch.StopsOther(file));
-        File.WriteAllText(file, """{"StopOtherOnSwitch":false}""");
-        Assert.False(EngineSwitch.StopsOther(file));
-        Assert.Contains("The Linux engine keeps running", EngineSwitch.Message("win", stopsOther: false));
-        File.WriteAllText(file, "not json");
-        Assert.True(EngineSwitch.StopsOther(file));
-        Assert.Contains("The Windows engine stops, and its running containers with it", EngineSwitch.Message("linux", stopsOther: true));
-    }
-
     [Fact]
     public void Worker_nodes_are_asked_for_through_a_kind_config()
     {

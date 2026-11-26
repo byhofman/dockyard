@@ -24,7 +24,9 @@ var proxy = new DomainProxy(table, log);
 var services = new Services(() => new DockerClient(DockerEndpoint.Parse("unix:///var/run/docker.sock")), table, "/var/lib/docker/dockyard/services",
     () => Services.Views(options.Mode, ResolvConf.Upstreams(ContainerResolvConf(), GuestAddresses.Dns), options.Mode is AgentMode.Vm or AgentMode.TcpTest ? InterfaceAddress.Of("eth0") : null),
     Services.EntryPoints(options.Mode), log);
-var api = new AgentApi(table, proxy, services);
+var clusters = new ClusterServices(new DockerClusterEngine(() => new DockerClient(DockerEndpoint.Parse("unix:///var/run/docker.sock")), log), "/var/lib/docker/dockyard/cluster-wants.json", log);
+table.ContainersChanged += clusters.ContainersChanged;
+var api = new AgentApi(table, proxy, services, clusters);
 
 string ReadResolvConf() => File.Exists("/etc/resolv.conf") ? File.ReadAllText("/etc/resolv.conf") : "";
 string ContainerResolvConf() => ResolvConf.ForContainers(options.Mode, File.Exists(AgentFiles.KeptDns) ? File.ReadAllText(AgentFiles.KeptDns) : null, ReadResolvConf());
@@ -35,7 +37,7 @@ Func<string, IPAddress?> HostView(Func<IPAddress?> address) => name => table.Con
 
 // dockyard-dns and dockyard-proxy answer for names when they can run; the agent's own servers are the fallback.
 var contained = await services.Start(cts.Token);
-List<Task> tasks = [table.Run(cts.Token)];
+List<Task> tasks = [table.Run(cts.Token), clusters.Run(cts.Token)];
 if (contained)
 {
     tasks.Add(services.Run(cts.Token));

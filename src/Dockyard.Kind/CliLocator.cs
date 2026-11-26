@@ -1,7 +1,7 @@
 namespace Dockyard.Kind;
 
 // Where Dockyard or a package manager puts a command. An app started from the menu bar, at login, or before winget
-// changed the PATH does not have these on its PATH, so they are looked at first, Dockyard's own copy before the rest.
+// changed the PATH does not have these on its PATH, so they are looked at first, the Dockyard source's before the rest.
 static class CliLocator
 {
     public static IEnumerable<string> KnownDirs(string home)

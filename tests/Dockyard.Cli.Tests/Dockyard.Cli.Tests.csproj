@@ -10,6 +10,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\Dockyard.Setup.Tests\FakeHost.cs;..\Dockyard.Setup.Tests\TempSettings.cs" LinkBase="Fakes" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Include="Xunit" />
     <ProjectReference Include="..\..\src\Dockyard.Cli\Dockyard.Cli.csproj" />
   </ItemGroup>

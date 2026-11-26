@@ -1,11 +1,11 @@
 #!/bin/sh
 # With a firewall that denies what comes in by default, containers still reach this machine and domains:
-#   WIZARD=<the wizard binary> sh firewall-linux.sh
+#   DOCKYARD=<the dockyard command> sh firewall-linux.sh
 set -eu
 ok() { echo "  ok   $1"; }
 fail() { echo "  FAIL $1" >&2; exit 1; }
 
-"$WIZARD" --silent --no-start --assets "$(dirname "$WIZARD")"
+"$DOCKYARD" setup --silent --no-start --assets "$(dirname "$DOCKYARD")"
 docker version >/dev/null
 sleep 2
 d="$(mktemp -d)"; echo from-the-host > "$d/marker"
@@ -58,5 +58,5 @@ sudo systemctl reset-failed docker.service docker.socket || true
 sudo systemctl restart docker.service
 docker rm -f e2e-web >/dev/null
 docker network rm e2e-fw >/dev/null
-"$WIZARD" --silent --uninstall
+"$DOCKYARD" uninstall
 echo "All good."

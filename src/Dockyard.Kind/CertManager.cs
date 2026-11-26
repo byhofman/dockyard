@@ -1,9 +1,8 @@
-using System.Diagnostics;
 using System.Text.RegularExpressions;
 
 namespace Dockyard.Kind;
 
-// cert-manager with a ClusterIssuer called dockyard: a CA from the Toolbox that can only sign for <cluster>.dockyard.internal,
+// cert-manager with a ClusterIssuer called dockyard: a CA from Dockyard.Setup that can only sign for <cluster>.dockyard.internal,
 // below Dockyard's root, which this computer already trusts. An Ingress with cert-manager.io/cluster-issuer: dockyard then
 // gets a certificate browsers accept, and Dockyard's proxy passes its TLS through untouched.
 static partial class CertManager
@@ -17,7 +16,7 @@ static partial class CertManager
     [GeneratedRegex(@"-----BEGIN (?<kind>[A-Z ]+)-----[\s\S]+?-----END \k<kind>-----")]
     private static partial Regex PemBlock();
 
-    // What `dockyard-toolbox https cluster-issuer <cluster>` prints: the cluster's CA, its key, the root.
+    // What DockyardSetup.ClusterCa returns: the cluster's CA, its key, the root.
     public static (string Chain, string Key)? Parse(string pem)
     {
         var blocks = PemBlock().Matches(pem.Replace("\r\n", "\n")).Select(m => (Kind: m.Groups["kind"].Value, Text: m.Value)).ToList();
@@ -50,22 +49,10 @@ static partial class CertManager
             secretName: {{SecretName}}
         """;
 
-    public static async Task<string> FromToolbox(string toolbox, string cluster)
-    {
-        var psi = new ProcessStartInfo(toolbox) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
-        foreach (var a in new[] { "https", "cluster-issuer", cluster }) psi.ArgumentList.Add(a);
-        using var process = Process.Start(psi) ?? throw new InvalidOperationException("Could not start the Dockyard Toolbox");
-        var output = process.StandardOutput.ReadToEndAsync();
-        var error = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        if (process.ExitCode != 0) throw new InvalidOperationException((await error).Trim() is { Length: > 0 } e ? e : $"the Toolbox exited with {process.ExitCode}");
-        return await output;
-    }
-
     // cert-manager's webhook takes a moment after Helm returns, and refuses the ClusterIssuer until it answers.
     public static async Task AddIssuer(string context, string cluster, string pem, Action<string>? onLine)
     {
-        if (Parse(pem) is not { } issued) throw new InvalidOperationException("The Toolbox gave no certificate authority for the cluster");
+        if (Parse(pem) is not { } issued) throw new InvalidOperationException("Dockyard gave no certificate authority for the cluster");
         onLine?.Invoke($"Adding the ClusterIssuer {IssuerName}, for names under {cluster}.{ExternalDns.Zone}");
         var until = DateTime.UtcNow + TimeSpan.FromMinutes(3);
         while (true)

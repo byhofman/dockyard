@@ -80,6 +80,21 @@ static class ClusterDefinitions
         return ports;
     }
 
+    public static IReadOnlyList<string> Names(string? folder = null)
+    {
+        folder ??= Folder;
+        return Directory.Exists(folder)
+            ? Directory.EnumerateFiles(folder, "*.yaml").Select(f => Path.GetFileNameWithoutExtension(f)).Order(StringComparer.Ordinal).ToList()
+            : [];
+    }
+
+    // What the engine's agent keeps running for each cluster.
+    public static List<Engine.ClusterWant> Wants(string? folder = null) => Names(folder)
+        .Select(name => (name, Definition: Load(name, folder)))
+        .Where(d => d.Definition is not null)
+        .Select(d => new Engine.ClusterWant(d.name, d.Definition!.LoadBalancer, d.Definition.LoadBalancerPorts, d.Definition.Storage == ClusterStorage.Nfs))
+        .ToList();
+
     public static void Remove(string name, string? folder = null)
     {
         folder ??= Folder;

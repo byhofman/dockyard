@@ -8,21 +8,21 @@ should be a separate OS native service providing only the integration part (adap
 
 | Part | Runs as | Does | Never does |
 |---|---|---|---|
-| **Toolbox** | the app the user opens; tray icon | installs, updates and removes components and features, including what needs administrator rights once: DNS routing rules (NRPT, `/etc/resolver`, systemd-resolved) and trusting the CA; settings; shows state | listen on a port, relay traffic, hold an engine alive |
+| **dockyard command**, with the tray and the dashboard | the command, the tray icon and the window the user opens, over `Dockyard.Setup` | installs, updates and removes components and features, including what needs administrator rights once: DNS routing rules (NRPT, `/etc/resolver`, systemd-resolved) and trusting the CA; settings; shows state | listen on a port, relay traffic, hold an engine alive |
 | **dockyard-host** | an OS-native background service per OS: a per-user logon service on Windows (WSL is per user), a LaunchAgent on macOS, a systemd user unit on Linux | only what has to run while the engine does: loopback relays into the engine where the OS cannot reach it, the engine's pipes and socket for the docker CLI, keeping the engine running | installing anything, names, routing decisions, certificates |
 | **Services** | containers in the Dockyard group, pinned by digest | DNS for `*.dockyard.internal` and what external-dns writes; the proxy for container names and cluster ingress; kind's cloud provider; NFS | anything the OS has to be asked for |
 
 dockyard-host is small, has no UI, and its behaviour is a fixed list of OS operations, so it can be reviewed and run with
-the least rights it needs. The Toolbox installs and updates it like any other component.
+the least rights it needs. `dockyard setup` installs and updates it like any other component.
 
 ## Where things are today (0.9.0) and where they go
 
 | Today | Goes to |
 |---|---|
-| `127.77.0.1:53/80/443` relay into the engine, in the Toolbox process (Windows) | dockyard-host |
-| published container ports on Windows' localhost, in the Toolbox process | dockyard-host |
-| the engine's named pipes for docker and the agent API, in the Toolbox process | dockyard-host |
-| the WSL keep-alive (`wsl.exe … dockyard-init`), held by the Toolbox | dockyard-host |
+| `127.77.0.1:53/80/443` relay into the engine, in the installer's process (Windows) | dockyard-host |
+| published container ports on Windows' localhost, in the installer's process | dockyard-host |
+| the engine's named pipes for docker and the agent API, in the installer's process | dockyard-host |
+| the WSL keep-alive (`wsl.exe … dockyard-init`), held by the installer | dockyard-host |
 | DNS for `*.dockyard.internal` and the name proxy with TLS, in the engine agent | `dockyard-dns` (CoreDNS + etcd) and `dockyard-proxy` (Traefik) containers |
 | a cluster's ingress by `<host>.<cluster>.dockyard.internal` (0.9.0, in the agent) | a Traefik route per cluster in `dockyard-proxy`, TLS passed through |
 | Windows bind paths rewritten in the docker API (0.9.0, in the agent) | stays in the engine side, where the docker API passes |
@@ -33,7 +33,7 @@ proxy for `host.docker.internal`, and the iptables rules that bring container tr
 
 ## Steps
 
-Done in 0.9.0: step 1 on Windows. `dockyard-host.exe` (src/Dockyard.Host) keeps the WSL engine running, serves its pipes, relays `127.77.0.1` for container domains and forwards published ports; it starts at logon by its own entry, and the Toolbox only asks it over `dockyard-host-<user>`. The Toolbox carries it and installs it next to itself until it is released on its own. Still to do in step 1: macOS (the VM process and its relays) and Linux.
+Done in 0.9.0: step 1 on Windows. `dockyard-host.exe` (src/Dockyard.Host) keeps the WSL engine running, serves its pipes, relays `127.77.0.1` for container domains and forwards published ports; it starts at logon by its own entry, and Dockyard.Setup only asks it over `dockyard-host-<user>`. The dockyard command carries it and installs it until it is released on its own. Still to do in step 1: macOS (the VM process and its relays) and Linux.
 
 Done in 0.9.0: step 2. The agent runs `dockyard-dns` (CoreDNS 1.13.1) and `dockyard-proxy` (Traefik v3.6), pinned by digest, on the engine's own network, labelled `dockyard.service` so they show in the Dockyard group. It writes their configuration to `/var/lib/docker/dockyard/services`, which they reload by themselves:
 
@@ -47,7 +47,7 @@ Verified on Windows (WSL); the Mac VM and Linux host run through CI.
 Done in 0.9.0 as well:
 
 - **Step 1 on macOS and Linux.**
-  - On the Mac, the VM helper is `dockyard-host`, under a LaunchAgent of its own: launchd restarts it after a failure, and it is never stopped by the Toolbox quitting.
+  - On the Mac, the VM helper is `dockyard-host`, under a LaunchAgent of its own: launchd restarts it after a failure, and it is never stopped by the tray or the dashboard quitting.
   - On Linux, `dockyard-host.service`.
 - **Step 3.**
   - `.internal` replaces `.test`, with no alias.
@@ -61,8 +61,8 @@ Done in 0.9.0 as well:
 Still open: declared domains outside `dockyard.internal` (step 4's approval per domain and separate constrained root). Any container can write to `dockyard-etcd`; it is reachable from containers only, but a container could publish a name under `dockyard.internal`. A name a container already has always wins.
 
 1. **dockyard-host, Windows first.** A `dockyard-host` executable (a component of its own, released as `host/<semver>`)
-   takes over the relays, the pipes and the keep-alive from the Toolbox; the Toolbox talks to it over a local pipe to start
-   and stop engines. Started at logon by dockyard-host's own entry, not by the Toolbox. Then the same for macOS and Linux.
+   takes over the relays, the pipes and the keep-alive from the installer; Dockyard.Setup talks to it over a local pipe to
+   start and stop engines. Started at logon by dockyard-host's own entry, not by the tray. Then the same for macOS and Linux.
 2. **`dockyard-dns` and `dockyard-proxy`.** CoreDNS answering `*.dockyard.internal`, Traefik with a file provider the agent writes from the running containers (name, detected port, HTTPS when on;
    a container's own `traefik.*` labels win). dockyard-host's DNS rule points at `dockyard-dns`, its relay at
    `dockyard-proxy`. Images are published as `byhofman/dockyard-*` on Docker Hub from `services/<semver>` tags when one of

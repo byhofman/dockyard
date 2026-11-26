@@ -2,7 +2,7 @@ using System.IO.Pipes;
 
 namespace Dockyard.Shared;
 
-// How the Toolbox asks dockyard-host for something: a line with the request, a line with the answer, on a pipe only this
+// How Dockyard.Setup asks dockyard-host for something: a line with the request, a line with the answer, on a pipe only this
 // user can open. Requests: status, attach (take on an engine that already runs), start, stop, domains on, domains off.
 static class HostPipe
 {

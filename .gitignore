@@ -6,3 +6,5 @@ obj/
 out/
 dist/
 packaging/winget/out/
+
+.claude/work/

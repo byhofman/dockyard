@@ -6,7 +6,7 @@ namespace Dockyard.Engine;
 
 // The part of Dockyard that lives next to the engine. Not every engine has one: the Windows engine does not,
 // and neither does whatever else a docker context may point at.
-public sealed class AgentClient(DockerEndpoint endpoint)
+public sealed class AgentClient(DockerEndpoint endpoint) : IClusterAgent
 {
     public static AgentClient? For(DockerEndpoint engine)
     {
@@ -52,4 +52,13 @@ public sealed class AgentClient(DockerEndpoint endpoint)
     // Container domains on or off: names under dockyard.internal, the proxy and what clusters publish.
     public Task SetNamesAsync(bool on, CancellationToken ct = default) =>
         Ask(new AgentMessage { Op = "names", On = on }, ct);
+
+    public Task SetClusterWantsAsync(IReadOnlyList<ClusterWant> wants, CancellationToken ct = default) =>
+        Ask(new AgentMessage { Op = "cluster-wants", Wants = [.. wants] }, ct);
+
+    public async Task<ClusterServicesStatus> ClusterStatusAsync(CancellationToken ct = default)
+    {
+        var reply = await Ask(new AgentMessage { Op = "cluster-status" }, ct);
+        return new ClusterServicesStatus(reply.Clusters ?? [], reply.ClusterErrors ?? []);
+    }
 }

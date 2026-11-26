@@ -1,0 +1,266 @@
+using System.Runtime.Versioning;
+using System.Text.RegularExpressions;
+using Dockyard.Hosts;
+using Microsoft.Win32;
+
+namespace Dockyard.Core;
+
+// Runs as the signed-in user: the WSL distro, docker contexts and autostart are per user.
+[SupportedOSPlatform("windows")]
+static partial class UserSetup
+{
+    const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    const string HostRunValue = "Dockyard Host";
+    const string RunOnceKey = @"Software\Microsoft\Windows\CurrentVersion\RunOnce";
+    // Windows 11 22H2; older builds ignore the setting and warn at every WSL start.
+    const int MirroredNetworkingBuild = 22621;
+
+    public static async Task Install(Action<string> log, string? image = null, IReadOnlyCollection<string>? without = null)
+    {
+        var withLinux = without?.Contains(nameof(Component.LinuxEngine)) != true;
+        if (withLinux)
+        {
+            await SetupDistro(log, image);
+            await ApplyGuest(new WslDistro(ProcessRunner.Instance), log);
+        }
+        await CreateContexts(log, without);
+        SetMirroredNetworking(log);
+        if (File.Exists(Paths.CredentialHelper)) await CredentialStore.Adopt(log, "wincred", Paths.CredentialHelper, Paths.CredentialStoreMarker);
+
+        PinTestcontainers(log, TestcontainersFile, withLinux);
+
+        var tray = without?.Contains(nameof(Component.Tray)) != true;
+        using (var key = Registry.CurrentUser.CreateSubKey(RunKey))
+        {
+            foreach (var (name, command) in LogonEntries(tray, host: File.Exists(Paths.HostExe))) key.SetValue(name, command);
+            if (!tray) key.DeleteValue(Paths.AppName, throwOnMissingValue: false);
+        }
+        if (tray) log($"{Paths.AppName} autostarts at logon");
+    }
+
+    static string TestcontainersFile => Path.Combine(Paths.UserProfile, ".testcontainers.properties");
+    static string TestcontainersPin => $"docker.host={Paths.LinuxHost}";
+
+    // Without the Linux engine a pin of Dockyard's own goes, and one the user wrote stays.
+    internal static void PinTestcontainers(Action<string> log, string file, bool withLinux)
+    {
+        if (withLinux)
+        {
+            File.WriteAllText(file, TestcontainersPin + "\n");
+            log("Testcontainers pinned to the Linux engine");
+        }
+        else if (File.Exists(file) && File.ReadAllText(file).Trim() == TestcontainersPin) File.Delete(file);
+    }
+
+    // The tray's entry exists only with the tray; the host keeps the Linux engine running whether it is there or not.
+    public static IReadOnlyList<(string Name, string Command)> LogonEntries(bool tray, bool host)
+    {
+        List<(string, string)> entries = [];
+        if (tray) entries.Add((Paths.AppName, $"\"{Paths.AppExe}\""));
+        if (host) entries.Add((HostRunValue, $"\"{Paths.HostExe}\""));
+        return entries;
+    }
+
+    public static void SetTrayLogon(bool installed)
+    {
+        using var key = Registry.CurrentUser.CreateSubKey(RunKey);
+        if (installed) key.SetValue(Paths.AppName, $"\"{Paths.AppExe}\"");
+        else key.DeleteValue(Paths.AppName, throwOnMissingValue: false);
+    }
+
+    public static async Task ApplyGuest(WslDistro distro, Action<string> log)
+    {
+        await using var bundle = typeof(Paths).Assembly.GetManifestResourceStream(GuestBundle.ResourceName);
+        if (bundle is not null) await distro.ApplyGuest(bundle, log);
+        await distro.WriteFile(WslEngineGate.TokenPath, WslEngineGate.Token(Paths.EngineTokenFile), secret: true);
+        await distro.LinkDrives();
+        await WriteEngineConfig(distro, log);
+    }
+
+    static ProxySettings? HostProxy()
+    {
+        if (HostProxySettings.FromEnvironment(Environment.GetEnvironmentVariable) is { } fromEnvironment) return fromEnvironment;
+        using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Internet Settings");
+        return HostProxySettings.FromWindows(key?.GetValue("ProxyEnable") as int? ?? 0, key?.GetValue("ProxyServer") as string, key?.GetValue("ProxyOverride") as string);
+    }
+
+    // Before every start, because what Windows uses changes with the network it is on.
+    public static async Task WriteEngineConfig(WslDistro distro, Action<string> log)
+    {
+        var proxy = await ReachableProxy(distro, HostProxy(), log);
+        await distro.WriteFile("/etc/docker/daemon.json", EngineConfig.WithDockyard(EngineSettings.Load(EngineSettings.Linux), proxy));
+        await EngineConfig.ApplyClientProxy(Paths.LinuxHost, proxy);
+        if (proxy is { IsEmpty: false }) log("The Linux engine and its containers use this PC's proxy");
+    }
+
+    static async Task<ProxySettings?> ReachableProxy(WslDistro distro, ProxySettings? proxy, Action<string> log)
+    {
+        if (proxy is null) return null;
+        List<int> unreachable = [];
+        foreach (var port in HostProxySettings.LoopbackPorts(proxy))
+            if (!await distro.ReachesHostPort(port)) unreachable.Add(port);
+        if (unreachable.Count == 0) return proxy;
+        log($"This PC's proxy listens on its own loopback (port {string.Join(", ", unreachable)}), out of reach of the Linux engine with WSL's NAT networking, so the engine connects directly. Mirrored networking or a proxy that listens on more than loopback changes that.");
+        return HostProxySettings.WithoutPorts(proxy, unreachable);
+    }
+
+    // The CLI finishes the setup after the restart, and opens the dashboard at Tools when that was chosen.
+    public static void ResumeAfterReboot(bool dashboard, Action<string> log)
+    {
+        using var key = Registry.CurrentUser.CreateSubKey(RunOnceKey);
+        key.SetValue(Paths.AppName, ResumeCommand(dashboard, Updates.LocalAssets));
+        log("Setup carries on by itself after the restart");
+    }
+
+    public static string ResumeCommand(bool dashboard, string? assets) =>
+        $"\"{Paths.DockyardCliExe}\" setup --resume{(dashboard ? " --open-dashboard" : "")}{(assets is null ? "" : $" --assets {Shell.Quote(assets)}")}";
+
+    static void SetMirroredNetworking(Action<string> log)
+    {
+        if (Environment.OSVersion.Version.Build < MirroredNetworkingBuild) return;
+        // Seen on Windows Server 2025: in mirrored mode WSL comes up with no network interfaces, and 127.0.0.1:2375 no longer
+        // reaches the engine from Windows.
+        if (!Hosts.WindowsHost.IsClientSku(Hosts.OsInfo.InstallationType())) return;
+        var existing = File.Exists(Paths.WslConfigFile) ? File.ReadAllText(Paths.WslConfigFile) : null;
+        if (WslConfig.WithMirroredNetworking(existing) is not { } updated) return;
+        File.WriteAllText(Paths.WslConfigFile, updated);
+        log("WSL uses mirrored networking from its next start (~/.wslconfig)");
+    }
+
+    public static async Task Uninstall(Action<string> log, bool removeData = false)
+    {
+        using (var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true))
+        {
+            key?.DeleteValue(Paths.AppName, throwOnMissingValue: false);
+            key?.DeleteValue(HostRunValue, throwOnMissingValue: false);
+        }
+        foreach (var host in System.Diagnostics.Process.GetProcessesByName(Paths.HostProcess))
+            using (host) try { host.Kill(); } catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception) { }
+
+        await CredentialStore.Forget(Paths.CredentialStoreMarker, Paths.CredentialHelper, log);
+        await EngineConfig.ApplyClientProxy(Paths.LinuxHost, null);
+        if (File.Exists(Paths.DockerCli))
+        {
+            await Shell.Run(Paths.DockerCli, "context", "use", "default");
+            await Shell.Run(Paths.DockerCli, "context", "rm", "-f", "linux", "win");
+            log("Removed docker contexts");
+        }
+        PinTestcontainers(log, TestcontainersFile, withLinux: false);
+
+        if (File.Exists(Paths.WslConfigFile) && WslConfig.WithoutDockyardLine(File.ReadAllText(Paths.WslConfigFile)) is { } restored)
+            File.WriteAllText(Paths.WslConfigFile, restored);
+
+        var distro = new WslDistro(ProcessRunner.Instance);
+        if (await distro.Exists())
+        {
+            await distro.StopEngine();
+            if (removeData)
+            {
+                await distro.Unregister();
+                log($"Removed the '{distro.Name}' WSL distro with its Linux images and containers");
+            }
+            else log($"The '{distro.Name}' WSL distro with your Linux images and containers was kept");
+        }
+        if (Directory.Exists(Paths.SettingsDir)) Directory.Delete(Paths.SettingsDir, recursive: true);
+    }
+
+    // --image, then a dockyard-linux-*.tar.gz given with --assets; without either the release asset is downloaded.
+    public static string? FindLocalImage(string? explicitPath)
+    {
+        if (explicitPath is not null) return File.Exists(explicitPath) ? explicitPath : throw new FileNotFoundException("Image not found", explicitPath);
+        return Updates.LocalAsset(Updates.ImageAsset);
+    }
+
+    static async Task SetupDistro(Action<string> log, string? image)
+    {
+        var distro = new WslDistro(ProcessRunner.Instance);
+        if (await distro.Exists())
+        {
+            log($"WSL distro '{distro.Name}' already exists (Docker {await distro.DockerVersion()})");
+            return;
+        }
+
+        var tarball = FindLocalImage(image);
+        string? downloaded = null;
+        if (tarball is null)
+        {
+            log("Downloading the Linux engine image");
+            tarball = downloaded = await Updates.DownloadImage(Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}"));
+        }
+        try
+        {
+            log($"Importing WSL distro '{distro.Name}' into {WslDistro.InstallDir}");
+            await distro.Import(tarball);
+            log($"Linux engine: Docker {await distro.DockerVersion()}");
+        }
+        finally
+        {
+            if (downloaded is not null) Directory.Delete(Path.GetDirectoryName(downloaded)!, recursive: true);
+        }
+    }
+
+    static async Task CreateContexts(Action<string> log, IReadOnlyCollection<string>? without = null)
+    {
+        var withLinux = without?.Contains(nameof(Component.LinuxEngine)) != true;
+        var withWindows = without?.Contains(nameof(Component.Engine)) != true;
+        if (withLinux) await AddContext("linux", Paths.LinuxHost);
+        else await RemoveContext("linux", "win", log);
+        if (withWindows) await AddContext("win", Paths.WindowsHost);
+        else await RemoveContext("win", "linux", log);
+        var current = (await Shell.Check(Paths.DockerCli, "context", "show")).Trim();
+        if (current is not ("linux" or "win")) await Shell.Check(Paths.DockerCli, "context", "use", withLinux ? "linux" : "win");
+        log(withLinux && withWindows ? "Docker contexts: linux (default), win" : $"Docker context: {(withLinux ? "linux" : "win")}");
+    }
+
+    public static async Task AddContext(string name, string host)
+    {
+        var inspect = await Shell.Run(Paths.DockerCli, "context", "inspect", name, "--format", "{{.Endpoints.docker.Host}}");
+        if (inspect.ExitCode == 0 && inspect.Output.Trim() == host) return;
+        string[] args = ["context", inspect.ExitCode == 0 ? "update" : "create", name, "--docker", $"host={host}"];
+        // docker replaces meta.json by renaming a new one over it, which Windows refuses while another docker process, such
+        // as the dashboard, has it open.
+        for (var attempt = 1; attempt < 4; attempt++)
+        {
+            var r = await Shell.Run(Paths.DockerCli, args);
+            if (r.ExitCode == 0) return;
+            if (!(r.Error + r.Output).Contains("Access is denied", StringComparison.OrdinalIgnoreCase)) break;
+            await Task.Delay(TimeSpan.FromSeconds(attempt));
+        }
+        await Shell.Check(Paths.DockerCli, args);
+    }
+
+    // The docker command must not be left pointing at an engine that is gone.
+    public static async Task RemoveContext(string name, string fallback, Action<string> log)
+    {
+        if (!File.Exists(Paths.DockerCli)) return;
+        if ((await Shell.Run(Paths.DockerCli, "context", "show")).Output.Trim() == name)
+        {
+            await Shell.Run(Paths.DockerCli, "context", "use", fallback);
+            log($"The docker context is now {fallback}");
+        }
+        await Shell.Run(Paths.DockerCli, "context", "rm", "-f", name);
+    }
+
+    public static async Task EnableLinuxEngine(Action<string> log)
+    {
+        await SetupDistro(log, null);
+        await ApplyGuest(new WslDistro(ProcessRunner.Instance), log);
+        await AddContext("linux", Paths.LinuxHost);
+    }
+
+    public static async Task DisableLinuxEngine(Action<string> log, bool removeData)
+    {
+        await RemoveContext("linux", "win", log);
+        var distro = new WslDistro(ProcessRunner.Instance);
+        if (!await distro.Exists()) return;
+        if (removeData)
+        {
+            await distro.Unregister();
+            log($"Removed the '{distro.Name}' WSL distro with its Linux images and containers");
+        }
+        else log($"The '{distro.Name}' WSL distro is kept with your Linux images and containers; adding the Linux engine back finds them");
+    }
+
+    [GeneratedRegex(@"^dockyard-linux-\d+\.\d+\.\d+-x86_64\.tar\.gz$")]
+    private static partial Regex ImageName();
+}

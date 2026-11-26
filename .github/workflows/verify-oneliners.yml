@@ -42,7 +42,7 @@ jobs:
         run: sh scripts/published-e2e.sh
       - name: The one-liner, on a Windows runner with WSL 2, starting from v0.1.0
         shell: pwsh
-        run: ./tests/e2e/wizard-windows.ps1 -OneLiner "$env:RAW/install.ps1"
+        run: ./tests/e2e/setup-windows.ps1 -OneLiner "$env:RAW/install.ps1"
 
   linux:
     runs-on: ubuntu-latest
@@ -53,7 +53,7 @@ jobs:
       - name: The end-to-end tests of the published release, which is what the one-liner installs
         run: sh scripts/published-e2e.sh
       - name: The one-liner, with systemd and sudo
-        run: ONELINER="$RAW/install.sh" sh tests/e2e/wizard-linux.sh
+        run: ONELINER="$RAW/install.sh" sh tests/e2e/setup-linux.sh
 
       - name: The one-liner, without a display, on other distributions
         run: |
@@ -62,6 +62,6 @@ jobs:
             echo "::group::$image"
             sudo docker run --rm -e DOCKYARD_GITHUB_TOKEN -e ONELINER="$RAW/install.sh" -v "$PWD/tests/e2e:/e2e:ro" "$image" sh -c '
               command -v curl >/dev/null || { command -v apt-get >/dev/null && apt-get update -qq && apt-get install -y -qq curl ca-certificates >/dev/null; }
-              sh /e2e/wizard-linux.sh --container'
+              sh /e2e/setup-linux.sh --container'
             echo "::endgroup::"
           done

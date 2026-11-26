@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Dockyard.Kind;
+using Dockyard.Setup;
 
 namespace Dockyard.Cli;
 
@@ -10,7 +11,7 @@ sealed class Clusters(Action<string> log)
     // The docker context of the Linux engine Dockyard set up: its own on Windows and macOS, the system's on Linux.
     public static string Context => OperatingSystem.IsWindows() ? "linux" : OperatingSystem.IsMacOS() ? "dockyard" : "default";
 
-    static string KindExe => CliLocator.Locate("kind") ?? throw new InvalidOperationException("kind is not installed: add it in the Dockyard Toolbox, or run dockyard --silent --with kind");
+    static string KindExe => CliLocator.Locate("kind") ?? throw new InvalidOperationException("kind is not installed: dockyard component add kind");
 
     static KindActions Actions() => new(KindExe, Context, HostKubeconfig.FromEnvironment());
 
@@ -65,17 +66,27 @@ sealed class Clusters(Action<string> log)
         definition ??= KindCli.Config(workers, storage == ClusterStorage.HostFolder);
         if (ClusterDefinitions.Problem(definition) is { } problem) throw new InvalidOperationException(problem);
         var helm = addons.Count > 0 || storage == ClusterStorage.Nfs
-            ? CliLocator.Locate("helm") ?? throw new InvalidOperationException("The add-ons and NFS storage go in with Helm, which is not installed: dockyard --silent --with helm adds it")
+            ? CliLocator.Locate("helm") ?? throw new InvalidOperationException("The add-ons and NFS storage go in with Helm, which is not installed: dockyard component add helm")
             : null;
         var image = KindImages.Choose(kubernetes);
         ClusterDefinitions.Save(name, new ClusterDefinition(definition, storage, addons.Select(a => a.Release).ToList(), loadBalancer, ports, image.Version));
+        await PushWants();
         var file = await Actions().Create(name, log, storage: storage, addons: addons, helm: helm, definition: definition, publishNames: loadBalancer, clusterCa: ClusterCa, image: image);
-        if (loadBalancer) await CloudProvider.EnsureRunning(Context.Length > 0 ? Context : "default", log);
         log($"kubectl now uses {KindKubeconfig.Key(name)}, from {file}");
     }
 
-    static Task<string> ClusterCa(string cluster) =>
-        CertManager.FromToolbox(Toolbox.Locate() ?? throw new InvalidOperationException("The Dockyard Toolbox is not installed next to this command"), cluster);
+    // The engine's agent keeps the cloud provider, the forwarder and dockyard-nfs running from the definitions.
+    static async Task PushWants()
+    {
+        using var setup = DockyardSetup.ForThisMachine();
+        await setup.PushClusterWants();
+    }
+
+    static async Task<string> ClusterCa(string cluster)
+    {
+        using var setup = DockyardSetup.ForThisMachine();
+        return await setup.ClusterCa(cluster);
+    }
 
     public async Task Recreate(string name, string? definition)
     {
@@ -106,9 +117,9 @@ sealed class Clusters(Action<string> log)
         await DeleteWithProxies(actions, name);
         var remade = wanted with { Addons = helm is null ? [] : wanted.Addons };
         ClusterDefinitions.Save(name, remade);
+        await PushWants();
         await actions.Create(name, log, storage: remade.Storage, addons: remade.AddonList, helm: helm, definition: remade.Yaml, publishNames: remade.LoadBalancer,
             clusterCa: ClusterCa, image: KindImages.For(remade.KubernetesVersion));
-        if (remade.LoadBalancer) await CloudProvider.EnsureRunning(Context.Length > 0 ? Context : "default", log);
     }
 
     // A running cluster's add-ons and NFS storage, as the dashboard's Add-ons does; the rest is its nodes' and needs recreate.
@@ -116,7 +127,7 @@ sealed class Clusters(Action<string> log)
     {
         await RequireLinuxEngine();
         var saved = ClusterDefinitions.Load(name) ?? throw new InvalidOperationException($"Dockyard has no definition of {name}: the dashboard puts one together from its nodes, under Definition");
-        var helm = CliLocator.Locate("helm") ?? throw new InvalidOperationException("The add-ons go in with Helm, which is not installed: dockyard --silent --with helm adds it");
+        var helm = CliLocator.Locate("helm") ?? throw new InvalidOperationException("The add-ons go in with Helm, which is not installed: dockyard component add helm");
         var wanted = addons is null ? saved.AddonList : Addons(addons);
         var wantedStorage = storage is null ? saved.Storage : Storage(storage);
         if (wantedStorage != saved.Storage && (wantedStorage == ClusterStorage.HostFolder || saved.Storage == ClusterStorage.HostFolder))
@@ -124,6 +135,7 @@ sealed class Clusters(Action<string> log)
         bool? nfs = wantedStorage == saved.Storage ? null : wantedStorage == ClusterStorage.Nfs;
         await Actions().EditAddons(name, saved.AddonList, wanted, helm, ClusterCa, log, nfs);
         ClusterDefinitions.Save(name, saved with { Addons = wanted.Select(a => a.Release).ToList(), Storage = wantedStorage });
+        await PushWants();
         log($"{name} is changed");
     }
 
@@ -138,8 +150,7 @@ sealed class Clusters(Action<string> log)
         await RequireLinuxEngine();
         await DeleteWithProxies(Actions(), name);
         ClusterDefinitions.Remove(name);
-        var left = await List();
-        await NfsStorage.RemoveServerIfUnused(Context, left.Select(c => ClusterDefinitions.Load(c.Name)));
+        await PushWants();
         log($"Deleted {name}");
     }
 

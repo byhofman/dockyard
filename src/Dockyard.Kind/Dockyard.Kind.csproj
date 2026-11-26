@@ -11,12 +11,16 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="Dockyard" />
+    <InternalsVisibleTo Include="Dockyard.Setup" />
+    <InternalsVisibleTo Include="Dockyard.Setup.Tests" />
     <InternalsVisibleTo Include="dockyard-cli" />
     <InternalsVisibleTo Include="Dockyard.Cli.Tests" />
     <InternalsVisibleTo Include="Dockyard.Dashboard" />
-    <InternalsVisibleTo Include="Dockyard.Tests" />
     <InternalsVisibleTo Include="Dockyard.Dashboard.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Dockyard.Engine\Dockyard.Engine.csproj" />
   </ItemGroup>
 
   <ItemGroup>

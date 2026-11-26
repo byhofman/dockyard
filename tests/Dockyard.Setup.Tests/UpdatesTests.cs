@@ -1,0 +1,170 @@
+using System.Net;
+using System.Security.Cryptography;
+using System.Text;
+using Dockyard.Core;
+using Dockyard.Hosts;
+
+namespace Dockyard.Setup.Tests;
+
+// Classes that swap Updates.Http or Updates.InstalledCli, which are static, run alone: a facade made by a test running
+// next to them would point InstalledCli at its own host.
+[CollectionDefinition(nameof(SharedHttp), DisableParallelization = true)]
+public sealed class SharedHttp;
+
+[Collection(nameof(SharedHttp))]
+public sealed class UpdatesTests : IDisposable
+{
+    const string Base = "https://github.com/byhofman/dockyard/releases";
+    readonly HttpClient original = Updates.Http;
+    readonly FakeGitHub github = new();
+    readonly string dir = Directory.CreateTempSubdirectory().FullName;
+
+    public UpdatesTests() => Updates.Http = new HttpClient(github);
+
+    public void Dispose()
+    {
+        Updates.Http = original;
+        Directory.Delete(dir, recursive: true);
+    }
+
+    sealed class FakeGitHub : HttpMessageHandler
+    {
+        public Dictionary<string, Func<HttpResponseMessage>> Routes { get; } = [];
+        public List<string> Requested { get; } = [];
+        public HttpStatusCode? Refuse { get; set; }
+
+        public void Serve(string url, string body) => Routes[url] = () => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) };
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var url = request.RequestUri!.ToString();
+            Requested.Add(url);
+            if (Refuse is { } status) return Task.FromResult(new HttpResponseMessage(status));
+            return Task.FromResult(Routes.TryGetValue(url, out var response) ? response() : new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
+    }
+
+    static string Sum(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
+
+    void ServeRelease(string tag, string asset, string content, string? sums = null)
+    {
+        github.Serve($"{Base}/download/{tag}/SHA256SUMS", sums ?? $"{Sum(content)}  {asset}\n");
+        github.Serve($"{Base}/download/{tag}/{asset}", content);
+    }
+
+    [Fact]
+    public async Task A_component_s_latest_release_comes_from_the_index_and_its_checksums_without_the_api()
+    {
+        github.Serve($"{Base}/download/index/components.json", """{ "cli": { "version": "1.2.3", "tag": "cli/1.2.3" }, "tray": { "version": "1.1.0", "tag": "tray/1.1.0" } }""");
+        ServeRelease("cli/1.2.3", "dockyard_1.2.3_amd64.deb", "app");
+        ServeRelease("tray/1.1.0", "Dockyard.Tray.zip", "tray");
+
+        var release = await Updates.LatestComponentAsset(Updates.CliComponent, LinuxLayout.AppPackage("apt"));
+        var tray = await Updates.LatestComponentAsset(Updates.TrayComponent, Updates.TrayZipPattern);
+
+        Assert.Equal(new Version(1, 2, 3), release!.Version);
+        Assert.Equal("cli/1.2.3", release.Tag);
+        Assert.Equal($"{Base}/download/cli/1.2.3/dockyard_1.2.3_amd64.deb", release.DownloadUrl);
+        Assert.Equal("tray/1.1.0", tray!.Tag);
+        Assert.DoesNotContain(github.Requested, url => url.Contains("api.github.com"));
+    }
+
+    [Theory]
+    [InlineData("Dockyard.Tray.zip", true)]
+    [InlineData("dockyard-tray-windows-x64.exe", false)]
+    [InlineData("Dockyard.Dashboard.zip", false)]
+    [InlineData("dockyard-windows-x64.exe", false)]
+    public void The_Windows_tray_is_found_by_its_own_asset_name(string asset, bool matches) =>
+        Assert.Equal(matches, System.Text.RegularExpressions.Regex.IsMatch(asset, Updates.TrayZipPattern));
+
+    [Fact]
+    public async Task Without_a_cli_release_in_the_index_nothing_is_downloaded()
+    {
+        github.Serve($"{Base}/download/index/components.json", """{ "tray": { "version": "1.1.0", "tag": "tray/1.1.0" } }""");
+        Updates.InstalledCli = () => Task.FromResult<Version?>(null);
+
+        var e = await Assert.ThrowsAsync<InvalidOperationException>(() => Updates.DownloadReleaseAsset(Updates.ImageAsset, dir, isPattern: true, tag: null));
+
+        Assert.Contains("No Dockyard release found", e.Message);
+    }
+
+    [Fact]
+    public async Task A_download_finds_the_asset_by_pattern_and_verifies_it()
+    {
+        ServeRelease("cli/1.2.3", "dockyard-linux-1.2.3-x86_64.tar.gz", "image");
+
+        var file = await Updates.DownloadReleaseAsset(Updates.ImageAsset, dir, isPattern: true, tag: "cli/1.2.3");
+
+        Assert.Equal("image", File.ReadAllText(file));
+        Assert.DoesNotContain(github.Requested, url => url.Contains("api.github.com"));
+    }
+
+    [Fact]
+    public async Task A_download_that_does_not_match_its_checksum_is_removed()
+    {
+        ServeRelease("cli/1.2.3", "dockyard-windows-x64.exe", "tampered", sums: $"{Sum("original")}  dockyard-windows-x64.exe\n");
+
+        var e = await Assert.ThrowsAsync<InvalidOperationException>(() => Updates.DownloadReleaseAsset("dockyard-windows-x64.exe", dir, tag: "cli/1.2.3"));
+
+        Assert.Contains("Checksum mismatch", e.Message);
+        Assert.Empty(Directory.GetFiles(dir));
+    }
+
+    [Fact]
+    public async Task An_asset_the_checksums_do_not_list_is_named_in_the_error()
+    {
+        ServeRelease("cli/1.2.3", "dockyard-windows-x64.exe", "app");
+
+        var e = await Assert.ThrowsAsync<InvalidOperationException>(() => Updates.DownloadReleaseAsset("other.zip", dir, tag: "cli/1.2.3"));
+
+        Assert.Equal("Release cli/1.2.3 has no other.zip", e.Message);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    public async Task A_refused_request_says_so_in_words_and_counts_as_rate_limited(HttpStatusCode status)
+    {
+        github.Refuse = status;
+
+        var e = await Assert.ThrowsAsync<HttpRequestException>(() => Updates.LatestComponentAsset(Updates.CliComponent, Updates.CliAssetPattern));
+
+        Assert.True(Updates.IsRateLimited(e));
+        Assert.Contains("github.com is refusing or limiting requests", e.Message);
+        Assert.DoesNotContain("net_http", e.Message);
+    }
+
+    [Fact]
+    public async Task Any_other_failure_names_what_could_not_be_fetched()
+    {
+        var e = await Assert.ThrowsAsync<HttpRequestException>(() => Updates.DownloadReleaseAsset("dockyard-windows-x64.exe", dir, tag: "cli/9.9.9"));
+
+        Assert.False(Updates.IsRateLimited(e));
+        Assert.Equal($"Could not get {Base}/download/cli/9.9.9/SHA256SUMS: github.com answered 404 (NotFound).", e.Message);
+    }
+
+    [Fact]
+    public void Nothing_local_is_used_unless_a_folder_was_named()
+    {
+        File.WriteAllText(Path.Combine(dir, "dockyard-linux-9.9.9-x86_64.tar.gz"), "planted");
+        Updates.LocalAssets = null;
+
+        Assert.Null(Updates.LocalAsset(Updates.ImageAsset));
+    }
+
+    [Fact]
+    public void A_named_folder_gives_its_newest_matching_file()
+    {
+        File.WriteAllText(Path.Combine(dir, "dockyard-linux-0.4.0-x86_64.tar.gz"), "");
+        File.WriteAllText(Path.Combine(dir, "dockyard-linux-0.10.0-x86_64.tar.gz"), "");
+        Updates.LocalAssets = dir;
+        try
+        {
+            Assert.Equal(Path.Combine(dir, "dockyard-linux-0.10.0-x86_64.tar.gz"), Updates.LocalAsset(Updates.ImageAsset));
+        }
+        finally
+        {
+            Updates.LocalAssets = null;
+        }
+    }
+}

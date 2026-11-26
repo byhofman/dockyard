@@ -1,0 +1,203 @@
+using System.Diagnostics;
+using Dockyard.Core;
+using Dockyard.Hosts;
+
+namespace Dockyard.Setup.Tests;
+
+sealed class FakeRunner : ICommandRunner
+{
+    readonly Queue<ShellResult> results = new();
+
+    public List<string> Commands { get; } = [];
+
+    public FakeRunner Returns(string output, int exitCode = 0)
+    {
+        results.Enqueue(new ShellResult(exitCode, output, ""));
+        return this;
+    }
+
+    public Task<ShellResult> Run(string file, params string[] args)
+    {
+        Commands.Add(Describe(file, args));
+        return Task.FromResult(results.Count > 0 ? results.Dequeue() : new ShellResult(0, "", ""));
+    }
+
+    public Process Spawn(string file, params string[] args)
+    {
+        Commands.Add(Describe(file, args));
+        throw new NotSupportedException("Spawn is not faked");
+    }
+
+    static string Describe(string file, string[] args) => string.Join(' ', [file, .. args]);
+}
+
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
+public sealed class WindowsHostTests
+{
+    [Theory]
+    [InlineData("default via 172.20.0.1 dev eth0 proto kernel", "172.20.0.1")]
+    [InlineData("", null)]
+    public void The_way_to_windows_with_nat_is_the_gateway(string route, string? expected) =>
+        Assert.Equal(expected, WslDistro.DefaultGateway(route));
+
+    [Fact]
+    public void Keepalive_runs_dockyard_init_as_root()
+    {
+        var distro = new WslDistro(new FakeRunner());
+        Assert.Equal(["-d", "dockyard", "-u", "root", "--", "/usr/local/sbin/dockyard-init"], distro.KeepAliveArgs());
+        Assert.Equal(["-d", "dockyard", "-u", "root", "--", "env", "DOCKYARD_TCP=127.0.0.1:23750", "/usr/local/sbin/dockyard-init"],
+            distro.KeepAliveArgs("127.0.0.1:23750"));
+    }
+
+    [Fact]
+    public async Task Exists_reads_wsl_list_with_utf16_noise()
+    {
+        var runner = new FakeRunner().Returns("Ubuntu-24.04\0\r\n\0dockyard\0\r\n");
+        Assert.True(await new WslDistro(runner).Exists());
+        Assert.Equal("wsl.exe -l -q", runner.Commands[0]);
+    }
+
+    [Fact]
+    public async Task Import_uses_wsl2_and_the_install_directory()
+    {
+        var runner = new FakeRunner();
+        var dir = Path.Combine(Path.GetTempPath(), $"dy-{Guid.NewGuid():N}");
+        await new WslDistro(runner).Import(@"C:\Downloads\dockyard-linux-1.0.0-x86_64.tar.gz", dir);
+        Assert.Equal($@"wsl.exe --import dockyard {dir} C:\Downloads\dockyard-linux-1.0.0-x86_64.tar.gz --version 2", runner.Commands[0]);
+        Directory.Delete(dir);
+    }
+
+    [Fact]
+    public async Task Docker_version_comes_from_dockyard_release()
+    {
+        var runner = new FakeRunner().Returns("VERSION=1.2.0\nDOCKER_VERSION=29.9.2\n");
+        Assert.Equal(new Version(29, 9, 2), await new WslDistro(runner).DockerVersion());
+        Assert.Equal("wsl.exe -d dockyard -u root -- cat /etc/dockyard-release", runner.Commands[0]);
+    }
+
+    [Fact]
+    public async Task Docker_version_is_null_when_distro_is_missing()
+    {
+        var runner = new FakeRunner().Returns("", exitCode: 1);
+        Assert.Null(await new WslDistro(runner).DockerVersion());
+    }
+
+    [Fact]
+    public async Task Stop_sends_sigterm_and_waits_for_dockerd()
+    {
+        var runner = new FakeRunner();
+        await new WslDistro(runner).StopEngine();
+        Assert.StartsWith("wsl.exe -d dockyard -u root -- sh -c pid=$(pidof dockerd) || exit 0; kill -TERM $pid;", runner.Commands[0]);
+    }
+
+    [Fact]
+    public async Task Update_translates_windows_paths_and_runs_dockyard_update()
+    {
+        var runner = new FakeRunner()
+            .Returns("/mnt/c/Temp/x/docker.tgz\n")
+            .Returns("/mnt/c/Temp/x/plugins\n")
+            .Returns("Docker 29.9.3\n");
+
+        var output = await new WslDistro(runner).Update(@"C:\Temp\x\docker.tgz", @"C:\Temp\x\plugins");
+
+        Assert.Equal("Docker 29.9.3", output);
+        Assert.Equal("wsl.exe -d dockyard -u root -- wslpath -a C:/Temp/x/docker.tgz", runner.Commands[0]);
+        Assert.Equal("wsl.exe -d dockyard -u root -- /usr/local/sbin/dockyard-update /mnt/c/Temp/x/docker.tgz /mnt/c/Temp/x/plugins", runner.Commands[2]);
+    }
+
+    [Fact]
+    public void Without_the_tray_no_logon_entry_is_written()
+    {
+        Assert.Equal([Paths.AppName, "Dockyard Host"], UserSetup.LogonEntries(tray: true, host: true).Select(e => e.Name));
+        Assert.Equal($"\"{Paths.AppExe}\"", UserSetup.LogonEntries(tray: true, host: false).Single().Command);
+        Assert.Equal("dockyard-tray.exe", Path.GetFileName(Paths.AppExe));
+        Assert.Equal(["Dockyard Host"], UserSetup.LogonEntries(tray: false, host: true).Select(e => e.Name));
+        Assert.Empty(UserSetup.LogonEntries(tray: false, host: false));
+    }
+
+    [Fact]
+    public void A_restart_resumes_with_the_CLI_and_opens_the_dashboard_only_when_chosen()
+    {
+        var cli = $"\"{Paths.DockyardCliExe}\"";
+        Assert.Equal($"{cli} setup --resume", UserSetup.ResumeCommand(dashboard: false, assets: null));
+        Assert.Equal($"{cli} setup --resume --open-dashboard", UserSetup.ResumeCommand(dashboard: true, assets: null));
+        Assert.Equal($"{cli} setup --resume --open-dashboard --assets \"D:\\my files\"", UserSetup.ResumeCommand(dashboard: true, assets: @"D:\my files"));
+    }
+
+    [Fact]
+    public void A_CLI_without_the_finished_mark_is_not_an_install_yet()
+    {
+        Assert.NotEqual(Paths.DockyardCliExe, Paths.InstalledMarker);
+        Assert.False(WindowsHost.IsInstalledWhere(path => path == Paths.DockyardCliExe));
+        Assert.True(WindowsHost.IsInstalledWhere(path => path == Paths.InstalledMarker));
+
+        var marker = Path.Combine(Directory.CreateTempSubdirectory().FullName, "app", "installed");
+        MachineSetup.MarkInstalled(marker);
+        Assert.True(File.Exists(marker));
+        Directory.Delete(Path.GetDirectoryName(Path.GetDirectoryName(marker))!, recursive: true);
+    }
+
+    [Fact]
+    public void Uninstall_removes_the_CLI_last()
+    {
+        string[] files = [Paths.DockyardCliExe, Paths.AppExe, Paths.HostExe, Paths.DashboardExe, Path.Combine(Paths.AppDir, "bin", "other.dll")];
+        var order = MachineSetup.RemovalOrder(files).ToList();
+        Assert.Equal(Paths.DockyardCliExe, order[^1]);
+        Assert.Equal(files.Length, order.Count);
+        Assert.Equal(files.Where(f => f != Paths.DockyardCliExe), order.Take(files.Length - 1));
+    }
+
+    [Fact]
+    public async Task On_a_server_the_Windows_engine_alone_is_the_default_and_WSL_is_not_touched()
+    {
+        var catalog = WindowsHost.CatalogFor(desktop: false, server: true);
+        Assert.Equal(["LinuxEngine", "Tray", "Dashboard"], catalog.Where(c => !c.Default).Select(c => c.Id));
+        Assert.All(WindowsHost.CatalogFor(desktop: true, server: false), c => Assert.True(c.Default));
+
+        using var settings = new TempSettings();
+        var host = new FakeHost { Components = catalog };
+        var request = new SetupRequest([], [], null, false, false, Silent: true, Resume: false) { Start = false };
+        Assert.Equal(DockyardSetup.Ok, await Facade.For(host, settings).Setup(request, new ProgressLines(), CancellationToken.None));
+
+        // Without the Linux engine, MachineSetup runs no `wsl --install` and removes the container domains' NRPT rule, and
+        // UserSetup sets up no distro.
+        var installed = host.Requests.Single();
+        Assert.Contains("LinuxEngine", installed.Without);
+        Assert.DoesNotContain("Engine", installed.Without);
+        Assert.DoesNotContain("DockerCli", installed.Without);
+        Assert.DoesNotContain("DockyardCli", installed.Without);
+        Assert.False(installed.Dashboard);
+        Assert.False(installed.Tray);
+    }
+
+    [Theory]
+    [InlineData("Client", false)]
+    [InlineData("Server", true)]
+    [InlineData("Server Core", true)]
+    [InlineData(null, false)]
+    public void Server_and_Server_Core_are_servers(string? installationType, bool server) =>
+        Assert.Equal(server, OsInfo.IsServerSku(installationType));
+
+    [Fact]
+    public void Testcontainers_is_pinned_to_the_Linux_engine_only_where_there_is_one()
+    {
+        var dir = Directory.CreateTempSubdirectory("dockyard-tc-").FullName;
+        try
+        {
+            var file = Path.Combine(dir, ".testcontainers.properties");
+            UserSetup.PinTestcontainers(_ => { }, file, withLinux: false);
+            Assert.False(File.Exists(file));
+
+            UserSetup.PinTestcontainers(_ => { }, file, withLinux: true);
+            Assert.Equal($"docker.host={Paths.LinuxHost}\n", File.ReadAllText(file));
+
+            UserSetup.PinTestcontainers(_ => { }, file, withLinux: false);
+            Assert.False(File.Exists(file));
+
+            File.WriteAllText(file, "docker.host=tcp://elsewhere:2375\n");
+            UserSetup.PinTestcontainers(_ => { }, file, withLinux: false);
+            Assert.True(File.Exists(file));
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+}

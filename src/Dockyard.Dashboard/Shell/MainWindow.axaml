@@ -5,6 +5,7 @@
         xmlns:res="using:Dockyard.Dashboard.Features.Resources"
         xmlns:clu="using:Dockyard.Dashboard.Features.Clusters"
         xmlns:bld="using:Dockyard.Dashboard.Features.Builds"
+        xmlns:setup="using:Dockyard.Dashboard.Features.Setup"
         xmlns:ctl="using:Dockyard.Shared"
         xmlns:dctl="using:Dockyard.Dashboard.Controls"
         x:Class="Dockyard.Dashboard.Shell.MainWindow"
@@ -62,6 +63,15 @@
     </DataTemplate>
     <DataTemplate DataType="res:DiskViewModel">
       <res:DiskView />
+    </DataTemplate>
+    <DataTemplate DataType="setup:ToolsViewModel">
+      <setup:ToolsView />
+    </DataTemplate>
+    <DataTemplate DataType="setup:SettingsViewModel">
+      <setup:SettingsView />
+    </DataTemplate>
+    <DataTemplate DataType="setup:SetupViewModel">
+      <setup:SetupView />
     </DataTemplate>
   </Window.DataTemplates>
 
@@ -123,15 +133,16 @@
 
   <Panel>
     <DockPanel>
-      <Border DockPanel.Dock="Top" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="16,10">
-        <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
-          <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+      <Border x:Name="TitleRow" DockPanel.Dock="Top" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1"
+              Padding="16,0" Height="{x:Static shell:WindowChrome.RowHeight}">
+        <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" VerticalAlignment="Center">
+          <StackPanel x:Name="Logo" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
             <Image Source="avares://Dockyard.Dashboard/Assets/dockyard.png" Width="26" Height="26" />
             <TextBlock Classes="h1" Text="Dockyard" VerticalAlignment="Center" />
           </StackPanel>
 
           <TextBox x:Name="SearchBox" Grid.Column="1" Margin="40,0,16,0" MaxWidth="380" HorizontalAlignment="Stretch"
-                   PlaceholderText="{Binding SearchHint}" Text="{Binding Search}" VerticalAlignment="Center" >
+                   PlaceholderText="{Binding SearchHint}" Text="{Binding Search}" VerticalAlignment="Center" IsVisible="{Binding !ShowsSetup}">
             <TextBox.InnerLeftContent>
               <PathIcon Data="{StaticResource IconSearch}" Margin="10,0,0,0" Foreground="{DynamicResource Muted}" />
             </TextBox.InnerLeftContent>
@@ -175,11 +186,11 @@
             </Border>
           </Popup>
 
-          <Border Grid.Column="2" Classes="pill warn" Margin="0,0,12,0" IsVisible="{Binding Session.IsReconnecting}">
+          <Border x:Name="Reconnecting" Grid.Column="2" Classes="pill warn" Margin="0,0,12,0" IsVisible="{Binding Session.IsReconnecting}">
             <TextBlock Text="Reconnecting…" />
           </Border>
 
-          <Border Grid.Column="3" IsVisible="{Binding HasEngineSwitch}" Background="{DynamicResource Bg}" BorderBrush="{DynamicResource Line}"
+          <Border x:Name="EngineSwitchBar" Grid.Column="3" IsVisible="{Binding HasEngineSwitch}" Background="{DynamicResource Bg}" BorderBrush="{DynamicResource Line}"
                   BorderThickness="1" CornerRadius="7" Padding="3" VerticalAlignment="Center" Margin="0,0,8,0">
             <StackPanel Orientation="Horizontal" Spacing="2">
               <Button Classes="segment" Classes.selected="{Binding IsLinuxActive}" Content="Linux" Command="{Binding SwitchLinuxCommand}"
@@ -189,7 +200,7 @@
             </StackPanel>
           </Border>
 
-          <Button Grid.Column="4" Classes="iconbtn" Command="{Binding SettingsCommand}" ToolTip.Tip="Engines, updates and settings">
+          <Button x:Name="Gear" Grid.Column="4" Classes="iconbtn" Command="{Binding SettingsCommand}" ToolTip.Tip="Engines, updates and settings" IsVisible="{Binding !ShowsSetup}">
             <PathIcon Data="{StaticResource IconSettings}" Width="18" Height="18" />
           </Button>
         </Grid>
@@ -279,15 +290,11 @@
         </DockPanel>
       </Border>
 
-      <Border DockPanel.Dock="Top" Background="{DynamicResource WarnBg}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="16,6"
-              IsVisible="{Binding Tools.HasHint}">
-        <Grid ColumnDefinitions="*,Auto">
-          <TextBlock Text="{Binding Tools.Hint}" Foreground="{DynamicResource Warn}" TextWrapping="Wrap" VerticalAlignment="Center" />
-          <Button Grid.Column="1" Classes="link" Content="Open the Toolbox" Command="{Binding SettingsCommand}" Margin="12,0,0,0" />
-        </Grid>
-      </Border>
+      <dctl:ToolNotice DockPanel.Dock="Top" Classes="bar" Text="{Binding Tools.Hint}" Command="{Binding OpenToolsCommand}" IsVisible="{Binding Tools.HasHint}" />
 
-      <Grid ColumnDefinitions="170,*">
+      <Panel>
+      <ContentControl Content="{Binding Setup}" IsVisible="{Binding ShowsSetup}" />
+      <Grid ColumnDefinitions="170,*" IsVisible="{Binding !ShowsSetup}">
         <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0">
           <ListBox Classes="sidebar" Margin="0,10" ItemsSource="{Binding Sections}" SelectedItem="{Binding CurrentSection}">
             <!-- Otherwise an item is named after the record's ToString, so screen readers and UI Automation never find "Clusters". -->
@@ -308,6 +315,7 @@
         </Border>
         <ContentControl Grid.Column="1" Content="{Binding CurrentSection.Content}" />
       </Grid>
+      </Panel>
     </DockPanel>
 
     <ItemsControl ItemsSource="{Binding Toasts}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="16" MaxWidth="420">

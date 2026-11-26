@@ -10,7 +10,7 @@ static class Program
 
     static async Task<int> Main(string[] args)
     {
-        // One per user: the pipe names are this user's, and several can be started at once (logon, the Toolbox, setup).
+        // One per user: the pipe names are this user's, and several can be started at once (logon, the tray, setup).
         using var single = new Mutex(initiallyOwned: true, $@"Local\dockyard-host-{Environment.UserName}", out var first);
         if (!first) return 0;
         using var host = new WslEngineHost(Log);

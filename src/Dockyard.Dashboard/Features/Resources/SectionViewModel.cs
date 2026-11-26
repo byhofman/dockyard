@@ -31,6 +31,7 @@ abstract class SectionViewModel : Observable, ISearchable
             foreach (var item in items) target.Add(item);
         }
         finally { Rebuilding = false; }
+        Raise("Summary");
     }
 
     public string? Busy { get => busy; private set { if (Set(ref busy, value)) Raise(nameof(IsBusy)); } }
@@ -99,10 +100,13 @@ abstract class SelectableSection<TRow> : SectionViewModel, ISearchable where TRo
     protected SelectableSection(ShellViewModel shell, EngineSession session) : base(shell, session)
     {
         SelectedItems.CollectionChanged += (_, _) => { if (!Rebuilding && !syncing) OnPicked(); };
+        Rows.CollectionChanged += (_, _) => { if (!Rebuilding) Raise(nameof(Summary)); };
         ClearSelectionCommand = new Command(() => { Selected = null; return Task.CompletedTask; });
     }
 
     public ObservableCollection<TRow> Rows { get; } = [];
+    // The line under the section's title: how many there are, whatever the search shows.
+    public virtual string Summary => "";
     public ObservableCollection<object> SelectedItems { get; } = [];
     public Command ClearSelectionCommand { get; }
     public IReadOnlyList<TRow> Picked => SelectedItems.OfType<TRow>().ToList();

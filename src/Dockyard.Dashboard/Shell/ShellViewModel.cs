@@ -21,10 +21,10 @@ sealed class ShellViewModel : Observable
     bool isSearchOpen;
     int hitIndex = -1;
     Dialog? dialog;
-    TaskCompletionSource<string?>? switchResult;
 
-    public ShellViewModel()
+    public ShellViewModel(Features.Setup.ISetupSource? setup = null)
     {
+        SetupSource = setup ?? new Features.Setup.StubSetupSource();
         Containers = new ContainersViewModel(this, Session);
         // No tab of its own: clusters are rows in Containers, which shows these details and actions for them.
         Clusters = new ClustersViewModel(this, Session);
@@ -36,6 +36,8 @@ sealed class ShellViewModel : Observable
             new Section("Networks", new NetworksViewModel(this, Session), Section.Resource("IconNetworks")),
             new Section("Builds", new Features.Builds.BuildsViewModel(this, Session), Section.Resource("IconBuilds")),
             new Section("Disk", new DiskViewModel(this, Session), Section.Resource("IconDisk")),
+            new Section("Tools", new Features.Setup.ToolsViewModel(SetupSource, this), Section.Resource("IconTools")),
+            new Section("Settings", new Features.Setup.SettingsViewModel(SetupSource, this), Section.Resource("IconSettings")),
         ];
         currentSection = Sections[0];
         _ = Tools.Refresh();
@@ -43,8 +45,10 @@ sealed class ShellViewModel : Observable
         HasEngineSwitch = OperatingSystem.IsWindows() && DockerContext.Exists("linux") && DockerContext.Exists("win");
         SwitchLinuxCommand = new Command(() => { AskSwitch("linux"); return Task.CompletedTask; });
         SwitchWindowsCommand = new Command(() => { AskSwitch("win"); return Task.CompletedTask; });
-        SettingsCommand = new Command(() => SendToTray(new TrayCommand(TrayCommandKind.Settings)));
-        StartEngineCommand = new Command(StartEngine);
+        SettingsCommand = new Command(() => { ShowSection("Settings"); return Task.CompletedTask; });
+        OpenToolsCommand = new Command(() => { ShowSection("Tools"); return Task.CompletedTask; });
+        StartEngineCommand = new Command(() => Session.EngineId is { } engine ? StartEngine(engine) : Task.CompletedTask);
+        if (!SetupSource.IsInstalled) OpenSetup();
 
         Session.PropertyChanged += (_, e) =>
         {
@@ -57,12 +61,23 @@ sealed class ShellViewModel : Observable
     public string SearchHint => OperatingSystem.IsMacOS() ? "Search  (\u2318K)" : "Search  (Ctrl+K)";
 
     public EngineSession Session { get; } = new();
+    public Features.Setup.ISetupSource SetupSource { get; }
+
+    // Shown instead of the sections until Dockyard is installed.
+    public Features.Setup.SetupViewModel? Setup { get => setup; set { if (Set(ref setup, value)) Raise(nameof(ShowsSetup)); } }
+    public bool ShowsSetup => setup is not null;
+    Features.Setup.SetupViewModel? setup;
     public ContainersViewModel Containers { get; }
     public IReadOnlyList<Section> Sections { get; }
     public ObservableCollection<Toast> Toasts { get; } = [];
 
     public void ShowSection(string title)
     {
+        if (title.Equals("setup", StringComparison.OrdinalIgnoreCase))
+        {
+            OpenSetup();
+            return;
+        }
         if (Sections.FirstOrDefault(s => s.Title.Equals(title, StringComparison.OrdinalIgnoreCase)) is { } section) CurrentSection = section;
     }
 
@@ -76,6 +91,8 @@ sealed class ShellViewModel : Observable
             if (value is null || !Set(ref currentSection, value)) return;
             ApplySearch();
             (value.Content as SectionViewModel)?.OnShown();
+            if (value.Content is Features.Setup.ToolsViewModel tools) _ = tools.Load();
+            if (value.Content is Features.Setup.SettingsViewModel settings) settings.Load();
             _ = Tools.Refresh();
         }
     }
@@ -143,6 +160,7 @@ sealed class ShellViewModel : Observable
     public Command SwitchLinuxCommand { get; }
     public Command SwitchWindowsCommand { get; }
     public Command SettingsCommand { get; }
+    public Command OpenToolsCommand { get; }
     public Command StartEngineCommand { get; }
 
     public void Start()
@@ -189,46 +207,70 @@ sealed class ShellViewModel : Observable
     {
         if (Session.ContextName == engine) return;
         var name = EngineSwitch.Name(engine);
-        Open(new Dialog($"Switch to {name} containers?", EngineSwitch.Message(engine, EngineSwitch.StopsOther()), "Switch",
+        Open(new Dialog($"Switch to {name} containers?", EngineSwitch.Message(engine, StopsOtherEngine()), "Switch",
             d => Switch(engine, d, TimeSpan.FromMinutes(5))));
     }
 
-    // Done when the dashboard is connected to the engine the context now names; the tray only says when it failed.
+    // The setting is there only where there are two engines; elsewhere there is no other engine to stop.
+    bool StopsOtherEngine()
+    {
+        try { return SetupSource.GetSetting(Dockyard.Setup.SettingDefinitions.StopOtherEngineOnSwitch) != Dockyard.Setup.SettingDefinitions.Off; }
+        catch (Exception e) when (e is ArgumentException or InvalidOperationException) { return true; }
+    }
+
+    // Done when the dashboard is connected to the engine the context now names.
     internal async Task Switch(string engine, Dialog dialog, TimeSpan timeout)
     {
         var name = EngineSwitch.Name(engine);
         dialog.Report($"Starting the {name} engine and switching the docker context…");
-        var result = switchResult = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var connected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         void Watch(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
             if (Session.ContextName != engine) return;
-            if (Session.IsConnected) result.TrySetResult(null);
+            if (Session.IsConnected) connected.TrySetResult();
             else dialog.Report($"Connecting to the {name} engine…");
         }
         Session.PropertyChanged += Watch;
         try
         {
-            if (!TrayClient.Send(new TrayCommand(TrayCommandKind.Switch, engine)))
-                throw new InvalidOperationException("The Dockyard tray app is not running and could not be started.");
+            await SetupSource.UseEngine(engine);
             Watch(null, new(nameof(EngineSession.State)));
-            var finished = await Task.WhenAny(result.Task, Task.Delay(timeout));
-            if (finished != result.Task)
-                throw new TimeoutException($"The {name} engine did not come up within {timeout.TotalMinutes:0} minutes. Engines and settings shows what Dockyard is doing.");
-            if (await result.Task is { } error) throw new InvalidOperationException(error);
+            if (await Task.WhenAny(connected.Task, Task.Delay(timeout)) != connected.Task)
+                throw new TimeoutException($"The {name} engine did not come up within {Math.Max(1, timeout.TotalMinutes):0} minutes. The activity log shows what Dockyard did.");
             ShowInfo($"Switched to {name} containers");
         }
-        finally
-        {
-            Session.PropertyChanged -= Watch;
-            if (switchResult == result) switchResult = null;
-        }
+        finally { Session.PropertyChanged -= Watch; }
     }
 
-    public void OnTrayMessage(string line)
+    internal async Task StartEngine(string engine)
     {
-        if (EngineSwitch.ParseResult(line) is not { } r) return;
-        if (r.Error is { } error) switchResult?.TrySetResult(error);
-        else if (Session.ContextName == r.Engine && Session.IsConnected) switchResult?.TrySetResult(null);
+        using var working = Activity.Working($"Starting the {EngineSwitch.Name(engine)} engine");
+        try
+        {
+            await SetupSource.StartEngine(engine);
+            Session.Start();
+        }
+        catch (Exception e) when (e is InvalidOperationException or ArgumentException or IOException or TimeoutException) { ShowError(e.Message); }
+    }
+
+    // What the background duties report: warnings go to the activity, errors are shown as well.
+    public void OnDuty(Dockyard.Setup.SetupProgress line)
+    {
+        if (line.Kind == Dockyard.Setup.SetupProgressKind.Error) ShowError(line.Line);
+        else Activity.Note(line.Line, line.Kind == Dockyard.Setup.SetupProgressKind.Warning ? ActivityKind.Info : ActivityKind.Detail);
+    }
+
+    void OpenSetup()
+    {
+        if (Setup is not null) return;
+        var setup = new Features.Setup.SetupViewModel(SetupSource, this);
+        setup.Installed += () =>
+        {
+            Setup = null;
+            ShowSection("Containers");
+        };
+        setup.Closed += () => Setup = null;
+        Setup = setup;
     }
 
     public void ShowError(string message) => Show(new Toast(message, IsError: true));
@@ -247,21 +289,5 @@ sealed class ShellViewModel : Observable
     void ApplySearch()
     {
         if (CurrentSection.Content is ISearchable s) s.ApplySearch(Search);
-    }
-
-    Task StartEngine()
-    {
-        if (Session.EngineId is { } engine)
-        {
-            SendToTray(new TrayCommand(TrayCommandKind.Start, engine));
-            DispatcherTimer.RunOnce(Session.Start, TimeSpan.FromSeconds(2));
-        }
-        return Task.CompletedTask;
-    }
-
-    Task SendToTray(TrayCommand command)
-    {
-        if (!TrayClient.Send(command)) ShowError("The Dockyard tray app is not running and could not be started.");
-        return Task.CompletedTask;
     }
 }

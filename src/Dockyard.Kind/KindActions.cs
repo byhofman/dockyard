@@ -1,6 +1,6 @@
 namespace Dockyard.Kind;
 
-// What the Kubernetes section does with kind, with the host's kubeconfig following along.
+// What the dashboard does with kind, with the host's kubeconfig following along.
 sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
 {
     // Returns the kubeconfig file the cluster's context went into.
