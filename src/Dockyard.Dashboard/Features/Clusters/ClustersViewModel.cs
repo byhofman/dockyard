@@ -93,6 +93,14 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     public Command UseContextCommand { get; }
     public Command CopyHeadlampTokenCommand { get; }
     public Command EditCommand { get; }
+
+    // Points the details at a cluster by name, for Containers, whose rows are its own copies.
+    public bool Select(string name)
+    {
+        if (Rows.FirstOrDefault(r => r.Name == name) is not { } row) return false;
+        Selected = row;
+        return true;
+    }
     public Command<NodeRow> OpenNodeCommand { get; }
 
     public Command<KindCluster> ToggleNodesCommand { get; }
