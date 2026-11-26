@@ -396,7 +396,7 @@ sealed class ContainersViewModel : Observable, ISearchable
     {
         var volumes = DialogField.Check("Also remove its volumes, with the data in them", isChecked: false);
         var images = DialogField.Check("Also remove the images it built or pulled", isChecked: false);
-        shell.Open(new Dialog($"Down {project.Name}?", "Stops and removes the project's containers and networks.", "Down",
+        shell.Open(new Dialog($"Down {project.Name}?", "Stops and removes the project's containers and networks, and takes it off the list here.", "Down",
             d => ComposeDown(project, d, volumes.IsChecked, images.IsChecked), danger: true, fields: [volumes, images]));
     }
 
@@ -407,6 +407,8 @@ sealed class ContainersViewModel : Observable, ISearchable
         dialog.Report($"docker compose {string.Join(' ', verb)} {project.Name}…");
         var exit = await CliRunner.Run(ComposeCli.Args(context, project, verb), line => { if (line.Trim().Length > 0) dialog.Report(line.Trim()); }, Session.IsWindowsEngine);
         if (exit != 0) throw new InvalidOperationException($"docker compose down failed for {project.Name} (exit code {exit}). {dialog.Progress}");
+        // Down is the end of it here: a compose file opened before stays on the list as a project to start again otherwise.
+        await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => ForgetRecent(project.Name));
     }
 
     Task Exec(ContainerItem item)
