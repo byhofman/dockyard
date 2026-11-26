@@ -97,7 +97,10 @@
             <Button Command="{Binding EditCommand}" ToolTip.Tip="Add or remove add-ons on the running cluster">
               <StackPanel Classes="label"><PathIcon Data="{StaticResource IconSettings}" /><TextBlock Text="Add-ons" /></StackPanel>
             </Button>
-            <Button Command="{Binding CopyHeadlampTokenCommand}" ToolTip.Tip="A token to sign in to Headlamp at https://dashboard.&lt;cluster&gt;.dockyard.internal, valid for a day">
+            <Button Command="{Binding OpenHeadlampCommand}" IsVisible="{Binding HasHeadlamp}" ToolTip.Tip="{Binding HeadlampUrl}">
+              <StackPanel Classes="label"><PathIcon Data="{StaticResource IconOpenExternal}" /><TextBlock Text="Open Headlamp" /></StackPanel>
+            </Button>
+            <Button Command="{Binding CopyHeadlampTokenCommand}" IsVisible="{Binding HasHeadlamp}" ToolTip.Tip="A token to sign in to Headlamp at https://dashboard.&lt;cluster&gt;.dockyard.internal, valid for a day">
               <StackPanel Classes="label"><PathIcon Data="{StaticResource IconCopy}" /><TextBlock Text="Headlamp token" /></StackPanel>
             </Button>
             <Button Command="{Binding DuplicateCommand}" ToolTip.Tip="A new cluster from this one's definition">

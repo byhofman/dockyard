@@ -24,6 +24,13 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         DeleteCommand = new Command(() => { AskDelete(Picked); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine && SelectionCount > 0);
         DeleteRowCommand = new Command<KindCluster>(c => { AskDelete([c]); return Task.CompletedTask; });
         EditCommand = new Command(() => { if (Selected is { } c) AskEdit(c); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine && Selected is { IsRunning: true });
+        OpenHeadlampCommand = new Command(() =>
+        {
+            if (HeadlampUrl is { } url)
+                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true })?.Dispose(); }
+                catch (Exception ex) { Shell.ShowError($"Could not open {url}: {ex.Message}"); }
+            return Task.CompletedTask;
+        }, () => !NeedsLinuxEngine && Selected is { IsRunning: true } && HasHeadlamp);
         CopyHeadlampTokenCommand = new Command(CopyHeadlampToken, () => HasKind && !NeedsLinuxEngine && Selected is { IsRunning: true });
         CopyKubeconfigCommand = new Command(CopyKubeconfig, () => HasKind && !NeedsLinuxEngine && Selected is { IsRunning: true });
         UseContextCommand = new Command(UseContext, () => !IsBusy && HasKind && !NeedsLinuxEngine && Selected is { IsRunning: true });
@@ -64,6 +71,12 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     public Command UseContextCommand { get; }
     public Command CopyHeadlampTokenCommand { get; }
     public Command EditCommand { get; }
+    public Command OpenHeadlampCommand { get; }
+
+    // Headlamp's address for the selected cluster, as its definition has it: https with cert-manager's certificate.
+    public string? HeadlampUrl => Selected is { } c && ClusterDefinitions.Load(c.Name) is { } d && d.Addons.Contains(Headlamp.Addon.Release)
+        ? $"{(d.Addons.Contains(CertManager.Addon.Release) ? "https" : "http")}://{Headlamp.Host(c.Name)}" : null;
+    public bool HasHeadlamp => HeadlampUrl is not null;
     public Command DuplicateCommand { get; }
     public Command RecreateCommand { get; }
     public Command ToggleCommand { get; }
@@ -248,6 +261,8 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         UseContextCommand.Refresh();
         EditCommand.Refresh();
         CopyHeadlampTokenCommand.Refresh();
+        OpenHeadlampCommand.Refresh();
+        Raise(nameof(HeadlampUrl), nameof(HasHeadlamp));
         DuplicateCommand.Refresh();
         RecreateCommand.Refresh();
         LoadBalancerCommand.Refresh();
