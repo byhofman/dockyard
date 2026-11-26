@@ -103,7 +103,7 @@ sealed class Clusters(Action<string> log)
         if (wantedStorage != saved.Storage && (wantedStorage == ClusterStorage.HostFolder || saved.Storage == ClusterStorage.HostFolder))
             throw new InvalidOperationException("The shared host folder is mounted on each node when kind makes it: change it with dockyard cluster recreate and --file");
         bool? nfs = wantedStorage == saved.Storage ? null : wantedStorage == ClusterStorage.Nfs;
-        await Actions().EditAddons(name, saved.AddonList, wanted, helm, ClusterCa, log, nfs);
+        await Actions().EditAddons(name, saved.AddonList, wanted, helm, ClusterCa, log, nfs, wantedStorage);
         ClusterDefinitions.Save(name, saved with { Addons = wanted.Select(a => a.Release).ToList(), Storage = wantedStorage });
         log($"{name} is changed");
     }
