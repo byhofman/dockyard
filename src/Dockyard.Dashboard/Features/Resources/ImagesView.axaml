@@ -1,4 +1,5 @@
 <UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:ctl="using:Dockyard.Dashboard.Controls"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:res="using:Dockyard.Dashboard.Features.Resources"
              xmlns:files="using:Dockyard.Dashboard.Features.Files"
@@ -10,15 +11,7 @@
         <Grid ColumnDefinitions="Auto,Auto,*,Auto">
           <CheckBox Classes="pick" IsChecked="{Binding AllSelected}" ToolTip.Tip="Select all" AutomationProperties.Name="Select all images" />
           <TextBlock Grid.Column="1" Classes="section" Text="IMAGES" VerticalAlignment="Center" />
-          <Border Grid.Column="2" Background="{DynamicResource Bg}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="7" Padding="3" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="16,0,8,0">
-            <StackPanel Orientation="Horizontal" Spacing="2">
-              <Button Classes="segment" Classes.selected="{Binding Usage.IsAll}" Content="{Binding Usage.AllText}" Command="{Binding Usage.ShowCommand}" CommandParameter="All" />
-              <Button Classes="segment" Classes.selected="{Binding Usage.IsUsed}" Content="{Binding Usage.UsedText}" Command="{Binding Usage.ShowCommand}" CommandParameter="Used"
-                      ToolTip.Tip="Used by a container, running or not" />
-              <Button Classes="segment" Classes.selected="{Binding Usage.IsUnused}" Content="{Binding Usage.UnusedText}" Command="{Binding Usage.ShowCommand}" CommandParameter="Unused"
-                      ToolTip.Tip="No container uses it" />
-            </StackPanel>
-          </Border>
+          <ctl:UsageFilterBar Grid.Column="2" DataContext="{Binding Usage}" Margin="16,0,8,0" />
           <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8">
             <Button Classes="primary" Command="{Binding PullCommand}">
               <StackPanel Classes="label"><PathIcon Data="{StaticResource IconPull}" /><TextBlock Text="Pull image…" /></StackPanel>

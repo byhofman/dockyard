@@ -168,6 +168,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         : "";
 
     public bool HasHint => Hint.Length > 0;
+    public string? HintLink => HasKind ? null : "Engines and settings";
     public string KubectlHint => Selected is { } c ? $"kubectl --context {c.Context} get nodes" : "";
 
     public bool HasSharedStorage => Selected?.HasSharedStorage == true;
@@ -193,7 +194,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     public override void OnShown()
     {
         kind = KindCli.Locate();
-        Raise(nameof(HasKind), nameof(Hint), nameof(HasHint));
+        Raise(nameof(HasKind), nameof(Hint), nameof(HasHint), nameof(HintLink));
         RefreshCommands();
     }
 
@@ -203,7 +204,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         all = NeedsLinuxEngine ? [] : KindClusters.From(Session.Containers.Items);
         ApplyFilter();
         ShowLoadBalancers();
-        Raise(nameof(HasKind), nameof(Hint), nameof(HasHint));
+        Raise(nameof(HasKind), nameof(Hint), nameof(HasHint), nameof(HintLink));
         RefreshCommands();
         return SyncController();
     }

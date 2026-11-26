@@ -21,10 +21,7 @@
             </Button>
           </StackPanel>
         </Grid>
-        <StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{Binding HasHint}">
-          <TextBlock Classes="muted" Text="{Binding Hint}" TextWrapping="Wrap" VerticalAlignment="Center" />
-          <Button Classes="link" Content="Engines and settings" Command="{Binding OpenSettingsCommand}" IsVisible="{Binding !HasKind}" />
-        </StackPanel>
+        <ctl:SectionHint IsVisible="{Binding HasHint}" Text="{Binding Hint}" LinkText="{Binding HintLink}" LinkCommand="{Binding OpenSettingsCommand}" />
         <Border Classes="selectionbar" IsVisible="{Binding HasMany}">
           <Grid ColumnDefinitions="*,Auto,Auto">
             <TextBlock Classes="count" Text="{Binding SelectionText}" />
@@ -159,24 +156,7 @@
                     <SelectableTextBlock Classes="muted mono" Text="{Binding Address}" IsVisible="{Binding HasAddress}"
                                          ToolTip.Tip="The service's load balancer IP on the kind network, as kubectl shows it under EXTERNAL-IP" />
                   </StackPanel>
-                  <ItemsControl ItemsSource="{Binding Ports}">
-                    <ItemsControl.ItemsPanel>
-                      <ItemsPanelTemplate>
-                        <WrapPanel ItemSpacing="10" />
-                      </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                      <DataTemplate DataType="store:PublishedPort">
-                        <Button Classes="link" ToolTip.Tip="{Binding Text}" CommandParameter="{Binding}"
-                                Command="{Binding $parent[UserControl].((clu:ClustersViewModel)DataContext).OpenUrlCommand}">
-                          <StackPanel Classes="label" Spacing="3">
-                            <TextBlock Classes="mono" Text="{Binding Url}" />
-                            <PathIcon Data="{StaticResource IconOpenExternal}" Width="10" Height="10" />
-                          </StackPanel>
-                        </Button>
-                      </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                  </ItemsControl>
+                  <ctl:PortLinks ItemsSource="{Binding Ports}" ShowUrl="True" OpenCommand="{Binding $parent[UserControl].((clu:ClustersViewModel)DataContext).OpenUrlCommand}" />
                 </StackPanel>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
