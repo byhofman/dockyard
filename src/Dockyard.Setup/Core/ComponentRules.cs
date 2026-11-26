@@ -2,7 +2,7 @@ using Dockyard.Hosts;
 
 namespace Dockyard.Core;
 
-// What can be added and removed, on what grounds, and what stays removed across a rerun of the wizard.
+// What can be added and removed, on what grounds, and what stays removed across a rerun of setup.
 static class ComponentRules
 {
     public const string DashboardId = "Dashboard";

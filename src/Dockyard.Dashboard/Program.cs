@@ -9,7 +9,7 @@ static class Program
     [STAThread]
     public static int Main(string[] args)
     {
-        // Asked by the wizard on macOS and Linux to learn which version is installed, so this comes before anything with a window.
+        // Asked by setup on macOS and Linux to learn which version is installed, so this comes before anything with a window.
         if (args.Contains("--version"))
         {
             Console.WriteLine((System.Reflection.Assembly.GetEntryAssembly()?.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false).OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion ?? "0.0.0").Split('+')[0]);

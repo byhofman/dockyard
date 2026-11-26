@@ -77,7 +77,7 @@ static class MachineSetup
             try { await tools.Ensure(log, tool); }
             catch (Exception e) when (tool != Tools.Docker && e is InvalidOperationException or HttpRequestException or IOException)
             {
-                log($"{tool.Title} was not installed ({e.Message}); running the wizard again retries it");
+                log($"{tool.Title} was not installed ({e.Message}); running dockyard setup again retries it");
             }
         }
     }

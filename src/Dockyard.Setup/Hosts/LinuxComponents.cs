@@ -29,7 +29,7 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
     async Task<Version?> InstalledDashboardVersion() =>
         HasDashboard ? Updates.ParseVersion((await runner.Run(LinuxLayout.Dashboard, "--version")).Output) : null;
 
-    // The wizard runs from a download and can be newer than what is installed.
+    // Setup runs from a download and can be newer than what is installed.
     async Task<Version?> InstalledAppVersion()
     {
         if (!File.Exists(LinuxLayout.InstalledExe)) return null;
@@ -116,7 +116,7 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
         }
         if (installed)
         {
-            // A wizard newer than what is installed brings the matching app along: the dashboard package depends on its exact version.
+            // A setup newer than what is installed brings the matching dockyard package along with the dashboard.
             var withApp = await InstalledAppVersion() != Updates.ParseVersion(Paths.AppVersion);
             await InstallPackages(log, os.PackageManager, app: withApp, dashboard: true, tag: null);
         }

@@ -7,7 +7,7 @@ sealed class Settings
 {
     public bool StopOtherOnSwitch { get; set; } = true;
     public bool StartActiveAtLogon { get; set; } = true;
-    // Components removed on purpose, so that rerunning the wizard or updating does not bring them back.
+    // Components removed on purpose, so that rerunning setup or updating does not bring them back.
     public List<string> RemovedComponents { get; set; } = [];
     public bool HttpsEnabled { get; set; }
     // Names under dockyard.internal, the proxy and the names clusters publish; off leaves containers' DNS as it is.
@@ -34,7 +34,7 @@ sealed class Settings
     }
 
     // Writes only what changed since this copy was loaded, over what is on disk now: the dashboard, a setup run and the
-    // wizard each hold a copy, and a whole stale copy would undo what another one saved meanwhile.
+    // tray each hold a copy, and a whole stale copy would undo what another one saved meanwhile.
     public void Save()
     {
         var mine = AsJson();

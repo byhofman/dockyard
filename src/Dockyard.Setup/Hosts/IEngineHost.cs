@@ -61,7 +61,7 @@ interface IEngineHost
     string DoneMessage(bool reboot);
     void Reboot() { }
 
-    // True for the tray; false for the wizard run from a download.
+    // True for the installed copy; false for dockyard setup run from a download.
     bool RunsFromInstallLocation { get; }
 
     // The component that is Dockyard itself for updates and for the installed version: the dockyard command.

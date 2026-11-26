@@ -6,23 +6,25 @@ section: admin
 priority: optional
 maintainer: Thomas Hofman <noreply@github.com>
 description: |
-  Docker engine tray: installs Docker CE on demand, starts and stops it, and keeps it up to date.
+  Dockyard: the dockyard command, which installs Docker CE on demand, starts and stops it and keeps it up to date, and the
+  Dockyard tray. The dashboard is the dockyard-dashboard package.
 homepage: https://github.com/byhofman/dockyard
 license: MIT
 contents:
-  - src: dist/linux/tray/dockyard-toolbox
-    dst: /usr/lib/dockyard/dockyard-toolbox
-    file_info: { mode: 0755 }
-  # The name before 0.9.0, which autostart entries written then still start.
-  - src: /usr/lib/dockyard/dockyard-toolbox
-    dst: /usr/lib/dockyard/Dockyard
-    type: symlink
   - src: dist/linux/cli/dockyard-cli
     dst: /usr/lib/dockyard/dockyard-cli
     file_info: { mode: 0755 }
   - src: /usr/lib/dockyard/dockyard-cli
     dst: /usr/bin/dockyard
     type: symlink
+  - src: dist/linux/tray/dockyard-tray
+    dst: /usr/lib/dockyard/dockyard-tray
+    file_info: { mode: 0755 }
+  # The tray's Skia and HarfBuzz; the dashboard, which depends on this package, uses the same ones.
+  - src: dist/linux/tray/libSkiaSharp.so
+    dst: /usr/lib/dockyard/libSkiaSharp.so
+  - src: dist/linux/tray/libHarfBuzzSharp.so
+    dst: /usr/lib/dockyard/libHarfBuzzSharp.so
   - src: packaging/linux/dockyard.desktop
     dst: /usr/share/applications/dockyard.desktop
   - src: branding/app-icon/png/icon-64.png

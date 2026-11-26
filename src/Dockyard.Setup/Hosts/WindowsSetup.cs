@@ -102,7 +102,7 @@ static class WindowsSetup
     }
 
     // The machine's store: the current user's would show its own dialog from an elevated process nobody is watching, and
-    // the wizard's administrator approval is the prompt that explains itself.
+    // setup's administrator approval is the prompt that explains itself.
     public static async Task<bool> TrustCa(Action<string> log, string certificateFile)
     {
         try

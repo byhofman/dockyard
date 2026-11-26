@@ -254,7 +254,7 @@ static class MacLayout
     public const string BundleId = "com.byhofman.dockyard";
 
     // Everything that is a Dockyard app bundle: where the login item points, either Applications folder, and what an
-    // interrupted install or update left next to them. A wizard run from a download only knows its own default otherwise.
+    // interrupted install or update left next to them. A setup run from a download only knows its own default otherwise.
     public static IReadOnlyList<string> InstalledBundles(string? launchAgentPlist, string userApplications, string systemApplications = "/Applications")
     {
         List<string> candidates = [];

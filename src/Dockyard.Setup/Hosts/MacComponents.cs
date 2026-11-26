@@ -23,7 +23,7 @@ sealed class MacComponents(ICommandRunner runner)
     async Task<Version?> InstalledDashboardVersion() =>
         HasDashboard ? Updates.ParseVersion((await runner.Run(Path.Combine(MacLayout.AppBase, MacLayout.DashboardName), "--version")).Output) : null;
 
-    // The wizard runs from a download and can be newer than what is installed.
+    // Setup runs from a download and can be newer than what is installed.
     static Version? InstalledAppVersion()
     {
         var plist = Path.Combine(MacLayout.AppBase, "..", "Info.plist");
@@ -41,7 +41,7 @@ sealed class MacComponents(ICommandRunner runner)
         _ => null,
     };
 
-    // From this bundle when it has the dashboard (the wizard), otherwise from the release of this version, or the one named.
+    // From this bundle when it has the dashboard (a setup run from it), otherwise from the release of this version, or the one named.
     public async Task AddDashboard(Action<string> log, string? tag = null)
     {
         string? downloaded = null;

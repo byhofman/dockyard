@@ -19,7 +19,6 @@ contents:
   - src: dist/linux/dashboard/dockyard-dashboard
     dst: /usr/lib/dockyard/dockyard-dashboard
     file_info: { mode: 0755 }
-  - src: dist/linux/dashboard/libSkiaSharp.so
-    dst: /usr/lib/dockyard/libSkiaSharp.so
-  - src: dist/linux/dashboard/libHarfBuzzSharp.so
-    dst: /usr/lib/dockyard/libHarfBuzzSharp.so
+  # Skia and HarfBuzz come with the dockyard package, for the tray.
+  - src: packaging/linux/dockyard-dashboard.desktop
+    dst: /usr/share/applications/dockyard-dashboard.desktop

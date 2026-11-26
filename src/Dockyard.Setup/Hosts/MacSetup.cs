@@ -139,8 +139,9 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
         return Task.CompletedTask;
     }
 
-    // Copies the wizard's bundle to where the app belongs, from a download, a disk image or a translocated copy.
-    // The login item and vm.json point at it, so it has to stay there. Nothing under ~/.dockyard is touched.
+    // Puts the app bundle where it belongs: this process's own bundle (a disk image or a translocated copy), or, for the
+    // dockyard command run from a download, the bundle from its release or --assets. The login item and vm.json point at
+    // it, so it has to stay there. Nothing under ~/.dockyard is touched.
     async Task InstallBundle(Action<string> log, bool dashboard)
     {
         if (RunsFromInstallLocation)
@@ -150,18 +151,34 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
             return;
         }
 
-        var source = MacLayout.Bundle(AppContext.BaseDirectory)!;
-        var target = MacLayout.InstallLocation(AppContext.BaseDirectory, MacLayout.UserApplications);
-        var incoming = target + ".new";
-        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-        if (Directory.Exists(incoming)) Directory.Delete(incoming, recursive: true);
-        await runner.Check("/usr/bin/ditto", source, incoming);
-        await runner.Run("/usr/bin/xattr", "-dr", "com.apple.quarantine", incoming);
-        // Only that install's tray: its VM keeps running, and a Dockyard somewhere else is none of this setup's business.
-        await runner.Run("/usr/bin/pkill", "-f", Path.Combine(target, "Contents", "MacOS", "Dockyard"));
-        if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
-        Directory.Move(incoming, target);
-        log($"Installed {target}");
+        string? downloaded = null;
+        try
+        {
+            var source = MacLayout.Bundle(AppContext.BaseDirectory);
+            if (source is null)
+            {
+                log("Downloading Dockyard.app");
+                downloaded = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
+                var zip = await Updates.ReleaseAssetOrLocal(MacLayout.ZipAsset(engineOnly: !dashboard), downloaded, tag: null);
+                await runner.Check("/usr/bin/ditto", "-x", "-k", zip, downloaded);
+                source = Path.Combine(downloaded, "Dockyard.app");
+            }
+            var target = MacLayout.InstallLocation(AppContext.BaseDirectory, MacLayout.UserApplications);
+            var incoming = target + ".new";
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            if (Directory.Exists(incoming)) Directory.Delete(incoming, recursive: true);
+            await runner.Check("/usr/bin/ditto", source, incoming);
+            await runner.Run("/usr/bin/xattr", "-dr", "com.apple.quarantine", incoming);
+            // Only that install's tray: its VM keeps running, and a Dockyard somewhere else is none of this setup's business.
+            await runner.Run("/usr/bin/pkill", "-f", Path.Combine(target, "Contents", "MacOS", "Dockyard"));
+            if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
+            Directory.Move(incoming, target);
+            log($"Installed {target}");
+        }
+        finally
+        {
+            if (downloaded is not null && Directory.Exists(downloaded)) Directory.Delete(downloaded, recursive: true);
+        }
         if (!dashboard) await components.RemoveDashboard(log);
     }
 
@@ -218,7 +235,7 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
             ? await runner.Run("sudo", "-n", "/bin/sh", "-c", script)
             : await runner.Run("/usr/bin/osascript", MacLayout.AdminShell(script));
         if (r.ExitCode != 0)
-            log($"Skipped ({(silent ? "no passwordless sudo" : "approval declined")}): {string.Join(", ", what)}. Running the wizard with an administrator's approval adds them; everything else works without them.");
+            log($"Skipped ({(silent ? "no passwordless sudo" : "approval declined")}): {string.Join(", ", what)}. Running dockyard setup with an administrator's approval adds them; everything else works without them.");
     }
 
     static async Task InstallCredentialHelper(Action<string> log)
@@ -234,11 +251,11 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
             if (File.Exists("/etc/paths.d/dockyard"))
                 await CredentialStore.Adopt(log, "osxkeychain", MacLayout.CredentialHelper, MacLayout.CredentialStoreMarker);
             else
-                log("docker login does not use the Keychain until ~/.dockyard/bin is on the PATH; running the wizard with an administrator's approval adds it");
+                log("docker login does not use the Keychain until ~/.dockyard/bin is on the PATH; running dockyard setup with an administrator's approval adds it");
         }
         catch (Exception e) when (e is HttpRequestException or InvalidOperationException or IOException)
         {
-            log($"The credential store was not set up ({e.Message}); running the wizard again retries it");
+            log($"The credential store was not set up ({e.Message}); running dockyard setup again retries it");
         }
     }
 

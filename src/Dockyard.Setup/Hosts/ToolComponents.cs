@@ -40,7 +40,7 @@ sealed class ToolComponents(IPackageManager? packages, IDockyardSource dockyard,
     // Returns true when the package manager has it.
     public Task<bool> Install(Action<string> log, CliTool tool) => Bring(log, tool, onlyIfChanged: false);
 
-    // The wizard, on every run: only what has something newer changes.
+    // Setup, on every run: only what has something newer changes.
     public Task<bool> Ensure(Action<string> log, CliTool tool) => Bring(log, tool, onlyIfChanged: true);
 
     async Task<bool> Bring(Action<string> log, CliTool tool, bool onlyIfChanged)

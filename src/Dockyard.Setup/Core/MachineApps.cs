@@ -68,7 +68,7 @@ static class MachineApps
         }
         catch (Exception e) when (e is HttpRequestException or InvalidOperationException or IOException)
         {
-            log($"The credential helper was not installed ({e.Message}); running the wizard again retries it");
+            log($"The credential helper was not installed ({e.Message}); running dockyard setup again retries it");
         }
     }
 

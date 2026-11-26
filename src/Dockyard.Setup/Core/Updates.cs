@@ -46,7 +46,7 @@ static partial class Updates
         Component.Buildx => await PluginVersion("docker-buildx.exe", "version"),
         Component.Kind or Component.Kubectl or Component.Helm => await OwnToolVersion(Tools.Find(c.ToString())!),
         Component.LinuxEngine => Settings.Load().RemovedComponents.Contains(nameof(Component.LinuxEngine)) ? null : await new WslDistro(ProcessRunner.Instance).DockerVersion(),
-        // The wizard runs from elsewhere and can be newer than what is installed, so not this process's own version.
+        // Setup runs from a download and can be newer than what is installed, so not this process's own version.
         Component.Tray => File.Exists(Paths.AppExe) ? ParseVersion(System.Diagnostics.FileVersionInfo.GetVersionInfo(Paths.AppExe).ProductVersion) : null,
         _ => null,
     };

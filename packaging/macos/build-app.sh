@@ -1,7 +1,8 @@
 #!/bin/sh
-# build-app.sh <version> <dist> <out>: Dockyard.app from the published files in <dist> (Dockyard, Dockyard Dashboard
-# and its dylibs, dockyard-host, vm/), ad-hoc signed (no certificate needed), as Dockyard-<version>-macos.zip,
-# -macos-engine-only.zip and Dockyard-<version>-macos.dmg.
+# build-app.sh <version> <dist> <out>: Dockyard.app from the published files in <dist> (dockyard-tray and the Avalonia
+# and Skia dylibs, dockyard-dashboard, dockyard-cli, dockyard-host, vm/), ad-hoc signed (no certificate needed), as
+# Dockyard-<version>-macos.zip, -macos-engine-only.zip and Dockyard-<version>-macos.dmg. They are assets of the CLI's
+# release: dockyard setup puts the bundle in place and links /usr/local/bin/dockyard to its dockyard-cli.
 set -eu
 version="$1"; dist="$2"; out="$3"
 here="$(cd "$(dirname "$0")" && pwd)"; root="$here/../.."
@@ -12,12 +13,12 @@ bundle() {
   app="$1/Dockyard.app"; with_dashboard="$2"
   mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
   sed "s/VERSION/$version/g" "$here/Info.plist" > "$app/Contents/Info.plist"
-  # Inside the bundle the Toolbox and the dashboard keep the app's name.
-  cp "$dist/dockyard-toolbox" "$app/Contents/MacOS/Dockyard"
-  cp "$dist/dockyard-host" "$dist/dockyard-cli" "$app/Contents/MacOS/"
+  # Inside the bundle the tray and the dashboard keep the app's name. The tray links the dylibs too, so every edition has
+  # them. The CLI stays dockyard-cli: the default file system cannot tell dockyard from Dockyard.
+  cp "$dist/dockyard-tray" "$app/Contents/MacOS/Dockyard"
+  cp "$dist/dockyard-host" "$dist/dockyard-cli" "$dist"/*.dylib "$app/Contents/MacOS/"
   if [ "$with_dashboard" = 1 ]; then
     cp "$dist/dockyard-dashboard" "$app/Contents/MacOS/Dockyard Dashboard"
-    cp "$dist"/*.dylib "$app/Contents/MacOS/"
   fi
   cp -R "$dist/vm" "$app/Contents/Resources/vm"
   cp "$work/Dockyard.icns" "$app/Contents/Resources/Dockyard.icns"

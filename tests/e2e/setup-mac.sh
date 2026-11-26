@@ -1,7 +1,7 @@
 #!/bin/sh
 # End to end on a Mac, in a throwaway home that is deleted afterwards: nothing outside it changes.
-#   WIZARD_ZIP=<Dockyard-*-macos.zip> sh wizard-mac.sh     the wizard from a build
-#   ONELINER=<url of install-mac.sh> sh wizard-mac.sh      the published one-liner
+#   DOCKYARD=<dockyard-macos-arm64> sh setup-mac.sh        the dockyard command from a build, the app's zips next to it
+#   ONELINER=<url of install-mac.sh> sh setup-mac.sh       the published one-liner
 # A sudo that refuses keeps the silent setup from changing /etc or installing Rosetta, whatever this user may do.
 # ADMIN=1 leaves sudo alone and checks what needs an administrator: only for a throwaway machine such as a CI runner.
 # Add BOOT=1 to also boot the VM and check that a volume survives (1 GiB of memory, about 30 s).
@@ -44,13 +44,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-wizard_dir=""
-if [ -n "${WIZARD_ZIP:-}" ]; then
-  wizard_dir="$home/wizard"; mkdir -p "$wizard_dir"
-  ditto -x -k "$WIZARD_ZIP" "$wizard_dir"
-fi
-run() {
-  if [ -n "${ONELINER:-}" ]; then curl -fsSL "$ONELINER" | sh -s -- "$@"; else "$wizard_dir/Dockyard.app/Contents/MacOS/Dockyard" "$@"; fi
+dockyard() {
+  if [ -n "${ONELINER:-}" ]; then curl -fsSL "$ONELINER" | sh -s -- "$@"; else "$DOCKYARD" "$@"; fi
+}
+setup() {
+  if [ -n "${ONELINER:-}" ]; then dockyard setup "$@"; else dockyard setup "$@" --assets "$(dirname "$DOCKYARD")"; fi
 }
 
 fingerprint() {
@@ -64,25 +62,27 @@ fingerprint() {
 before="$(fingerprint)"
 
 echo "== wrong arguments are refused"
-rc=0; run --silent --typo >/dev/null 2>&1 || rc=$?
+rc=0; setup --silent --typo >/dev/null 2>&1 || rc=$?
 if [ "$rc" -eq 2 ]; then ok "exit 2"; else fail "--typo exits $rc"; fi
 check "and nothing was installed" missing "$app"
 
 echo "== first install, no dashboard"
 # Homebrew installs for the whole Mac, outside this throwaway home, so the source here is Dockyard.
 unset XDG_CONFIG_HOME
-run --silent --no-dashboard --no-start --source dockyard
-check "app in place" test -x "$macos/Dockyard"
+setup --silent --without dashboard --no-start --source dockyard
+check "the tray is the app's executable" test -x "$macos/Dockyard"
+check "with the libraries it links" sh -c "ls '$macos'/*.dylib >/dev/null 2>&1"
+check "the command too" test -x "$macos/dockyard-cli"
 check "the VM helper too" test -x "$macos/dockyard-host"
 check "no dashboard" missing "$macos/Dockyard Dashboard"
-check "no dashboard libraries" sh -c "! ls '$macos'/*.dylib >/dev/null 2>&1"
 check "docker CLI" test -x "$docker"
 check "VM prepared" test -f "$home/.dockyard/vm.json"
 if sed 's#\\/#/#g' "$home/.dockyard/vm.json" | grep -q "$app/Contents/Resources/vm/kernel"; then ok "vm.json points at the installed app, not at the download"; else fail "vm.json: $(cat "$home/.dockyard/vm.json")"; fi
 if grep -q "$macos/Dockyard" "$home/Library/LaunchAgents/com.byhofman.dockyard.plist"; then ok "login item points at the installed app"; else fail "login item"; fi
 if [ "$("$docker" context show)" = dockyard ]; then ok "docker context selected"; else fail "docker context"; fi
 if codesign -d --entitlements - "$macos/dockyard-host" 2>/dev/null | grep -q com.apple.security.virtualization; then ok "the helper kept its entitlement"; else fail "entitlement"; fi
-if "$macos/Dockyard" --version >/dev/null; then ok "the installed app still starts after re-signing"; else fail "--version"; fi
+if "$macos/Dockyard" --version >/dev/null; then ok "the installed tray still starts after re-signing"; else fail "tray --version"; fi
+if "$macos/dockyard-cli" --version >/dev/null; then ok "and the installed command"; else fail "dockyard-cli --version"; fi
 
 if [ -n "${BOOT:-}" ]; then
   echo "== the engine boots and holds data"
@@ -96,6 +96,7 @@ fi
 if [ -n "${ADMIN:-}" ]; then
   echo "== what needs an administrator"
   check "the PATH entry" test -f /etc/paths.d/dockyard
+  if [ "$(readlink /usr/local/bin/dockyard)" = "$macos/dockyard-cli" ]; then ok "/usr/local/bin/dockyard is the installed command"; else fail "/usr/local/bin/dockyard: $(ls -la /usr/local/bin/dockyard 2>&1)"; fi
   if [ "$(readlink /var/run/docker.sock)" = "$home/.dockyard/docker.sock" ]; then ok "/var/run/docker.sock points at Dockyard"; else fail "/var/run/docker.sock: $(ls -la /var/run/docker.sock 2>&1)"; fi
   check "and comes back after a restart" test -f /Library/LaunchDaemons/com.byhofman.dockyard.socket.plist
   sudo rm -f /var/run/docker.sock
@@ -129,7 +130,7 @@ if [ -n "${ADMIN:-}" ]; then
   security create-keychain -p e2e "$home/Library/Keychains/login.keychain-db"
   security unlock-keychain -p e2e "$home/Library/Keychains/login.keychain-db"
   security set-keychain-settings "$home/Library/Keychains/login.keychain-db"
-  run --silent --no-start --no-dashboard --trust-https
+  setup --silent --no-start --without dashboard --trust-https
   ca="$home/.dockyard/ca/ca.pem"
   check "the CA was made" test -f "$ca"
   check "no file holds the key, /Users being shared with the engine" missing "$home/.dockyard/ca/ca.key"
@@ -142,45 +143,45 @@ date > "$home/.dockyard/marker"
 data_before="$(ls -i "$home/.dockyard/data.img")"
 
 echo "== rerun keeps the choice and the data"
-run --silent --no-start
+setup --silent --no-start
 check "still no dashboard" missing "$macos/Dockyard Dashboard"
 check "marker kept" test -f "$home/.dockyard/marker"
 if [ "$(ls -i "$home/.dockyard/data.img")" = "$data_before" ]; then ok "the data disk is the same file"; else fail "the data disk was replaced"; fi
 
 echo "== add the dashboard"
-run --silent --dashboard --no-start
+setup --silent --with dashboard --no-start
 check "dashboard added" test -x "$macos/Dockyard Dashboard"
-check "with its libraries" sh -c "ls '$macos'/*.dylib >/dev/null 2>&1"
 check "signature of the dashboard is valid" codesign --verify "$macos/Dockyard Dashboard"
 
 echo "== any component can go and come back, and required ones refuse"
-run --silent --dashboard --no-start --without compose
+setup --silent --with dashboard --no-start --without compose
 check "compose is gone" missing "$home/.docker/cli-plugins/docker-compose"
-run --silent --dashboard --no-start
+setup --silent --with dashboard --no-start
 check "it stays gone on a rerun" missing "$home/.docker/cli-plugins/docker-compose"
-run --silent --dashboard --no-start --with compose
+setup --silent --with dashboard --no-start --with compose
 check "it is back" test -x "$home/.docker/cli-plugins/docker-compose"
 if [ -z "${ONELINER:-}" ]; then
   kind="$home/.dockyard/bin/kind"
   check "kind is next to docker" test -x "$kind"
   "$kind" version | grep -q '^kind v' && ok "it runs: $("$kind" version)" || fail "kind version"
-  run --silent --dashboard --no-start --without kind
+  setup --silent --with dashboard --no-start --without kind
   check "kind is gone" missing "$kind"
-  run --silent --dashboard --no-start
+  setup --silent --with dashboard --no-start
   check "it stays gone on a rerun" missing "$kind"
-  run --silent --dashboard --no-start --with kind
+  setup --silent --with dashboard --no-start --with kind
   check "it is back" test -x "$kind"
   "$home/.dockyard/bin/kubectl" version --client >/dev/null && ok "kubectl is Dockyard's own and runs" || fail "kubectl"
   "$home/.dockyard/bin/helm" version --short >/dev/null && ok "helm comes out of its archive and runs" || fail "helm"
 fi
-rc=0; run --silent --no-start --without linux-engine >/dev/null 2>&1 || rc=$?
+rc=0; setup --silent --no-start --without linux-engine >/dev/null 2>&1 || rc=$?
 if [ "$rc" -eq 2 ]; then ok "the engine is required here"; else fail "--without linux-engine exits $rc"; fi
 if [ "$("$macos/Dockyard Dashboard" --version)" = 0.0.0 ] || "$macos/Dockyard Dashboard" --version >/dev/null; then ok "the dashboard says its version without opening a window"; else fail "dashboard --version"; fi
 
 echo "== remove the dashboard"
-run --silent --no-dashboard --no-start
+setup --silent --without dashboard --no-start
 check "dashboard removed" missing "$macos/Dockyard Dashboard"
-check "app stays" test -x "$macos/Dockyard"
+check "the tray stays" test -x "$macos/Dockyard"
+check "with its libraries" sh -c "ls '$macos'/*.dylib >/dev/null 2>&1"
 
 if [ -n "${BOOT:-}" ]; then
   echo "== the engine still has the data"
@@ -190,7 +191,7 @@ if [ -n "${BOOT:-}" ]; then
 fi
 
 echo "== uninstall keeps the data"
-run --silent --uninstall
+dockyard uninstall
 check "app removed" missing "$app"
 check "login item removed" missing "$home/Library/LaunchAgents/com.byhofman.dockyard.plist"
 check "data kept" test -f "$home/.dockyard/data.img"
@@ -200,6 +201,7 @@ if [ -n "${ADMIN:-}" ]; then
 fi
 if [ -f "$home/.docker/config.json" ] && grep -q credsStore "$home/.docker/config.json"; then fail "credsStore left behind"; else ok "no credential store left in the config"; fi
 if [ -n "${ADMIN:-}" ]; then
+  check "/usr/local/bin/dockyard is gone" missing /usr/local/bin/dockyard
   check "/var/run/docker.sock is gone" missing /var/run/docker.sock
   check "the daemon is gone" missing /Library/LaunchDaemons/com.byhofman.dockyard.socket.plist
   check "the resolver entry is gone" missing /etc/resolver/dockyard.internal
@@ -207,9 +209,9 @@ if [ -n "${ADMIN:-}" ]; then
 fi
 
 echo "== and --remove-data takes it"
-run --silent --no-start
+setup --silent --no-start
 check "a fresh install gets the dashboard" test -x "$macos/Dockyard Dashboard"
-run --silent --uninstall --remove-data
+dockyard uninstall --remove-data
 check "data removed" missing "$home/.dockyard"
 
 if [ -n "${ADMIN:-}" ]; then echo "All good."; exit 0; fi

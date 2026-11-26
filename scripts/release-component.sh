@@ -28,6 +28,6 @@ gh release view "$tag" --repo "$repo" >/dev/null 2>&1 || \
   gh release create "$tag" --repo "$repo" --draft --target "${GITHUB_SHA:?}" --title "$component $version" --notes-file "$notes"
 gh release upload "$tag" --repo "$repo" --clobber "$own"/*
 sh "$here/check-release-assets.sh" "$component" "$version" "$(gh release view "$tag" --repo "$repo" --json assets -q '.assets[].name')"
-if [ "$component" = toolbox ]; then latest=--latest; else latest=--latest=false; fi
+if [ "$component" = cli ]; then latest=--latest; else latest=--latest=false; fi
 gh release edit "$tag" --repo "$repo" --draft=false "$latest"
 sh "$here/update-index.sh" "$component" "$version"

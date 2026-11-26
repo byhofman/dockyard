@@ -1,11 +1,14 @@
 #!/bin/sh
-# End to end on Linux: WIZARD=<the wizard binary> sh wizard-linux.sh [--container]
-# or ONELINER=<url of install.sh> to go through the one-liner. --container: no systemd, running as root.
+# End to end on Linux: DOCKYARD=<the dockyard command> sh setup-linux.sh [--container], with the release's other files
+# next to it, or ONELINER=<url of install.sh> to go through the one-liner. --container: no systemd, running as root.
 set -eu
 container=0; [ "${1:-}" = --container ] && container=1
 
-run() {
-  if [ -n "${ONELINER:-}" ]; then curl -fsSL "$ONELINER" | sh -s -- "$@"; else "$WIZARD" "$@" --assets "$(dirname "$WIZARD")"; fi
+dockyard() {
+  if [ -n "${ONELINER:-}" ]; then curl -fsSL "$ONELINER" | sh -s -- "$@"; else "$DOCKYARD" "$@"; fi
+}
+setup() {
+  if [ -n "${ONELINER:-}" ]; then dockyard setup "$@"; else dockyard setup "$@" --assets "$(dirname "$DOCKYARD")"; fi
 }
 ok() { echo "  ok   $1"; }
 fail() { echo "  FAIL $1" >&2; exit 1; }
@@ -25,14 +28,14 @@ dash() { echo "$app_dir/dockyard-dashboard"; }
 marker=/etc/dockyard/installed
 
 echo "== wrong arguments are refused"
-rc=0; run --silent --typo >/dev/null 2>&1 || rc=$?
+rc=0; setup --silent --typo >/dev/null 2>&1 || rc=$?
 [ "$rc" -eq 2 ] && ok "exit 2" || fail "--typo exits $rc"
 check "and nothing was installed" missing "$marker"
 
 # GitHub's runner image comes with a kind of its own in /usr/local/bin, which Dockyard would rightly leave alone.
-if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then sudo rm -f /usr/local/bin/kind; fi
+if [ "$container" -eq 0 ] && [ -n "${DOCKYARD:-}" ]; then sudo rm -f /usr/local/bin/kind; fi
 
-if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
+if [ "$container" -eq 0 ] && [ -n "${DOCKYARD:-}" ]; then
   # Some of GitHub's runners come with a daemon.json naming their DNS server and some with none: start every run from the
   # first, and the later fresh install from the second.
   upstream="$(awk '$1 == "nameserver" { print $2; exit }' /run/systemd/resolve/resolv.conf)"
@@ -40,14 +43,16 @@ if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
 fi
 
 echo "== first install, no dashboard"
-run --silent --no-dashboard --no-start
-check "app in place" test -x "$app_dir/dockyard-toolbox"
+setup --silent --without dashboard --no-start
+check "the tray in place" test -x "$app_dir/dockyard-tray"
+check "the command in place" test -x "$app_dir/dockyard-cli"
 check "no dashboard" missing "$(dash)"
 check "setup ran" test -f "$marker"
 check "docker installed" command -v dockerd
 if [ "$container" -eq 0 ]; then
   check "tray autostarts" test -f "$HOME/.config/autostart/dockyard.desktop"
-  grep -q "Exec=\"$app_dir/dockyard-toolbox\" --tray" "$HOME/.config/autostart/dockyard.desktop" && ok "autostart points at the installed app" || fail "autostart target"
+  grep -q "Exec=\"$app_dir/dockyard-tray\"" "$HOME/.config/autostart/dockyard.desktop" && ok "autostart points at the installed tray" || fail "autostart target"
+  check "dockyard is on the PATH" test -x /usr/bin/dockyard
 
   echo "== docker works in this session, without signing out"
   sudo systemctl stop docker.service docker.socket
@@ -57,7 +62,7 @@ if [ "$container" -eq 0 ]; then
   ok "marker volume created"
 fi
 
-if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
+if [ "$container" -eq 0 ] && [ -n "${DOCKYARD:-}" ]; then
   echo "== host.docker.internal reaches a service on this machine's loopback"
   grep -q 198.19.250.1 /etc/docker/daemon.json && ok "daemon.json names the agent" || fail "daemon.json: $(cat /etc/docker/daemon.json)"
   grep -qx "nameserver $upstream" /etc/dockyard/dns-upstreams && ok "in place of the server it named, which the agent asks" || fail "kept servers: $(cat /etc/dockyard/dns-upstreams 2>&1)"
@@ -78,19 +83,19 @@ if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
   docker run --rm alpine:3.24 nslookup dl-cdn.alpinelinux.org >/dev/null && ok "other names still resolve" || fail "DNS"
 fi
 
-if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
+if [ "$container" -eq 0 ] && [ -n "${DOCKYARD:-}" ]; then
   echo "== the engine and containers follow this machine's proxy, also one on its loopback"
   sudo apt-get install -y -qq tinyproxy >/dev/null
   sudo systemctl stop tinyproxy
   # Its packaged config path: AppArmor keeps tinyproxy from reading one anywhere else.
   printf 'User tinyproxy\nGroup tinyproxy\nPort 18888\nListen 127.0.0.1\nTimeout 60\nAllow 127.0.0.1\nLogFile "/var/log/tinyproxy/tinyproxy.log"\nLogLevel Connect\nMaxClients 20\n' | sudo tee /etc/tinyproxy/tinyproxy.conf >/dev/null
   sudo systemctl start tinyproxy
-  HTTP_PROXY=http://127.0.0.1:18888 HTTPS_PROXY=http://127.0.0.1:18888 run --silent --no-start >/dev/null
+  HTTP_PROXY=http://127.0.0.1:18888 HTTPS_PROXY=http://127.0.0.1:18888 setup --silent --no-start >/dev/null
   grep -q 'http://198.19.250.254:18888' /etc/docker/daemon.json && ok "daemon.json has the proxy, through the agent" || fail "daemon.json: $(cat /etc/docker/daemon.json)"
   docker version >/dev/null; sleep 2
   docker pull -q busybox:1.37 >/dev/null || fail "pull through the proxy"
   sudo grep -q 'CONNECT.*docker' /var/log/tinyproxy/tinyproxy.log && ok "the pull went through the proxy" || fail "not in the proxy's log: $(sudo tail -5 /var/log/tinyproxy/tinyproxy.log); docker uses: $(docker info --format '{{.HTTPProxy}} {{.HTTPSProxy}}' 2>&1); docker.service since $(systemctl show -p ActiveEnterTimestamp --value docker.service)"
-  run --silent --no-start >/dev/null
+  setup --silent --no-start >/dev/null
   if grep -q 18888 /etc/docker/daemon.json; then fail "the proxy stayed after the machine stopped using it"; else ok "gone once the machine stops using it"; fi
   sudo systemctl stop tinyproxy || true
   # This section restarts the engine more often in a minute than systemd allows; nobody else does that.
@@ -100,7 +105,7 @@ if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
   docker image rm busybox:1.37 >/dev/null 2>&1 || true
 fi
 
-if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
+if [ "$container" -eq 0 ] && [ -n "${DOCKYARD:-}" ]; then
   echo "== container domains, without publishing a port"
   docker run -d --name e2e-web nginx:alpine >/dev/null
   docker run -d --name e2e-custom -l dockyard.port=8099 alpine:3.24 sh -c 'while :; do printf "HTTP/1.0 200 OK\r\n\r\nfrom-8099" | nc -l -p 8099 >/dev/null; done' >/dev/null
@@ -126,7 +131,7 @@ if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
 
   echo "== trusted HTTPS"
   [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 https://e2e-web.dockyard.internal/ || true)" = 000 ] && ok "without trusting, no HTTPS" || fail "HTTPS before it was turned on"
-  run --silent --no-start --trust-https
+  setup --silent --no-start --trust-https
   # Setup restarted the agent and the resolver, and the agent looks containers up again when it starts.
   i=0; while [ $i -lt 20 ] && [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 https://e2e-web.dockyard.internal/ || true)" != 200 ]; do i=$((i+1)); sleep 1; done
   [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://e2e-web.dockyard.internal/)" = 200 ] && ok "https is trusted by the system" || fail "https: $(curl -v --max-time 15 https://e2e-web.dockyard.internal/ 2>&1 | tail -5)"
@@ -142,7 +147,7 @@ if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
   docker rm -f e2e-web e2e-custom >/dev/null
 fi
 
-if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
+if [ "$container" -eq 0 ] && [ -n "${DOCKYARD:-}" ]; then
   echo "== kubectl and helm: from their apt or dnf repositories"
   for tool in kubectl helm; do
     if command -v dpkg-query >/dev/null 2>&1; then
@@ -170,74 +175,76 @@ if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
   [ -z "$(docker ps -aq --filter label=io.x-k8s.kind.cluster=e2e)" ] && ok "deleting leaves no node" || fail "nodes left after delete"
 
   echo "== kind can go and come back, and someone else's kind is left alone"
-  run --silent --no-start --without kind
+  setup --silent --no-start --without kind
   check "kind is gone" missing /usr/local/bin/kind
   check "and its marker" missing /etc/dockyard/kind
-  run --silent --no-start
+  setup --silent --no-start
   check "it stays gone on a rerun" missing /usr/local/bin/kind
   printf '#!/bin/sh\necho mine\n' | sudo tee /usr/local/bin/kind >/dev/null
   sudo chmod +x /usr/local/bin/kind
-  run --silent --no-start --with kind
+  setup --silent --no-start --with kind
   [ "$(/usr/local/bin/kind)" = mine ] && ok "a kind Dockyard did not install stays" || fail "the user's kind was replaced"
   sudo rm /usr/local/bin/kind
-  run --silent --no-start --with kind
+  setup --silent --no-start --with kind
   check "it is back" test -f /etc/dockyard/kind
   kind version >/dev/null && ok "and runs" || fail "kind after --with kind"
 fi
 
 echo "== rerun keeps the choice and the data"
-run --silent --no-start
+setup --silent --no-start
 check "still no dashboard" missing "$(dash)"
 if [ "$container" -eq 0 ]; then
   docker volume inspect dockyard-e2e >/dev/null && ok "marker volume kept" || fail "marker volume gone"
 fi
 
 echo "== add the dashboard"
-run --silent --dashboard --no-start
+setup --silent --with dashboard --no-start
 check "dashboard added" test -x "$(dash)"
 check "with its libraries" test -f "$app_dir/libSkiaSharp.so"
 
-if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
+if [ "$container" -eq 0 ] && [ -n "${DOCKYARD:-}" ]; then
   echo "== the process name"
   check "the file name" test -x "$app_dir/dockyard-dashboard"
   echo "  for the record, /proc comm of that file name is 15 characters: $(printf 'dockyard-dashboard' | cut -c1-15)"
 fi
 
-if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
+if [ "$container" -eq 0 ] && [ -n "${DOCKYARD:-}" ]; then
   echo "== any component can go and come back, and required ones refuse"
-  run --silent --no-start --without compose
+  setup --silent --no-start --without compose
   # By the package: this runner also has a compose of its own outside any package.
   if dpkg -s docker-compose-plugin 2>/dev/null | grep -q 'Status: install ok'; then fail "compose is still there"; else ok "compose is gone"; fi
-  run --silent --no-start
+  setup --silent --no-start
   if dpkg -s docker-compose-plugin 2>/dev/null | grep -q 'Status: install ok'; then fail "a rerun brought compose back"; else ok "it stays gone on a rerun"; fi
-  run --silent --no-start --with compose
+  setup --silent --no-start --with compose
   dpkg -s docker-compose-plugin 2>/dev/null | grep -q 'Status: install ok' && ok "it is back" || fail "compose did not come back"
-  rc=0; run --silent --no-start --without linux-engine >/dev/null 2>&1 || rc=$?
+  rc=0; setup --silent --no-start --without linux-engine >/dev/null 2>&1 || rc=$?
   [ "$rc" -eq 2 ] && ok "the engine is required here" || fail "--without linux-engine exits $rc"
 fi
 
 echo "== rerun keeps it"
-run --silent --no-start
+setup --silent --no-start
 check "dashboard kept" test -x "$(dash)"
 
 echo "== remove the dashboard"
-run --silent --no-dashboard --no-start
+setup --silent --without dashboard --no-start
 check "dashboard removed" missing "$(dash)"
-check "app stays" test -x "$app_dir/dockyard-toolbox"
+check "the tray stays" test -x "$app_dir/dockyard-tray"
+check "and the libraries it links" test -f "$app_dir/libSkiaSharp.so"
 
 echo "== uninstall keeps docker's data"
-run --silent --uninstall
-check "app removed" missing "$app_dir/dockyard-toolbox"
+dockyard uninstall
+check "the tray removed" missing "$app_dir/dockyard-tray"
+check "the command removed" missing "$app_dir/dockyard-cli"
 check "setup undone" missing "$marker"
 if [ "$container" -eq 0 ]; then
   check "the agent is gone" missing /etc/systemd/system/dockyard-host.service
-  [ -n "${WIZARD:-}" ] && check "kind is gone" missing /usr/local/bin/kind
+  [ -n "${DOCKYARD:-}" ] && check "kind is gone" missing /usr/local/bin/kind
   check "the CA is out of the trust store" missing /usr/local/share/ca-certificates/dockyard-local-ca.crt
   if grep -rl "Dockyard Local CA" /etc/ssl/certs >/dev/null 2>&1; then fail "the CA stayed in the system's bundle"; else ok "and out of the system's bundle"; fi
   check "the key is gone" missing "$HOME/.config/Dockyard/ca/ca.key"
   check "names no longer route to Dockyard" missing /etc/systemd/resolved.conf.d/dockyard.conf
   if [ -f /etc/docker/daemon.json ] && grep -q 198.19.250.1 /etc/docker/daemon.json; then fail "daemon.json still names the agent"; else ok "daemon.json no longer names the agent"; fi
-  if [ -n "${WIZARD:-}" ]; then
+  if [ -n "${DOCKYARD:-}" ]; then
     grep -q "\"$upstream\"" /etc/docker/daemon.json && ok "and names its own server again" || fail "daemon.json: $(cat /etc/docker/daemon.json)"
   fi
   if ip addr show lo | grep -q 198.19.250.; then fail "lo kept the agent's addresses: $(ip addr show lo)"; else ok "lo no longer has the agent's addresses"; fi
@@ -251,20 +258,20 @@ if [ "$container" -eq 0 ]; then
   docker volume rm dockyard-e2e >/dev/null
 fi
 
-if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then sudo rm -f /etc/docker/daemon.json; fi
+if [ "$container" -eq 0 ] && [ -n "${DOCKYARD:-}" ]; then sudo rm -f /etc/docker/daemon.json; fi
 echo "== a fresh install gets the dashboard"
-run --silent --no-start
+setup --silent --no-start
 check "dashboard there" test -x "$(dash)"
-if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
+if [ "$container" -eq 0 ] && [ -n "${DOCKYARD:-}" ]; then
   grep -q 198.19.250.1 /etc/docker/daemon.json && ok "a daemon.json of its own names the agent" || fail "daemon.json: $(cat /etc/docker/daemon.json 2>&1)"
   check "with no servers kept" missing /etc/dockyard/dns-upstreams
 fi
 
 if [ "$container" -eq 1 ] && [ "$ID" != arch ]; then
   echo "== removed again, silent without root has no way up"
-  run --silent --uninstall
+  dockyard uninstall
   useradd -m dockyard-e2e 2>/dev/null || true
-  if [ -n "${ONELINER:-}" ]; then as_user="curl -fsSL $ONELINER | sh -s -- --silent --no-start"; else as_user="$WIZARD --silent --no-start --assets $(dirname "$WIZARD")"; fi
+  if [ -n "${ONELINER:-}" ]; then as_user="curl -fsSL $ONELINER | sh -s -- setup --silent --no-start"; else as_user="$DOCKYARD setup --silent --no-start --assets $(dirname "$DOCKYARD")"; fi
   out="$(su dockyard-e2e -c "$as_user" 2>&1)" && fail "exited 0 without root"
   echo "$out" | grep -q "needs root" && ok "non-zero with a clear message" || fail "message was: $out"
 fi

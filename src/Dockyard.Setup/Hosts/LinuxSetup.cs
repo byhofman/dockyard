@@ -38,7 +38,7 @@ sealed class LinuxSetup(LinuxRoot root, LinuxComponents components, ToolComponen
             }
             catch (Exception e) when (e is HttpRequestException or InvalidOperationException or IOException)
             {
-                log($"{tool.Title} was not installed ({e.Message}); running the wizard again retries it");
+                log($"{tool.Title} was not installed ({e.Message}); running dockyard setup again retries it");
             }
         }
         if (request.TrustHttps)
@@ -158,7 +158,7 @@ sealed class LinuxSetup(LinuxRoot root, LinuxComponents components, ToolComponen
         }
         catch (Exception e) when (e is HttpRequestException or InvalidOperationException or IOException)
         {
-            log($"The credential store was not set up ({e.Message}); running the wizard again retries it");
+            log($"The credential store was not set up ({e.Message}); running dockyard setup again retries it");
         }
         finally
         {
