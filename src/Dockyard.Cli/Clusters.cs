@@ -66,7 +66,7 @@ sealed class Clusters(Action<string> log)
         definition ??= KindCli.Config(workers, storage == ClusterStorage.HostFolder);
         if (ClusterDefinitions.Problem(definition) is { } problem) throw new InvalidOperationException(problem);
         var helm = addons.Count > 0 || storage == ClusterStorage.Nfs
-            ? CliLocator.Locate("helm") ?? throw new InvalidOperationException("The add-ons and NFS storage go in with Helm, which is not installed: dockyard --silent --with helm adds it")
+            ? CliLocator.Locate("helm") ?? throw new InvalidOperationException("The add-ons and NFS storage go in with Helm, which is not installed: dockyard component add helm")
             : null;
         var image = KindImages.Choose(kubernetes);
         ClusterDefinitions.Save(name, new ClusterDefinition(definition, storage, addons.Select(a => a.Release).ToList(), loadBalancer, ports, image.Version));
@@ -120,7 +120,7 @@ sealed class Clusters(Action<string> log)
     {
         await RequireLinuxEngine();
         var saved = ClusterDefinitions.Load(name) ?? throw new InvalidOperationException($"Dockyard has no definition of {name}: the dashboard puts one together from its nodes, under Definition");
-        var helm = CliLocator.Locate("helm") ?? throw new InvalidOperationException("The add-ons go in with Helm, which is not installed: dockyard --silent --with helm adds it");
+        var helm = CliLocator.Locate("helm") ?? throw new InvalidOperationException("The add-ons go in with Helm, which is not installed: dockyard component add helm");
         var wanted = addons is null ? saved.AddonList : Addons(addons);
         var wantedStorage = storage is null ? saved.Storage : Storage(storage);
         if (wantedStorage != saved.Storage && (wantedStorage == ClusterStorage.HostFolder || saved.Storage == ClusterStorage.HostFolder))

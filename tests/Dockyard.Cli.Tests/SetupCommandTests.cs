@@ -26,6 +26,29 @@ public sealed class SetupCommandTests
     }
 
     [Fact]
+    public void Setup_on_a_desktop_without_a_terminal_and_without_silent_also_exits_2()
+    {
+        using var h = new CliHarness(Catalog) { HasTerminal = false, HasDesktop = true };
+
+        Assert.Equal(2, h.Run("setup"));
+
+        Assert.Contains("run dockyard setup in a terminal", h.Error);
+        Assert.Empty(h.Host.Requests);
+    }
+
+    [Fact]
+    public void Silent_setup_with_a_component_on_a_headless_new_install_leaves_out_the_tray_and_the_dashboard()
+    {
+        using var h = new CliHarness(Catalog) { HasTerminal = false, HasDesktop = false };
+
+        Assert.Equal(0, h.Run("setup", "--silent", "--with", "kind"));
+
+        var request = Assert.Single(h.Host.Requests);
+        Assert.False(request.Tray);
+        Assert.False(request.Dashboard);
+    }
+
+    [Fact]
     public void Setup_in_a_terminal_asks_which_optional_components_and_then_installs()
     {
         using var h = new CliHarness(Catalog) { HasTerminal = true, HasDesktop = false };

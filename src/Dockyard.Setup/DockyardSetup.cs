@@ -271,7 +271,7 @@ public sealed partial class DockyardSetup : IDisposable
 
         var removedBefore = settings.RemovedComponents.ToList();
         var removed = ComponentRules.Removed(Catalog, removedBefore, with, without);
-        if (!host.IsInstalled && !with.Contains(TrayFlag) && Catalog.Any(c => c.Id == ComponentRules.TrayId && !c.Default) && !removed.Contains(ComponentRules.TrayId))
+        if (!host.IsInstalled && !with.Contains(TrayFlag) && Catalog.Any(c => c.Id == ComponentRules.TrayId && (!c.Default || request.Headless)) && !removed.Contains(ComponentRules.TrayId))
             removed.Add(ComponentRules.TrayId);
         settings.RemovedComponents = removed;
         settings.Source = request.Source ?? settings.Source;
@@ -279,7 +279,7 @@ public sealed partial class DockyardSetup : IDisposable
         // The hosts read these from the file while they install.
         settings.Save();
 
-        bool? dashboardAsked = with.Contains(DashboardFlag) ? true : without.Contains(DashboardFlag) ? false : null;
+        bool? dashboardAsked = with.Contains(DashboardFlag) ? true : without.Contains(DashboardFlag) || request.Headless && !host.IsInstalled ? false : null;
         var dashboard = DashboardChoice.Resolve(dashboardAsked, host.IsInstalled, host.HasDashboard, Catalog.FirstOrDefault(c => c.Id == ComponentRules.DashboardId)?.Default ?? true);
         List<ComponentInfo> adds = [];
         List<ComponentInfo> removes = [];

@@ -75,9 +75,9 @@ sealed class SetupCommand(CliEnvironment env) : AsyncCommand<SetupSettings>
     public override async Task<int> ExecuteAsync(CommandContext context, SetupSettings s, CancellationToken cancellation)
     {
         var asks = !s.Silent && !s.Resume;
-        if (asks && !env.HasTerminal && !env.HasDesktop)
+        if (asks && !env.HasTerminal)
         {
-            env.Error.WriteLine("Setup needs a terminal to ask in, and there is no terminal or display here: add --silent to install without asking.");
+            env.Error.WriteLine("Setup asks which components you want, and there is no terminal to ask in: run dockyard setup in a terminal, or add --silent to install without asking.");
             return DockyardSetup.WrongArguments;
         }
         if (s.Assets is not null) DockyardSetup.LocalAssets = Path.GetFullPath(s.Assets);
@@ -93,6 +93,7 @@ sealed class SetupCommand(CliEnvironment env) : AsyncCommand<SetupSettings>
             Start = !s.NoStart,
             Image = s.Image,
             RemoveData = s.RemoveData,
+            Headless = !env.HasDesktop,
         };
         var code = await setup.Setup(request, new ProgressRenderer(env.Console, env.Error), cancellation);
         if (code == DockyardSetup.Ok && (s.OpenDashboard || asks && env.HasDesktop && setup.HasDashboard))
@@ -100,17 +101,13 @@ sealed class SetupCommand(CliEnvironment env) : AsyncCommand<SetupSettings>
         return code;
     }
 
-    // A new install on a computer without a desktop is not offered the tray and the dashboard, and leaves them out.
+    // A new install on a computer without a desktop is not offered the tray and the dashboard; the library leaves them out.
     (IReadOnlyList<string> With, IReadOnlyList<string> Without) Ask(DockyardSetup setup)
     {
         var offered = setup.Components().Where(c => c.Flag is not null).ToList();
-        var leftOut = new List<string>();
         if (!setup.IsInstalled && !env.HasDesktop)
-        {
-            leftOut = offered.Where(c => c.Flag is DockyardSetup.TrayFlag or DockyardSetup.DashboardFlag).Select(c => c.Flag!).ToList();
-            offered = offered.Where(c => !leftOut.Contains(c.Flag!)).ToList();
-        }
-        if (offered.Count == 0) return ([], leftOut);
+            offered = offered.Where(c => c.Flag is not (DockyardSetup.TrayFlag or DockyardSetup.DashboardFlag)).ToList();
+        if (offered.Count == 0) return ([], []);
 
         var prompt = new MultiSelectionPrompt<ComponentRow>()
             .Title("Which optional components should Dockyard have?")
@@ -123,7 +120,7 @@ sealed class SetupCommand(CliEnvironment env) : AsyncCommand<SetupSettings>
             if (setup.IsInstalled ? !row.CanAdd : true) item.Select();
         }
         var chosen = env.Console.Prompt(prompt).Select(c => c.Flag!).ToList();
-        return (chosen, [.. leftOut, .. offered.Select(c => c.Flag!).Where(f => !chosen.Contains(f))]);
+        return (chosen, offered.Select(c => c.Flag!).Where(f => !chosen.Contains(f)).ToList());
     }
 }
 

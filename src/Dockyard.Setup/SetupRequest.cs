@@ -13,4 +13,6 @@ public sealed record SetupRequest(IReadOnlyList<string> With, IReadOnlyList<stri
     public string? Image { get; init; }
     // What Without removes from an existing install takes its images and containers along.
     public bool RemoveData { get; init; }
+    // No desktop session here: a new install leaves the tray and the dashboard out unless With names them.
+    public bool Headless { get; init; }
 }

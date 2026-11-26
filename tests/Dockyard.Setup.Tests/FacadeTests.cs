@@ -172,6 +172,21 @@ public sealed class FacadeTests : IDisposable
     }
 
     [Fact]
+    public async Task A_headless_request_leaves_out_the_tray_and_the_dashboard_on_a_new_install_unless_asked()
+    {
+        var headless = new FakeHost { Components = TrayCatalog(desktop: true) };
+        Assert.Equal(DockyardSetup.Ok, await For(headless).Setup(new SetupRequest([], [], null, false, false, Silent: true, Resume: false) { Start = false, Headless = true }, progress, CancellationToken.None));
+        Assert.False(headless.Requests.Single().Tray);
+        Assert.False(headless.Requests.Single().Dashboard);
+
+        var asked = new FakeHost { Components = TrayCatalog(desktop: true) };
+        settings.Settings.RemovedComponents = [];
+        Assert.Equal(DockyardSetup.Ok, await For(asked).Setup(new SetupRequest(["tray", "dashboard"], [], null, false, false, Silent: true, Resume: false) { Start = false, Headless = true }, progress, CancellationToken.None));
+        Assert.True(asked.Requests.Single().Tray);
+        Assert.True(asked.Requests.Single().Dashboard);
+    }
+
+    [Fact]
     public async Task A_new_install_on_a_desktop_has_the_tray_and_the_dashboard_unless_declined()
     {
         var host = new FakeHost { Components = TrayCatalog(desktop: true) };
