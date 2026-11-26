@@ -204,12 +204,15 @@ public partial class App : Application
         var activeEngine = vm.ActiveEngine;
         var color = vm.IsBusy ? TrayColors.Busy : activeEngine.IsRunning ? TrayColors.Running : TrayColors.Stopped;
         var multiple = vm.EngineCards.Count > 1;
+        // The badge and the list are for a choice between engines, which a removed one is not.
+        var installed = vm.EngineCards.Where(e => e.IsAvailable).ToList();
+        var choice = installed.Count > 1;
         var offer = vm.UpdateOffer;
-        tray.Icon = TrayIconRenderer.Render(color, multiple ? activeEngine.Name[..1] : null, update: offer is not null);
+        tray.Icon = TrayIconRenderer.Render(color, choice ? activeEngine.Name[..1] : null, update: offer is not null);
         tray.ToolTipText = vm.IsBusy
             ? $"Dockyard: {vm.Busy}…"
-            : "Dockyard\n" + string.Join("\n", vm.EngineCards.Select(e =>
-                $"{e.Name} engine {e.StatusText.ToLowerInvariant()}{(multiple && e.IsActive ? " (active)" : "")}"))
+            : "Dockyard\n" + string.Join("\n", installed.Select(e =>
+                $"{e.Name} engine {e.StatusText.ToLowerInvariant()}{(choice && e.IsActive ? " (active)" : "")}"))
                 + (offer is null ? "" : "\nUpdate available, in the menu");
         if (updateItem is not null && updateSeparator is not null)
         {

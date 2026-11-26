@@ -156,7 +156,8 @@ sealed class MainViewModel : Observable
     public string Version => "v" + Paths.AppVersion;
     public string Active => active;
     public EngineViewModel ActiveEngine => EngineCards.FirstOrDefault(e => e.Id == active) ?? EngineCards[0];
-    public bool HasEngineSwitch => IsDashboard && EngineCards.Count > 1;
+    // Two engines only on Windows, and only while both are installed: one removed leaves nothing to switch to.
+    public bool HasEngineSwitch => IsDashboard && EngineCards.Count(e => e.IsAvailable) > 1;
 
     public string SetupDescription => OperatingSystem.IsWindows()
         ? "Installs the Windows Docker engine (dockerd service), the docker CLI with compose and buildx, a dedicated 'dockyard' WSL distro for Linux containers, and Dockyard itself, which runs in the tray."
@@ -413,6 +414,7 @@ sealed class MainViewModel : Observable
         foreach (var e in EngineCards) e.IsActive = e.Id == active;
         RefreshDashboard();
         foreach (var e in EngineCards) e.IsAvailable = e.Info.ComponentId is not { } id || !settings.RemovedComponents.Contains(id);
+        Raise(nameof(HasEngineSwitch));
         Raise(nameof(Active), nameof(ActiveEngine));
         StateChanged?.Invoke();
     }
