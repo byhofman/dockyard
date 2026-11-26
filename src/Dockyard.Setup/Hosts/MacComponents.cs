@@ -27,7 +27,7 @@ sealed class MacComponents(ICommandRunner runner)
     static Version? InstalledAppVersion()
     {
         var plist = Path.Combine(MacLayout.AppBase, "..", "Info.plist");
-        return File.Exists(plist) ? MacLayout.BundleVersion(File.ReadAllText(plist)) : Updates.ParseVersion(Paths.AppVersion);
+        return File.Exists(plist) ? MacLayout.BundleVersion(File.ReadAllText(plist)) : null;
     }
 
     public static async Task<Release?> Latest(string component) => component switch

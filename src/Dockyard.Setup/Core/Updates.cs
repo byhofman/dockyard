@@ -109,18 +109,23 @@ static partial class Updates
     // which everyone behind one office network or VPN shares.
     static string AssetUrl(string repo, string tag, string asset) => $"https://github.com/{repo}/releases/download/{tag}/{asset}";
 
-    internal static async Task<string?> LatestTag(string repo)
-    {
-        var url = $"https://github.com/{repo}/releases/latest";
-        using var request = new HttpRequestMessage(HttpMethod.Head, url);
-        using var response = await Http.SendAsync(request);
-        EnsureSuccess(response, url);
-        return TagOfLatestRedirect(response.RequestMessage!.RequestUri!);
-    }
+    // "The Dockyard version" is the installed dockyard command's: the tray and the dashboard run this library too, with
+    // versions of their own. Only the command itself has none installed yet during a first install, and goes by its own.
+    // The facade points InstalledCli at its host.
+    internal static Func<Task<Version?>> InstalledCli { get; set; } = () => Task.FromResult<Version?>(null);
+    internal static readonly bool RunsAsCli = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name == "dockyard-cli";
 
-    // A repository without releases redirects to its release list instead.
-    internal static string? TagOfLatestRedirect(Uri target) =>
-        ReleaseTagPath().Match(target.AbsolutePath) is { Success: true } m ? Uri.UnescapeDataString(m.Groups["tag"].Value) : null;
+    internal static Version? DockyardVersion(Version? installedCli, bool runsAsCli, string ownVersion) =>
+        installedCli ?? (runsAsCli ? ParseVersion(ownVersion) : null);
+
+    internal static async Task<Version?> DockyardVersion() => DockyardVersion(await InstalledCli(), RunsAsCli, Paths.AppVersion);
+
+    // A dockyard command run from a download that differs from the installed one brings its own package along. The tray and
+    // the dashboard never do: their version is not the command's.
+    internal static bool BringsCliAlong(Version? installedCli, bool runsAsCli, string ownVersion) =>
+        runsAsCli && installedCli != ParseVersion(ownVersion);
+
+    internal static async Task<bool> BringsCliAlong() => BringsCliAlong(await InstalledCli(), RunsAsCli, Paths.AppVersion);
 
     [SupportedOSPlatform("windows")]
     static async Task<Version?> OwnToolVersion(CliTool tool) =>
@@ -192,7 +197,7 @@ static partial class Updates
     public static async Task<Release?> LatestComponentAsset(string component, string assetPattern)
     {
         if (await LatestComponent(component) is not { } entry) return null;
-        if (!RequirementsMet(entry, ParseVersion(Paths.AppVersion))) return null;
+        if (!RequirementsMet(entry, await DockyardVersion())) return null;
         if (await GetTextIfFound(AssetUrl(Paths.Repo, entry.Tag, "SHA256SUMS")) is not { } sums) return null;
         return Checksums.Names(sums).FirstOrDefault(n => Regex.IsMatch(n, assetPattern)) is { } asset
             ? new Release(entry.Version, entry.Tag, AssetUrl(Paths.Repo, entry.Tag, asset))
@@ -214,10 +219,11 @@ static partial class Updates
         return await DownloadReleaseAsset(assetPattern, targetDir, isPattern: true, tag: entry.Tag);
     }
 
-    // From the given release; without one, the CLI's release of this build, or the latest for development builds. The CLI's
-    // release also carries the macOS app and the Linux packages and tarball.
-    internal static string? ReleaseTag(string appVersion, string? tag) =>
-        tag ?? (appVersion == "0.0.0" ? null : ComponentTag(CliComponent, appVersion));
+    // From the given release; without one, the CLI release of the Dockyard version, so what is added matches what is
+    // installed. A development build (0.0.0) or no version at all leaves it to the index's cli entry. The CLI's release also
+    // carries the macOS app and the Linux packages and tarball.
+    internal static string? ReleaseTag(Version? dockyard, string? tag) =>
+        tag ?? (dockyard is null || dockyard == new Version(0, 0, 0) ? null : ComponentTag(CliComponent, dockyard.ToString()));
 
     // --assets: Dockyard's own files from a folder the user named, for offline installs and for testing a build before its
     // release. Never the installer's own folder by itself: that is usually Downloads, where any web page can leave a file.
@@ -240,8 +246,8 @@ static partial class Updates
 
     public static async Task<string> DownloadReleaseAsset(string name, string targetDir, bool isPattern = false, string? tag = null)
     {
-        var release = ReleaseTag(Paths.AppVersion, tag) ?? await LatestTag(Paths.Repo)
-            ?? throw new InvalidOperationException("No Dockyard release found");
+        var release = ReleaseTag(await DockyardVersion(), tag) ?? (await LatestComponent(CliComponent))?.Tag
+            ?? throw new InvalidOperationException("No Dockyard release found: components.json on the release tagged index names no cli release");
         var sums = await GetText(AssetUrl(Paths.Repo, release, "SHA256SUMS"));
         var asset = Checksums.Names(sums).FirstOrDefault(n => isPattern ? Regex.IsMatch(n, name) : n == name)
             ?? throw new InvalidOperationException($"Release {release} has no {name}");
@@ -304,7 +310,4 @@ static partial class Updates
 
     [GeneratedRegex(@"\d+\.\d+\.\d+")]
     private static partial Regex VersionNumber();
-
-    [GeneratedRegex(@"/releases/tag/(?<tag>.+)$")]
-    private static partial Regex ReleaseTagPath();
 }

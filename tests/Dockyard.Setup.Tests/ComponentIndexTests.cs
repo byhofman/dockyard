@@ -23,11 +23,8 @@ public sealed class ComponentIndexTests
     }
 
     [Fact]
-    public void A_latest_release_with_a_component_tag_is_read_from_its_redirect()
+    public void A_component_tag_names_the_component_and_its_version()
     {
-        Assert.Equal("cli/0.9.0", Updates.TagOfLatestRedirect(new Uri("https://github.com/byhofman/dockyard/releases/tag/cli%2F0.9.0")));
-        Assert.Equal("cli/0.9.0", Updates.TagOfLatestRedirect(new Uri("https://github.com/byhofman/dockyard/releases/tag/cli/0.9.0")));
-        Assert.Null(Updates.TagOfLatestRedirect(new Uri("https://github.com/byhofman/dockyard/releases")));
         Assert.Equal(new Version(0, 9, 0), Updates.ParseVersion("cli/0.9.0"));
         Assert.Equal("cli/1.2.3", Updates.ComponentTag(Updates.CliComponent, "1.2.3"));
     }

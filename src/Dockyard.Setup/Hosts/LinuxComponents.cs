@@ -116,8 +116,7 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
         }
         if (installed)
         {
-            // A setup newer than what is installed brings the matching dockyard package along with the dashboard.
-            var withApp = await InstalledAppVersion() != Updates.ParseVersion(Paths.AppVersion);
+            var withApp = await Updates.BringsCliAlong();
             await InstallPackages(log, os.PackageManager, app: withApp, dashboard: true, tag: null);
         }
         else await RemoveDashboardPackage(log, os.PackageManager);

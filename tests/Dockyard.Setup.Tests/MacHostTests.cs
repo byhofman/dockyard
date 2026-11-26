@@ -262,9 +262,10 @@ public sealed class MacInstallTests : IDisposable
     [Fact]
     public void Self_update_downloads_the_offered_release_not_the_running_one()
     {
-        Assert.Equal("v2.0.0", Updates.ReleaseTag("1.0.0", "v2.0.0"));
-        Assert.Equal("cli/1.0.0", Updates.ReleaseTag("1.0.0", null));
-        Assert.Null(Updates.ReleaseTag("0.0.0", null));
+        Assert.Equal("v2.0.0", Updates.ReleaseTag(new Version(1, 0, 0), "v2.0.0"));
+        Assert.Equal("cli/1.0.0", Updates.ReleaseTag(new Version(1, 0, 0), null));
+        Assert.Null(Updates.ReleaseTag(new Version(0, 0, 0), null));
+        Assert.Null(Updates.ReleaseTag(null, null));
     }
 
     [Fact]

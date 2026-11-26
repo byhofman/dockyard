@@ -37,6 +37,7 @@ public sealed partial class DockyardSetup : IDisposable
         this.host = host;
         this.settings = settings;
         this.shell = shell ?? ShellProfiles.User;
+        Updates.InstalledCli = () => host.Installed(nameof(Component.DockyardCli));
         Duties = new BackgroundDuties(this, host, settings);
         ClusterAgent = () => AgentClient.For(DockerEndpoint.Parse(host.Engines[0].Endpoint));
     }

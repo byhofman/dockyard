@@ -6,8 +6,9 @@ using Dockyard.Hosts;
 
 namespace Dockyard.Setup.Tests;
 
-// Classes that swap Updates.Http, which is static, cannot run side by side.
-[CollectionDefinition(nameof(SharedHttp))]
+// Classes that swap Updates.Http or Updates.InstalledCli, which are static, run alone: a facade made by a test running
+// next to them would point InstalledCli at its own host.
+[CollectionDefinition(nameof(SharedHttp), DisableParallelization = true)]
 public sealed class SharedHttp;
 
 [Collection(nameof(SharedHttp))]
@@ -33,10 +34,6 @@ public sealed class UpdatesTests : IDisposable
         public HttpStatusCode? Refuse { get; set; }
 
         public void Serve(string url, string body) => Routes[url] = () => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) };
-
-        // HttpClient reports where redirects ended up through the response's request.
-        public void Redirect(string url, string target) =>
-            Routes[url] = () => new HttpResponseMessage(HttpStatusCode.OK) { RequestMessage = new HttpRequestMessage(HttpMethod.Head, target) };
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -80,11 +77,14 @@ public sealed class UpdatesTests : IDisposable
         Assert.Equal(matches, System.Text.RegularExpressions.Regex.IsMatch(asset, Updates.WindowsAppAsset));
 
     [Fact]
-    public async Task A_repository_without_releases_has_no_latest()
+    public async Task Without_a_cli_release_in_the_index_nothing_is_downloaded()
     {
-        github.Redirect($"{Base}/latest", Base);
+        github.Serve($"{Base}/download/index/components.json", """{ "tray": { "version": "1.1.0", "tag": "tray/1.1.0" } }""");
+        Updates.InstalledCli = () => Task.FromResult<Version?>(null);
 
-        Assert.Null(await Updates.LatestTag(Paths.Repo));
+        var e = await Assert.ThrowsAsync<InvalidOperationException>(() => Updates.DownloadReleaseAsset(Updates.ImageAsset, dir, isPattern: true, tag: null));
+
+        Assert.Contains("No Dockyard release found", e.Message);
     }
 
     [Fact]
@@ -126,7 +126,7 @@ public sealed class UpdatesTests : IDisposable
     {
         github.Refuse = status;
 
-        var e = await Assert.ThrowsAsync<HttpRequestException>(() => Updates.LatestTag(Paths.Repo));
+        var e = await Assert.ThrowsAsync<HttpRequestException>(() => Updates.LatestComponentAsset(Updates.CliComponent, Updates.CliAssetPattern));
 
         Assert.True(Updates.IsRateLimited(e));
         Assert.Contains("github.com is refusing or limiting requests", e.Message);
