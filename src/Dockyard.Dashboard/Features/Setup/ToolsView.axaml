@@ -16,7 +16,7 @@
           <StackPanel Classes="label"><PathIcon Data="{StaticResource IconRefresh}" /><TextBlock Text="Check for updates" /></StackPanel>
         </Button>
         <Button Grid.Column="2" Classes="primary" Command="{Binding UpdateAllCommand}" VerticalAlignment="Center"
-                ToolTip.Tip="Update every component that has a newer version, except Dockyard itself">
+                ToolTip.Tip="Update every component that has a newer version, Dockyard itself last">
           <StackPanel Classes="label"><PathIcon Data="{StaticResource IconDown}" /><TextBlock Text="Update all" /></StackPanel>
         </Button>
       </Grid>

@@ -1,7 +1,7 @@
 #!/bin/sh
 # check-release-assets.sh <component> <version> <asset names, whitespace separated>: fails when something the one-liners
 # or dockyard setup and update download is missing from a component's release.
-# <component> is cli, tray, dashboard or engine; all checks a build of everything (pull requests and main).
+# <component> is cli, tray, dashboard or engine; all checks a build of everything (a run by hand, or a v tag).
 # check-release-assets.sh --list <component> <version>: the names and patterns of what that release carries.
 set -euf
 list=0

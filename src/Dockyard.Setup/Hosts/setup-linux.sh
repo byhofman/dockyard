@@ -268,7 +268,7 @@ EOF
 }
 
 # systemd-resolved sends one name space to one server and leaves the rest alone. Without it there is no such thing to
-# hook into, and rewriting the machine's only resolver for this would be a poor trade: the wizard says what is missing.
+# hook into, and rewriting the machine's only resolver for this would be a poor trade: setup says what is missing.
 route_domains() {
   [ -d /run/systemd/resolve ] || { echo "No systemd-resolved: container domains do not resolve by name here"; return 0; }
   mkdir -p /etc/systemd/resolved.conf.d

@@ -36,9 +36,9 @@ Run the same line again at any time: setup brings what is installed up to date a
 
 Dockyard's own parts are released on their own, each with its own version: the `dockyard` command, the tray, the dashboard and the engine image. A fix to one of them does not wait for a release of everything.
 
-The tray, or the dashboard when there is no tray, looks for updates by itself every six hours. A blue dot on the tray's icon and its tooltip say one is there; `dockyard update` or **Update to** in the dashboard's Tools brings it.
+The tray, or the dashboard when there is no tray, looks for updates by itself every six hours. A blue dot on the tray's icon and its tooltip say one is there; `dockyard update` or **Update all** in the dashboard's Tools brings everything, Dockyard itself last, and `dockyard update <component>` or **Update** on its row brings one. When the dashboard or the tray would replace itself, a `dockyard` command of its own does that step and the app closes meanwhile.
 
-The command-line tools (the Docker CLI, Compose, Buildx, kind, kubectl and Helm) come from the system's package manager wherever it has them: winget on Windows, Homebrew on macOS, and on Linux the Docker, Kubernetes and Helm apt or dnf repositories. They then update the way everything else on the computer does (`winget upgrade`, `brew upgrade`, `apt upgrade`), and Dockyard's **Update** offers what the package manager has. Where there is no package manager, where it fails, or when you choose **Dockyard** under **Install docker, kind, kubectl and helm with** in setup or the dashboard's Settings (`--source dockyard`), the source is Dockyard: its own pinned downloads. On Windows, winget installs them for all users (`C:\Program Files\WinGet`), and Defender's prevalence rule gets an exclusion for exactly those files, so a brand-new release of a tool is not blocked.
+The command-line tools (the Docker CLI, Compose, Buildx, kind, kubectl and Helm) come from the system's package manager wherever it has them: winget on Windows, Homebrew on macOS, and on Linux the Docker, Kubernetes and Helm apt or dnf repositories. They then update the way everything else on the computer does (`winget upgrade`, `brew upgrade`, `apt upgrade`), and Dockyard's **Update** offers what the package manager has. Where there is no package manager, where it fails, or when you choose **Dockyard** as the **Download source** in setup or the dashboard's Tools, the source is Dockyard: its own pinned downloads. In a terminal both take the same two words: `--source dockyard` or `--source package-manager` for setup, and `dockyard settings set source dockyard` or `package-manager` afterwards. On Windows, winget installs them for all users (`C:\Program Files\WinGet`), and Defender's prevalence rule gets an exclusion for exactly those files, so a brand-new release of a tool is not blocked.
 
 With kubectl comes an optional shell setup (**Set up kubectl in my shell**, `--kubectl-shell`): `k` for kubectl with its completion, `$do` for `--dry-run=client -o yaml` and `$now` for `--force --grace-period 0`, as the Kubernetes exams have it; in PowerShell you splat them, `kubectl run web --image nginx @do`. It is a marked block in your PowerShell profiles and Git Bash's `.bashrc` on Windows, `.zshrc` on macOS and `.bashrc` on Linux, which Dockyard takes out again when you turn it off. In PowerShell `$do` and `$now` are lists, so `k run web --image nginx $do` passes them as separate arguments.
 
@@ -82,7 +82,7 @@ The line runs `dockyard setup` with them; once installed, `dockyard` itself take
 | `--no-start` | Do not start Dockyard afterwards. |
 | `--assets <folder>` | Take Dockyard's own release files (image, tray, dashboard, packages, the macOS app) from this folder instead of downloading them, for an install without internet or a build before its release. They are not checked, so only name a folder you filled yourself. |
 | `--trust-https` | Add Dockyard's own certificate to the trust store, for HTTPS on container domains. |
-| `--open-dashboard` | Open the dashboard's Setup screen when done. |
+| `--open-dashboard` | Open the dashboard at Tools when done. |
 
 `dockyard import` copies images, volumes and containers from Docker Desktop, which keeps them (**Import** in the dashboard's Tools does the same). `dockyard uninstall` removes Dockyard and keeps images and containers; `dockyard uninstall --remove-data` takes them too.
 
@@ -249,10 +249,10 @@ dockyard config edit --engine linux     # daemon.json in your editor, checked, t
 dockyard cluster create dev --workers 2 --addons metrics-server,traefik,cert-manager --storage nfs
 dockyard cluster ls                     # also recreate, upgrade, delete, use, kubeconfig, definition
 dockyard https on
-dockyard update --check
+dockyard update --check                # dockyard update brings it all; dockyard update kind only that
 ```
 
-Every command runs in the command itself, over the same library the tray and the dashboard use. `dockyard setup` installs and asks which optional components you want (`dockyard setup --silent --with kind --without tray` does not ask), `dockyard component ls|add|remove <flag>` changes them, and `dockyard settings ls|get|set`, `dockyard uninstall` and `dockyard import` do what their names say. The exit code is `0` when done, `1` on failure and `2` for wrong arguments.
+Every command runs in the command itself, over the same library the tray and the dashboard use. `dockyard setup` installs and asks which optional components you want (`dockyard setup --silent --with kind --without tray` does not ask), `dockyard component ls|add|remove <flag>` changes them, and `dockyard settings ls|get|set`, `dockyard uninstall` and `dockyard import` do what their names say. The exit code is `0` when done, `1` on failure with the reason on stderr (also when `dockyard update` could not check something), and `2` for wrong arguments, such as a `--file` that is not there.
 
 ## Container domains
 

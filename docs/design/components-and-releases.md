@@ -56,8 +56,8 @@ shares. So one release with the fixed tag `index` carries a single asset, `compo
 - Without an index (a network that blocks the download) setup says so; `--assets` installs without it.
 - The one-liners read the index too: they take the `cli` entry's tag (or `cli/$DOCKYARD_VERSION`), download only that
   release's command for their OS and its `SHA256SUMS`, check it and run `dockyard setup <args>`. They accept only `cli/*` tags.
-- The CLI's release is the one marked latest; the other components publish with `--latest=false`. So `releases/latest` is
-  the CLI's, which a development build (0.0.0) falls back to.
+- The CLI's release is the one marked latest; the other components publish with `--latest=false`. Nothing reads
+  `releases/latest`: a development build (0.0.0) takes its Dockyard files from the index's `cli` entry.
 
 ## The CLI
 
@@ -73,16 +73,17 @@ shares. So one release with the fixed tag `index` carries a single asset, `compo
 
 ## Pipelines
 
-One workflow, `release.yml`. Its `plan` job reads the ref and turns on only the jobs a component needs:
+One workflow, `release.yml`, run by a release tag or by hand; there is none on pull requests or `main`. Its `plan` job reads
+the ref and turns on only the jobs a component needs:
 
 | Ref | Builds and tests | Releases |
 |---|---|---|
-| pull request, `main` | everything | nothing |
+| run by hand (`workflow_dispatch`) | everything | nothing |
 | `cli/<version>` | the CLI for Windows, Linux and macOS, the Linux packages and tarball and the macOS app (with the tray and dashboard of this commit), with the `setup-*` end-to-end tests that drive `dockyard setup --silent` | the CLI, marked latest |
 | `tray/<version>` | the tray for Windows | the tray |
 | `dashboard/<version>` | the dashboard for Windows and Linux | the dashboard |
 | `engine/<version>` | the WSL image and the macOS VM images, with their boot tests | the engine |
-| `v<version>` | everything, as for a pull request | all four at `<version>`, in order: engine, tray, dashboard, CLI |
+| `v<version>` | everything, as for a run by hand | all four at `<version>`, in order: engine, tray, dashboard, CLI |
 
 A single component's release writes `SHA256SUMS`, publishes the release as a draft, checks its assets, makes it public and
 updates `components.json`. A `v` tag does the same for each component in turn (`scripts/release-component.sh`): it creates
