@@ -80,7 +80,7 @@ sealed class CreateSettings : CommandSettings
     public int Workers { get; init; }
 
     [CommandOption("--addons <names>")]
-    [Description("metrics-server, traefik, cert-manager, headlamp (with Helm), comma separated")]
+    [Description("metrics-server, traefik, cert-manager, victoria-metrics, headlamp (with Helm), comma separated")]
     public string? Addons { get; init; }
 
     [CommandOption("--storage <kind>")]
@@ -169,7 +169,7 @@ sealed class EditSettings : CommandSettings
     public string Name { get; init; } = "";
 
     [CommandOption("--addons <names>")]
-    [Description("All the add-ons it should have, comma separated: metrics-server, traefik, cert-manager, headlamp; none for none")]
+    [Description("All the add-ons it should have, comma separated: metrics-server, traefik, cert-manager, victoria-metrics, headlamp; none for none")]
     public string? Addons { get; init; }
 
     [CommandOption("--storage <kind>")]

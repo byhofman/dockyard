@@ -31,6 +31,7 @@ sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
             }
             foreach (var addon in addons ?? [])
                 await ClusterAddons.Install(helm ?? throw new InvalidOperationException("Helm is not installed."), addon, own, name, Path.Combine(scratch.FullName, "helm"), onLine);
+            if (addons?.Contains(VictoriaMetrics.Addon) == true) await VictoriaMetrics.Alias(dockerContext.Length > 0 ? dockerContext : "default", name, onLine);
             if (addons?.Contains(Headlamp.Addon) == true)
             {
                 try { await Headlamp.Expose(dockerContext.Length > 0 ? dockerContext : "default", name, tls: addons.Contains(CertManager.Addon), onLine); }
@@ -71,6 +72,7 @@ sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
             var added = ClusterAddons.All.Where(a => wanted.Contains(a) && !current.Contains(a)).ToList();
             foreach (var addon in added)
                 await ClusterAddons.Install(helm, addon, own, name, Path.Combine(scratch.FullName, "helm"), onLine);
+            if (added.Contains(VictoriaMetrics.Addon)) await VictoriaMetrics.Alias(context, name, onLine);
             if (added.Contains(CertManager.Addon) && clusterCa is not null)
                 await CertManager.AddIssuer(context, name, await clusterCa(name), onLine);
             if (wanted.Contains(Headlamp.Addon) && (added.Contains(Headlamp.Addon) || added.Contains(CertManager.Addon)))
