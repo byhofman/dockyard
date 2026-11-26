@@ -47,6 +47,17 @@ public sealed class ClusterWantsTests : IDisposable
         await For(new FakeHost(), new RecordingAgent { Failure = new IOException("The agent next to the engine did not answer") }).PushClusterWants();
     }
 
+    [Fact]
+    public async Task An_agent_that_answers_with_an_error_says_so()
+    {
+        ClusterDefinitions.Save("dev", new ClusterDefinition(Yaml, ClusterStorage.None, []), folder);
+
+        var e = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            For(new FakeHost(), new RecordingAgent { Failure = new InvalidOperationException("unknown request") }).PushClusterWants());
+
+        Assert.Equal("The engine's agent refused the cluster settings: unknown request", e.Message);
+    }
+
     sealed class RecordingAgent : IClusterAgent
     {
         public List<IReadOnlyList<ClusterWant>> Pushed { get; } = [];
@@ -59,7 +70,7 @@ public sealed class ClusterWantsTests : IDisposable
             return Task.CompletedTask;
         }
 
-        public Task<IReadOnlyList<ClusterStatus>> ClusterStatusAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<ClusterStatus>>([]);
+        public Task<ClusterServicesStatus> ClusterStatusAsync(CancellationToken ct = default) => Task.FromResult(new ClusterServicesStatus([], []));
     }
 
     // A record's own equality compares the list of ports by reference.

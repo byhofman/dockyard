@@ -75,7 +75,7 @@ public sealed class ClusterServicesTests : IDisposable
         Assert.Equal("80=kindccm-a", engine.Find(KindForwarder.Prefix + "aaa")!.Labels![KindForwarder.ForwardsLabel]);
         Assert.Equal("443=kindccm-c", engine.Find(KindForwarder.Prefix + "dev")!.Labels![KindForwarder.ForwardsLabel]);
         Assert.Equal([443], engine.Specs[KindForwarder.Prefix + "dev"].LoopbackPorts);
-        var dev = services.Status().Single(s => s.Cluster == "dev");
+        var dev = services.Status().Clusters.Single(s => s.Cluster == "dev");
         Assert.Equal([new ClusterForward(443, "traefik/traefik")], dev.Forwards);
         Assert.Equal([new TakenPort(80, "aaa")], dev.Taken);
         Assert.Empty(dev.Busy);
@@ -117,19 +117,57 @@ public sealed class ClusterServicesTests : IDisposable
 
         await services.Reconcile(Ct);
         Assert.Equal("443=kindccm-a", engine.Find(KindForwarder.Prefix + "dev")!.Labels![KindForwarder.ForwardsLabel]);
-        Assert.Equal([80], services.Status().Single().Busy);
-        Assert.Equal([new ClusterForward(443, "traefik/traefik")], services.Status().Single().Forwards);
+        Assert.Equal([80], services.Status().Clusters.Single().Busy);
+        Assert.Equal([new ClusterForward(443, "traefik/traefik")], services.Status().Clusters.Single().Forwards);
 
         engine.BusyOnHost.Clear();
         var runs = engine.Runs;
         await services.Reconcile(Ct);
         Assert.Equal(runs, engine.Runs);
-        Assert.Equal([80], services.Status().Single().Busy);
+        Assert.Equal([80], services.Status().Clusters.Single().Busy);
 
         engine.Balancer("dev", "default/api", "kindccm-b", 8081);
         await services.Reconcile(Ct);
         Assert.Equal("80=kindccm-a,443=kindccm-a", engine.Find(KindForwarder.Prefix + "dev")!.Labels![KindForwarder.ForwardsLabel]);
-        Assert.Empty(services.Status().Single().Busy);
+        Assert.Empty(services.Status().Clusters.Single().Busy);
+    }
+
+    [Fact]
+    public async Task A_cloud_provider_that_cannot_start_still_lets_NFS_and_the_forwarders_start_and_says_why()
+    {
+        engine.Node("dev");
+        engine.Balancer("dev", "traefik/traefik", "kindccm-a", 80);
+        engine.Failing[KindCloudProvider.Name] = "pull access denied: no network";
+        var services = Services();
+        services.SetWants([new("dev", true, [80], true)]);
+
+        await services.Reconcile(Ct);
+
+        Assert.Null(engine.Find(KindCloudProvider.Name));
+        Assert.NotNull(engine.Find(KindNfsServer.ContainerName));
+        Assert.NotNull(engine.Find(KindForwarder.Prefix + "dev"));
+        Assert.Equal([$"{KindCloudProvider.Name}: pull access denied: no network"], services.Status().Errors);
+        Assert.Null(services.Status().Clusters.Single().Error);
+    }
+
+    [Fact]
+    public async Task One_clusters_forwarder_failing_leaves_the_next_clusters_alone_and_shows_under_that_cluster()
+    {
+        engine.Node("aaa");
+        engine.Node("dev");
+        engine.Balancer("aaa", "traefik/traefik", "kindccm-a", 80);
+        engine.Balancer("dev", "traefik/traefik", "kindccm-b", 443);
+        engine.Failing[KindForwarder.Prefix + "aaa"] = "No such image";
+        var services = Services();
+        services.SetWants([new("aaa", true, [80], false), new("dev", true, [443], false)]);
+
+        await services.Reconcile(Ct);
+
+        Assert.NotNull(engine.Find(KindForwarder.Prefix + "dev"));
+        var aaa = services.Status().Clusters.Single(c => c.Cluster == "aaa");
+        Assert.Equal($"{KindForwarder.Prefix}aaa: No such image", aaa.Error);
+        Assert.Empty(aaa.Forwards);
+        Assert.Empty(services.Status().Errors);
     }
 
     [Fact]
@@ -215,6 +253,7 @@ public sealed class ClusterServicesTests : IDisposable
         var reply = api.Reply("""{"op":"cluster-status"}""");
 
         var status = Assert.Single(reply.Clusters!);
+        Assert.Empty(reply.ClusterErrors!);
         Assert.Equal(("dev", 80, "traefik/traefik"), (status.Cluster, status.Forwards.Single().Port, status.Forwards.Single().Service));
     }
 
@@ -223,6 +262,7 @@ public sealed class ClusterServicesTests : IDisposable
         readonly List<ContainerSummary> containers = [];
         public Dictionary<string, ServiceContainerSpec> Specs { get; } = [];
         public HashSet<int> BusyOnHost { get; } = [];
+        public Dictionary<string, string> Failing { get; } = [];
         public int Runs { get; private set; }
         int next;
 
@@ -248,6 +288,7 @@ public sealed class ClusterServicesTests : IDisposable
         public Task Run(ServiceContainerSpec spec, CancellationToken ct)
         {
             Runs++;
+            if (Failing.TryGetValue(spec.Name, out var failure)) throw new DockerException(HttpStatusCode.InternalServerError, failure);
             if (spec.LoopbackPorts.FirstOrDefault(BusyOnHost.Contains) is var busy and > 0)
                 throw new DockerException(HttpStatusCode.InternalServerError, $"driver failed programming external connectivity on endpoint {spec.Name}: Bind for 127.0.0.1:{busy} failed: port is already allocated");
             Specs[spec.Name] = spec;

@@ -13,4 +13,5 @@ sealed class AgentMessage
     public bool Https { get; set; }
     public List<ClusterWant>? Wants { get; set; }
     public List<ClusterStatus>? Clusters { get; set; }
+    public List<string>? ClusterErrors { get; set; }
 }

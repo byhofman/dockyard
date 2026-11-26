@@ -21,7 +21,7 @@ sealed class ClusterServices(IClusterEngine engine, string wantsFile, Action<str
     const string NodeLabel = "io.x-k8s.kind.cluster";
     readonly object gate = new();
     List<ClusterWant>? wants = Load(wantsFile);
-    List<ClusterStatus> status = [];
+    ClusterServicesStatus status = new([], []);
     // A port another program holds on the host shows only when a forwarder fails to start; it is tried again once the
     // cluster's own containers or its wants change, not in a loop.
     readonly Dictionary<string, (string Fingerprint, HashSet<int> Ports)> busy = [];
@@ -35,18 +35,22 @@ sealed class ClusterServices(IClusterEngine engine, string wantsFile, Action<str
 
     public void SetWants(IReadOnlyList<ClusterWant> next)
     {
-        lock (gate) wants = [.. next];
-        try
+        // The file is written under the lock too, so two requests at once cannot leave it saying other than memory does.
+        lock (gate)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(wantsFile)!);
-            File.WriteAllText(wantsFile + ".new", JsonSerializer.Serialize(next.ToList(), AgentApiJson.Default.ListClusterWant));
-            File.Move(wantsFile + ".new", wantsFile, overwrite: true);
+            wants = [.. next];
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(wantsFile)!);
+                File.WriteAllText(wantsFile + ".new", JsonSerializer.Serialize(wants, AgentApiJson.Default.ListClusterWant));
+                File.Move(wantsFile + ".new", wantsFile, overwrite: true);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { log($"cannot keep the clusters' wants: {e.Message}"); }
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { log($"cannot keep the clusters' wants: {e.Message}"); }
         ContainersChanged();
     }
 
-    public List<ClusterStatus> Status()
+    public ClusterServicesStatus Status()
     {
         lock (gate) return status;
     }
@@ -70,7 +74,28 @@ sealed class ClusterServices(IClusterEngine engine, string wantsFile, Action<str
     {
         List<ClusterWant>? wanted;
         lock (gate) wanted = wants;
-        var containers = await engine.List(ct);
+        IReadOnlyList<ContainerSummary> containers;
+        try { containers = await engine.List(ct); }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            lock (gate) status = status with { Errors = [$"the engine: {e.Message}"] };
+            throw;
+        }
+        var errors = new List<string>();
+        // Each step on its own: the cloud provider failing to pull offline must not keep dockyard-nfs or a forwarder from starting.
+        async Task<string?> Step(string what, Func<Task> step)
+        {
+            try
+            {
+                await step();
+                return null;
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                log($"{what}: {e.Message}");
+                return $"{what}: {e.Message}";
+            }
+        }
         var clusters = containers.Where(c => c.Labels?.ContainsKey(NodeLabel) == true)
             .GroupBy(c => c.Labels![NodeLabel])
             .ToDictionary(g => g.Key, g => g.All(n => n.State == "running"));
@@ -78,11 +103,12 @@ sealed class ClusterServices(IClusterEngine engine, string wantsFile, Action<str
         ClusterWant WantOf(string cluster) => wanted?.FirstOrDefault(w => w.Cluster == cluster) ?? new ClusterWant(cluster, true, [], false);
         var running = clusters.Where(c => c.Value).Select(c => WantOf(c.Key)).ToList();
 
-        await Keep(KindCloudProvider.Spec, running.Any(w => w.LoadBalancer), containers, ct);
+        if (await Step(KindCloudProvider.Name, () => Keep(KindCloudProvider.Spec, running.Any(w => w.LoadBalancer), containers, ct)) is { } providerError) errors.Add(providerError);
 
         var nfs = running.Any(w => w.Nfs);
         // Only once the host said what it wants: dockyard-nfs holds no files itself, but a cluster may still be on its way.
-        await Keep(KindNfsServer.Spec, nfs ? true : wanted is not null && !wanted.Any(w => w.Nfs) ? false : null, containers, ct);
+        if (await Step(KindNfsServer.ContainerName, () => Keep(KindNfsServer.Spec, nfs ? true : wanted is not null && !wanted.Any(w => w.Nfs) ? false : null, containers, ct)) is { } nfsError)
+            errors.Add(nfsError);
 
         var claimed = new Dictionary<int, string>();
         var next = new List<ClusterStatus>();
@@ -95,17 +121,20 @@ sealed class ClusterServices(IClusterEngine engine, string wantsFile, Action<str
             foreach (var forward in forwards) claimed.TryAdd(forward.Port, cluster);
             var fingerprint = Fingerprint(cluster, want, containers);
             if (!busy.TryGetValue(cluster, out var known) || known.Fingerprint != fingerprint) busy[cluster] = known = (fingerprint, []);
-            var live = await KeepForwarder(cluster, forwards.Where(f => !known.Ports.Contains(f.Port)).ToList(), known.Ports, containers, ct);
-            next.Add(new ClusterStatus(cluster, live.Select(f => new ClusterForward(f.Port, f.Service)).ToList(), taken, known.Ports.Order().ToList()));
+            List<PlannedForward> live = [];
+            var error = await Step(KindForwarder.Prefix + cluster, async () => live = await KeepForwarder(cluster, forwards.Where(f => !known.Ports.Contains(f.Port)).ToList(), known.Ports, containers, ct));
+            next.Add(new ClusterStatus(cluster, live.Select(f => new ClusterForward(f.Port, f.Service)).ToList(), taken, known.Ports.Order().ToList(), error));
         }
         foreach (var gone in busy.Keys.Where(k => !clusters.ContainsKey(k)).ToList()) busy.Remove(gone);
         // A forwarder whose cluster was deleted has nothing to forward to.
         foreach (var orphan in containers.Where(c => c.Labels?.GetValueOrDefault(KindForwarder.ClusterLabel) is { } cluster && !clusters.ContainsKey(cluster)))
-        {
-            await engine.Remove(orphan.Id, ct);
-            log($"{orphan.Name} removed: its cluster is gone");
-        }
-        lock (gate) status = next;
+            if (await Step(orphan.Name, async () =>
+                {
+                    await engine.Remove(orphan.Id, ct);
+                    log($"{orphan.Name} removed: its cluster is gone");
+                }) is { } orphanError)
+                errors.Add(orphanError);
+        lock (gate) status = new ClusterServicesStatus(next, errors);
     }
 
     static List<ClusterBalancer> Balancers(string cluster, IEnumerable<ContainerSummary> containers) => containers

@@ -30,13 +30,17 @@ static class LoadBalancers
         .OrderBy(l => l.Service, StringComparer.Ordinal)
         .ToList();
 
-    // Under Load balancer, one line per fixed port.
-    public static string Notes(ClusterStatus status) => string.Join("\n",
+    // Under Load balancer, one line per fixed port, then what failed: for this cluster, or for all of them.
+    public static string Notes(ClusterStatus status, IReadOnlyList<string> errors) => string.Join("\n",
         status.Forwards.Select(f => $"127.0.0.1:{f.Port} → {f.Service}")
             .Concat(status.Taken.Select(t => $"Port {t.Port} is used by cluster {t.Cluster}; its service keeps the port Docker picked"))
-            .Concat(status.Busy.Select(p => $"Port {p} is in use by another program; its service keeps the port Docker picked. Dockyard tries again when the cluster starts.")));
+            .Concat(status.Busy.Select(p => $"Port {p} is in use by another program; its service keeps the port Docker picked. Dockyard tries again when the cluster starts."))
+            .Concat(Failures(status, errors)));
 
     // For the footer's activity, when it changes.
-    public static string Activity(ClusterStatus status) => string.Join(", ",
-        status.Forwards.Select(f => $"127.0.0.1:{f.Port} → {f.Service}").Concat(status.Busy.Select(p => $"port {p} in use by another program")));
+    public static string Activity(ClusterStatus status, IReadOnlyList<string> errors) => string.Join(", ",
+        status.Forwards.Select(f => $"127.0.0.1:{f.Port} → {f.Service}").Concat(status.Busy.Select(p => $"port {p} in use by another program")).Concat(Failures(status, errors)));
+
+    static IEnumerable<string> Failures(ClusterStatus status, IReadOnlyList<string> errors) =>
+        (status.Error is { } error ? errors.Prepend(error) : errors).Select(e => $"Load balancers for kind: {e}");
 }

@@ -8,12 +8,15 @@ public sealed record ClusterForward(int Port, string Service);
 
 public sealed record TakenPort(int Port, string Cluster);
 
-// What the agent made of a cluster's ports: those forwarded, those another cluster had first, and those another program
-// holds on the host.
-public sealed record ClusterStatus(string Cluster, IReadOnlyList<ClusterForward> Forwards, IReadOnlyList<TakenPort> Taken, IReadOnlyList<int> Busy);
+// What the agent made of a cluster's ports: those forwarded, those another cluster had first, those another program holds
+// on the host, and why its forwarder did not start.
+public sealed record ClusterStatus(string Cluster, IReadOnlyList<ClusterForward> Forwards, IReadOnlyList<TakenPort> Taken, IReadOnlyList<int> Busy, string? Error = null);
+
+// Errors: what failed for every cluster, kind's cloud provider or dockyard-nfs.
+public sealed record ClusterServicesStatus(IReadOnlyList<ClusterStatus> Clusters, IReadOnlyList<string> Errors);
 
 public interface IClusterAgent
 {
     Task SetClusterWantsAsync(IReadOnlyList<ClusterWant> wants, CancellationToken ct = default);
-    Task<IReadOnlyList<ClusterStatus>> ClusterStatusAsync(CancellationToken ct = default);
+    Task<ClusterServicesStatus> ClusterStatusAsync(CancellationToken ct = default);
 }

@@ -36,7 +36,8 @@ sealed class AgentApi(DomainTable table, DomainProxy proxy, Services? services =
                     clusters.SetWants(wants);
                     return new AgentReply();
                 case "cluster-status" when clusters is not null:
-                    return new AgentReply { Clusters = clusters.Status() };
+                    var status = clusters.Status();
+                    return new AgentReply { Clusters = [.. status.Clusters], ClusterErrors = [.. status.Errors] };
                 default: return new AgentReply { Error = "unknown request" };
             }
         }

@@ -242,12 +242,14 @@ public sealed partial class DockyardSetup : IDisposable
     internal string ClusterFolder { get; init; } = ClusterDefinitions.Folder;
 
     // Tells the engine's agent what every cluster's definition wants, after each change to one. With no Linux engine
-    // running, as when only the Windows engine is, nothing is told: the agent keeps what it was told last.
+    // running, as when only the Windows engine is, nothing is told: the agent keeps what it was told last. An agent that
+    // answers with an error throws, since then nothing keeps the cloud provider, the forwarders or NFS running.
     public async Task PushClusterWants()
     {
         if (ClusterAgent() is not { } agent) return;
         try { await agent.SetClusterWantsAsync(ClusterDefinitions.Wants(ClusterFolder)); }
-        catch (Exception e) when (e is IOException or System.Net.Sockets.SocketException or TimeoutException or InvalidOperationException or OperationCanceledException) { }
+        catch (Exception e) when (e is IOException or System.Net.Sockets.SocketException or TimeoutException) { }
+        catch (InvalidOperationException e) { throw new InvalidOperationException($"The engine's agent refused the cluster settings: {e.Message}", e); }
     }
 
     // Setup
@@ -333,7 +335,9 @@ public sealed partial class DockyardSetup : IDisposable
         }
         ApplyShell(log);
         // The definitions are the user's: a setup run with sudo would tell the agent there are none.
-        if (Environment.UserName != "root") await PushClusterWants();
+        if (Environment.UserName != "root")
+            try { await PushClusterWants(); }
+            catch (InvalidOperationException e) { progress.Report(new SetupProgress(e.Message, SetupProgressKind.Warning)); }
         // Installing never fails halfway unnoticed: a step that quietly did nothing would otherwise report success.
         if (!reboot && !host.IsInstalled) throw new InvalidOperationException("Setup finished, but Dockyard is not installed");
         if (host.HasDashboard != dashboard)

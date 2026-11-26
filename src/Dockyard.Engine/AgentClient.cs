@@ -56,6 +56,9 @@ public sealed class AgentClient(DockerEndpoint endpoint) : IClusterAgent
     public Task SetClusterWantsAsync(IReadOnlyList<ClusterWant> wants, CancellationToken ct = default) =>
         Ask(new AgentMessage { Op = "cluster-wants", Wants = [.. wants] }, ct);
 
-    public async Task<IReadOnlyList<ClusterStatus>> ClusterStatusAsync(CancellationToken ct = default) =>
-        (await Ask(new AgentMessage { Op = "cluster-status" }, ct)).Clusters ?? [];
+    public async Task<ClusterServicesStatus> ClusterStatusAsync(CancellationToken ct = default)
+    {
+        var reply = await Ask(new AgentMessage { Op = "cluster-status" }, ct);
+        return new ClusterServicesStatus(reply.Clusters ?? [], reply.ClusterErrors ?? []);
+    }
 }

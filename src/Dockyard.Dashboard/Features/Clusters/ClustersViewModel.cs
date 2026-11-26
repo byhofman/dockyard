@@ -188,17 +188,17 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     async Task RefreshForwards()
     {
         if (NeedsLinuxEngine || !Session.IsConnected || Session.Client is not { } client || Dockyard.Engine.AgentClient.For(client.Endpoint) is not { } agent) return;
-        IReadOnlyList<Dockyard.Engine.ClusterStatus> statuses;
-        try { statuses = await agent.ClusterStatusAsync(); }
+        Dockyard.Engine.ClusterServicesStatus report;
+        try { report = await agent.ClusterStatusAsync(); }
         catch (Exception ex) when (ex is IOException or System.Net.Sockets.SocketException or InvalidOperationException or TimeoutException) { return; }
-        foreach (var status in statuses)
+        foreach (var status in report.Clusters)
         {
-            var note = LoadBalancers.Activity(status);
+            var note = LoadBalancers.Activity(status, report.Errors);
             if (note != loggedForwards.GetValueOrDefault(status.Cluster, "") && (note.Length > 0 || loggedForwards.ContainsKey(status.Cluster)))
                 Shell.Activity.Note($"{status.Cluster} load balancer: {(note.Length > 0 ? note : "no ports")}", ActivityKind.Info);
             loggedForwards[status.Cluster] = note;
         }
-        forwardNotes = statuses.ToDictionary(st => st.Cluster, LoadBalancers.Notes);
+        forwardNotes = report.Clusters.ToDictionary(st => st.Cluster, st => LoadBalancers.Notes(st, report.Errors));
         Raise(nameof(ForwardsText), nameof(HasForwards));
     }
 
