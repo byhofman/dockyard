@@ -91,4 +91,143 @@ public sealed class BackgroundDutiesTests : IDisposable
 
         Assert.Contains(progress.All.ToList(), p => p.Kind == SetupProgressKind.Warning && p.Line.Contains("the engine did not answer"));
     }
+
+    // Two processes are two facades over one lock name.
+    (DockyardSetup Setup, FakeHost Host) Process(string lockName)
+    {
+        var host = new FakeHost { Installed = true };
+        var setup = Facade.For(host, settings);
+        setup.Duties.LockFile = lockName;
+        setup.Duties.Times = new BackgroundDuties.Timing(TimeSpan.FromHours(6), TimeSpan.FromHours(6), TimeSpan.FromMilliseconds(10));
+        return (setup, host);
+    }
+
+    string NewLockName() => Path.Combine(Path.GetTempPath(), "dockyard-tests-" + Guid.NewGuid().ToString("N") + ".lock");
+
+    static async Task Until(Func<bool> condition)
+    {
+        var until = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        while (!condition())
+        {
+            Assert.True(DateTime.UtcNow < until, "The condition was not met in time");
+            await Task.Delay(10);
+        }
+    }
+
+    [Fact]
+    public async Task Only_one_process_runs_the_duties()
+    {
+        settings.Settings.StartActiveAtLogon = false;
+        var name = NewLockName();
+        var (first, firstHost) = Process(name);
+        var (second, secondHost) = Process(name);
+        using var stop = new CancellationTokenSource();
+
+        var running = first.Duties.RunWhenFree(new ProgressLines(), startEngine: false, stop.Token);
+        await Until(() => firstHost.TrayServicesStarted == 1);
+        var waiting = second.Duties.RunWhenFree(new ProgressLines(), startEngine: false, stop.Token);
+        await Task.Delay(300, TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, secondHost.TrayServicesStarted);
+        Assert.Equal(1, firstHost.TrayServicesStarted);
+        stop.Cancel();
+        await Task.WhenAll(running, waiting);
+    }
+
+    [Fact]
+    public async Task The_dashboard_takes_over_when_the_tray_quits()
+    {
+        settings.Settings.StartActiveAtLogon = false;
+        var name = NewLockName();
+        var (tray, trayHost) = Process(name);
+        var (dashboard, dashboardHost) = Process(name);
+        using var trayStop = new CancellationTokenSource();
+        using var dashboardStop = new CancellationTokenSource();
+
+        var trayRuns = tray.Duties.RunWhenFree(new ProgressLines(), startEngine: false, trayStop.Token);
+        await Until(() => trayHost.TrayServicesStarted == 1);
+        var dashboardRuns = dashboard.Duties.RunWhenFree(new ProgressLines(), startEngine: false, dashboardStop.Token);
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+        Assert.Equal(0, dashboardHost.TrayServicesStarted);
+
+        trayStop.Cancel();
+        await trayRuns;
+        await Until(() => dashboardHost.TrayServicesStarted == 1);
+
+        dashboardStop.Cancel();
+        await dashboardRuns;
+    }
+
+    [Fact]
+    public async Task A_process_that_yields_to_the_tray_gives_the_duties_up_and_takes_them_back_when_the_tray_is_gone()
+    {
+        settings.Settings.StartActiveAtLogon = false;
+        var name = NewLockName();
+        var (dashboard, host) = Process(name);
+        var trayRuns = false;
+        using var stop = new CancellationTokenSource();
+
+        var runs = dashboard.Duties.RunWhenFree(new ProgressLines(), startEngine: false, stop.Token, yieldTo: () => trayRuns);
+        await Until(() => host.TrayServicesStarted == 1);
+        trayRuns = true;
+        await Until(() => ProcessLock.TryTake(name) is { } free && Release(free));
+        trayRuns = false;
+        await Until(() => host.TrayServicesStarted == 2);
+
+        stop.Cancel();
+        await runs;
+    }
+
+    static bool Release(ProcessLock taken)
+    {
+        taken.Dispose();
+        return true;
+    }
+
+    [Fact]
+    public async Task The_engine_starts_at_logon_only_where_the_duties_are_asked_to_start_it()
+    {
+        settings.Settings.StartActiveAtLogon = true;
+        var (setup, host) = Process(NewLockName());
+        var started = new TaskCompletionSource();
+        host.StartedEngine = _ => started.TrySetResult();
+        using var stop = new CancellationTokenSource();
+
+        var runs = setup.Duties.RunWhenFree(new ProgressLines(), startEngine: false, stop.Token);
+        await Until(() => host.TrayServicesStarted == 1);
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+        Assert.False(started.Task.IsCompleted);
+        stop.Cancel();
+        await runs;
+
+        var (tray, trayHost) = Process(NewLockName());
+        trayHost.StartedEngine = _ => started.TrySetResult();
+        using var trayStop = new CancellationTokenSource();
+        var trayRuns = tray.Duties.RunWhenFree(new ProgressLines(), startEngine: true, trayStop.Token);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        trayStop.Cancel();
+        await trayRuns;
+    }
+}
+
+public sealed class ProcessLockTests
+{
+    [Fact]
+    public void A_lock_is_held_by_one_taker_until_it_is_let_go_and_the_tray_is_found_by_it()
+    {
+        var file = Path.Combine(Path.GetTempPath(), "dockyard-tests-" + Guid.NewGuid().ToString("N") + ".lock");
+        Assert.False(ProcessLock.IsHeld(file));
+
+        using (var first = ProcessLock.TryTake(file))
+        {
+            Assert.NotNull(first);
+            Assert.True(ProcessLock.IsHeld(file));
+            Assert.Null(ProcessLock.TryTake(file));
+        }
+
+        Assert.False(ProcessLock.IsHeld(file));
+        using var again = ProcessLock.TryTake(file);
+        Assert.NotNull(again);
+        File.Delete(file);
+    }
 }

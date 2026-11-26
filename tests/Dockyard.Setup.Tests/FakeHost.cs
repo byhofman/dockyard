@@ -11,7 +11,7 @@ sealed class FakeHost : IEngineHost
     public Exception? Failure { get; set; }
     public Exception? FailureOnSetComponent { get; set; }
     public bool IgnoresDashboard { get; set; }
-    public string SelfComponent { get; set; } = "Tray";
+    public string SelfComponent { get; set; } = "DockyardCli";
     public Version Newest { get; set; } = new(1, 0, 0);
     public List<string> Calls { get; } = [];
     public List<InstallRequest> Requests { get; } = [];
@@ -28,7 +28,12 @@ sealed class FakeHost : IEngineHost
 
     public Func<string, Task<bool>>? Running { get; set; }
     public Task<bool> IsRunning(string engine) => Running?.Invoke(engine) ?? Task.FromResult(false);
-    public Task Start(string engine) => Task.CompletedTask;
+    public Action<string>? StartedEngine { get; set; }
+    public Task Start(string engine)
+    {
+        StartedEngine?.Invoke(engine);
+        return Task.CompletedTask;
+    }
     public Task Stop(string engine) => Task.CompletedTask;
     public string ActiveEngine() => "linux";
     public Task UseContext(string engine) => Task.CompletedTask;
@@ -64,6 +69,9 @@ sealed class FakeHost : IEngineHost
         Calls.Add("resume");
         return Task.CompletedTask;
     }
+
+    public int TrayServicesStarted;
+    public void StartTrayServices() => Interlocked.Increment(ref TrayServicesStarted);
 
     public void StartApp() => Calls.Add("start");
     public string DoneMessage(bool reboot) => reboot ? "reboot" : "done";
