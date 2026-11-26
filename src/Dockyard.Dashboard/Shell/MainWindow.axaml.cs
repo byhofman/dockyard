@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Chrome;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
@@ -10,9 +11,12 @@ namespace Dockyard.Dashboard.Shell;
 
 public partial class MainWindow : Window
 {
-    public MainWindow()
+    public MainWindow() : this(WindowChrome.ForThisMachine) { }
+
+    internal MainWindow(WindowChrome chrome)
     {
         InitializeComponent();
+        UseChrome(chrome);
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
         DataContextChanged += (_, _) =>
         {
@@ -27,6 +31,19 @@ public partial class MainWindow : Window
                 shell.Activity.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(ActivityLog.IsOpen) && shell.Activity.IsOpen) ScrollActivityToEnd(); };
             }
         };
+    }
+
+    // The empty parts of the top row drag the window, and a double-click on them maximizes it, as the system's title bar
+    // would; the platform does both for the TitleBar role. What is on the row keeps its own input.
+    void UseChrome(WindowChrome chrome)
+    {
+        TitleRow.Padding = new Thickness(TitleRow.Padding.Left + chrome.RowInset.Left, 0, TitleRow.Padding.Right + chrome.RowInset.Right, 0);
+        if (!chrome.ExtendsIntoTitleBar) return;
+        ExtendClientAreaToDecorationsHint = true;
+        ExtendClientAreaTitleBarHeightHint = WindowChrome.RowHeight;
+        WindowDecorationProperties.SetElementRole(TitleRow, WindowDecorationsElementRole.TitleBar);
+        foreach (var own in new Control[] { Logo, SearchBox, Reconnecting, EngineSwitchBar, Gear })
+            WindowDecorationProperties.SetElementRole(own, WindowDecorationsElementRole.User);
     }
 
     // The activity list is in a tab's template, in one place or side by side, so it is found rather than named.

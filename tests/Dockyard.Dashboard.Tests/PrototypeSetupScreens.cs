@@ -5,6 +5,7 @@ using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Dockyard.Dashboard.Controls;
+using Dockyard.Dashboard.Features.Resources;
 using Dockyard.Dashboard.Features.Setup;
 using Dockyard.Dashboard.Shell;
 using Dockyard.Setup;
@@ -118,7 +119,7 @@ public sealed partial class PrototypeScreens
     public static TheoryData<string> SetupScreens => new()
     {
         "setup-before", "setup-installing", "setup-error",
-        "tools-default", "tools-updating", "tools-uninstall",
+        "tools-default", "tools-updating", "tools-uninstall", "tools-windows",
         "settings-default", "settings-approving", "settings-engine-file",
     };
 
@@ -163,7 +164,9 @@ public sealed partial class PrototypeScreens
         if (kind == "setup") shell.Setup = new SetupViewModel(fake, shell);
         else shell.ShowSection(kind);
 
-        var window = new MainWindow { DataContext = shell, Width = width, Height = height };
+        // The top row as the title bar. Headless draws neither macOS's traffic lights nor Windows' caption buttons, so their
+        // place in the row stays empty in the shots.
+        var window = new MainWindow(WindowChrome.For(state == "windows" ? HostOs.Windows : HostOs.MacOS)) { DataContext = shell, Width = width, Height = height };
         window.Show();
         Dispatcher.UIThread.RunJobs();
 
