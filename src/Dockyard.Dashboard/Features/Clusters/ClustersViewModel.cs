@@ -246,6 +246,8 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         DeleteCommand.Refresh();
         CopyKubeconfigCommand.Refresh();
         UseContextCommand.Refresh();
+        EditCommand.Refresh();
+        CopyHeadlampTokenCommand.Refresh();
         DuplicateCommand.Refresh();
         RecreateCommand.Refresh();
         LoadBalancerCommand.Refresh();
