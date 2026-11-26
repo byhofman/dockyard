@@ -37,6 +37,7 @@ IDs are permanent: never renumber or reuse one.
 - [ ] DOK-44 Edit a running cluster: the create dialog's add-ons (metrics-server, Traefik, cert-manager with its issuer, Headlamp), external-dns, NFS storage and the load balancer changed on a running cluster through Helm and manifests, in the right order, with its definition saved; host-folder storage and the kind config greyed out as needing Recreate; dockyard cluster edit for the same; plus the CLI's dashboard-token and a real-cluster test of Headlamp (feat/headlamp) (owner 2026-11-26, next)
 - [ ] DOK-45 The one-liner opened the installer window, but it offered no choice of what to install: the component checkboxes the wizard shows on a first install should be there whenever the one-liner opens it, also over an existing install, so a run of it is a way to add or leave out components (owner 2026-11-26)
 - [ ] DOK-46 Measure before rewriting: profile the dashboard (polling loops, stats sampling, docker CLI calls it could make through the API), the trimmed Toolbox's startup and the agent, and fix what costs; a rewrite in Rust was considered and set aside, since what is slow is engine work, pulls and kind, not .NET (owner 2026-11-26)
+- [ ] DOK-47 Manage a cluster's node containers in the Kubernetes tab itself: a node row is selectable on its own and opens the same detail as in Containers (logs, terminal, files, inspect, stats), with start, stop and restart, so there is no switching to Containers; today only the cluster row selects (owner 2026-11-26)
 
 ## Quality
 
