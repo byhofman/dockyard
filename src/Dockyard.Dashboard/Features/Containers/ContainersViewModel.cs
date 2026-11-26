@@ -66,7 +66,7 @@ sealed class ContainersViewModel : Observable, ISearchable
         {
             rebuilding = false;
             RestoreSelection();
-            Raise(nameof(IsEmpty));
+            Raise(nameof(IsEmpty), nameof(Summary));
             sampler.Update();
         };
         session.Connected += sampler.Update;
@@ -74,6 +74,16 @@ sealed class ContainersViewModel : Observable, ISearchable
     }
 
     public EngineSession Session { get; }
+
+    public string Summary
+    {
+        get
+        {
+            var all = Store.Items.Where(c => !c.IsSystem).ToList();
+            var running = all.Count(c => c.IsRunning);
+            return all.Count == 1 ? $"1 container, {running} running" : $"{all.Count} containers, {running} running";
+        }
+    }
     public ContainerStore Store => Session.Containers;
     public bool IsEmpty => Session.IsConnected && Store.Rows.Count == 0;
 

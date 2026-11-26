@@ -78,6 +78,7 @@ sealed class ImagesViewModel : SelectableSection<ImageRow>
     protected override void ShowEverything() => Usage.Current = UsageFilter.Kind.All;
 
     protected override IEnumerable<ImageRow> All => all;
+    public override string Summary => $"{Count(all.Count, "image", "images")}, {Format.Bytes(all.Sum(r => r.Size))}";
     protected override string?[] Words(ImageRow row) => [row.Reference, row.ShortId];
     protected override SearchResult Describe(ImageRow row) => new(row.Reference, $"{row.ShortId}  {row.SizeText}", row);
 

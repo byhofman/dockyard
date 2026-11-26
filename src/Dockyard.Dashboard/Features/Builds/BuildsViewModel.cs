@@ -90,6 +90,8 @@ sealed class BuildsViewModel : SelectableSection<BuildRecord>
 
     protected override object Key(BuildRecord row) => row.Ref;
     protected override IEnumerable<BuildRecord> All => all;
+    public override string Summary => all.Count(b => b.IsFailed) is > 0 and var failed
+        ? $"{Count(all.Count, "build", "builds")}, {failed} failed" : Count(all.Count, "build", "builds");
     protected override string?[] Words(BuildRecord row) => [row.Name, row.Ref, row.StatusText];
     protected override SearchResult Describe(BuildRecord row) => new(row.Name, $"{row.StatusText}  {row.StartedText}", row);
 

@@ -204,6 +204,7 @@ sealed class VolumesViewModel : SelectableSection<VolumeRow>
     protected override void ShowEverything() => Usage.Current = UsageFilter.Kind.All;
 
     protected override IEnumerable<VolumeRow> All => all;
+    public override string Summary => $"{Count(all.Count, "volume", "volumes")}, {all.Count(v => !v.InUse)} unused";
     protected override string?[] Words(VolumeRow row) => [row.Name, row.Driver, row.UsageText];
     protected override SearchResult Describe(VolumeRow row) => new(row.Name, row.UsageText, row);
 }

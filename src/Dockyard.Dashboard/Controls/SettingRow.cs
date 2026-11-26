@@ -36,7 +36,7 @@ sealed class SettingRow : Grid
     readonly StackPanel status = new() { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 6, 0, 0) };
     readonly TextBlock statusText = new() { TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
     readonly TextBlock error = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0) };
-    readonly ContentControl editor = new() { VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(24, 0, 0, 0) };
+    readonly ContentControl editor = new() { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(24, 0, 0, 0) };
 
     static Border Badge(string text, string tip)
     {

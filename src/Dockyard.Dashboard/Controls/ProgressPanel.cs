@@ -1,7 +1,6 @@
 using System.Collections;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Templates;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Dockyard.Setup;
@@ -32,7 +31,7 @@ sealed class ProgressPanel : DockPanel
     readonly ProgressBar bar = new() { Minimum = 0, Margin = new Thickness(0, 8, 0, 0) };
     readonly SelectableTextBlock error = new() { TextWrapping = TextWrapping.Wrap };
     readonly Border errorBox;
-    readonly FollowingLogList list = new() { FollowsItems = true, Padding = new Thickness(0, 6) };
+    readonly SetupLog log = new();
 
     public ProgressPanel()
     {
@@ -50,23 +49,7 @@ sealed class ProgressPanel : DockPanel
         SetDock(errorBox, Dock.Top);
         Children.Add(errorBox);
 
-        list.Classes.Add("log");
-        list.ItemTemplate = new FuncDataTemplate<SetupProgress?>((line, _) =>
-        {
-            // A recycled container is given no line.
-            if (line is null) return new SelectableTextBlock();
-            var text = new SelectableTextBlock { Text = line.Line, TextWrapping = TextWrapping.Wrap };
-            text.Classes.Add("activity");
-            text.Classes.Add("console");
-            text.Classes.Set("step", line.Step is not null);
-            text.Classes.Set("command", line.Kind == SetupProgressKind.Command);
-            text.Classes.Set("warning", line.Kind == SetupProgressKind.Warning);
-            text.Classes.Set("error", line.Kind == SetupProgressKind.Error);
-            if (line.Step is not null) text.Margin = new Thickness(0, 6, 0, 1);
-            return text;
-        });
-        Children.Add(new Border { BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6), ClipToBounds = true, Child = list }
-            .Token(Border.BackgroundProperty, "Bg").Token(Border.BorderBrushProperty, "Line"));
+        Children.Add(log);
         errorBox.Token(Border.BackgroundProperty, "BadBg");
         Show();
     }
@@ -74,7 +57,7 @@ sealed class ProgressPanel : DockPanel
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == LinesProperty) list.ItemsSource = Lines;
+        if (change.Property == LinesProperty) log.Lines = Lines;
         else if (change.Property == HeadingProperty || change.Property == StepProperty || change.Property == StepsProperty
             || change.Property == ErrorProperty || change.Property == IsRunningProperty) Show();
     }

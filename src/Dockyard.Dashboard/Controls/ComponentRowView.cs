@@ -56,21 +56,23 @@ sealed class ComponentRowView : Grid
     readonly TextBlock title = new() { FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
     readonly SourceBadge source = new() { Margin = new Thickness(0, 1) };
     readonly TextBlock detail = new() { TextWrapping = TextWrapping.Wrap };
-    readonly StackPanel version = new() { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16, 0, 0, 0), MinWidth = 110 };
+    readonly StackPanel version = new() { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16, 0, 0, 0), MinWidth = 110, Spacing = 1 };
     readonly TextBlock installed = new() { HorizontalAlignment = HorizontalAlignment.Right };
-    readonly Button update = new() { HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 1, -4, 0) };
+    readonly TextBlock available = new() { HorizontalAlignment = HorizontalAlignment.Right };
     readonly StackPanel actions = new() { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(16, 0, 0, 0) };
+    readonly Button update = Action("Update", "update");
     readonly Button add = Action("Add", null);
-    readonly Button remove = Action("Remove", "danger");
-    readonly Button uninstall = Action("Uninstall…", "danger");
-    readonly PathIcon required = new() { Width = 14, Height = 14, Margin = new Thickness(0, 0, 12, 0) };
+    // Quiet, and always there rather than on hover, so a keyboard and a touch screen reach it as well.
+    readonly Button remove = Action("Remove", "ghost");
+    readonly Button uninstall = Action("Uninstall…", "ghost danger");
+    readonly Button required = new() { Focusable = true };
     readonly StackPanel busy = new() { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 4, 0, 0) };
     readonly TextBlock busyText = new() { VerticalAlignment = VerticalAlignment.Center };
 
     static Button Action(string text, string? style)
     {
         var b = new Button { Content = text, MinHeight = 28, Padding = new Thickness(12, 3), MinWidth = 72, HorizontalContentAlignment = HorizontalAlignment.Center };
-        if (style is not null) b.Classes.Add(style);
+        if (style is not null) b.Classes.AddRange(style.Split(' '));
         return b;
     }
 
@@ -82,6 +84,7 @@ sealed class ComponentRowView : Grid
             new ColumnDefinition(GridLength.Auto),
             new ColumnDefinition(1, GridUnitType.Star),
             new ColumnDefinition(GridLength.Auto) { SharedSizeGroup = "ComponentVersion" },
+            new ColumnDefinition(GridLength.Auto) { SharedSizeGroup = "ComponentUpdate" },
             new ColumnDefinition(GridLength.Auto) { SharedSizeGroup = "ComponentAction" },
         ];
         pick.Classes.Add("pick");
@@ -89,17 +92,22 @@ sealed class ComponentRowView : Grid
         detail.Classes.Add("muted");
         detail.Classes.Add("small");
         installed.Classes.Add("mono");
-        update.Classes.Add("link");
+        available.Classes.Add("small");
+        available.Token(TextBlock.ForegroundProperty, "AccentText");
         busyText.Classes.Add("muted");
         busyText.Classes.Add("small");
-        required.Token(PathIcon.ForegroundProperty, "Muted");
-        ToolTip.SetTip(required, "Required, so it stays");
-        Avalonia.Automation.AutomationProperties.SetName(required, "Required");
+        required.Classes.Add("badge");
+        var lockIcon = new PathIcon { Width = 12, Height = 12 };
+        required.Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5, Children = { lockIcon, new TextBlock { Text = "Required" } } };
+        // A tooltip opens on hover only: focus and a tap open it as well.
+        required.GotFocus += (_, _) => ToolTip.SetIsOpen(required, true);
+        required.LostFocus += (_, _) => ToolTip.SetIsOpen(required, false);
+        required.Click += (_, _) => ToolTip.SetIsOpen(required, !ToolTip.GetIsOpen(required));
 
         var heading = new WrapPanel { Children = { title, source } };
         var label = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Spacing = 2, Children = { heading, detail, busy } };
         version.Children.Add(installed);
-        version.Children.Add(update);
+        version.Children.Add(available);
         actions.Children.Add(add);
         actions.Children.Add(remove);
         actions.Children.Add(uninstall);
@@ -110,15 +118,20 @@ sealed class ComponentRowView : Grid
         Place(pick, 0);
         Place(label, 1);
         Place(version, 2);
-        Place(actions, 3);
+        update.Margin = new Thickness(16, 0, 0, 0);
+        update.VerticalAlignment = VerticalAlignment.Center;
+        Place(update, 3);
+        Place(actions, 4);
 
         update.Click += (_, _) => Run(UpdateCommand);
         add.Click += (_, _) => Run(AddCommand);
         remove.Click += (_, _) => Run(RemoveCommand);
         uninstall.Click += (_, _) => Run(UninstallCommand);
-        AttachedToVisualTree += (_, _) => { if (this.FindResource("IconLock") is Geometry g) required.Data = g; };
+        AttachedToVisualTree += (_, _) => { if (this.FindResource("IconLock") is Geometry g) lockIcon.Data = g; };
         Show();
     }
+
+    static string Sentence(string text) => text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
 
     void Place(Control control, int column)
     {
@@ -141,7 +154,7 @@ sealed class ComponentRowView : Grid
     {
         var isRequired = RequiredBecause is not null;
         title.Text = Title;
-        detail.Text = isRequired ? "Required: " + RequiredBecause : Needs;
+        detail.Text = isRequired ? Sentence(RequiredBecause!) : Needs;
         detail.IsVisible = !string.IsNullOrEmpty(detail.Text);
         Avalonia.Automation.AutomationProperties.SetName(this, Title);
 
@@ -156,8 +169,13 @@ sealed class ComponentRowView : Grid
         installed.Classes.Set("mono", Installed is not null);
         installed.Classes.Set("muted", Installed is null);
         installed.Classes.Set("small", Installed is null);
-        update.Content = Newest is null ? null : $"Update to {Newest}";
-        update.IsVisible = CanUpdate && Newest is not null && !isBusy;
+        var hasUpdate = CanUpdate && Newest is not null;
+        available.Text = hasUpdate ? $"{Newest} available" : null;
+        available.IsVisible = hasUpdate;
+        update.IsVisible = hasUpdate && !ShowsPick;
+        update.Opacity = isBusy ? 0 : 1;
+        update.IsHitTestVisible = !isBusy;
+        ToolTip.SetTip(update, hasUpdate ? $"Update {Title} to {Newest}" : null);
 
         source.Source = ShowsPick ? null : Source;
 
@@ -171,6 +189,8 @@ sealed class ComponentRowView : Grid
         remove.IsVisible = CanRemove;
         uninstall.IsVisible = CanUninstall;
         required.IsVisible = isRequired && !CanUninstall;
+        ToolTip.SetTip(required, isRequired ? $"Required: {RequiredBecause}" : null);
+        Avalonia.Automation.AutomationProperties.SetName(required, isRequired ? $"Required: {RequiredBecause}" : null);
         foreach (var (button, verb) in new[] { (update, "Update"), (add, "Add"), (remove, "Remove"), (uninstall, "Uninstall") })
             Avalonia.Automation.AutomationProperties.SetName(button, $"{verb} {Title}");
     }

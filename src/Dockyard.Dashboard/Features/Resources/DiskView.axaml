@@ -4,18 +4,19 @@
              x:Class="Dockyard.Dashboard.Features.Resources.DiskView"
              x:DataType="res:DiskViewModel">
   <ScrollViewer>
-    <StackPanel Margin="24,18" Spacing="14" MaxWidth="760" HorizontalAlignment="Left">
+    <StackPanel Classes="page">
       <Grid ColumnDefinitions="*,Auto,Auto">
-        <StackPanel>
+        <StackPanel Classes="pagehead">
           <TextBlock Classes="title" Text="Disk usage" />
-          <TextBlock Classes="muted">
+          <TextBlock Classes="muted small">
             <Run Text="{Binding TotalText}" /><Run Text=" used, " /><Run Text="{Binding ReclaimableText}" /><Run Text=" can be reclaimed" />
           </TextBlock>
         </StackPanel>
-        <Button Grid.Column="1" Command="{Binding RefreshCommand}" Margin="24,0,8,0" VerticalAlignment="Center" ToolTip.Tip="Refresh">
-          <PathIcon Data="{StaticResource IconRefresh}" />
+        <Button Grid.Column="1" Command="{Binding RefreshCommand}" Margin="24,0,8,0" VerticalAlignment="Center" ToolTip.Tip="Ask the engine again">
+          <StackPanel Classes="label"><PathIcon Data="{StaticResource IconRefresh}" /><TextBlock Text="Refresh" /></StackPanel>
         </Button>
-        <Button Grid.Column="2" Classes="dangerfill" Command="{Binding CleanAllCommand}" VerticalAlignment="Center">
+        <Button Grid.Column="2" Classes="danger" Command="{Binding CleanAllCommand}" VerticalAlignment="Center"
+                ToolTip.Tip="Prune every category below; what a container uses stays">
           <StackPanel Classes="label"><PathIcon Data="{StaticResource IconPrune}" /><TextBlock Text="Clean everything unused…" /></StackPanel>
         </Button>
       </Grid>
@@ -30,7 +31,7 @@
         </ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
           <DataTemplate DataType="res:DiskCategory">
-            <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="8" Padding="16,12">
+            <Border Classes="card" Padding="16,12">
               <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
                 <TextBlock FontWeight="SemiBold" Text="{Binding Name}" />
                 <TextBlock Grid.Column="1" Classes="mono" Text="{Binding TotalText}" />
@@ -38,7 +39,7 @@
                 <TextBlock Grid.Row="2" Classes="muted small" VerticalAlignment="Center">
                   <Run Text="{Binding ReclaimableText}" /><Run Text=" reclaimable" />
                 </TextBlock>
-                <Button Grid.Row="2" Grid.Column="1" Classes="iconbtn" ToolTip.Tip="Prune"
+                <Button Grid.Row="2" Grid.Column="1" Classes="ghost" ToolTip.Tip="Prune what is unused here"
                         Command="{Binding $parent[UserControl].((res:DiskViewModel)DataContext).PruneCommand}" CommandParameter="{Binding}">
                   <StackPanel Classes="label"><PathIcon Data="{StaticResource IconPrune}" /><TextBlock Text="Prune" /></StackPanel>
                 </Button>

@@ -4,6 +4,26 @@
              xmlns:dctl="using:Dockyard.Dashboard.Controls"
              x:Class="Dockyard.Dashboard.Features.Setup.SetupView"
              x:DataType="setup:SetupViewModel">
+  <UserControl.Styles>
+    <Style Selector="Ellipse.steptodo">
+      <Setter Property="Stroke" Value="{DynamicResource Muted}" />
+      <Setter Property="StrokeThickness" Value="1.5" />
+    </Style>
+    <Style Selector="Ellipse.steprunning">
+      <Setter Property="Stroke" Value="{DynamicResource Brand}" />
+      <Setter Property="StrokeThickness" Value="2" />
+    </Style>
+    <Style Selector="Ellipse.steprunningdot">
+      <Setter Property="Fill" Value="{DynamicResource Brand}" />
+    </Style>
+    <Style Selector="TextBlock.steptitle.todo">
+      <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+    </Style>
+    <Style Selector="TextBlock.steptitle.running, TextBlock.steptitle.failed">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+  </UserControl.Styles>
+
   <DockPanel>
     <Border DockPanel.Dock="Bottom" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="24,10">
       <Grid ColumnDefinitions="*,Auto" MaxWidth="760">
@@ -13,6 +33,7 @@
                      IsVisible="{Binding IsFailed}" />
         </Panel>
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+          <Button Content="Close" Command="{Binding CloseCommand}" IsVisible="{Binding ShowsClose}" ToolTip.Tip="Back to the dashboard, with nothing changed" />
           <Button Content="Cancel" Command="{Binding CancelCommand}" IsVisible="{Binding IsRunning}" />
           <Button Content="Back" Command="{Binding BackCommand}" IsVisible="{Binding IsFailed}" ToolTip.Tip="Change what is installed" />
           <Button Classes="primary" Content="Try again" Command="{Binding TryAgainCommand}" IsVisible="{Binding IsFailed}" />
@@ -24,9 +45,9 @@
     <Panel>
       <ScrollViewer HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding ShowsChoices}">
         <StackPanel Margin="24,22" Spacing="14" MaxWidth="760">
-          <StackPanel Spacing="2">
+          <StackPanel Classes="pagehead">
             <TextBlock Classes="title" Text="Set up Dockyard" />
-            <TextBlock Classes="muted" Text="{Binding Description}" TextWrapping="Wrap" />
+            <TextBlock Classes="muted small" Text="{Binding Description}" TextWrapping="Wrap" />
           </StackPanel>
 
           <ItemsControl ItemsSource="{Binding Groups}">
@@ -43,7 +64,7 @@
                     <ItemsControl Classes="hairlines" ItemsSource="{Binding Items}">
                       <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="setup:ComponentItem">
-                          <dctl:ComponentRowView Margin="16,10" ShowsPick="True" IsPicked="{Binding IsPicked}"
+                          <dctl:ComponentRowView Classes="cardrow" ShowsPick="True" IsPicked="{Binding IsPicked}"
                                                  Title="{Binding Row.Title}" Needs="{Binding Row.Needs}" RequiredBecause="{Binding Row.RequiredBecause}" />
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
@@ -60,8 +81,8 @@
               <ItemsControl Classes="hairlines" ItemsSource="{Binding Options}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate DataType="setup:SettingItem">
-                    <dctl:SettingRow Margin="16,12" Title="{Binding Definition.Title}" Description="{Binding Definition.Description}"
-                                     NeedsAdmin="{Binding Definition.NeedsAdmin}">
+                    <dctl:SettingRow Classes="cardrow" Title="{Binding Definition.Title}" Description="{Binding Definition.Description}"
+                                     IsLinuxEngineOnly="{Binding ShowsLinuxEngineOnly}" NeedsAdmin="{Binding Definition.NeedsAdmin}">
                       <dctl:SettingEditor Kind="{Binding Definition.Kind}" Choices="{Binding Definition.Choices}" Value="{Binding Value}"
                                           Label="{Binding Definition.Title}" />
                     </dctl:SettingRow>
@@ -73,17 +94,66 @@
         </StackPanel>
       </ScrollViewer>
 
-      <DockPanel Margin="24,22" MaxWidth="760" IsVisible="{Binding ShowsRun}">
-        <StackPanel DockPanel.Dock="Top" Spacing="2" Margin="0,0,0,14">
-          <TextBlock Classes="title" Text="Setting up Dockyard" />
-          <TextBlock Classes="muted" Text="{Binding Description}" TextWrapping="Wrap" />
+      <ScrollViewer HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding ShowsRun}">
+        <StackPanel Margin="24,22" Spacing="14" MaxWidth="760" DataContext="{Binding Run}" x:DataType="setup:SetupRun">
+          <StackPanel Classes="pagehead">
+            <TextBlock Classes="title" Text="Setting up Dockyard" />
+            <TextBlock Classes="muted small" Text="{Binding $parent[UserControl].((setup:SetupViewModel)DataContext).Description, FallbackValue={x:Null}}" TextWrapping="Wrap" />
+          </StackPanel>
+
+          <Border Classes="card">
+            <StackPanel>
+              <StackPanel Margin="16,12,16,12" Spacing="8">
+                <TextBlock Classes="muted small" Classes.activityerror="{Binding IsFailed, FallbackValue=False}"
+                           Text="{Binding StatusText, FallbackValue={x:Null}}" IsVisible="{Binding StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}, FallbackValue=False}" />
+                <ProgressBar Minimum="0" Maximum="100" Value="{Binding Percent, FallbackValue=0}" IsIndeterminate="{Binding IsIndeterminate, FallbackValue=True}"
+                             IsVisible="{Binding IsRunning, FallbackValue=False}" />
+              </StackPanel>
+
+              <ItemsControl Classes="hairlines" ItemsSource="{Binding Checklist, FallbackValue={x:Null}}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="setup:SetupStep">
+                    <Grid ColumnDefinitions="Auto,*" Margin="16,9" AutomationProperties.Name="{Binding Title}" AutomationProperties.HelpText="{Binding StateText}">
+                      <Panel Width="16" Height="16" Margin="0,1,12,0" VerticalAlignment="Top">
+                        <PathIcon Data="{StaticResource IconCheck}" Width="16" Height="16" Foreground="{DynamicResource Ok}" IsVisible="{Binding IsDone}" />
+                        <Panel IsVisible="{Binding IsRunning}">
+                          <Ellipse Classes="steprunning" Width="15" Height="15" />
+                          <Ellipse Classes="steprunningdot" Width="6" Height="6" />
+                        </Panel>
+                        <Ellipse Classes="steptodo" Width="13" Height="13" IsVisible="{Binding IsToDo}" />
+                        <PathIcon Data="{StaticResource IconError}" Width="16" Height="16" Foreground="{DynamicResource Bad}" IsVisible="{Binding IsFailed}" />
+                      </Panel>
+                      <StackPanel Grid.Column="1" Spacing="8">
+                        <Grid ColumnDefinitions="*,Auto">
+                          <TextBlock Classes="steptitle" Classes.todo="{Binding IsToDo}" Classes.running="{Binding IsRunning}" Classes.failed="{Binding IsFailed}"
+                                     Text="{Binding Title}" TextWrapping="Wrap" />
+                          <TextBlock Grid.Column="1" Classes="muted small" Text="Running…" IsVisible="{Binding IsRunning}" Margin="12,0,0,0" />
+                        </Grid>
+                        <TextBlock Classes="muted small" Text="{Binding Latest}" TextTrimming="CharacterEllipsis" IsVisible="{Binding ShowsLatest}" Margin="0,-6,0,0" />
+                        <dctl:SetupLog Follows="False" Lines="{Binding Lines}" IsVisible="{Binding IsExpanded}" />
+                      </StackPanel>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+
+              <StackPanel Margin="16,8,16,14" Spacing="8">
+                <Button Classes="link disclosure" Command="{Binding ToggleDetailsCommand, FallbackValue={x:Null}}" HorizontalAlignment="Left" Margin="-4,0,0,0"
+                        AutomationProperties.Name="{Binding DetailsText, FallbackValue={x:Null}}">
+                  <StackPanel Classes="label" Spacing="4">
+                    <Panel Width="12" Height="12">
+                      <PathIcon Data="{StaticResource IconChevronRight}" Width="12" Height="12" IsVisible="{Binding !ShowsDetails, FallbackValue=True}" />
+                      <PathIcon Data="{StaticResource IconChevronDown}" Width="12" Height="12" IsVisible="{Binding ShowsDetails, FallbackValue=False}" />
+                    </Panel>
+                    <TextBlock Text="{Binding DetailsText, FallbackValue={x:Null}}" />
+                  </StackPanel>
+                </Button>
+                <dctl:SetupLog Height="240" Lines="{Binding Lines, FallbackValue={x:Null}}" IsVisible="{Binding ShowsDetails, FallbackValue=False}" />
+              </StackPanel>
+            </StackPanel>
+          </Border>
         </StackPanel>
-        <Border Classes="card" Padding="16,14">
-          <dctl:ProgressPanel Heading="{Binding Run.Heading, FallbackValue={x:Null}}" Step="{Binding Run.Step, FallbackValue={x:Null}}"
-                              Steps="{Binding Run.Steps, FallbackValue={x:Null}}" Lines="{Binding Run.Lines, FallbackValue={x:Null}}"
-                              Error="{Binding Run.Error, FallbackValue={x:Null}}" IsRunning="{Binding Run.IsRunning, FallbackValue=False}" />
-        </Border>
-      </DockPanel>
+      </ScrollViewer>
     </Panel>
   </DockPanel>
 </UserControl>

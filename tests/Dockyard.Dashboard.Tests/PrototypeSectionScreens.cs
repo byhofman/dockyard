@@ -66,6 +66,12 @@ public sealed partial class PrototypeScreens
         Ports = ports.Select(p => new PortMapping { IP = "127.0.0.1", PrivatePort = p.Private, PublicPort = p.Public, Type = "tcp" }).ToList(),
     };
 
+    static ContainerSummary Mount(ContainerSummary container, string volume, string at)
+    {
+        container.Mounts = [new() { Type = "volume", Name = volume, Source = $"/var/lib/docker/volumes/{volume}/_data", Destination = at, RW = true }];
+        return container;
+    }
+
     static Dictionary<string, string> Compose(string project, string service) =>
         new() { [ContainerItem.ProjectLabel] = project, [ContainerItem.ServiceLabel] = service, ["com.docker.compose.project.working_dir"] = $"/Users/me/src/{project}" };
 
@@ -73,7 +79,7 @@ public sealed partial class PrototypeScreens
 
     static readonly List<ContainerSummary> Containers =
     [
-        Box(Id('1'), "contoso-db-1", "postgres:17-alpine", "running", Compose("contoso", "db"), (5432, 5433)),
+        Mount(Box(Id('1'), "contoso-db-1", "postgres:17-alpine", "running", Compose("contoso", "db"), (5432, 5433)), "contoso_pgdata", "/var/lib/postgresql/data"),
         Box(Id('2'), "contoso-web-1", "contoso/web:2.4", "running", Compose("contoso", "web"), (8080, 8080)),
         Box(Id('3'), "contoso-worker-1", "contoso/worker:2.4", "exited", Compose("contoso", "worker")),
         Box(Id('4'), "dev-control-plane", "kindest/node:v1.34.0", "running", Kind("dev", "control-plane"), (6443, 6443)),
@@ -181,7 +187,8 @@ public sealed partial class PrototypeScreens
         var shell = new ShellViewModel(new FakeSetup(installed: true));
         var engine = shell.Session;
         Set(engine, "client", new DockerClient(DockerEndpoint.Parse("unix:///nonexistent.sock"), Engine()));
-        Set(engine, "ContextName", "dockyard");
+        // The field, not the property: Builds answers a context change by asking this machine's docker for its history.
+        Set(engine, "contextName", "dockyard");
         Set(engine, "State", SessionState.Connected);
         engine.Containers.Reset(Containers);
         var usage = new Dictionary<string, (double, ulong)> { [Id('1')] = (6.8, 90_400_000), [Id('2')] = (1.5, 93_400_000), [Id('4')] = (3.2, 105_200_000), [Id('5')] = (2.2, 84_500_000), [Id('7')] = (5.8, 69_700_000), [Id('8')] = (1.5, 229_400_000) };

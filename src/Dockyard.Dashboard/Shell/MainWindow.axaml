@@ -290,13 +290,7 @@
         </DockPanel>
       </Border>
 
-      <Border DockPanel.Dock="Top" Background="{DynamicResource WarnBg}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="16,6"
-              IsVisible="{Binding Tools.HasHint}">
-        <Grid ColumnDefinitions="*,Auto">
-          <TextBlock Text="{Binding Tools.Hint}" Foreground="{DynamicResource Warn}" TextWrapping="Wrap" VerticalAlignment="Center" />
-          <Button Grid.Column="1" Classes="link" Content="Open Tools" Command="{Binding OpenToolsCommand}" Margin="12,0,0,0" />
-        </Grid>
-      </Border>
+      <dctl:ToolNotice DockPanel.Dock="Top" Classes="bar" Text="{Binding Tools.Hint}" Command="{Binding OpenToolsCommand}" IsVisible="{Binding Tools.HasHint}" />
 
       <Panel>
       <ContentControl Content="{Binding Setup}" IsVisible="{Binding ShowsSetup}" />

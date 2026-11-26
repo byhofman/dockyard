@@ -84,42 +84,47 @@ public sealed partial class PrototypeScreens
         public Task PushClusterWants() => Task.CompletedTask;
     }
 
-    static SetupProgress Step(int n, string line) => new(line, Step: n, Steps: 7);
     static SetupProgress Info(string line) => new(line);
     static SetupProgress Cmd(string line) => new(line, SetupProgressKind.Command);
 
-    static readonly SetupProgress[] FirstSteps =
+    // A new Mac: the facade installs Dockyard as one step, which the host reports line by line.
+    static readonly SetupProgress[] FirstRun =
     [
-        Step(1, "Installing Dockyard"),
+        new("Installing Dockyard", Step: 1, Steps: 1) { Plan = ["Installing Dockyard"] },
         Info("The tools come from Homebrew"),
-        Cmd("brew install docker"),
+        Cmd("brew install docker docker-compose docker-buildx kind kubectl"),
         Info("Installed /opt/homebrew/bin/docker (28.5.1)"),
         Info("Downloading the Linux engine image (212 MB)"),
-        Info("Docker context 'dockyard' → unix:///Users/me/.dockyard/run/docker.sock"),
-        Info("Dockyard starts at login (~/Library/LaunchAgents/dev.dockyard.plist)"),
-        Step(2, "Adding Docker Compose"),
-        Cmd("brew install docker-compose"),
-        Info("Installed /opt/homebrew/bin/docker-compose (2.40.3)"),
-        Step(3, "Adding Docker Buildx"),
-        Cmd("brew install docker-buildx"),
-        Info("==> Fetching docker-buildx 0.29.1"),
-        Info("==> Pouring docker-buildx--0.29.1.arm64_tahoe.bottle.tar.gz"),
     ];
 
-    static readonly SetupProgress[] FailedSteps =
+    // Opened again on an installed Dockyard with Helm picked and Buildx left out: the install is brought up to date, then
+    // each change is a step of its own.
+    static readonly string[] Plan = ["Installing Dockyard", "Adding Helm", "Removing Docker Buildx"];
+
+    static readonly SetupProgress[] Rerun =
     [
-        .. FirstSteps,
-        Info("Installed /opt/homebrew/lib/docker/cli-plugins/docker-buildx (0.29.1)"),
-        Step(4, "Adding kind (Kubernetes in Docker)"),
-        Cmd("brew install kind"),
-        new("Warning: kind 0.29.0 is already installed but outdated", SetupProgressKind.Warning),
-        new("brew install kind failed (exit code 1): Error: Permission denied @ apply2files - /opt/homebrew/share/zsh/site-functions/_kind", SetupProgressKind.Error),
+        new("Installing Dockyard", Step: 1, Steps: 3) { Plan = Plan },
+        Info("The tools come from Homebrew"),
+        Cmd("brew upgrade docker kind"),
+        Info("Installed /opt/homebrew/bin/docker (29.0.2)"),
+        Info("Docker context 'dockyard' → unix:///Users/me/.dockyard/run/docker.sock"),
+        Info("Dockyard starts at login (~/Library/LaunchAgents/dev.dockyard.plist)"),
+        new("Adding Helm", Step: 2, Steps: 3),
+        Cmd("brew install helm"),
+        Info("==> Fetching helm 3.19.2"),
+    ];
+
+    static readonly SetupProgress[] FailedRerun =
+    [
+        .. Rerun,
+        new("Warning: helm 3.19.2 is already downloaded", SetupProgressKind.Warning),
+        new("brew install helm failed (exit code 1): Error: Permission denied @ apply2files - /opt/homebrew/share/zsh/site-functions/_helm", SetupProgressKind.Error),
     ];
 
     public static TheoryData<string> SetupScreens => new()
     {
-        "setup-before", "setup-installing", "setup-error",
-        "tools-default", "tools-updating", "tools-uninstall", "tools-windows",
+        "setup-before", "setup-reopened", "setup-first-run", "setup-installing", "setup-error",
+        "tools-default", "tools-focus", "tools-updating", "tools-remove", "tools-uninstall", "tools-windows",
         "settings-default", "settings-approving", "settings-engine-file",
     };
 
@@ -149,12 +154,13 @@ public sealed partial class PrototypeScreens
     static void Render(string screen, string file, double width, double height)
     {
         var (kind, state) = (screen[..screen.IndexOf('-')], screen[(screen.IndexOf('-') + 1)..]);
-        var fake = new FakeSetup(installed: kind != "setup")
+        var fake = new FakeSetup(installed: kind != "setup" || state is "reopened" or "installing" or "error")
         {
             Lines = state switch
             {
-                "installing" => FirstSteps,
-                "error" => FailedSteps,
+                "first-run" => FirstRun,
+                "installing" => Rerun,
+                "error" => FailedRerun,
                 "updating" => [new("Updating Docker CLI", Step: 1, Steps: 1), Cmd("brew upgrade docker"), Info("==> Fetching docker 29.0.2"), Info("==> Pouring docker--29.0.2.arm64_tahoe.bottle.tar.gz")],
                 _ => [],
             },
@@ -172,8 +178,16 @@ public sealed partial class PrototypeScreens
 
         switch (screen)
         {
-            case "setup-installing" or "setup-error":
+            case "setup-first-run" or "setup-installing" or "setup-error":
                 shell.Setup!.InstallCommand.Execute(null);
+                break;
+            case "tools-focus":
+                var compose = window.GetVisualDescendants().OfType<ComponentRowView>().First(r => r.Title == "Docker Compose");
+                compose.GetVisualDescendants().OfType<Button>().First(b => b.Content as string == "Remove").Focus(Avalonia.Input.NavigationMethod.Tab);
+                break;
+            case "tools-remove":
+                var kindTools = (ToolsViewModel)shell.CurrentSection.Content;
+                kindTools.RemoveCommand.Execute(kindTools.Groups.SelectMany(g => g.Items).First(i => i.Row.Id == "Kind"));
                 break;
             case "tools-updating":
                 var tools = (ToolsViewModel)shell.CurrentSection.Content;
