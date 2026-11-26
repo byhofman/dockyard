@@ -34,6 +34,7 @@ IDs are permanent: never renumber or reuse one.
 - [ ] DOK-38 A pod's logs and a terminal into it from the dashboard, the same way as for a Docker container (owner 2026-11-25, a version after 0.9.0)
 - [ ] DOK-39 The Helm releases installed in a cluster, with their chart, version and status (owner 2026-11-25, a version after 0.9.0)
 - [ ] DOK-40 Images built locally are usable in kind clusters without pushing them anywhere: loaded into a cluster (kind load) from the dashboard and the CLI, or a local registry every cluster pulls from (owner 2026-11-25, a version after 0.9.0)
+- [ ] DOK-44 Edit a running cluster: the create dialog's add-ons (metrics-server, Traefik, cert-manager with its issuer, Headlamp), external-dns, NFS storage and the load balancer changed on a running cluster through Helm and manifests, in the right order, with its definition saved; host-folder storage and the kind config greyed out as needing Recreate; dockyard cluster edit for the same; plus the CLI's dashboard-token and a real-cluster test of Headlamp (feat/headlamp) (owner 2026-11-26, next)
 
 ## Quality
 
