@@ -38,6 +38,7 @@ IDs are permanent: never renumber or reuse one.
 - [x] DOK-45 The one-liner opened the installer window, but it offered no choice of what to install: the component checkboxes the wizard shows on a first install should be there whenever the one-liner opens it, also over an existing install, so a run of it is a way to add or leave out components (owner 2026-11-26; done: over an existing install the boxes start from what is there)
 - [ ] DOK-46 Measure before rewriting: profile the dashboard (polling loops, stats sampling, docker CLI calls it could make through the API), the trimmed Toolbox's startup and the agent, and fix what costs; a rewrite in Rust was considered and set aside, since what is slow is engine work, pulls and kind, not .NET (owner 2026-11-26)
 - [x] DOK-47 Manage a cluster's node containers in the Kubernetes tab itself: a node row is selectable on its own and opens the same detail as in Containers (logs, terminal, files, inspect, stats), with start, stop and restart, so there is no switching to Containers; today only the cluster row selects (owner 2026-11-26; done differently: the Kubernetes tab is gone and clusters and their nodes are rows in Containers)
+- [ ] DOK-48 Time-locked scrolling in the log panel: with logs side by side, scrolling one scrolls the others to the same moment by timestamp, so what happened across containers at one time lines up (owner 2026-11-26)
 
 ## Quality
 
