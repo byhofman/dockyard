@@ -86,7 +86,8 @@ jobs:
         shell: pwsh
         run: |
           dotnet publish src/Dockyard.Tray/Dockyard.Tray.csproj -c Release -r win-x64 -o out/tray -p:Version=${{ needs.plan.outputs.version }} -warnaserror
-          Copy-Item out/tray/dockyard-tray.exe out/dockyard-tray-windows-x64.exe
+          # With Skia's native libraries: an AOT exe alone cannot draw its icon without the dashboard's copies next to it.
+          Compress-Archive -Path out/tray/*.exe, out/tray/*.dll -DestinationPath out/Dockyard.Tray.zip
 
       - name: Dashboard
         if: needs.plan.outputs.dashboard == 'true' || needs.plan.outputs.cli == 'true'
@@ -101,7 +102,7 @@ jobs:
           if-no-files-found: ignore
           path: |
             out/dockyard-windows-x64.exe
-            out/dockyard-tray-windows-x64.exe
+            out/Dockyard.Tray.zip
             out/Dockyard.Dashboard.zip
 
   linux:

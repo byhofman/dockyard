@@ -214,15 +214,15 @@ sealed class WindowsHost : IEngineHost
         string? downloaded = null;
         try
         {
-            string? exe = null;
+            string? zip = null;
             if (installed)
             {
                 log("Downloading the Dockyard tray");
                 downloaded = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
-                exe = await Updates.DownloadComponentAsset(Updates.TrayComponent, Updates.WindowsAppAsset, downloaded);
+                zip = await Updates.DownloadComponentAsset(Updates.TrayComponent, Updates.TrayZipPattern, downloaded);
             }
             // First: a declined approval then leaves everything as it was.
-            await WindowsSetup.MachineComponent(log, nameof(Component.Tray), installed, exe);
+            await WindowsSetup.MachineComponent(log, nameof(Component.Tray), installed, zip);
             UserSetup.SetTrayLogon(installed);
             if (installed) StartApp();
             return false;

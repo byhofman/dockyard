@@ -98,17 +98,17 @@ static class MachineApps
 
     public static IEnumerable<string> WingetToolFiles => Tools.All.SelectMany(Hosts.Winget.MachineFiles);
 
-    // dockyard-tray from the file given, or from the folder --assets names or the tray's own release.
-    public static async Task InstallTray(Action<string> log, string? file = null)
+    // Dockyard.Tray.zip, the tray with its native libraries, from the file given, or from the folder --assets names or the
+    // tray's own release.
+    public static async Task InstallTray(Action<string> log, string? zip = null)
     {
         Directory.CreateDirectory(Paths.AppDir);
         var download = Path.Combine(Paths.AppDir, $".download-{Guid.NewGuid():N}");
         try
         {
-            if (file is null) log("Downloading the Dockyard tray");
-            file ??= await Updates.DownloadComponentAsset(Updates.TrayComponent, Updates.WindowsAppAsset, download);
-            if (string.Equals(Path.GetFullPath(file), Paths.AppExe, StringComparison.OrdinalIgnoreCase)) return;
-            ReplaceAppExe(file);
+            if (zip is null) log("Downloading the Dockyard tray");
+            zip ??= await Updates.DownloadComponentAsset(Updates.TrayComponent, Updates.TrayZipPattern, download);
+            AppFiles.Extract(zip, Paths.AppDir, AppFiles.TrayManifest);
             log($"Installed {Paths.AppExe}");
         }
         finally
@@ -119,8 +119,7 @@ static class MachineApps
 
     public static void RemoveTray(Action<string> log)
     {
-        if (!File.Exists(Paths.AppExe)) return;
-        InUseFiles.MoveAside(Paths.AppExe);
+        AppFiles.Remove(Paths.AppDir, AppFiles.TrayManifest, log);
         log($"Removed {Paths.AppExe}");
     }
 
@@ -167,24 +166,6 @@ static class MachineApps
         AddToMachinePath(Paths.CommandDir);
     }
 
-    // A running exe cannot be overwritten but can be renamed, and the worker doing this may be running from that very
-    // file.
-    static void ReplaceAppExe(string source)
-    {
-        var old = Paths.AppExe + ".old";
-        try { File.Delete(old); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
-        if (File.Exists(Paths.AppExe)) File.Move(Paths.AppExe, old, overwrite: true);
-        try
-        {
-            File.Copy(source, Paths.AppExe);
-        }
-        catch
-        {
-            if (!File.Exists(Paths.AppExe)) File.Move(old, Paths.AppExe);
-            throw;
-        }
-    }
-
     // Dockyard.Dashboard.zip from the given folder, or the one from this release. A download goes to Program Files, which
     // only administrators can write, so nothing can swap it between the check and the extraction.
     public static async Task InstallDashboard(Action<string> log, string? sourceDir)
@@ -198,7 +179,7 @@ static class MachineApps
         }
         try
         {
-            DashboardFiles.Extract(zip, Paths.AppDir);
+            AppFiles.Extract(zip, Paths.AppDir, AppFiles.DashboardManifest);
             log($"Installed {Paths.DashboardExe}");
         }
         finally
@@ -209,7 +190,7 @@ static class MachineApps
 
     public static void RemoveDashboard(Action<string> log)
     {
-        DashboardFiles.Remove(Paths.AppDir, log);
+        AppFiles.Remove(Paths.AppDir, AppFiles.DashboardManifest, log);
         log("Removed the dashboard");
     }
 

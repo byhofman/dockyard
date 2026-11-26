@@ -1,6 +1,6 @@
 <#
   End to end on a Windows machine with WSL 2, as an administrator:
-    setup-windows.ps1 -Dockyard <dockyard-windows-x64.exe, with dockyard-tray-windows-x64.exe, Dockyard.Dashboard.zip and the image next to it>
+    setup-windows.ps1 -Dockyard <dockyard-windows-x64.exe, with Dockyard.Tray.zip, Dockyard.Dashboard.zip and the image next to it>
     setup-windows.ps1 -OneLiner <url of install.ps1>
 #>
 param([string]$Dockyard, [string]$OneLiner, [string]$Screenshots = (Join-Path $PSScriptRoot '../../screenshots'))
@@ -81,6 +81,15 @@ function Linux-Engine {
     throw 'FAIL the Linux engine did not start'
 }
 
+# The tray is an AOT program that loads Skia's native libraries next to it: a missing one ends it within seconds of its start.
+function Tray-Stays-Up($what) {
+    Get-Process dockyard-tray -ErrorAction SilentlyContinue | Stop-Process -Force
+    $started = Start-Process $trayExe -PassThru
+    Start-Sleep 10
+    Check $what (-not $started.HasExited)
+    Get-Process dockyard-tray -ErrorAction SilentlyContinue | Stop-Process -Force
+}
+
 # What a container printed, from its logs and not through an attached docker run.
 function In-Container($command) {
     $id = (& $docker --context linux run -d alpine:3.24 sh -c $command | Out-String).Trim()
@@ -106,6 +115,7 @@ $code = Run --silent --without dashboard --no-start
 Check "exit 0 (was $code)" ($code -eq 0)
 Check 'the dockyard command is installed' (Test-Path $cli)
 Check 'and the tray' (Test-Path $trayExe)
+Tray-Stays-Up 'the tray runs without the dashboard, on libraries of its own'
 $code = Run --silent --no-start
 Check "rerun exit 0 (was $code)" ($code -eq 0)
 Check 'no dashboard' (-not (Test-Path $dashboard))
@@ -504,12 +514,13 @@ Section 'remove the dashboard'
 Check 'exit 0' ((Run --silent --without dashboard --no-start) -eq 0)
 Check 'dashboard removed' (-not (Test-Path $dashboard))
 Check 'the command and the tray stay' ((Test-Path $cli) -and (Test-Path $trayExe))
+Tray-Stays-Up 'the tray still runs once the dashboard and its libraries are gone'
 
 Section 'the installed command replaces the tray, also a running one'
 $tray = Start-Process $trayExe -PassThru
 Start-Sleep 3
-$source = Join-Path (New-Item -ItemType Directory (Join-Path $env:TEMP ([guid]::NewGuid()))) 'dockyard-tray-windows-x64.exe'
-Copy-Item $trayExe $source
+$source = Join-Path (New-Item -ItemType Directory (Join-Path $env:TEMP ([guid]::NewGuid()))) 'Dockyard.Tray.zip'
+Compress-Archive -Path (Get-Content (Join-Path $appDir 'tray.files') | ForEach-Object { Join-Path $appDir $_ }) -DestinationPath $source
 $log = New-TemporaryFile
 $id = [Security.Principal.WindowsIdentity]::GetCurrent()
 $p = Start-Process $cli -ArgumentList "--machine-update Tray --app-file `"$source`" --user-sid $($id.User.Value) --user-name `"$($id.Name)`" --log `"$log`" --keep-pid 0" -Wait -PassThru

@@ -10,6 +10,7 @@ static class MachineSetup
         ToolSource source)
     {
         InUseFiles.CleanUp(Paths.DockerDir);
+        InUseFiles.CleanUp(Paths.AppDir);
         // First, so that a setup that stops halfway leaves the command that finishes it.
         await MachineApps.AddDefenderExclusions(log);
         await MachineApps.InstallCli(log, Updates.LocalAssets);
@@ -100,9 +101,9 @@ static class MachineSetup
                 break;
             case Component.Tray:
                 await MachineApps.AddDefenderExclusions(log);
-                var exe = appFile ?? throw new ArgumentException("--app-file is required for the tray update");
+                var zip = appFile ?? throw new ArgumentException("--app-file is required for the tray update");
                 MachineApps.StopApps(keepPid, trayOnly: true);
-                await MachineApps.InstallTray(log, exe);
+                await MachineApps.InstallTray(log, zip);
                 Shell.StartUnelevated(Paths.AppExe);
                 break;
             default: throw new ArgumentException($"{component} is not a machine component");

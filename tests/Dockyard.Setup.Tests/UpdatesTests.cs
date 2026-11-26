@@ -57,10 +57,10 @@ public sealed class UpdatesTests : IDisposable
     {
         github.Serve($"{Base}/download/index/components.json", """{ "cli": { "version": "1.2.3", "tag": "cli/1.2.3" }, "tray": { "version": "1.1.0", "tag": "tray/1.1.0" } }""");
         ServeRelease("cli/1.2.3", "dockyard_1.2.3_amd64.deb", "app");
-        ServeRelease("tray/1.1.0", "dockyard-tray-windows-x64.exe", "tray");
+        ServeRelease("tray/1.1.0", "Dockyard.Tray.zip", "tray");
 
         var release = await Updates.LatestComponentAsset(Updates.CliComponent, LinuxLayout.AppPackage("apt"));
-        var tray = await Updates.LatestComponentAsset(Updates.TrayComponent, Updates.WindowsAppAsset);
+        var tray = await Updates.LatestComponentAsset(Updates.TrayComponent, Updates.TrayZipPattern);
 
         Assert.Equal(new Version(1, 2, 3), release!.Version);
         Assert.Equal("cli/1.2.3", release.Tag);
@@ -70,11 +70,12 @@ public sealed class UpdatesTests : IDisposable
     }
 
     [Theory]
-    [InlineData("dockyard-tray-windows-x64.exe", true)]
-    [InlineData("dockyard-tray-linux-x64", false)]
+    [InlineData("Dockyard.Tray.zip", true)]
+    [InlineData("dockyard-tray-windows-x64.exe", false)]
+    [InlineData("Dockyard.Dashboard.zip", false)]
     [InlineData("dockyard-windows-x64.exe", false)]
     public void The_Windows_tray_is_found_by_its_own_asset_name(string asset, bool matches) =>
-        Assert.Equal(matches, System.Text.RegularExpressions.Regex.IsMatch(asset, Updates.WindowsAppAsset));
+        Assert.Equal(matches, System.Text.RegularExpressions.Regex.IsMatch(asset, Updates.TrayZipPattern));
 
     [Fact]
     public async Task Without_a_cli_release_in_the_index_nothing_is_downloaded()

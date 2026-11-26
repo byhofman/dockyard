@@ -6,7 +6,7 @@ using Dockyard.Hosts;
 
 namespace Dockyard.Setup.Tests;
 
-public sealed class DashboardFilesTests : IDisposable
+public sealed class AppFilesTests : IDisposable
 {
     readonly string dir = Directory.CreateTempSubdirectory().FullName;
 
@@ -28,22 +28,51 @@ public sealed class DashboardFilesTests : IDisposable
     public void Adding_and_removing_leaves_the_rest_of_the_install_alone()
     {
         File.WriteAllText(Path.Combine(dir, "dockyard-tray.exe"), "tray");
-        DashboardFiles.Extract(Zip("dockyard-dashboard.exe", "libSkiaSharp.dll"), dir);
+        AppFiles.Extract(Zip("dockyard-dashboard.exe", "libSkiaSharp.dll"), dir, AppFiles.DashboardManifest);
         Assert.True(File.Exists(Path.Combine(dir, "dockyard-dashboard.exe")));
         Assert.True(File.Exists(Path.Combine(dir, "libSkiaSharp.dll")));
 
-        DashboardFiles.Remove(dir, _ => { });
+        AppFiles.Remove(dir, AppFiles.DashboardManifest, _ => { });
         Assert.Equal(["dockyard-tray.exe"], Directory.GetFiles(dir).Select(Path.GetFileName));
 
-        DashboardFiles.Extract(Zip("dockyard-dashboard.exe"), dir);
+        AppFiles.Extract(Zip("dockyard-dashboard.exe"), dir, AppFiles.DashboardManifest);
         Assert.True(File.Exists(Path.Combine(dir, "dockyard-dashboard.exe")));
+    }
+
+    [Fact]
+    public void Removing_one_app_keeps_the_libraries_the_other_still_lists()
+    {
+        AppFiles.Extract(Zip("dockyard-tray.exe", "libSkiaSharp.dll", "libHarfBuzzSharp.dll"), dir, AppFiles.TrayManifest);
+        AppFiles.Extract(Zip("dockyard-dashboard.exe", "libSkiaSharp.dll", "libHarfBuzzSharp.dll", "av_libglesv2.dll"), dir, AppFiles.DashboardManifest);
+
+        AppFiles.Remove(dir, AppFiles.DashboardManifest, _ => { });
+
+        Assert.Equal(["dockyard-tray.exe", "libHarfBuzzSharp.dll", "libSkiaSharp.dll", AppFiles.TrayManifest],
+            Directory.GetFiles(dir).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+
+        AppFiles.Extract(Zip("dockyard-dashboard.exe", "libSkiaSharp.dll", "libHarfBuzzSharp.dll"), dir, AppFiles.DashboardManifest);
+        AppFiles.Remove(dir, AppFiles.TrayManifest, _ => { });
+
+        Assert.Equal(["dashboard.files", "dockyard-dashboard.exe", "libHarfBuzzSharp.dll", "libSkiaSharp.dll"],
+            Directory.GetFiles(dir).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void A_library_one_app_no_longer_brings_stays_while_the_other_lists_it()
+    {
+        AppFiles.Extract(Zip("dockyard-tray.exe", "libSkiaSharp.dll"), dir, AppFiles.TrayManifest);
+        AppFiles.Extract(Zip("dockyard-dashboard.exe", "libSkiaSharp.dll"), dir, AppFiles.DashboardManifest);
+
+        AppFiles.Extract(Zip("dockyard-dashboard.exe"), dir, AppFiles.DashboardManifest);
+
+        Assert.True(File.Exists(Path.Combine(dir, "libSkiaSharp.dll")));
     }
 
     [Fact]
     public void Extracting_stays_inside_the_app_directory()
     {
         var outside = Path.Combine(Path.GetDirectoryName(dir)!, $"{Guid.NewGuid():N}.txt");
-        DashboardFiles.Extract(Zip($"../{Path.GetFileName(outside)}"), dir);
+        AppFiles.Extract(Zip($"../{Path.GetFileName(outside)}"), dir, AppFiles.DashboardManifest);
         Assert.False(File.Exists(outside));
     }
 
@@ -52,8 +81,8 @@ public sealed class DashboardFilesTests : IDisposable
     {
         var outside = Path.Combine(Path.GetDirectoryName(dir)!, $"{Guid.NewGuid():N}.txt");
         File.WriteAllText(outside, "keep");
-        File.WriteAllLines(Path.Combine(dir, DashboardFiles.ManifestName), [$"../{Path.GetFileName(outside)}"]);
-        DashboardFiles.Remove(dir, _ => { });
+        File.WriteAllLines(Path.Combine(dir, AppFiles.DashboardManifest), [$"../{Path.GetFileName(outside)}"]);
+        AppFiles.Remove(dir, AppFiles.DashboardManifest, _ => { });
         Assert.True(File.Exists(outside));
         File.Delete(outside);
     }
@@ -62,9 +91,9 @@ public sealed class DashboardFilesTests : IDisposable
     public void A_file_the_new_dashboard_no_longer_brings_goes_and_the_rest_stays()
     {
         File.WriteAllText(Path.Combine(dir, "dockyard-tray.exe"), "tray");
-        DashboardFiles.Extract(Zip("dockyard-dashboard.exe", "libOld.dll", "libSkiaSharp.dll"), dir);
+        AppFiles.Extract(Zip("dockyard-dashboard.exe", "libOld.dll", "libSkiaSharp.dll"), dir, AppFiles.DashboardManifest);
 
-        DashboardFiles.Extract(Zip("dockyard-dashboard.exe", "libSkiaSharp.dll"), dir);
+        AppFiles.Extract(Zip("dockyard-dashboard.exe", "libSkiaSharp.dll"), dir, AppFiles.DashboardManifest);
 
         Assert.True(File.Exists(Path.Combine(dir, "dockyard-dashboard.exe")));
         Assert.True(File.Exists(Path.Combine(dir, "libSkiaSharp.dll")));

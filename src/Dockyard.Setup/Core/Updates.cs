@@ -7,7 +7,7 @@ namespace Dockyard.Core;
 
 static partial class Updates
 {
-    public const string WindowsAppAsset = @"^dockyard-tray-windows-x64\.exe$";
+    public const string TrayZipPattern = @"^Dockyard\.Tray\.zip$";
     public const string ImageAsset = @"^dockyard-linux-[\d.]+-x86_64\.tar\.gz$";
 
     internal static HttpClient Http = CreateHttp();
@@ -55,11 +55,11 @@ static partial class Updates
     {
         Component.DockyardCli => await LatestComponentAsset(CliComponent, CliAssetPattern),
         Component.Engine or Component.DockerCli => WindowsDocker,
-        Component.Dashboard => await LatestComponentAsset(DashboardComponent, @"^Dockyard\.Dashboard\.zip$"),
+        Component.Dashboard => await LatestComponentAsset(DashboardComponent, DashboardZipPattern),
         Component.Compose => WindowsCompose,
         Component.Buildx => WindowsBuildx,
         Component.LinuxEngine => LinuxDocker,
-        Component.Tray => await LatestComponentAsset(TrayComponent, WindowsAppAsset),
+        Component.Tray => await LatestComponentAsset(TrayComponent, TrayZipPattern),
         Component.Kind or Component.Kubectl or Component.Helm => Tools.Pinned(Tools.Find(c.ToString())!),
         _ => null,
     };

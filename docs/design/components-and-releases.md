@@ -26,7 +26,7 @@ assets and its own `SHA256SUMS`:
 | Release | Assets |
 |---|---|
 | `cli/<v>` | `dockyard-windows-x64.exe`, `dockyard-linux-x64`, `dockyard-macos-arm64`; and what holds the command on Linux and macOS: `dockyard_<v>_amd64.deb` and `dockyard-<v>-1.x86_64.rpm` (the command and the tray), `Dockyard-<v>-linux-x64.tar.gz` (command, tray and dashboard, for distributions without apt or dnf), `Dockyard-<v>-macos.zip`, `Dockyard-<v>-macos-engine-only.zip` and `Dockyard-<v>-macos.dmg` (the app bundle) |
-| `tray/<v>` | `dockyard-tray-windows-x64.exe` |
+| `tray/<v>` | `Dockyard.Tray.zip` (the tray and its native libraries) |
 | `dashboard/<v>` | `Dockyard.Dashboard.zip`, `dockyard-dashboard_<v>_amd64.deb`, `dockyard-dashboard-<v>-1.x86_64.rpm` |
 | `engine/<v>` | `dockyard-linux-<v>-x86_64.tar.gz`, `dockyard-vm-<v>-aarch64.tar.gz` |
 

@@ -34,7 +34,7 @@ static class WindowsSetup
         else await Elevation.Run(log, "--machine-uninstall");
     }
 
-    // appFile: the tray's executable to put in place, where it is not this process's own.
+    // appFile: the tray's zip to put in place.
     public static async Task MachineComponent(Action<string> log, string component, bool installed, string? appFile = null)
     {
         if (Elevation.IsElevated)
@@ -64,15 +64,15 @@ static class WindowsSetup
     public static async Task UpdateTray(Action<string> log, Release release)
     {
         log($"Downloading the Dockyard tray {release.Tag}");
-        var exe = await Updates.DownloadTray(release);
+        var zip = await Updates.DownloadTray(release);
         try
         {
-            if (Elevation.IsElevated) await MachineSetup.Update(log, Component.Tray, exe, Environment.ProcessId, Source);
-            else await Elevation.Run(log, "--machine-update", Component.Tray.ToString(), "--app-file", exe);
+            if (Elevation.IsElevated) await MachineSetup.Update(log, Component.Tray, zip, Environment.ProcessId, Source);
+            else await Elevation.Run(log, "--machine-update", Component.Tray.ToString(), "--app-file", zip);
         }
         finally
         {
-            Directory.Delete(Path.GetDirectoryName(exe)!, recursive: true);
+            Directory.Delete(Path.GetDirectoryName(zip)!, recursive: true);
         }
     }
 
