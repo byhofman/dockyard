@@ -127,7 +127,8 @@ sealed class Dialog : Observable
     public bool IsClosed { get; private set; }
 
     public bool Option { get => option; set => Set(ref option, value); }
-    public bool CanConfirm => canConfirm?.Invoke(this) ?? Fields.All(f => f.Value.Length > 0);
+    // A checkbox is an answer either way; only text and choices have to be filled in.
+    public bool CanConfirm => canConfirm?.Invoke(this) ?? Fields.Where(f => !f.IsCheck).All(f => f.Value.Length > 0);
 
     public bool IsWorking
     {

@@ -253,4 +253,13 @@ public sealed class SelectionAndDialogTests
         Assert.Equal("kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nnodes:\n- role: control-plane\n- role: worker\n- role: worker\n", KindCli.Config(2));
         Assert.Equal(["create", "cluster", "--name", "dev", "--kubeconfig", "own", "--config", "c.yaml"], KindCli.Create("dev", "own", "c.yaml"));
     }
-}
+
+    [Fact]
+    public void Checkboxes_do_not_hold_back_the_confirm_button_but_an_empty_text_does()
+    {
+        var withChecks = new Dialog("Down shop?", "", "Down", _ => Task.CompletedTask, fields: [DialogField.Check("Also remove its volumes"), DialogField.Check("Also remove its images")]);
+        Assert.True(withChecks.CanConfirm);
+
+        var withText = new Dialog("Name it", "", "Create", _ => Task.CompletedTask, fields: [new DialogField("Name"), DialogField.Check("Start it")]);
+        Assert.False(withText.CanConfirm);
+    }}
