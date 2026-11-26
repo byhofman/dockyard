@@ -534,7 +534,8 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
 
     async Task CopyHeadlampToken()
     {
-        if (Selected is not { } c || CopyText is not { } copy) return;
+        if (Selected is not { } c) return;
+        if (CopyText is not { } copy) { Shell.ShowError("Could not reach the clipboard."); return; }
         try
         {
             await copy(await Headlamp.Token(Session.ContextName.Length > 0 ? Session.ContextName : "default", c.Name));
@@ -545,7 +546,8 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
 
     async Task CopyKubeconfig()
     {
-        if (Selected is not { } c || kind is not { } exe || CopyText is not { } copy) return;
+        if (Selected is not { } c || kind is not { } exe) return;
+        if (CopyText is not { } copy) { Shell.ShowError("Could not reach the clipboard."); return; }
         try
         {
             await copy(await new KindActions(exe, Session.ContextName, kubeconfig).Kubeconfig(c.Name));
