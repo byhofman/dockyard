@@ -2,7 +2,7 @@ using Dockyard.Core;
 
 namespace Dockyard.Hosts;
 
-// Dockyard's own pinned download of a tool, for where no package manager brings it, or when the source is Dockyard.
+// The Dockyard source: Dockyard's pinned download of a tool, for where no package manager brings it, or when the source is Dockyard.
 interface IDockyardSource
 {
     Task<Version?> Installed(CliTool tool);
@@ -12,10 +12,10 @@ interface IDockyardSource
 }
 
 // A tool comes from the package manager wherever there is one, and then takes the place of a copy Dockyard put there
-// earlier. Only without one, or when the user chose the source Dockyard, does Dockyard keep a pinned copy of its own.
+// earlier. Only without one, or when the user chose the source Dockyard, does the Dockyard source put its pinned copy in place.
 // source is that choice, read each time so that a change applies at once.
 // ledger holds what Dockyard itself installed through the package manager.
-sealed class ToolComponents(IPackageManager? packages, IDockyardSource own, Func<ToolSource>? source = null, ToolLedger? ledger = null)
+sealed class ToolComponents(IPackageManager? packages, IDockyardSource dockyard, Func<ToolSource>? source = null, ToolLedger? ledger = null)
 {
     bool ChoseDockyard => source?.Invoke() == ToolSource.Dockyard;
 
@@ -26,14 +26,14 @@ sealed class ToolComponents(IPackageManager? packages, IDockyardSource own, Func
     public async Task<bool> IsManaged(CliTool tool) => Carries(tool) && await packages!.Installed(tool) is not null;
 
     public async Task<string?> Source(CliTool tool) =>
-        await IsManaged(tool) ? packages!.Name : await own.Installed(tool) is not null ? "Dockyard" : null;
+        await IsManaged(tool) ? packages!.Name : await dockyard.Installed(tool) is not null ? "Dockyard" : null;
 
-    public async Task<Version?> Installed(CliTool tool) => (Carries(tool) ? await packages!.Installed(tool) : null) ?? await own.Installed(tool);
+    public async Task<Version?> Installed(CliTool tool) => (Carries(tool) ? await packages!.Installed(tool) : null) ?? await dockyard.Installed(tool);
 
     // What the package manager would upgrade to, for a tool it manages; otherwise the pinned version.
     public async Task<Release?> Latest(CliTool tool)
     {
-        if (!await IsManaged(tool)) return own.Pinned(tool);
+        if (!await IsManaged(tool)) return dockyard.Pinned(tool);
         return await packages!.Available(tool) is { } version ? new Release(version, version.ToString(), null) : null;
     }
 
@@ -47,11 +47,11 @@ sealed class ToolComponents(IPackageManager? packages, IDockyardSource own, Func
     {
         if (await FromPackageManager(log, tool, onlyIfChanged))
         {
-            if (await own.Installed(tool) is not null) await own.Remove(log, tool);
+            if (await dockyard.Installed(tool) is not null) await dockyard.Remove(log, tool);
             return true;
         }
-        if (own.Pinned(tool) is not { } pinned) throw new InvalidOperationException($"{tool.Title} needs {packages?.Name ?? "a package manager"}");
-        if (!onlyIfChanged || await own.Installed(tool) != pinned.Version) await own.Install(log, tool);
+        if (dockyard.Pinned(tool) is not { } pinned) throw new InvalidOperationException($"{tool.Title} needs {packages?.Name ?? "a package manager"}");
+        if (!onlyIfChanged || await dockyard.Installed(tool) != pinned.Version) await dockyard.Install(log, tool);
         if (ChoseDockyard) await RemovePackage(log, tool);
         return false;
     }
@@ -97,7 +97,7 @@ sealed class ToolComponents(IPackageManager? packages, IDockyardSource own, Func
     // For a tool left out of an install: only what Dockyard put there itself, since the package manager's may be the user's own.
     public async Task RemoveDockyardCopy(Action<string> log, CliTool tool)
     {
-        if (await own.Installed(tool) is not null) await own.Remove(log, tool);
+        if (await dockyard.Installed(tool) is not null) await dockyard.Remove(log, tool);
     }
 
     // Both, so that removing a tool leaves no copy behind whichever way it came.
@@ -105,6 +105,6 @@ sealed class ToolComponents(IPackageManager? packages, IDockyardSource own, Func
     {
         if (await IsManaged(tool)) await packages!.Remove(log, tool);
         ledger?.Remove(tool.Id);
-        if (await own.Installed(tool) is not null) await own.Remove(log, tool);
+        if (await dockyard.Installed(tool) is not null) await dockyard.Remove(log, tool);
     }
 }

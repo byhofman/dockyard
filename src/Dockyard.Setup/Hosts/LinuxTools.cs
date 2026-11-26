@@ -49,7 +49,7 @@ sealed class LinuxPackages(LinuxRoot root) : IPackageManager
     static string KubernetesMinor => Tools.Pinned(Tools.Kubectl).Version is var v ? $"{v.Major}.{v.Minor}" : "";
 }
 
-// Dockyard's own copies in /usr/local/bin, where every shell finds them, each with a marker in /etc/dockyard: one without
+// The Dockyard source's tools in /usr/local/bin, where every shell finds them, each with a marker in /etc/dockyard: one without
 // a marker is someone else's and stays as it is.
 [SupportedOSPlatform("linux")]
 sealed class LinuxDockyardSource(ICommandRunner runner, LinuxRoot root) : IDockyardSource

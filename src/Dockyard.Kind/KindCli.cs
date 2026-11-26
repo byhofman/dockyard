@@ -6,7 +6,7 @@ static class KindCli
 {
     static string Exe => OperatingSystem.IsWindows() ? "kind.exe" : "kind";
 
-    // Where Dockyard installs its own copy on each system.
+    // Where the Dockyard source installs it on each system.
     public static string OwnPath(string home) => System.IO.Path.Combine(CliLocator.KnownDirs(home).First(), Exe);
 
     public static string? Locate() => CliLocator.Locate("kind");

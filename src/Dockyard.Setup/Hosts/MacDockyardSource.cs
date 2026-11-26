@@ -3,7 +3,7 @@ using Dockyard.Core;
 
 namespace Dockyard.Hosts;
 
-// Dockyard's own copies on a Mac without Homebrew: the CLI and the other tools in ~/.dockyard/bin, the plugins in
+// The Dockyard source on a Mac without Homebrew: the CLI and the other tools in ~/.dockyard/bin, the plugins in
 // ~/.docker/cli-plugins.
 [SupportedOSPlatform("macos")]
 sealed class MacDockyardSource(ICommandRunner runner, MacComponents parts) : IDockyardSource
@@ -41,7 +41,7 @@ sealed class MacDockyardSource(ICommandRunner runner, MacComponents parts) : IDo
     {
         if (Plugin(tool) is not null) MacComponents.RemovePlugin(tool.Command);
         else System.IO.File.Delete(File(tool));
-        log($"Removed Dockyard's own {tool.Command}");
+        log($"Removed the Dockyard source's {tool.Command}");
         return Task.CompletedTask;
     }
 }

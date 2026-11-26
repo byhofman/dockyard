@@ -20,7 +20,7 @@ interface IPackageManager
 
 // winget's portable packages for the whole machine, in Program Files where only administrators write: Dockyard runs it in
 // its administrator step, and excludes exactly those files from Defender's rule against files too new to be common, as it
-// does for its own. A tool Windows still will not run counts as not installed, and Dockyard's own copy takes its place.
+// does for its own. A tool Windows still will not run counts as not installed, and the Dockyard source's takes its place.
 sealed class Winget(ICommandRunner runner, Action<IReadOnlyList<string>>? exclude = null) : IPackageManager
 {
     // Success as winget reports it: nothing newer to install, already installed, or not installed at all.

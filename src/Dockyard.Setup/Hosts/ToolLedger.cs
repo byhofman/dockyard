@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace Dockyard.Hosts;
 
-// The tools Dockyard itself installed through the package manager, so that moving to Dockyard's own copies takes those
+// The tools Dockyard itself installed through the package manager, so that moving to the Dockyard source takes those
 // away again and leaves alone a package the user had before.
 sealed class ToolLedger(string file)
 {

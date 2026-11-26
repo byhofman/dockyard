@@ -3,7 +3,7 @@ using Dockyard.Core;
 
 namespace Dockyard.Hosts;
 
-// Dockyard's own copies in Program Files\Docker, for a Windows without winget: changing them takes the administrator step.
+// The Dockyard source's tools in Program Files\Docker, for a Windows without winget: changing them takes the administrator step.
 [SupportedOSPlatform("windows")]
 sealed class WindowsDockyardSource : IDockyardSource
 {
