@@ -104,21 +104,4 @@ public sealed class WindowsHostTests
         Assert.Equal("wsl.exe -d dockyard -u root -- wslpath -a C:/Temp/x/docker.tgz", runner.Commands[0]);
         Assert.Equal("wsl.exe -d dockyard -u root -- /usr/local/sbin/dockyard-update /mnt/c/Temp/x/docker.tgz /mnt/c/Temp/x/plugins", runner.Commands[2]);
     }
-
-    [Fact]
-    public async Task Legacy_engine_in_users_distro_is_stopped_and_disabled()
-    {
-        var runner = new FakeRunner().Returns("Ubuntu-24.04\n");
-        Assert.True(await WslDistro.DisableLegacyEngine(runner, "Ubuntu-24.04"));
-        Assert.Contains("systemctl stop docker.service docker.socket containerd.service", runner.Commands[1]);
-        Assert.Contains("systemctl disable docker.socket", runner.Commands[1]);
-    }
-
-    [Fact]
-    public async Task Legacy_migration_skips_missing_distro()
-    {
-        var runner = new FakeRunner().Returns("dockyard\n");
-        Assert.False(await WslDistro.DisableLegacyEngine(runner, "Ubuntu-24.04"));
-        Assert.Single(runner.Commands);
-    }
 }

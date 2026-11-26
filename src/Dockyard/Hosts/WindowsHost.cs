@@ -50,7 +50,7 @@ sealed class WindowsHost : IEngineHost
         new(nameof(Component.Dashboard), Updates.Title(Component.Dashboard), Flag: "dashboard", Note: "Optional. Opens from the tray."),
     ];
 
-    public bool IsInstalled => File.Exists(Paths.InstalledAppExe);
+    public bool IsInstalled => File.Exists(Paths.AppExe);
     public ICaKeyStore CaKeys => new DpapiCaKey(((IEngineHost)this).CaDirectory);
 
     public Task<bool> IsRunning(string engine) => Task.Run(() => engine == Linux ? wsl.IsRunning() : WindowsServiceEngine.IsRunning());

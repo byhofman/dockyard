@@ -36,9 +36,7 @@ public partial class App : Application
         this.args = args;
     }
 
-    // The old name counts until the next wizard run replaces it: a tray that updated itself from before the rename can find it there.
-    static readonly string[] DashboardFiles = OperatingSystem.IsWindows() ? ["dockyard-dashboard.exe", "Dockyard Dashboard.exe", "Dockyard.Dashboard.exe"] : ["dockyard-dashboard", "Dockyard Dashboard", "Dockyard.Dashboard"];
-    static string DashboardExe => DashboardFiles.Select(f => Path.Combine(AppContext.BaseDirectory, f)).FirstOrDefault(File.Exists) ?? Path.Combine(AppContext.BaseDirectory, DashboardFiles[0]);
+    static string DashboardExe => Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "dockyard-dashboard.exe" : "dockyard-dashboard");
     static bool HasDashboard => File.Exists(DashboardExe);
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);

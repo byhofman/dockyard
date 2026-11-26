@@ -120,13 +120,4 @@ sealed class WslDistro(ICommandRunner runner, string name = WslDistro.DefaultNam
         if (pluginsDir is not null) args.Add(await ToLinuxPath(pluginsDir));
         return (await runner.Check("wsl.exe", [.. args])).Trim();
     }
-
-    // The Docker CE setup of earlier Dockyard versions in the user's own distro: stop it so nothing else listens on 2375.
-    public static async Task<bool> DisableLegacyEngine(ICommandRunner runner, string distro)
-    {
-        if (!(await List(runner)).Contains(distro, StringComparer.OrdinalIgnoreCase)) return false;
-        await runner.Run("wsl.exe", "-d", distro, "-u", "root", "--", "sh", "-c",
-            "systemctl stop docker.service docker.socket containerd.service 2>/dev/null; systemctl disable docker.socket 2>/dev/null; true");
-        return true;
-    }
 }

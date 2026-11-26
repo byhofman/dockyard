@@ -17,18 +17,11 @@ static class EngineSettings
     public static string UserFile(string engine, string? settingsDir = null) =>
         Path.Combine(settingsDir ?? Paths.SettingsDir, "engines", engine + ".daemon.json");
 
-    // An engine whose file Dockyard renders: what the user put in it, or the settings from before it could be edited.
-    public static string Load(string engine, Settings settings, string? settingsDir = null)
+    // An engine whose file Dockyard renders: what the user put in it.
+    public static string Load(string engine, string? settingsDir = null)
     {
         var file = UserFile(engine, settingsDir);
-        return File.Exists(file) ? File.ReadAllText(file) : FromOldSettings(settings);
-    }
-
-    public static string FromOldSettings(Settings settings)
-    {
-        var config = JsonNode.Parse(EngineConfig.Render(null, settings))!.AsObject();
-        config.Remove("dns");
-        return config.ToJsonString(Indented);
+        return File.Exists(file) ? File.ReadAllText(file) : "{}";
     }
 
     public static void Save(string engine, string json, string? settingsDir = null)

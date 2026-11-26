@@ -58,7 +58,7 @@ interface IEngineHost
     string DoneMessage(bool reboot);
     void Reboot() { }
 
-    // True for the tray and for a copy an earlier script placed; false for the wizard run from a download.
+    // True for the tray; false for the wizard run from a download.
     bool RunsFromInstallLocation { get; }
 
     bool HasDashboard { get; }

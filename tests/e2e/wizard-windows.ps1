@@ -2,7 +2,6 @@
   End to end on a Windows machine with WSL 2, as an administrator:
     wizard-windows.ps1 -Wizard <Dockyard.exe with Dockyard.Dashboard.zip and the image next to it>
     wizard-windows.ps1 -OneLiner <url of install.ps1>
-  Starts from an install of v0.1.0, the state of the owner's PC.
 #>
 param([string]$Wizard, [string]$OneLiner, [string]$Screenshots = (Join-Path $PSScriptRoot '../../screenshots'))
 
@@ -10,9 +9,6 @@ $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 $appDir = Join-Path $env:ProgramFiles 'Dockyard'
 $appExe = Join-Path $appDir 'dockyard-toolbox.exe'
-# What the Toolbox was called before 0.9.0.
-$legacyExe = Join-Path $appDir 'Dockyard.exe'
-# Either name: the one-liner test runs the release that is out, and the rename reaches it with the next release.
 $dashboard = Join-Path $appDir 'dockyard-dashboard.exe'
 $ownDocker = Join-Path $env:ProgramFiles 'Docker\docker.exe'
 
@@ -104,17 +100,15 @@ if ($OneLiner) {
     Check 'exit 2' ((Run --silent --typo) -eq 2)
 }
 
-Section 'over v0.1.0, as the owner has it: update, the skipped dashboard stays skipped'
-New-Item -ItemType Directory -Force $appDir | Out-Null
-Invoke-WebRequest https://github.com/byhofman/dockyard/releases/download/v0.1.0/Dockyard.exe -OutFile $legacyExe
-Check 'really v0.1.0 to start from' ((Get-Item $legacyExe).VersionInfo.ProductVersion -like '0.1.0*')
+Section 'a new install without the dashboard; a rerun keeps it skipped'
 New-Item -ItemType Directory -Force "$env:APPDATA\Dockyard" | Out-Null
 '{"StopOtherOnSwitch":false,"StartActiveAtLogon":false}' | Set-Content "$env:APPDATA\Dockyard\settings.json"
-if (-not $OneLiner) { Window -LookOnly 'manage-over-v0.1.0' }
-$code = Run --silent --no-start
+$code = Run --silent --no-dashboard --no-start
 Check "exit 0 (was $code)" ($code -eq 0)
-Check 'no longer v0.1.0' ((Get-Item $appExe).VersionInfo.ProductVersion -notlike '0.1.0*')
-Check 'the old name is gone' (-not (Test-Path $legacyExe))
+Check 'installed' (Test-Path $appExe)
+if (-not $OneLiner) { Window -LookOnly 'manage-installed' }
+$code = Run --silent --no-start
+Check "rerun exit 0 (was $code)" ($code -eq 0)
 Check 'no dashboard' (-not (Test-Path $dashboard))
 Check 'settings kept' ((Get-Content "$env:APPDATA\Dockyard\settings.json" -Raw) -match '"StopOtherOnSwitch":\s*false')
 $distros = (wsl.exe -l -q | Out-String) -replace "`0", ''
@@ -260,13 +254,11 @@ if ($Wizard) {
     Check 'gone once Windows stops using it' ((wsl.exe -d dockyard -u root -- cat /etc/docker/daemon.json | Out-String) -notmatch '18888')
     Linux-Engine
 
-    Section 'engine configuration from the settings reaches the engine'
-    $saved = Get-Content "$env:APPDATA\Dockyard\settings.json" -Raw
-    $settings = $saved | ConvertFrom-Json
-    $settings | Add-Member -Force RegistryMirrors 'https://mirror.dockyard.internal'
-    $settings | Add-Member -Force InsecureRegistries 'registry.dockyard.internal:5000'
-    $settings | Add-Member -Force AddressPools '10.123.0.0/16 24'
-    $settings | ConvertTo-Json | Set-Content "$env:APPDATA\Dockyard\settings.json"
+    Section 'the engine settings file reaches the engine'
+    $engineFile = "$env:APPDATA\Dockyard\engines\linux.daemon.json"
+    $saved = if (Test-Path $engineFile) { Get-Content $engineFile -Raw } else { $null }
+    New-Item -ItemType Directory -Force (Split-Path $engineFile) | Out-Null
+    '{ "registry-mirrors": ["https://mirror.dockyard.internal"], "insecure-registries": ["registry.dockyard.internal:5000"], "default-address-pools": [{ "base": "10.123.0.0/16", "size": 24 }] }' | Set-Content $engineFile
     Check 'exit 0' ((Run --silent --no-start) -eq 0)
     wsl.exe -d dockyard -u root -- sh -c 'kill -TERM $(pidof dockerd); while pidof dockerd >/dev/null; do sleep 0.2; done'
     Linux-Engine
@@ -277,7 +269,7 @@ if ($Wizard) {
     $subnet = & $docker --context linux network inspect e2e-pool --format '{{(index .IPAM.Config 0).Subnet}}' | Out-String
     Check "a new network comes from the pool (got $subnet)" ($subnet -match '^10\.123\.')
     & $docker --context linux network rm e2e-pool | Out-Null
-    $saved | Set-Content "$env:APPDATA\Dockyard\settings.json"
+    if ($null -ne $saved) { $saved | Set-Content $engineFile } else { Remove-Item $engineFile }
 
     Section 'container domains and trusted HTTPS, without publishing a port'
     Check 'windows sends the name space to Dockyard' ((Get-DnsClientNrptRule | Where-Object { $_.Namespace -contains '.dockyard.internal' }) -ne $null)
@@ -380,22 +372,10 @@ Section 'the wizard window adds the skipped dashboard and removes it again'
 Window
 
 if ($Wizard) {
-    Section 'a dashboard from v0.2.1, also running, is stopped and replaced by the new name'
-    $previous = Join-Path (New-Item -ItemType Directory (Join-Path $env:TEMP ([guid]::NewGuid()))) 'Dockyard.exe'
-    Invoke-WebRequest https://github.com/byhofman/dockyard/releases/download/v0.2.1/Dockyard.exe -OutFile $previous
-    $p = Start-Process $previous -ArgumentList '--silent --dashboard --no-start' -Wait -PassThru
-    Check "v0.2.1 installs (exit $($p.ExitCode))" ($p.ExitCode -eq 0)
-    $oldExe = Join-Path $appDir 'Dockyard.Dashboard.exe'
-    Check 'the old name is there to start from' (Test-Path $oldExe)
-    $old = Start-Process $oldExe -PassThru
-    Start-Sleep 5
-    Check 'exit 0' ((Run --silent --no-start) -eq 0)
-    Check 'the old process was stopped' ($old.HasExited)
-    Check 'the old file is gone' (-not (Test-Path $oldExe))
-    $newExe = Join-Path $appDir 'dockyard-dashboard.exe'
-    Check 'the new file is there' (Test-Path $newExe)
-    Check 'the description Task Manager shows' ((Get-Item $newExe).VersionInfo.FileDescription -eq 'Dockyard Dashboard')
-    $new = Start-Process $newExe -PassThru
+    Section 'a running dashboard is stopped when it is removed'
+    Check 'exit 0' ((Run --silent --dashboard --no-start) -eq 0)
+    Check 'the description Task Manager shows' ((Get-Item $dashboard).VersionInfo.FileDescription -eq 'Dockyard Dashboard')
+    $new = Start-Process $dashboard -PassThru
     Start-Sleep 5
     Check 'the process is called dockyard-dashboard' ((Get-Process -Id $new.Id).ProcessName -eq 'dockyard-dashboard')
     Check 'exit 0 with it running' ((Run --silent --no-dashboard --no-start) -eq 0)
@@ -408,7 +388,7 @@ Check 'dashboard added' (Test-Path $dashboard)
 Check 'with its libraries' (Test-Path (Join-Path $appDir 'dashboard.files'))
 
 if ($Wizard) {
-    Section 'the tools: from winget where it is there, in place of the copies an earlier Dockyard put in Program Files'
+    Section 'the tools: from winget where it is there'
     if ($docker -ne $ownDocker) {
         Ok "docker is winget's: $docker"
         Check "Dockyard's own docker.exe went" (-not (Test-Path $ownDocker))
@@ -529,7 +509,7 @@ Check 'exit 0' ((Run --silent --no-dashboard --no-start) -eq 0)
 Check 'dashboard removed' (-not (Test-Path $dashboard))
 Check 'app stays' (Test-Path $appExe)
 
-Section 'the installed tray can replace itself, which v0.1.0 could not'
+Section 'the installed tray can replace itself'
 $source = Join-Path (New-Item -ItemType Directory (Join-Path $env:TEMP ([guid]::NewGuid()))) 'Dockyard.exe'
 Copy-Item $appExe $source
 $log = New-TemporaryFile

@@ -47,29 +47,16 @@ public sealed class EngineSettingsTests : IDisposable
     }
 
     [Fact]
-    public void Settings_from_before_the_editor_become_the_first_daemon_json_without_Dockyard_s_dns()
-    {
-        var settings = new Settings { RegistryMirrors = "https://mirror.example.com", AddressPools = "10.20.0.0/16 24" };
-
-        var config = JsonNode.Parse(EngineSettings.Load(EngineSettings.Linux, settings, dir))!.AsObject();
-
-        Assert.Equal("https://mirror.example.com", config["registry-mirrors"]![0]!.GetValue<string>());
-        Assert.Equal("10.20.0.0/16", config["default-address-pools"]![0]!["base"]!.GetValue<string>());
-        Assert.False(config.ContainsKey("dns"));
-    }
-
-    [Fact]
     public void What_the_user_saved_is_what_comes_back_and_Dockyard_adds_its_dns_when_it_writes_the_engine_s_file()
     {
         EngineSettings.Save(EngineSettings.Linux, """{ "log-level": "warn", "features": { "containerd-snapshotter": true } }""", dir);
 
-        var saved = EngineSettings.Load(EngineSettings.Linux, new Settings { RegistryMirrors = "https://ignored.example.com" }, dir);
+        var saved = EngineSettings.Load(EngineSettings.Linux, dir);
         var written = JsonNode.Parse(EngineConfig.WithDockyard(saved))!.AsObject();
 
         Assert.Equal("warn", written["log-level"]!.GetValue<string>());
         Assert.True(written["features"]!["containerd-snapshotter"]!.GetValue<bool>());
         Assert.Equal(EngineConfig.DnsAddress, written["dns"]![0]!.GetValue<string>());
-        Assert.False(written.ContainsKey("registry-mirrors"));
     }
 
     [Theory]

@@ -23,7 +23,6 @@ static class MachineSetup
         else await RouteDomains(log);
         if (withWindows) await MachineEngine.Configure(log, userSid, userName);
         await MachineApps.InstallApp(log, Paths.Self, keepPid, engineOnly, Updates.LocalAssets);
-        MachineApps.RemoveLegacy(log, keepPid);
         return reboot;
     }
 
@@ -59,7 +58,7 @@ static class MachineSetup
         {
             case Component.Engine: await MachineEngine.Update(log, onlyIfNewer: false); break;
             case Component.App:
-                // Defender's rule goes by path, and an update can bring the first dashboard with the new name.
+                // Defender's rule goes by path, and an update can bring a file that is not excluded yet.
                 await MachineApps.AddDefenderExclusions(log);
                 // Next to the new exe in the folder the tray downloaded and checked both into.
                 var exe = source ?? throw new ArgumentException("--source is required for the app update");
@@ -83,7 +82,6 @@ static class MachineSetup
         await Shell.Run("net.exe", "localgroup", "docker-users", "/delete");
         MachineApps.RemoveFromMachinePath(Paths.DockerDir);
         MachineApps.RemoveFromMachinePath(MachineApps.CommandDir);
-        MachineApps.RemoveLegacy(log, keepPid);
 
         foreach (var dir in new[] { Paths.DockerDir, Paths.AppDir })
         {
@@ -139,19 +137,17 @@ static class MachineSetup
     }
 
     const string DomainNamespace = ".dockyard.internal";
-    const string LegacyDomainNamespace = ".dockyard.test";
 
     // A rule for one name space only: everything else keeps using the DNS servers Windows was using.
     static async Task RouteDomains(Action<string> log)
     {
         var r = await Shell.Run("powershell.exe", "-NoProfile", "-Command",
-            $"Get-DnsClientNrptRule | Where-Object {{ $_.Namespace -contains '{LegacyDomainNamespace}' }} | Remove-DnsClientNrptRule -Force; " +
             $"if (-not (Get-DnsClientNrptRule | Where-Object {{ $_.Namespace -contains '{DomainNamespace}' }})) {{ Add-DnsClientNrptRule -Namespace '{DomainNamespace}' -NameServers '{DomainRelay.Address}' }}");
         log(r.ExitCode == 0 ? $"Windows asks Dockyard about names under {DomainNamespace}" : $"Container domains were not set up ({r.Error.Trim()})");
     }
 
     static async Task UnrouteDomains() => await Shell.Run("powershell.exe", "-NoProfile", "-Command",
-        $"Get-DnsClientNrptRule | Where-Object {{ $_.Namespace -contains '{DomainNamespace}' -or $_.Namespace -contains '{LegacyDomainNamespace}' }} | Remove-DnsClientNrptRule -Force");
+        $"Get-DnsClientNrptRule | Where-Object {{ $_.Namespace -contains '{DomainNamespace}' }} | Remove-DnsClientNrptRule -Force");
 
     // Returns true when a reboot has to finish the WSL install.
     static async Task<bool> InstallWsl(Action<string> log)

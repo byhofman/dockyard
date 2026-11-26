@@ -67,13 +67,13 @@ sealed record SetupOptions
             options = arg switch
             {
                 "--silent" => options with { Silent = true },
-                // --install is the name earlier one-liners and scripts use.
+                // --install is what winget's manifest calls.
                 "--install" => options with { Silent = true, Action = SetupAction.Install },
                 "--uninstall" => options with { Silent = true, Action = SetupAction.Uninstall },
                 "--import" => options with { Silent = true, Action = SetupAction.Import },
                 "--import-from" => options with { Silent = true, Action = SetupAction.Import, ImportFrom = ++i < args.Count ? args[i] : throw new SetupUsageException("--import-from needs an endpoint") },
                 "--dashboard" => options with { Dashboard = Choose(options.Dashboard, true) },
-                "--no-dashboard" or "--engine-only" => options with { Dashboard = Choose(options.Dashboard, false) },
+                "--no-dashboard" => options with { Dashboard = Choose(options.Dashboard, false) },
                 "--with" => Names(options, ++i < args.Count ? args[i] : throw new SetupUsageException("--with needs names"), wanted: true),
                 "--without" => Names(options, ++i < args.Count ? args[i] : throw new SetupUsageException("--without needs names"), wanted: false),
                 "--trust-https" => options with { TrustHttps = true },

@@ -39,13 +39,13 @@ static partial class Updates
     {
         Component.Engine => File.Exists(Paths.DockerdExe) ? ParseVersion(await Shell.Check(Paths.DockerdExe, "--version")) : null,
         Component.Cli => File.Exists(Paths.DockerExe) ? ParseVersion((await Shell.Run(Paths.DockerExe, "--version")).Output) : null,
-        Component.Dashboard => Paths.AnyDashboardExe.FirstOrDefault(File.Exists) is { } dashboard ? ParseVersion(System.Diagnostics.FileVersionInfo.GetVersionInfo(dashboard).ProductVersion) : null,
+        Component.Dashboard => File.Exists(Paths.DashboardExe) ? ParseVersion(System.Diagnostics.FileVersionInfo.GetVersionInfo(Paths.DashboardExe).ProductVersion) : null,
         Component.Compose => await PluginVersion("docker-compose.exe", "version", "--short"),
         Component.Buildx => await PluginVersion("docker-buildx.exe", "version"),
         Component.Kind or Component.Kubectl or Component.Helm => await OwnToolVersion(Tools.Find(c.ToString())!),
         Component.LinuxEngine => Settings.Load().RemovedComponents.Contains(nameof(Component.LinuxEngine)) ? null : await new WslDistro(ProcessRunner.Instance).DockerVersion(),
         // The wizard runs from elsewhere and can be newer than what is installed, so not this process's own version.
-        Component.App => File.Exists(Paths.InstalledAppExe) ? ParseVersion(System.Diagnostics.FileVersionInfo.GetVersionInfo(Paths.InstalledAppExe).ProductVersion) : null,
+        Component.App => File.Exists(Paths.AppExe) ? ParseVersion(System.Diagnostics.FileVersionInfo.GetVersionInfo(Paths.AppExe).ProductVersion) : null,
         _ => null,
     };
 

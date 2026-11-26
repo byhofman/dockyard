@@ -20,16 +20,7 @@ static class Paths
     public static readonly string AppExe = Path.Combine(AppDir, AppProcess + ".exe");
     public const string DashboardProcess = "dockyard-dashboard";
     public static readonly string DashboardExe = Path.Combine(AppDir, DashboardProcess + ".exe");
-    // What earlier installs have, running or not: the Toolbox was Dockyard.exe before 0.9.0, and the dashboard
-    // "Dockyard Dashboard.exe", and Dockyard.Dashboard.exe up to 0.2.1.
-    public const string LegacyAppProcess = "Dockyard";
-    public static readonly string LegacyAppExe = Path.Combine(AppDir, LegacyAppProcess + ".exe");
-    // The Toolbox as installed: an install from before 0.9.0 has it under its old name until this version replaces it.
-    public static string InstalledAppExe => File.Exists(AppExe) || !File.Exists(LegacyAppExe) ? AppExe : LegacyAppExe;
-    public static readonly string[] LegacyDashboardProcesses = ["Dockyard Dashboard", "Dockyard.Dashboard"];
-    public static IEnumerable<string> LegacyDashboardExes => LegacyDashboardProcesses.Select(p => Path.Combine(AppDir, p + ".exe"));
-    public static IEnumerable<string> AnyDashboardExe => LegacyDashboardExes.Prepend(DashboardExe);
-    public static bool HasDashboard => AnyDashboardExe.Any(File.Exists);
+    public static bool HasDashboard => File.Exists(DashboardExe);
     // The asset keeps its name: scripts and trays already out there ask for it.
     public const string DashboardZipName = "Dockyard.Dashboard.zip";
     public static readonly string DaemonConfigDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "docker", "config");
@@ -39,18 +30,12 @@ static class Paths
     public static readonly string SettingsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Dockyard");
     public static readonly string SettingsFile = Path.Combine(SettingsDir, "settings.json");
 
-    public static readonly string LegacyTrayDir = Path.Combine(DockerDir, "tray");
-    public static readonly string LegacySettingsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DockerTray");
-    public const string LegacyName = "DockerTray";
-
     public const string WindowsPipeName = "docker_windows";
     public const string WindowsHost = "npipe:////./pipe/" + WindowsPipeName;
     public const int LinuxPort = Shared.WslPaths.LinuxPort;
     public const string LinuxPipeName = Shared.WslPaths.LinuxPipeName;
     public const string LinuxAgentPipeName = Shared.WslPaths.LinuxAgentPipeName;
     public const string LinuxHost = Shared.WslPaths.LinuxHost;
-    // What the linux context pointed at up to v0.4: an open port every Windows user and web page could reach.
-    public const string LegacyLinuxHost = "tcp://127.0.0.1:2375";
     public static string EngineTokenFile => Shared.WslPaths.EngineTokenFile;
     public const string ServiceName = "docker";
     public const string Repo = "byhofman/dockyard";

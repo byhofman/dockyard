@@ -237,7 +237,7 @@ public sealed class SelectionAndDialogTests
     {
         var file = Path.Combine(Directory.CreateTempSubdirectory("dy-settings").FullName, "settings.json");
         Assert.True(EngineSwitch.StopsOther(file));
-        File.WriteAllText(file, """{"Distro":"dockyard","StopOtherOnSwitch":false}""");
+        File.WriteAllText(file, """{"StopOtherOnSwitch":false}""");
         Assert.False(EngineSwitch.StopsOther(file));
         Assert.Contains("The Linux engine keeps running", EngineSwitch.Message("win", stopsOther: false));
         File.WriteAllText(file, "not json");

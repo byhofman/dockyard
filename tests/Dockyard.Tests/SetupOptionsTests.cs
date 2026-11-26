@@ -16,7 +16,6 @@ public sealed class SetupOptionsTests
     [Theory]
     [InlineData("--silent --dashboard", true)]
     [InlineData("--silent --no-dashboard", false)]
-    [InlineData("--silent --engine-only", false)]
     public void Silent_takes_a_dashboard_choice(string args, bool dashboard)
     {
         var o = SetupOptions.Parse(args.Split(' '));
@@ -31,13 +30,11 @@ public sealed class SetupOptionsTests
         Assert.Null(SetupOptions.Parse(["--silent"]).Dashboard);
     }
 
-    // What the one-liners that are already out there call.
+    // What winget's manifest calls.
     [Theory]
     [InlineData("--install")]
     [InlineData("--install --no-start")]
-    [InlineData("--install --engine-only")]
-    [InlineData("--install --image image.tar.gz")]
-    public void Earlier_install_arguments_still_work(string args)
+    public void Install_arguments_work(string args)
     {
         var o = SetupOptions.Parse(args.Split(' '));
         Assert.True(o.Silent);
@@ -73,21 +70,19 @@ public sealed class SetupOptionsTests
     }
 
     [Theory]
-    [InlineData(null, false, false, false, true)]   // new install: with the dashboard
-    [InlineData(false, false, false, false, false)]
-    [InlineData(null, true, false, false, false)]   // existing install keeps what it has, also the owner's skipped dashboard
-    [InlineData(null, true, true, false, true)]
-    [InlineData(true, true, false, false, true)]    // an explicit choice changes it
-    [InlineData(false, true, true, false, false)]
-    [InlineData(null, false, false, true, false)]   // an earlier script placed the engine-only edition and called --install
-    [InlineData(null, false, true, true, true)]
-    public void Dashboard_choice(bool? requested, bool installed, bool has, bool inPlace, bool expected)
+    [InlineData(null, false, false, true)]   // new install: with the dashboard
+    [InlineData(false, false, false, false)]
+    [InlineData(null, true, false, false)]   // existing install keeps what it has, also the owner's skipped dashboard
+    [InlineData(null, true, true, true)]
+    [InlineData(true, true, false, true)]    // an explicit choice changes it
+    [InlineData(false, true, true, false)]
+    public void Dashboard_choice(bool? requested, bool installed, bool has, bool expected)
     {
-        Assert.Equal(expected, DashboardChoice.Resolve(requested, installed, has, inPlace));
+        Assert.Equal(expected, DashboardChoice.Resolve(requested, installed, has));
     }
 
     [Fact]
-    public void With_and_without_name_any_component_and_dashboard_stays_what_the_old_flags_mean()
+    public void With_and_without_name_any_component_and_dashboard_means_what_its_flags_mean()
     {
         var o = SetupOptions.Parse(["--silent", "--with", "compose,buildx", "--without", "linux-engine"]);
         Assert.Equal(["compose", "buildx"], o.With);

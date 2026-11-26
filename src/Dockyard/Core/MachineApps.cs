@@ -73,10 +73,10 @@ static class MachineApps
     }
 
     // Only files in Program Files, which only administrators can write: an exclusion goes by path and exempts whatever is
-    // there from every ASR rule. Earlier versions also excluded the installer wherever it ran, and the one-liner asks for
-    // its own download path when Defender blocks it, so uninstall takes those back too.
+    // there from every ASR rule. The one-liner asks for its own download path when Defender blocks it, so uninstall takes
+    // that back too.
     static IEnumerable<string> ExcludedFromAsr => new[] { Paths.AppExe, Paths.DashboardExe, Paths.HostExe, CommandExe };
-    public static IEnumerable<string> EverExcludedFromAsr => ExcludedFromAsr.Concat(Paths.LegacyDashboardExes).Append(Paths.LegacyAppExe).Append(Paths.OneLinerExe).Concat(WingetToolFiles);
+    public static IEnumerable<string> EverExcludedFromAsr => ExcludedFromAsr.Append(Paths.OneLinerExe).Concat(WingetToolFiles);
 
     // Defender's prevalence/age rule (event 1121) blocks every new build, and an exclusion goes by path because a hash changes with each build.
     public static async Task AddDefenderExclusions(Action<string> log)
@@ -109,11 +109,6 @@ static class MachineApps
             log($"Installed {Paths.AppExe}");
         }
         InstallHost(log, keepPid);
-        if (File.Exists(Paths.LegacyAppExe))
-        {
-            InUseFiles.MoveAside(Paths.LegacyAppExe);
-            log($"Removed {Paths.LegacyAppExe}, the Toolbox's name before 0.9.0");
-        }
         if (!engineOnly) await InstallDashboard(log, dashboardDir);
         else if (Paths.HasDashboard) RemoveDashboard(log);
         else log("The dashboard is not installed");
@@ -167,14 +162,11 @@ static class MachineApps
         InUseFiles.MoveAside(CommandExe);
         File.Move(incoming, CommandExe);
         log($"Installed {CommandExe}");
-        File.Delete(Path.Combine(CommandDir, "dockyard.cmd"));
-        File.Delete(Path.Combine(Paths.AppDir, "dockyard.cmd"));
-        RemoveFromMachinePath(Paths.AppDir);
         AddToMachinePath(CommandDir);
     }
 
     // A running exe cannot be overwritten but can be renamed, and the worker doing this may be running from that very
-    // file. Earlier versions copied over it, which is why their tray could never update itself.
+    // file.
     static void ReplaceAppExe(string source)
     {
         var old = Paths.AppExe + ".old";
@@ -204,7 +196,7 @@ static class MachineApps
         }
         try
         {
-            DashboardFiles.Extract(zip, Paths.AppDir, [.. Paths.LegacyDashboardExes.Select(Path.GetFileName).OfType<string>()]);
+            DashboardFiles.Extract(zip, Paths.AppDir);
             log($"Installed {Paths.DashboardExe}");
         }
         finally
@@ -215,28 +207,20 @@ static class MachineApps
 
     public static void RemoveDashboard(Action<string> log)
     {
-        DashboardFiles.Remove(Paths.AppDir, [.. Paths.AnyDashboardExe.Select(Path.GetFileName).OfType<string>()], log);
+        DashboardFiles.Remove(Paths.AppDir, log);
         log("Removed the dashboard");
-    }
-
-    public static void RemoveLegacy(Action<string> log, int keepPid)
-    {
-        if (!Directory.Exists(Paths.LegacyTrayDir)) return;
-        foreach (var p in Process.GetProcessesByName(Paths.LegacyName)) Kill(p, keepPid);
-        Directory.Delete(Paths.LegacyTrayDir, recursive: true);
-        log($"Removed the old {Paths.LegacyName} from {Paths.LegacyTrayDir}");
     }
 
     public static void StopApps(int keepPid, bool dashboardOnly = false)
     {
-        var processes = Paths.LegacyDashboardProcesses.Prepend(Paths.DashboardProcess).SelectMany(Process.GetProcessesByName);
-        if (!dashboardOnly) processes = processes.Concat(Process.GetProcessesByName(Paths.AppProcess)).Concat(Process.GetProcessesByName(Paths.LegacyAppProcess));
+        var processes = Process.GetProcessesByName(Paths.DashboardProcess).AsEnumerable();
+        if (!dashboardOnly) processes = processes.Concat(Process.GetProcessesByName(Paths.AppProcess));
         foreach (var p in processes)
         {
             try
             {
                 var file = p.MainModule?.FileName;
-                if (Paths.AnyDashboardExe.Append(Paths.AppExe).Append(Paths.LegacyAppExe).Contains(file, StringComparer.OrdinalIgnoreCase)) Kill(p, keepPid);
+                if (new[] { Paths.DashboardExe, Paths.AppExe }.Contains(file, StringComparer.OrdinalIgnoreCase)) Kill(p, keepPid);
             }
             // Gone by now, or another user's process whose file cannot be read: not one of ours to stop.
             catch (Exception e) when (e is Win32Exception or InvalidOperationException) { }

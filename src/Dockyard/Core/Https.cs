@@ -12,12 +12,6 @@ static class Https
         PemPair ca;
         try
         {
-            // A CA from before the IP and usage limits is replaced, which asks for trust once more.
-            if (await LocalCa.Load(host.CaDirectory, host.CaKeys) is { } earlier && !LocalCa.IsConstrainedRoot(earlier.Certificate))
-            {
-                log("Replacing Dockyard's certificate authority with one that can only vouch for web servers under dockyard.internal");
-                await Disable(host, log, silent);
-            }
             ca = await LocalCa.LoadOrCreate(host.CaDirectory, host.CaKeys);
         }
         catch (InvalidOperationException e)
@@ -78,10 +72,6 @@ static class Https
         {
             log("Container domains change once the engine runs");
         }
-        catch (InvalidOperationException)
-        {
-            log("The Linux engine is from before this setting: update it under Components, and container domains follow it");
-        }
     }
 
     // The agent keeps its certificate in memory only, so it has none after each engine start, and one lasts 90 days.
@@ -97,19 +87,11 @@ static class Https
             try
             {
                 await agent.DomainsAsync(ct);
-                // An agent that just started may have missed a change made while it was gone. An engine from before the
-                // switch does not know it, and must still get its certificate.
-                if (!reachable)
-                    try { await agent.SetNamesAsync(Settings.Load().ContainerDomains, ct); }
-                    catch (InvalidOperationException) { }
+                // An agent that just started may have missed a change made while it was gone.
+                if (!reachable) await agent.SetNamesAsync(Settings.Load().ContainerDomains, ct);
                 // Only when a certificate is due: the key can be in the OS's store, which is not for asking every 10 seconds.
                 if ((!reachable || DateTime.UtcNow - given > TimeSpan.FromDays(1)) && await LocalCa.Load(host.CaDirectory, host.CaKeys) is { } ca)
                 {
-                    if (!LocalCa.IsConstrainedRoot(ca.Certificate))
-                    {
-                        await Enable(host, _ => { }, silent: false);
-                        continue;
-                    }
                     var leaf = LocalCa.Leaf(ca, DateTimeOffset.UtcNow);
                     await agent.SetCertificateAsync(leaf.Certificate, leaf.Key, ct);
                     given = DateTime.UtcNow;

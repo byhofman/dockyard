@@ -17,15 +17,12 @@ static partial class UserSetup
 
     public static async Task Install(Action<string> log, string? image = null, IReadOnlyCollection<string>? without = null)
     {
-        MigrateLegacySettings(log);
         var withLinux = without?.Contains(nameof(Component.LinuxEngine)) != true;
         if (withLinux)
         {
             await SetupDistro(log, image);
             await ApplyGuest(new WslDistro(ProcessRunner.Instance), log);
         }
-        await MigrateLegacyEngine(log);
-        await EngineConfig.ApplyClientProxy(Paths.LegacyLinuxHost, null);
         await CreateContexts(log, without);
         SetMirroredNetworking(log);
         if (File.Exists(Paths.CredentialHelper)) await CredentialStore.Adopt(log, "wincred", Paths.CredentialHelper, Paths.CredentialStoreMarker);
@@ -60,7 +57,7 @@ static partial class UserSetup
     public static async Task WriteEngineConfig(WslDistro distro, Action<string> log)
     {
         var proxy = await ReachableProxy(distro, HostProxy(), log);
-        await distro.WriteFile("/etc/docker/daemon.json", EngineConfig.WithDockyard(EngineSettings.Load(EngineSettings.Linux, Settings.Load()), proxy));
+        await distro.WriteFile("/etc/docker/daemon.json", EngineConfig.WithDockyard(EngineSettings.Load(EngineSettings.Linux), proxy));
         await EngineConfig.ApplyClientProxy(Paths.LinuxHost, proxy);
         if (proxy is { IsEmpty: false }) log("The Linux engine and its containers use this PC's proxy");
     }
@@ -104,14 +101,12 @@ static partial class UserSetup
         {
             key?.DeleteValue(Paths.AppName, throwOnMissingValue: false);
             key?.DeleteValue(HostRunValue, throwOnMissingValue: false);
-            key?.DeleteValue(Paths.LegacyName, throwOnMissingValue: false);
         }
         foreach (var host in System.Diagnostics.Process.GetProcessesByName(Paths.HostProcess))
             using (host) try { host.Kill(); } catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception) { }
 
         await CredentialStore.Forget(Paths.CredentialStoreMarker, Paths.CredentialHelper, log);
         await EngineConfig.ApplyClientProxy(Paths.LinuxHost, null);
-        await EngineConfig.ApplyClientProxy(Paths.LegacyLinuxHost, null);
         if (File.Exists(Paths.DockerCli))
         {
             await Shell.Run(Paths.DockerCli, "context", "use", "default");
@@ -119,7 +114,7 @@ static partial class UserSetup
             log("Removed docker contexts");
         }
         var tc = Path.Combine(Paths.UserProfile, ".testcontainers.properties");
-        if (File.Exists(tc) && File.ReadAllText(tc).Trim() is var line && (line == $"docker.host={Paths.LinuxHost}" || line == $"docker.host={Paths.LegacyLinuxHost}")) File.Delete(tc);
+        if (File.Exists(tc) && File.ReadAllText(tc).Trim() is var line && line == $"docker.host={Paths.LinuxHost}") File.Delete(tc);
 
         if (File.Exists(Paths.WslConfigFile) && WslConfig.WithoutDockyardLine(File.ReadAllText(Paths.WslConfigFile)) is { } restored)
             File.WriteAllText(Paths.WslConfigFile, restored);
@@ -135,8 +130,7 @@ static partial class UserSetup
             }
             else log($"The '{distro.Name}' WSL distro with your Linux images and containers was kept");
         }
-        foreach (var dir in new[] { Paths.SettingsDir, Paths.LegacySettingsDir })
-            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+        if (Directory.Exists(Paths.SettingsDir)) Directory.Delete(Paths.SettingsDir, recursive: true);
     }
 
     // --image, then a dockyard-linux-*.tar.gz given with --assets; without either the release asset is downloaded.
@@ -172,35 +166,6 @@ static partial class UserSetup
         {
             if (downloaded is not null) Directory.Delete(Path.GetDirectoryName(downloaded)!, recursive: true);
         }
-    }
-
-    static async Task MigrateLegacyEngine(Action<string> log)
-    {
-        var settings = Settings.Load();
-        if (settings.Distro is not { Length: > 0 } old || string.Equals(old, WslDistro.DefaultName, StringComparison.OrdinalIgnoreCase)) return;
-
-        if (await WslDistro.DisableLegacyEngine(ProcessRunner.Instance, old))
-        {
-            log($"Stopped and disabled Docker CE in '{old}' (packages, images and containers are kept there).");
-            log($"To copy an image: wsl -d {old} -u root -- docker save <image> | docker --context linux load");
-        }
-        settings.Distro = null;
-        settings.Save();
-    }
-
-    static void MigrateLegacySettings(Action<string> log)
-    {
-        using (var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true))
-            key?.DeleteValue(Paths.LegacyName, throwOnMissingValue: false);
-
-        var legacy = Path.Combine(Paths.LegacySettingsDir, "settings.json");
-        if (File.Exists(legacy) && !File.Exists(Paths.SettingsFile))
-        {
-            Directory.CreateDirectory(Paths.SettingsDir);
-            File.Copy(legacy, Paths.SettingsFile);
-            log($"Migrated settings from {Paths.LegacySettingsDir}");
-        }
-        if (Directory.Exists(Paths.LegacySettingsDir)) Directory.Delete(Paths.LegacySettingsDir, recursive: true);
     }
 
     static async Task CreateContexts(Action<string> log, IReadOnlyCollection<string>? without = null)
