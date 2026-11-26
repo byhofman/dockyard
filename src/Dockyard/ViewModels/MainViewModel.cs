@@ -233,10 +233,29 @@ sealed class MainViewModel : Observable
             if (IsInstalled)
             {
                 settings.Save();
-                ShellSetup.Apply(settings, Log);
+                ApplyKubectlShell();
             }
             Raise(nameof(KubectlShell));
         }
+    }
+
+    // Checks the profiles afterwards: a profile that did not get the block (Controlled Folder Access, a read-only file)
+    // turns the setting off again, so it never says on while k does not work.
+    void ApplyKubectlShell()
+    {
+        var enabled = settings.KubectlShell && !settings.RemovedComponents.Contains(nameof(Component.Kubectl));
+        ShellSetup.TryApply(enabled, Log);
+        if (!enabled) return;
+        var missing = ShellSetup.Missing().ToList();
+        if (missing.Count == 0)
+        {
+            Log("kubectl is set up in your shell: open a new terminal for k, completion, $do and $now");
+            return;
+        }
+        Log($"kubectl could not be set up in {string.Join(" and ", missing)}, so the setting is off again");
+        settings.KubectlShell = false;
+        settings.Save();
+        Raise(nameof(KubectlShell));
     }
 
     public static string ShellProfilesText =>
@@ -275,10 +294,12 @@ sealed class MainViewModel : Observable
 
     public async Task StartTray()
     {
+        // The tray is the installed Toolbox: its settings save and apply as they change.
+        IsInstalled = host.IsInstalled;
         host.StartTrayServices();
         // Setup often runs from Downloads, where Controlled Folder Access keeps it out of Documents and so out of the
         // PowerShell profile; the installed Toolbox may be allowed there, and writes only what is missing.
-        ShellSetup.Apply(settings, Log);
+        if (settings.KubectlShell) ApplyKubectlShell();
         _ = Https.KeepCertificateCurrent(host, trayLifetime.Token);
         await RefreshState();
         if (settings.StartActiveAtLogon)

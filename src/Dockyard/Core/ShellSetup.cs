@@ -61,6 +61,23 @@ static class ShellSetup
         return without.Length == 0 ? block : without.TrimEnd('\r', '\n') + newline + newline + block;
     }
 
+    // The profiles that should have the block and do not.
+    public static IEnumerable<string> Missing(string? home = null, string? documents = null)
+    {
+        home ??= Paths.UserProfile;
+        documents ??= Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        foreach (var (file, _) in Profiles(home, documents))
+        {
+            string? content = null;
+            try { content = File.Exists(file) ? File.ReadAllText(file) : null; }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+            if (!HasBlock(content)) yield return file;
+        }
+    }
+
+    static bool HasBlock(string? content) =>
+        content is not null && content.IndexOf(Begin, StringComparison.Ordinal) is var start and >= 0 && content.IndexOf(End, start, StringComparison.Ordinal) >= 0;
+
     public static bool HasBrokenBlock(string content) =>
         content.IndexOf(Begin, StringComparison.Ordinal) is var start and >= 0 && content.IndexOf(End, start, StringComparison.Ordinal) < 0;
 
