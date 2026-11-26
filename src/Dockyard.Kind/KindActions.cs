@@ -108,19 +108,6 @@ sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
         finally { scratch.Delete(recursive: true); }
     }
 
-    // Which nodes Kubernetes counts as Ready, by node name; empty when the API server does not answer.
-    public async Task<Dictionary<string, bool>> NodeReadiness(string name)
-    {
-        var context = dockerContext.Length > 0 ? dockerContext : "default";
-        var (exit, output, _) = await SharedStorage.Docker(["--context", context, "exec", name + "-control-plane", "kubectl", "--kubeconfig", SharedStorage.AdminConfig,
-            "get", "nodes", "-o", "jsonpath={range .items[*]}{.metadata.name}={.status.conditions[?(@.type==\"Ready\")].status}{\"\\n\"}{end}"]);
-        var ready = new Dictionary<string, bool>();
-        if (exit != 0) return ready;
-        foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            if (line.Split('=') is [var node, var status]) ready[node] = status == "True";
-        return ready;
-    }
-
     public async Task Delete(string name, Action<string>? onLine = null)
     {
         var scratch = Directory.CreateTempSubdirectory("dockyard-kind-");

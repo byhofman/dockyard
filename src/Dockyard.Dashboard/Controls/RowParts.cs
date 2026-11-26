@@ -310,3 +310,47 @@ sealed class SectionHint : StackPanel
         }
     }
 }
+// A filter that is on or off, drawn like one segment of UsageFilterBar.
+sealed class FilterSwitch : Border
+{
+    public static readonly StyledProperty<bool> IsCheckedProperty =
+        AvaloniaProperty.Register<FilterSwitch, bool>(nameof(IsChecked), defaultBindingMode: Avalonia.Data.BindingMode.TwoWay);
+    public static readonly StyledProperty<string?> TextProperty = AvaloniaProperty.Register<FilterSwitch, string?>(nameof(Text));
+    public static readonly StyledProperty<Geometry?> IconProperty = AvaloniaProperty.Register<FilterSwitch, Geometry?>(nameof(Icon));
+
+    public bool IsChecked { get => GetValue(IsCheckedProperty); set => SetValue(IsCheckedProperty, value); }
+    public string? Text { get => GetValue(TextProperty); set => SetValue(TextProperty, value); }
+    public Geometry? Icon { get => GetValue(IconProperty); set => SetValue(IconProperty, value); }
+
+    readonly Button segment = new();
+    readonly PathIcon icon = new();
+    readonly TextBlock text = new();
+
+    public FilterSwitch()
+    {
+        BorderThickness = new Thickness(1);
+        CornerRadius = new CornerRadius(7);
+        Padding = new Thickness(3);
+        VerticalAlignment = VerticalAlignment.Center;
+        segment.Classes.Add("segment");
+        var label = new StackPanel { Children = { icon, text } };
+        label.Classes.Add("label");
+        segment.Content = label;
+        segment.Click += (_, _) => IsChecked = !IsChecked;
+        Child = segment;
+        AttachedToVisualTree += (_, _) =>
+        {
+            if (this.FindResource("Bg") is IBrush bg) Background = bg;
+            if (this.FindResource("Line") is IBrush line) BorderBrush = line;
+        };
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == IsCheckedProperty) segment.Classes.Set("selected", IsChecked);
+        else if (change.Property == TextProperty) { text.Text = Text; Avalonia.Automation.AutomationProperties.SetName(segment, Text); }
+        else if (change.Property == IconProperty) { icon.Data = Icon; icon.IsVisible = Icon is not null; }
+        else if (change.Property == ToolTip.TipProperty) ToolTip.SetTip(segment, ToolTip.GetTip(this));
+    }
+}

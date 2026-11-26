@@ -46,7 +46,7 @@ sealed class ContainersViewModel : Observable, ISearchable
         ToggleClusterCommand = new Command<ClusterRow>(k => { Store.ToggleProject(k.Key); return Task.CompletedTask; });
         ToggleSystemCommand = new Command<SystemRow>(_ => { Store.ToggleProject(SystemRow.Key); return Task.CompletedTask; });
         ClusterStartStopCommand = new Command<ClusterRow>(k => shell.Clusters?.StartOrStop(k.Cluster) ?? Task.CompletedTask);
-        OpenClusterCommand = new Command<ClusterRow>(k => { shell.Reveal("Kubernetes", k.Cluster); return Task.CompletedTask; });
+        OpenClusterCommand = new Command<ClusterRow>(k => { SelectedRow = k; return Task.CompletedTask; });
 
         StartPickedCommand = new Command(() => StartOrStopPicked(stop: false), () => PickedContainers.Any(c => !c.IsRunning) || PickedClusters.Any(c => !c.IsRunning));
         StopPickedCommand = new Command(() => StartOrStopPicked(stop: true), () => PickedContainers.Any(c => c.IsRunning) || PickedClusters.Any(c => c.Nodes.Any(n => n.IsRunning)));
@@ -121,7 +121,6 @@ sealed class ContainersViewModel : Observable, ISearchable
         var service = item.Labels.GetValueOrDefault(SystemRow.ServiceLabel);
         string? setting = service switch { "dns" or "etcd" => "domains", "proxy" => "proxy", _ => null };
         if (setting is not null && TrayClient.Send(new Shared.TrayCommand(Shared.TrayCommandKind.Highlight, setting))) return;
-        if (service is "cloud-provider-kind" or "nfs") shell.ShowSection("Kubernetes");
         shell.ShowInfo(SystemHint(item));
     }
 

@@ -26,6 +26,8 @@ sealed class ShellViewModel : Observable
     public ShellViewModel()
     {
         Containers = new ContainersViewModel(this, Session);
+        // No tab of its own: clusters are rows in Containers, which shows these details and actions for them.
+        Clusters = new ClustersViewModel(this, Session);
         Sections =
         [
             new Section("Containers", Containers, Section.Resource("IconContainers")),
@@ -33,7 +35,6 @@ sealed class ShellViewModel : Observable
             new Section("Volumes", new VolumesViewModel(this, Session), Section.Resource("IconVolumes")),
             new Section("Networks", new NetworksViewModel(this, Session), Section.Resource("IconNetworks")),
             new Section("Builds", new Features.Builds.BuildsViewModel(this, Session), Section.Resource("IconBuilds")),
-            new Section("Kubernetes", new ClustersViewModel(this, Session), Section.Resource("IconKubernetes")),
             new Section("Disk", new DiskViewModel(this, Session), Section.Resource("IconDisk")),
         ];
         currentSection = Sections[0];
@@ -115,7 +116,7 @@ sealed class ShellViewModel : Observable
         HitIndex = i;
     }
 
-    public Features.Clusters.ClustersViewModel? Clusters => Sections.Select(s => s.Content).OfType<Features.Clusters.ClustersViewModel>().FirstOrDefault();
+    public ClustersViewModel Clusters { get; }
 
     public void Reveal(string sectionTitle, object row)
     {
