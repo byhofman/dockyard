@@ -12,7 +12,7 @@ public sealed class MacHostTests
     {
         var plist = MacLayout.LaunchAgentPlist("/Applications/Dockyard.app/Contents/MacOS/Dockyard");
         Assert.Contains("<string>com.byhofman.dockyard</string>", plist);
-        Assert.Contains("<string>/Applications/Dockyard.app/Contents/MacOS/Dockyard</string>\n        <string>--tray</string>", plist.Replace("    ", "    "));
+        Assert.Contains("<key>ProgramArguments</key>\n    <array>\n        <string>/Applications/Dockyard.app/Contents/MacOS/Dockyard</string>\n    </array>", plist);
         Assert.Contains("<key>RunAtLoad</key>\n    <true/>", plist);
     }
 
@@ -112,7 +112,7 @@ public sealed class MacUpdateTests
         var script = MacLayout.SwapScript(4242, "/tmp/u/Dockyard.app", "/Users/me/Applications/Dockyard.app");
         Assert.Contains("while kill -0 4242", script);
         Assert.Contains("mv '/tmp/u/Dockyard.app' '/Users/me/Applications/Dockyard.app'", script);
-        Assert.Contains("open '/Users/me/Applications/Dockyard.app' --args --tray", script);
+        Assert.Contains("open '/Users/me/Applications/Dockyard.app'\n", script);
     }
 }
 
@@ -394,6 +394,9 @@ public sealed class MacInstallTests : IDisposable
         Assert.Equal("/usr/local/bin/dockyard", MacLayout.CliLink);
         Assert.Contains("ln -sfn '/Applications/Dockyard.app/Contents/MacOS/Dockyard' /usr/local/bin/dockyard", MacLayout.InstallCliLink("/Applications/Dockyard.app/Contents/MacOS/Dockyard"));
         Assert.Contains("readlink /usr/local/bin/dockyard", MacLayout.RemoveCliLink);
+        Assert.Contains("*/Dockyard.app/Contents/MacOS/dockyard-cli)", MacLayout.RemoveCliLink);
+        Assert.Equal("dockyard-cli", Path.GetFileName(MacLayout.CliExe));
+        Assert.Equal("Dockyard", Path.GetFileName(MacLayout.InstalledExe));
         Assert.DoesNotContain("dockyard", MacLayout.SharedCommands);
     }
 }

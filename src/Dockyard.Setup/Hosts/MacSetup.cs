@@ -192,9 +192,9 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
             steps.Add(MacLayout.InstallSocketDaemon(plist));
             what.Add($"making {MacLayout.SystemSocket} point at Dockyard");
         }
-        if (new FileInfo(MacLayout.CliLink).LinkTarget != MacLayout.InstalledExe)
+        if (new FileInfo(MacLayout.CliLink).LinkTarget != MacLayout.CliExe)
         {
-            steps.Add(MacLayout.InstallCliLink(MacLayout.InstalledExe));
+            steps.Add(MacLayout.InstallCliLink(MacLayout.CliExe));
             what.Add($"adding the dockyard command to {MacLayout.CliLink}");
         }
         if (!File.Exists(MacLayout.DomainResolver))

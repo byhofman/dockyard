@@ -61,9 +61,8 @@ interface IEngineHost
     // True for the tray; false for the wizard run from a download.
     bool RunsFromInstallLocation { get; }
 
-    // The component that is Dockyard itself for updates and for the installed version: the tray's executable on Windows,
-    // the bundle or package on macOS and Linux.
-    string SelfComponent => nameof(Core.Component.Tray);
+    // The component that is Dockyard itself for updates and for the installed version: the dockyard command.
+    string SelfComponent => nameof(Core.Component.DockyardCli);
 
     bool HasDashboard { get; }
     // Where the dashboard is, or would be; null when this host has no fixed place for it.

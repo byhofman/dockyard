@@ -14,7 +14,7 @@ static class Paths
     // Where the Dockyard source puts a tool that winget did not bring.
     public static string ToolExe(CliTool tool) => Path.Combine(DockerDir, tool.FileName);
     public static readonly string AppDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Dockyard");
-    public const string AppProcess = "dockyard-toolbox";
+    public const string AppProcess = "dockyard-tray";
     public const string HostProcess = "dockyard-host";
     public static readonly string HostExe = Path.Combine(AppDir, HostProcess + ".exe");
     public static readonly string AppExe = Path.Combine(AppDir, AppProcess + ".exe");
@@ -49,7 +49,7 @@ static class Paths
     public const string AppName = "Dockyard";
 
     public static string Self => Environment.ProcessPath!;
-    public static bool IsInstalledCopy => string.Equals(Path.GetFullPath(Self), AppExe, StringComparison.OrdinalIgnoreCase);
+    public static bool IsInstalledCopy => new[] { AppExe, DockyardCliExe }.Contains(Path.GetFullPath(Self), StringComparer.OrdinalIgnoreCase);
 
     public static string AppVersion =>
         (typeof(Paths).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0").Split('+')[0];

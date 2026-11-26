@@ -110,6 +110,7 @@ public sealed class WindowsHostTests
     {
         Assert.Equal([Paths.AppName, "Dockyard Host"], UserSetup.LogonEntries(tray: true, host: true).Select(e => e.Name));
         Assert.Equal($"\"{Paths.AppExe}\"", UserSetup.LogonEntries(tray: true, host: false).Single().Command);
+        Assert.Equal("dockyard-tray.exe", Path.GetFileName(Paths.AppExe));
         Assert.Equal(["Dockyard Host"], UserSetup.LogonEntries(tray: false, host: true).Select(e => e.Name));
         Assert.Empty(UserSetup.LogonEntries(tray: false, host: false));
     }

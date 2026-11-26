@@ -104,14 +104,8 @@ sealed class WindowsHost : IEngineHost
         if (parsed.FirstOrDefault(c => c.Component == Component.Dashboard) is { Release: { } dashboard })
             await WindowsSetup.UpdateDashboard(log, dashboard);
 
-        if (parsed.FirstOrDefault(c => c.Component == Component.Tray) is { Release: { } app })
-        {
-            log($"Downloading the Dockyard tray {app.Tag}");
-            var exe = await Updates.DownloadTray(app);
-            Elevation.StartDetached("--machine-update", nameof(Component.Tray), "--app-file", exe);
-            log("Restarting Dockyard");
-            return true;
-        }
+        if (parsed.FirstOrDefault(c => c.Component == Component.Tray) is { Release: { } tray })
+            await WindowsSetup.UpdateTray(log, tray);
         return false;
     }
 
@@ -213,14 +207,13 @@ sealed class WindowsHost : IEngineHost
         return false;
     }
 
-    // The tray's own executable is the Toolbox's: this process's when it is that, else the release's.
     async Task<bool> SetTray(Action<string> log, bool installed)
     {
         string? downloaded = null;
         try
         {
             string? exe = null;
-            if (installed && !Paths.IsInstalledCopy)
+            if (installed)
             {
                 log("Downloading the Dockyard tray");
                 downloaded = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");

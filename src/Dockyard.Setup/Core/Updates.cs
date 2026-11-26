@@ -7,7 +7,7 @@ namespace Dockyard.Core;
 
 static partial class Updates
 {
-    public const string WindowsAppAsset = @"^Dockyard\.exe$";
+    public const string WindowsAppAsset = @"^dockyard-tray-windows-x64\.exe$";
     public const string ImageAsset = @"^dockyard-linux-[\d.]+-x86_64\.tar\.gz$";
 
     internal static HttpClient Http = CreateHttp();
@@ -27,7 +27,8 @@ static partial class Updates
         Component.Compose => "Docker Compose",
         Component.Buildx => "Docker Buildx",
         Component.LinuxEngine => "Docker Engine (Linux, WSL)",
-        Component.Tray => "Dockyard",
+        Component.DockyardCli => "Dockyard",
+        Component.Tray => "Dockyard tray",
         Component.Kind => Tools.Kind.Title,
         Component.Kubectl => Tools.Kubectl.Title,
         Component.Helm => Tools.Helm.Title,

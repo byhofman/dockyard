@@ -20,7 +20,9 @@ public sealed class LinuxHostTests
     }
 
     [Theory]
-    [InlineData("Dockyard-linux-x64", true)]
+    [InlineData("dockyard-tray-linux-x64", true)]
+    [InlineData("dockyard-tray-windows-x64.exe", false)]
+    [InlineData("Dockyard-linux-x64", false)]
     [InlineData("Dockyard.exe", false)]
     [InlineData("Dockyard-0.3.0-linux-x64.tar.gz", false)]
     public void Update_check_looks_for_the_linux_binary(string asset, bool matches) =>
@@ -29,8 +31,8 @@ public sealed class LinuxHostTests
     [Fact]
     public void Autostart_entry_runs_the_tray()
     {
-        var entry = DesktopEntry.Autostart("/usr/lib/dockyard/Dockyard");
-        Assert.Contains("Exec=\"/usr/lib/dockyard/Dockyard\" --tray", entry);
+        var entry = DesktopEntry.Autostart("/usr/lib/dockyard/dockyard-tray");
+        Assert.Contains("Exec=\"/usr/lib/dockyard/dockyard-tray\"\n", entry);
         Assert.StartsWith("[Desktop Entry]\nType=Application", entry);
     }
 

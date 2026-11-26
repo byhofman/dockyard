@@ -61,6 +61,21 @@ static class WindowsSetup
         }
     }
 
+    public static async Task UpdateTray(Action<string> log, Release release)
+    {
+        log($"Downloading the Dockyard tray {release.Tag}");
+        var exe = await Updates.DownloadTray(release);
+        try
+        {
+            if (Elevation.IsElevated) await MachineSetup.Update(log, Component.Tray, exe, Environment.ProcessId, Source);
+            else await Elevation.Run(log, "--machine-update", Component.Tray.ToString(), "--app-file", exe);
+        }
+        finally
+        {
+            Directory.Delete(Path.GetDirectoryName(exe)!, recursive: true);
+        }
+    }
+
     public static Task MachineUpdate(Action<string> log, IReadOnlyCollection<Component> components) =>
         Elevation.Run(log, "--machine-update", [string.Join(',', components), .. SourceArgs]);
 

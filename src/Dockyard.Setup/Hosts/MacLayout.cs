@@ -55,7 +55,9 @@ static class MacLayout
         ? AppContext.BaseDirectory
         : Path.Combine(InstallLocation(AppContext.BaseDirectory, UserApplications), "Contents", "MacOS");
 
+    // The bundle's own executable is the tray.
     public static string InstalledExe => Path.Combine(AppBase, "Dockyard");
+    public static string CliExe => Path.Combine(AppBase, "dockyard-cli");
     public static string Helper => Path.Combine(AppBase, "dockyard-host");
     public static string Assets => Directory.Exists(Path.Combine(AppBase, "..", "Resources", "vm"))
         ? Path.GetFullPath(Path.Combine(AppBase, "..", "Resources", "vm"))
@@ -115,7 +117,6 @@ static class MacLayout
             <key>ProgramArguments</key>
             <array>
                 <string>{Escape(exe)}</string>
-                <string>--tray</string>
             </array>
             <key>RunAtLoad</key>
             <true/>
@@ -185,7 +186,7 @@ static class MacLayout
     // is left alone when taking it back.
     public const string CliLink = "/usr/local/bin/dockyard";
     public static string InstallCliLink(string exe) => $"mkdir -p /usr/local/bin && ln -sfn {Shell.ShQuote(exe)} {CliLink}";
-    public static string RemoveCliLink => $"case \"$(readlink {CliLink})\" in */Dockyard.app/Contents/MacOS/Dockyard) rm -f {CliLink} ;; esac";
+    public static string RemoveCliLink => $"case \"$(readlink {CliLink})\" in */Dockyard.app/Contents/MacOS/dockyard-cli) rm -f {CliLink} ;; esac";
 
     // brewBin: where Homebrew's copy is, for when the tool came from there and this user has no copy of Dockyard's.
     public static string Wrapper(string uid, string binDir, string command, string? brewBin = null) =>
@@ -284,7 +285,7 @@ static class MacLayout
         while kill -0 {pid} 2>/dev/null; do sleep 0.2; done
         rm -rf {Shell.ShQuote(bundle + ".old")}
         mv {Shell.ShQuote(bundle)} {Shell.ShQuote(bundle + ".old")} && mv {Shell.ShQuote(newBundle)} {Shell.ShQuote(bundle)} && rm -rf {Shell.ShQuote(bundle + ".old")}
-        open {Shell.ShQuote(bundle)} --args --tray
+        open {Shell.ShQuote(bundle)}
 
         """.ReplaceLineEndings("\n");
 

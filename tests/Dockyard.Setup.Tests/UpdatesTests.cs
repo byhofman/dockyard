@@ -59,15 +59,23 @@ public sealed class UpdatesTests : IDisposable
     public async Task The_latest_release_comes_from_the_redirect_and_its_checksums_without_the_api()
     {
         github.Redirect($"{Base}/latest", $"{Base}/tag/toolbox/1.2.3");
-        ServeRelease("toolbox/1.2.3", "Dockyard-linux-x64", "app");
+        ServeRelease("toolbox/1.2.3", "dockyard-tray-linux-x64", "app");
 
         var release = await Updates.LatestApp(LinuxLayout.AppAsset);
 
         Assert.Equal(new Version(1, 2, 3), release!.Version);
         Assert.Equal("toolbox/1.2.3", release.Tag);
-        Assert.Equal($"{Base}/download/toolbox/1.2.3/Dockyard-linux-x64", release.DownloadUrl);
+        Assert.Equal($"{Base}/download/toolbox/1.2.3/dockyard-tray-linux-x64", release.DownloadUrl);
         Assert.DoesNotContain(github.Requested, url => url.Contains("api.github.com"));
     }
+
+    [Theory]
+    [InlineData("dockyard-tray-windows-x64.exe", true)]
+    [InlineData("dockyard-tray-linux-x64", false)]
+    [InlineData("dockyard-windows-x64.exe", false)]
+    [InlineData("Dockyard.exe", false)]
+    public void The_Windows_tray_is_found_by_its_own_asset_name(string asset, bool matches) =>
+        Assert.Equal(matches, System.Text.RegularExpressions.Regex.IsMatch(asset, Updates.WindowsAppAsset));
 
     [Fact]
     public async Task A_repository_without_releases_has_no_latest()

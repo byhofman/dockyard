@@ -85,8 +85,6 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
 
     public bool RunsFromInstallLocation => MacSetup.RunsFromInstallLocation;
 
-    public string SelfComponent => nameof(Component.DockyardCli);
-
     public bool HasDashboard => MacComponents.HasDashboard;
     public string? DashboardExe => Path.Combine(MacLayout.AppBase, MacLayout.DashboardName);
 
@@ -122,8 +120,8 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
     public void StartApp()
     {
         if (!File.Exists(MacLayout.LaunchAgent)) return;
-        if (MacLayout.Bundle(MacLayout.AppBase + Path.DirectorySeparatorChar) is { } bundle) Shell.Spawn("/usr/bin/open", bundle, "--args", "--tray").Dispose();
-        else Shell.Spawn(MacLayout.InstalledExe, "--tray").Dispose();
+        if (MacLayout.Bundle(MacLayout.AppBase + Path.DirectorySeparatorChar) is { } bundle) Shell.Spawn("/usr/bin/open", bundle).Dispose();
+        else Shell.Spawn(MacLayout.InstalledExe).Dispose();
     }
 
     public string DoneMessage(bool reboot) => "Done. Dockyard runs in the menu bar.";

@@ -40,7 +40,7 @@ static class MachineSetup
         MachineApps.StopApps(keepPid);
         Directory.CreateDirectory(Paths.AppDir);
         MachineApps.InstallHost(log, keepPid);
-        if (tray) MachineApps.InstallTray(log, Paths.Self);
+        if (tray) await MachineApps.InstallTray(log);
         else MachineApps.RemoveTray(log);
         if (dashboard) await MachineApps.InstallDashboard(log, Updates.LocalAssets);
         else if (Paths.HasDashboard) MachineApps.RemoveDashboard(log);
@@ -87,9 +87,8 @@ static class MachineSetup
             case Component.Tray:
                 await MachineApps.AddDefenderExclusions(log);
                 var exe = appFile ?? throw new ArgumentException("--app-file is required for the tray update");
-                MachineApps.StopApps(keepPid);
-                MachineApps.InstallHost(log, keepPid);
-                MachineApps.InstallTray(log, exe);
+                MachineApps.StopApps(keepPid, trayOnly: true);
+                await MachineApps.InstallTray(log, exe);
                 Shell.StartUnelevated(Paths.AppExe);
                 break;
             default: throw new ArgumentException($"{component} is not a machine component");
@@ -150,8 +149,8 @@ static class MachineSetup
                 await MachineEngine.Configure(log, userSid, userName);
                 break;
             case Component.Tray:
-                MachineApps.StopApps(keepPid);
-                if (installed) MachineApps.InstallTray(log, appFile ?? Paths.Self);
+                MachineApps.StopApps(keepPid, trayOnly: true);
+                if (installed) await MachineApps.InstallTray(log, appFile);
                 else MachineApps.RemoveTray(log);
                 break;
             default: throw new ArgumentException($"{component} cannot be changed here");

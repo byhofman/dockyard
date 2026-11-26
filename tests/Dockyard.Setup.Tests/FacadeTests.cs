@@ -129,15 +129,15 @@ public sealed class FacadeTests : IDisposable
     }
 
     [Fact]
-    public async Task Dockyard_itself_is_the_tray_on_Windows_and_the_bundle_where_the_CLI_carries_the_update()
+    public async Task Dockyard_itself_is_the_dockyard_command_on_every_system_and_not_the_tray()
     {
-        var windows = new FakeHost { Installed = true };
-        var bundle = new FakeHost { Installed = true, SelfComponent = "DockyardCli" };
-        Assert.Equal("Tray", For(windows).SelfId);
-        Assert.Equal("DockyardCli", For(bundle).SelfId);
-        Assert.Equal(new Version(1, 0, 0), await For(bundle).InstalledSelfVersion());
-        windows.Missing.Add("Tray");
-        Assert.Null(await For(windows).InstalledSelfVersion());
+        var host = new FakeHost { Installed = true };
+        Assert.Equal("DockyardCli", For(host).SelfId);
+        Assert.Equal(new Version(1, 0, 0), await For(host).InstalledSelfVersion());
+        host.Missing.Add("Tray");
+        Assert.Equal(new Version(1, 0, 0), await For(host).InstalledSelfVersion());
+        host.Missing.Add("DockyardCli");
+        Assert.Null(await For(host).InstalledSelfVersion());
     }
 
     [Theory]

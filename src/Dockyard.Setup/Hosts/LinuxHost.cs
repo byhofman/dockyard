@@ -153,15 +153,13 @@ sealed class LinuxHost : IEngineHost
             await this.components.InstallApp(log, HasDashboard, app.Tag);
             // The tray still holds the single-instance lock, so the new one starts just after this process exits.
             if (File.Exists(LinuxSetup.AutostartFile))
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("/bin/sh", ["-c", $"sleep 2; exec \"{LinuxLayout.InstalledExe}\" --tray"]) { UseShellExecute = false })?.Dispose();
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("/bin/sh", ["-c", $"sleep 2; exec \"{LinuxLayout.InstalledExe}\""]) { UseShellExecute = false })?.Dispose();
             return true;
         }
         return false;
     }
 
     public bool RunsFromInstallLocation => LinuxComponents.RunsFromInstallLocation;
-
-    public string SelfComponent => nameof(Component.DockyardCli);
 
     public bool HasDashboard => LinuxComponents.HasDashboard;
     public string? DashboardExe => LinuxLayout.Dashboard;
@@ -182,7 +180,7 @@ sealed class LinuxHost : IEngineHost
     {
         if (!File.Exists(LinuxSetup.AutostartFile)) return;
         if (!LinuxLayout.HasDisplay(Environment.GetEnvironmentVariable("DISPLAY"), Environment.GetEnvironmentVariable("WAYLAND_DISPLAY"))) return;
-        Shell.Spawn(LinuxLayout.InstalledExe, "--tray").Dispose();
+        Shell.Spawn(LinuxLayout.InstalledExe).Dispose();
     }
 
     public string DoneMessage(bool reboot) => "Done. Dockyard and the docker command are ready.";

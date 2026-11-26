@@ -98,13 +98,23 @@ static class MachineApps
 
     public static IEnumerable<string> WingetToolFiles => Tools.All.SelectMany(Hosts.Winget.MachineFiles);
 
-    // The tray is the Toolbox's executable until the tray is a program of its own.
-    public static void InstallTray(Action<string> log, string source)
+    // dockyard-tray from the file given, or from the folder --assets names or the release.
+    public static async Task InstallTray(Action<string> log, string? file = null)
     {
         Directory.CreateDirectory(Paths.AppDir);
-        if (string.Equals(Path.GetFullPath(source), Paths.AppExe, StringComparison.OrdinalIgnoreCase)) return;
-        ReplaceAppExe(source);
-        log($"Installed {Paths.AppExe}");
+        var download = Path.Combine(Paths.AppDir, $".download-{Guid.NewGuid():N}");
+        try
+        {
+            if (file is null) log("Downloading the Dockyard tray");
+            file ??= await Updates.ReleaseAssetOrLocal(Updates.WindowsAppAsset, download, tag: null);
+            if (string.Equals(Path.GetFullPath(file), Paths.AppExe, StringComparison.OrdinalIgnoreCase)) return;
+            ReplaceAppExe(file);
+            log($"Installed {Paths.AppExe}");
+        }
+        finally
+        {
+            if (Directory.Exists(download)) Directory.Delete(download, recursive: true);
+        }
     }
 
     public static void RemoveTray(Action<string> log)
@@ -203,9 +213,10 @@ static class MachineApps
         log("Removed the dashboard");
     }
 
-    public static void StopApps(int keepPid, bool dashboardOnly = false)
+    public static void StopApps(int keepPid, bool dashboardOnly = false, bool trayOnly = false)
     {
-        var processes = Process.GetProcessesByName(Paths.DashboardProcess).AsEnumerable();
+        IEnumerable<Process> processes = [];
+        if (!trayOnly) processes = processes.Concat(Process.GetProcessesByName(Paths.DashboardProcess));
         if (!dashboardOnly) processes = processes.Concat(Process.GetProcessesByName(Paths.AppProcess));
         foreach (var p in processes)
         {
