@@ -40,6 +40,12 @@ static partial class SharedStorage
         return provisioner.Length > 0 && helper.Success ? (provisioner, helper.Groups["image"].Value) : null;
     }
 
+    // The storage chosen for the cluster is its default, so a claim without a class and every chart lands there; kind's own
+    // node-local class steps back, and takes over again when the chosen one goes.
+    public static Task KindDefault(string context, string cluster, bool isDefault) =>
+        Docker(["--context", context, "exec", cluster + "-control-plane", "kubectl", "--kubeconfig", AdminConfig, "annotate", "storageclass", "standard",
+            $"storageclass.kubernetes.io/is-default-class={(isDefault ? "true" : "false")}", "--overwrite"]);
+
     // The manifest goes to the script as an argument, never inside it.
     public static string[] ApplyArgs(string context, string node, string manifest) =>
         ["--context", context, "exec", node, "sh", "-c", $"printf '%s' \"$1\" | kubectl --kubeconfig {AdminConfig} apply -f -", "sh", manifest];
@@ -54,6 +60,7 @@ static partial class SharedStorage
         (exit, output, error) = await Docker(ApplyArgs(context, node, Manifest(images.Provisioner, images.Helper)));
         foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) onLine?.Invoke(line);
         if (exit != 0) throw new InvalidOperationException($"Could not add the shared storage class to {cluster}: {error.Trim()}");
+        await KindDefault(context, cluster, isDefault: false);
     }
 
     internal static async Task<(int ExitCode, string Output, string Error)> Docker(IReadOnlyList<string> args)
@@ -157,6 +164,8 @@ static partial class SharedStorage
         kind: StorageClass
         metadata:
           name: {{{ClassName}}}
+          annotations:
+            storageclass.kubernetes.io/is-default-class: "true"
         provisioner: dockyard.io/shared
         reclaimPolicy: Retain
         volumeBindingMode: Immediate

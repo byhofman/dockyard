@@ -11,14 +11,6 @@ static class VictoriaMetrics
         new("VictoriaMetrics", "victoria-metrics", "victoria-metrics-single", "https://victoriametrics.github.io/helm-charts/", "0.52.0", Namespace,
             ["server.scrape.enabled=true", "fullnameOverride=victoria-metrics"]);
 
-    // Its data on the cluster's shared storage when it has one, so it outlives the node it ran on; the default class otherwise.
-    public static ClusterAddon For(ClusterStorage storage) => storage switch
-    {
-        ClusterStorage.Nfs => Addon with { Values = [.. Addon.Values, $"server.persistentVolume.storageClassName={NfsStorage.ClassName}"] },
-        ClusterStorage.HostFolder => Addon with { Values = [.. Addon.Values, $"server.persistentVolume.storageClassName={SharedStorage.ClassName}"] },
-        _ => Addon,
-    };
-
     // Plugin settings, when it does not find it by itself: monitoring/prometheus-server:80.
     public const string Manifest = """
         apiVersion: v1

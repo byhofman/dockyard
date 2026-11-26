@@ -39,6 +39,8 @@ static class NfsStorage
         kind: StorageClass
         metadata:
           name: {{ClassName}}
+          annotations:
+            storageclass.kubernetes.io/is-default-class: "true"
         provisioner: nfs.csi.k8s.io
         parameters:
           server: {{ContainerName}}
@@ -78,6 +80,7 @@ static class NfsStorage
         var (exit, output, error) = await SharedStorage.Docker(SharedStorage.ApplyArgs(context, cluster + "-control-plane", StorageClass));
         foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) onLine?.Invoke(line);
         if (exit != 0) throw new InvalidOperationException($"Could not add the nfs storage class to {cluster}: {error.Trim()}");
+        await SharedStorage.KindDefault(context, cluster, isDefault: false);
     }
 
     // Once no cluster uses it: the files stay in the volume for the next cluster that asks for NFS.

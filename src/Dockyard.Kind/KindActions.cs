@@ -30,7 +30,7 @@ sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
                 catch (InvalidOperationException e) { onLine?.Invoke($"{e.Message}. The cluster works; its Ingress hosts under {name}.{ExternalDns.Zone} still resolve."); }
             }
             foreach (var addon in addons ?? [])
-                await ClusterAddons.Install(helm ?? throw new InvalidOperationException("Helm is not installed."), addon == VictoriaMetrics.Addon ? VictoriaMetrics.For(storage) : addon, own, name, Path.Combine(scratch.FullName, "helm"), onLine);
+                await ClusterAddons.Install(helm ?? throw new InvalidOperationException("Helm is not installed."), addon, own, name, Path.Combine(scratch.FullName, "helm"), onLine);
             if (addons?.Contains(VictoriaMetrics.Addon) == true) await VictoriaMetrics.Alias(dockerContext.Length > 0 ? dockerContext : "default", name, onLine);
             if (addons?.Contains(Headlamp.Addon) == true)
             {
@@ -50,7 +50,7 @@ sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
     // A running cluster's add-ons changed: removed in reverse order, so nothing goes before what uses it, then added as at
     // creation, Headlamp's address and cert-manager's issuer with them.
     public async Task EditAddons(string name, IReadOnlyList<ClusterAddon> current, IReadOnlyList<ClusterAddon> wanted, string helm,
-        Func<string, Task<string>>? clusterCa, Action<string>? onLine, bool? nfs = null, ClusterStorage storage = ClusterStorage.None)
+        Func<string, Task<string>>? clusterCa, Action<string>? onLine, bool? nfs = null)
     {
         var scratch = Directory.CreateTempSubdirectory("dockyard-kind-");
         try
@@ -67,11 +67,12 @@ sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
                 await ClusterAddons.Uninstall(helm, NfsStorage.Driver, own, name, onLine);
                 await SharedStorage.Docker(["--context", context, "exec", name + "-control-plane", "kubectl", "--kubeconfig", SharedStorage.AdminConfig,
                     "delete", "storageclass", NfsStorage.ClassName, "--ignore-not-found"]);
+                await SharedStorage.KindDefault(context, name, isDefault: true);
             }
             if (nfs == true) await NfsStorage.Install(context, name, own, helm, Path.Combine(scratch.FullName, "helm"), onLine);
             var added = ClusterAddons.All.Where(a => wanted.Contains(a) && !current.Contains(a)).ToList();
             foreach (var addon in added)
-                await ClusterAddons.Install(helm, addon == VictoriaMetrics.Addon ? VictoriaMetrics.For(storage) : addon, own, name, Path.Combine(scratch.FullName, "helm"), onLine);
+                await ClusterAddons.Install(helm, addon, own, name, Path.Combine(scratch.FullName, "helm"), onLine);
             if (added.Contains(VictoriaMetrics.Addon)) await VictoriaMetrics.Alias(context, name, onLine);
             if (added.Contains(CertManager.Addon) && clusterCa is not null)
                 await CertManager.AddIssuer(context, name, await clusterCa(name), onLine);

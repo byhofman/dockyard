@@ -484,7 +484,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
                     return;
                 }
                 bool? nfs = chosen == current.Storage ? null : chosen == ClusterStorage.Nfs;
-                await actions.EditAddons(cluster.Name, current.AddonList, wanted, helm, c => CertManager.FromToolbox(Dashboard.Shell.TrayClient.TrayExe, c), onLine, nfs, chosen);
+                await actions.EditAddons(cluster.Name, current.AddonList, wanted, helm, c => CertManager.FromToolbox(Dashboard.Shell.TrayClient.TrayExe, c), onLine, nfs);
                 ClusterDefinitions.Save(cluster.Name, current with { Addons = wanted.Select(a => a.Release).ToList(), Storage = chosen });
                 Shell.ShowInfo($"{cluster.Name} has the add-ons and storage as chosen");
             }), fields: [metrics, traefik, certManager, victoria, headlamp, storage]);
