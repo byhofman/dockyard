@@ -23,6 +23,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         CreateCommand = new Command(() => { AskCreate(); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine);
         DeleteCommand = new Command(() => { AskDelete(Picked); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine && SelectionCount > 0);
         DeleteRowCommand = new Command<KindCluster>(c => { AskDelete([c]); return Task.CompletedTask; });
+        CopyHeadlampTokenCommand = new Command(CopyHeadlampToken, () => HasKind && !NeedsLinuxEngine && Selected is { IsRunning: true });
         CopyKubeconfigCommand = new Command(CopyKubeconfig, () => HasKind && !NeedsLinuxEngine && Selected is { IsRunning: true });
         UseContextCommand = new Command(UseContext, () => !IsBusy && HasKind && !NeedsLinuxEngine && Selected is { IsRunning: true });
         DuplicateCommand = new Command(() => { if (Selected is { } c) AskDuplicate(c); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine && Selected is not null);
@@ -60,6 +61,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     public Command<KindCluster> DeleteRowCommand { get; }
     public Command CopyKubeconfigCommand { get; }
     public Command UseContextCommand { get; }
+    public Command CopyHeadlampTokenCommand { get; }
     public Command DuplicateCommand { get; }
     public Command RecreateCommand { get; }
     public Command ToggleCommand { get; }
@@ -307,6 +309,8 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         var metrics = DialogField.Check($"metrics-server {ClusterAddons.MetricsServer.Version}: kubectl top and pod autoscaling", isChecked: from?.Addons.Contains(ClusterAddons.MetricsServer.Release) ?? true);
         var traefik = DialogField.Check($"Traefik {ClusterAddons.Traefik.Version}: an ingress controller, reachable through the load balancer", isChecked: from?.Addons.Contains(ClusterAddons.Traefik.Release) ?? false);
         var certManager = DialogField.Check($"cert-manager {CertManager.Addon.Version}: certificates for <host>.<name>.dockyard.internal from the ClusterIssuer dockyard, trusted on this computer when trusted HTTPS is on", isChecked: from?.Addons.Contains(CertManager.Addon.Release) ?? false);
+        var headlamp = DialogField.Check($"Headlamp {Headlamp.Addon.Version}: the Kubernetes UI at dashboard.<name>.dockyard.internal, with Traefik", isChecked: from?.Addons.Contains(Headlamp.Addon.Release) ?? false);
+        headlamp.Changed += () => { if (headlamp.IsChecked) traefik.IsChecked = true; };
         string? generated = from is null ? KindCli.Config(0) : null;
         var definition = DialogField.Code("Definition: kind's cluster config, from the choices above until you change it", from?.Yaml ?? generated!, Shared.CodeLanguage.Yaml, ClusterDefinitions.Problem);
         var message = (fromName is null ? "Each node is a container on the Linux engine. The first cluster pulls kind's node image, which takes a few minutes. " : $"From {fromName}'s definition. ")
@@ -315,7 +319,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         List<DialogField> fields =
         [
             name, .. from is null ? [workers] : Array.Empty<DialogField>(), storage, balancer, ports,
-            .. helm is null ? Array.Empty<DialogField>() : [metrics, traefik, certManager], definition,
+            .. helm is null ? Array.Empty<DialogField>() : [metrics, traefik, certManager, headlamp], definition,
         ];
         void Regenerate()
         {
@@ -326,16 +330,17 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         workers.Changed += Regenerate;
         storage.Changed += Regenerate;
         Shell.Open(new Dialog(fromName is null ? "Create a kind cluster" : $"Duplicate {fromName}", message, "Create",
-            d => Create(d, name.Value, new ClusterDefinition(definition.Text, StorageOf(storage.Value), Addons(metrics, traefik, certManager, helm).Select(a => a.Release).ToList(),
+            d => Create(d, name.Value, new ClusterDefinition(definition.Text, StorageOf(storage.Value), Addons(metrics, traefik, certManager, headlamp, helm).Select(a => a.Release).ToList(),
                 balancer.IsChecked, ClusterDefinitions.ParsePorts(ports.Text) ?? ClusterDefinition.DefaultPorts), helm),
             fields: fields,
             canConfirm: _ => KindClusters.IsValidName(name.Value) && all.All(c => c.Name != name.Value) && definition.Problem is null && (!balancer.IsChecked || ports.Problem is null)));
     }
 
-    static List<ClusterAddon> Addons(DialogField metrics, DialogField traefik, DialogField certManager, string? helm) => helm is null ? [] :
+    static List<ClusterAddon> Addons(DialogField metrics, DialogField traefik, DialogField certManager, DialogField headlamp, string? helm) => helm is null ? [] :
         [
             .. metrics.IsChecked ? [ClusterAddons.MetricsServer] : Array.Empty<ClusterAddon>(), .. traefik.IsChecked ? [ClusterAddons.Traefik] : Array.Empty<ClusterAddon>(),
             .. certManager.IsChecked ? [CertManager.Addon] : Array.Empty<ClusterAddon>(),
+            .. headlamp.IsChecked ? [Headlamp.Addon] : Array.Empty<ClusterAddon>(),
         ];
 
     Task Create(Dialog dialog, string name, ClusterDefinition definition, string? helm) => RunKind(dialog, async (actions, onLine) =>
@@ -413,6 +418,17 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
             }));
         }
         finally { await Reload(); }
+    }
+
+    async Task CopyHeadlampToken()
+    {
+        if (Selected is not { } c || CopyText is not { } copy) return;
+        try
+        {
+            await copy(await Headlamp.Token(Session.ContextName.Length > 0 ? Session.ContextName : "default", c.Name));
+            Shell.ShowInfo($"A Headlamp token for {c.Name} is on the clipboard, valid for a day: https://{Headlamp.Host(c.Name)}");
+        }
+        catch (Exception ex) { Shell.ShowError(ex.Message); }
     }
 
     async Task CopyKubeconfig()

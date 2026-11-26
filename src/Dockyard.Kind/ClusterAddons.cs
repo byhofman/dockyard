@@ -15,7 +15,7 @@ static class ClusterAddons
     public static readonly ClusterAddon MetricsServer =
         new("metrics-server", "metrics-server", "metrics-server", "https://kubernetes-sigs.github.io/metrics-server/", "3.14.0", "kube-system", ["args[0]=--kubelet-insecure-tls"]);
 
-    public static readonly IReadOnlyList<ClusterAddon> All = [MetricsServer, Traefik, CertManager.Addon];
+    public static readonly IReadOnlyList<ClusterAddon> All = [MetricsServer, Traefik, CertManager.Addon, Headlamp.Addon];
 
     // kind's own kubeconfig, never the user's: its context for the cluster is kind-<name>. Helm gets repositories of its
     // own in scratch: with --repo it still reads the user's list, and fails on a repository there whose cache is gone.

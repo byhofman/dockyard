@@ -94,6 +94,9 @@
             <Button Command="{Binding CopyKubeconfigCommand}" ToolTip.Tip="kind get kubeconfig, onto the clipboard">
               <StackPanel Classes="label"><PathIcon Data="{StaticResource IconCopy}" /><TextBlock Text="Copy kubeconfig" /></StackPanel>
             </Button>
+            <Button Command="{Binding CopyHeadlampTokenCommand}" ToolTip.Tip="A token to sign in to Headlamp at https://dashboard.&lt;cluster&gt;.dockyard.internal, valid for a day">
+              <StackPanel Classes="label"><PathIcon Data="{StaticResource IconCopy}" /><TextBlock Text="Headlamp token" /></StackPanel>
+            </Button>
             <Button Command="{Binding DuplicateCommand}" ToolTip.Tip="A new cluster from this one's definition">
               <StackPanel Classes="label"><PathIcon Data="{StaticResource IconCopy}" /><TextBlock Text="Duplicate…" /></StackPanel>
             </Button>

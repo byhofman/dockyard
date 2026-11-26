@@ -31,6 +31,11 @@ sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
             }
             foreach (var addon in addons ?? [])
                 await ClusterAddons.Install(helm ?? throw new InvalidOperationException("Helm is not installed."), addon, own, name, Path.Combine(scratch.FullName, "helm"), onLine);
+            if (addons?.Contains(Headlamp.Addon) == true)
+            {
+                try { await Headlamp.Expose(dockerContext.Length > 0 ? dockerContext : "default", name, tls: addons.Contains(CertManager.Addon), onLine); }
+                catch (InvalidOperationException e) { onLine?.Invoke(e.Message); }
+            }
             if (addons?.Contains(CertManager.Addon) == true && clusterCa is not null)
             {
                 try { await CertManager.AddIssuer(dockerContext.Length > 0 ? dockerContext : "default", name, await clusterCa(name), onLine); }
