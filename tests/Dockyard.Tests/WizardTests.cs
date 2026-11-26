@@ -157,20 +157,24 @@ public sealed class WizardTests
     [Fact]
     public void The_tray_offers_the_update_with_its_version_and_Dockyard_first()
     {
-        Assert.Null(UpdateOffers.Text([]));
-        Assert.Equal("Update Dockyard to 0.7.1", UpdateOffers.Text([("Tray", "Dockyard tray", "0.7.1")]));
-        Assert.Equal("Update Dockyard to 0.7.1 and 1 more", UpdateOffers.Text([("Kind", "kind", "0.34.0"), ("Tray", "Dockyard tray", "0.7.1")]));
-        Assert.Equal("Update kind to 0.34.0", UpdateOffers.Text([("Kind", "kind", "0.34.0")]));
-        Assert.Equal("Install 2 updates", UpdateOffers.Text([("Kind", "kind", "0.34.0"), ("DockerCli", "Docker CLI", "30.0.0")]));
+        Assert.Null(UpdateOffers.Text([], "Tray"));
+        Assert.Equal("Update Dockyard to 0.7.1", UpdateOffers.Text([("Tray", "Dockyard tray", "0.7.1")], "Tray"));
+        Assert.Equal("Update Dockyard to 0.7.1 and 1 more", UpdateOffers.Text([("Kind", "kind", "0.34.0"), ("Tray", "Dockyard tray", "0.7.1")], "Tray"));
+        Assert.Equal("Update kind to 0.34.0", UpdateOffers.Text([("Kind", "kind", "0.34.0")], "Tray"));
+        Assert.Equal("Update Dockyard tray to 1.0.0", UpdateOffers.Text([("Tray", "Dockyard tray", "1.0.0")], "DockyardCli"));
+        Assert.Equal("Update Dockyard to 0.7.1", UpdateOffers.Text([("DockyardCli", "Dockyard CLI", "0.7.1")], "DockyardCli"));
+        Assert.Equal("Install 2 updates", UpdateOffers.Text([("Kind", "kind", "0.34.0"), ("DockerCli", "Docker CLI", "30.0.0")], "Tray"));
     }
 
     [Fact]
     public void Release_notes_are_linked_for_Dockyards_own_parts()
     {
         var release = new Hosts.Release(new Version(0, 7, 1), "v0.7.1", null);
-        Assert.Equal("https://github.com/byhofman/dockyard/releases/tag/v0.7.1", UpdateOffers.NotesUrl("Tray", release));
-        Assert.NotNull(UpdateOffers.NotesUrl("Dashboard", release));
-        Assert.Null(UpdateOffers.NotesUrl("Kind", release));
-        Assert.Null(UpdateOffers.NotesUrl("Tray", null));
+        Assert.Equal("https://github.com/byhofman/dockyard/releases/tag/v0.7.1", UpdateOffers.NotesUrl("Tray", release, "Tray"));
+        Assert.NotNull(UpdateOffers.NotesUrl("Dashboard", release, "Tray"));
+        Assert.Null(UpdateOffers.NotesUrl("Kind", release, "Tray"));
+        Assert.Null(UpdateOffers.NotesUrl("Tray", null, "Tray"));
+        Assert.Null(UpdateOffers.NotesUrl("Tray", release, "DockyardCli"));
+        Assert.NotNull(UpdateOffers.NotesUrl("DockyardCli", release, "DockyardCli"));
     }
 }

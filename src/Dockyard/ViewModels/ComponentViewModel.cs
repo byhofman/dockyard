@@ -3,8 +3,8 @@ using Dockyard.Setup;
 
 namespace Dockyard.ViewModels;
 
-// Flag: its name for the command line, which an optional component has.
-sealed class ComponentViewModel(ComponentRow row, string? flag) : Observable
+// Flag: its name for the command line, which an optional component has. IsApp: this is Dockyard itself, as the facade names it.
+sealed class ComponentViewModel(ComponentRow row, string? flag, bool isApp) : Observable
 {
     string installed = "–";
     string latest = "–";
@@ -30,7 +30,7 @@ sealed class ComponentViewModel(ComponentRow row, string? flag) : Observable
     public bool HasSource => source is not null;
     public string Latest { get => latest; set { if (Set(ref latest, value)) Raise(nameof(UpdateText)); } }
     public string UpdateText => $"Update to {Latest}";
-    public string? NotesUrl => UpdateOffers.NotesUrl(Id, LatestRelease);
+    public string? NotesUrl => UpdateOffers.NotesUrl(Id, LatestRelease, IsApp ? Id : "");
     public bool HasNotes => NotesUrl is not null && IsAvailable;
     public Command OpenNotesCommand => new(() =>
     {
@@ -56,7 +56,7 @@ sealed class ComponentViewModel(ComponentRow row, string? flag) : Observable
     public bool Include { get => include; set => Set(ref include, value); }
     public bool IsOptional => Flag is not null;
     public bool IsDockyard => Row.Group == "Dockyard";
-    public bool IsApp => Id is nameof(Core.Component.Tray);
+    public bool IsApp { get; } = isApp;
     public bool IsKubernetes => Row.Group == "Kubernetes";
     public string AddId => "Add-" + Id;
     public string RemoveId => "Remove-" + Id;

@@ -50,7 +50,7 @@ sealed class MainViewModel : Observable
         foreach (var row in setup.Components())
         {
             ComponentViewModel? item = null;
-            item = new ComponentViewModel(row, setup.Flag(row.Id))
+            item = new ComponentViewModel(row, setup.Flag(row.Id), row.Id == setup.SelfId)
             {
                 UpdateCommand = Cmd(() => UpdateComponents([item!]), () => item!.IsAvailable),
                 AddCommand = Cmd(() => SetComponent(item!, true)),
@@ -404,7 +404,7 @@ sealed class MainViewModel : Observable
     }
 
     public bool HasUpdates => Components.Any(c => c.IsAvailable);
-    public string? UpdateOffer => UpdateOffers.Text(Components.Where(c => c.IsAvailable).Select(c => (c.Id, c.Title, c.Latest)).ToList());
+    public string? UpdateOffer => UpdateOffers.Text(Components.Where(c => c.IsAvailable).Select(c => (c.Id, c.Title, c.Latest)).ToList(), setup.SelfId);
 
     void Show(DockyardSetup.ComponentCheck check)
     {

@@ -13,6 +13,7 @@ public sealed class ComponentRowTests
     {
         public Dictionary<string, Version?> Versions { get; } = new() { ["DockyardCli"] = new(1, 0, 0), ["Compose"] = new(2, 0, 0), [ComponentRules.DashboardId] = new(1, 0, 0) };
         public Version Newest { get; set; } = new(1, 1, 0);
+        public string SelfComponent { get; set; } = "DockyardCli";
         public List<string> Updated { get; } = [];
         public List<string> Changed { get; } = [];
 
@@ -119,6 +120,17 @@ public sealed class ComponentRowTests
 
         Assert.Equal(["Compose"], Settings.Load(mine.File).RemovedComponents);
         Assert.Equal(userBefore, File.Exists(userFile) ? File.ReadAllText(userFile) : null);
+    }
+
+    [Theory]
+    [InlineData("DockyardCli")]
+    [InlineData("Compose")]
+    public async Task Only_the_row_the_facade_names_is_Dockyard_itself(string self)
+    {
+        using var settings = new TempSettings();
+        var vm = new MainViewModel(Facade.For(new RowsHost { SelfComponent = self }, settings), setupMode: true);
+        await vm.LoadSetup();
+        Assert.Equal([self], vm.Components.Where(c => c.IsApp).Select(c => c.Id));
     }
 
     [Fact]
