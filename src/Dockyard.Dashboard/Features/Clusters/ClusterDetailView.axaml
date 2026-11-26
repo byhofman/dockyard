@@ -5,9 +5,10 @@
              xmlns:kind="using:Dockyard.Kind"
              xmlns:store="using:Dockyard.Dashboard.Store"
              xmlns:sh="using:Dockyard.Shared"
+             xmlns:cont="using:Dockyard.Dashboard.Features.Containers"
              x:Class="Dockyard.Dashboard.Features.Clusters.ClusterDetailView"
-             x:DataType="clu:ClustersViewModel">
-  <DockPanel>
+             x:DataType="clu:ClusterDetail">
+  <DockPanel DataContext="{Binding Clusters}" x:DataType="clu:ClustersViewModel">
     <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="16,14,16,10">
       <Grid ColumnDefinitions="*,Auto">
         <TextBlock Classes="title" Text="{Binding Selected.Name, FallbackValue=''}" TextWrapping="Wrap" VerticalAlignment="Center" />
@@ -26,9 +27,6 @@
         <Button Command="{Binding UseContextCommand}" ToolTip.Tip="Makes it the current context in your kubeconfig, adding it back if it went missing">
           <TextBlock Text="Use context" />
         </Button>
-        <Button Command="{Binding OpenHeadlampCommand}" IsVisible="{Binding HasHeadlamp}" ToolTip.Tip="{Binding HeadlampUrl}">
-          <StackPanel Classes="label"><PathIcon Data="{StaticResource IconOpenExternal}" /><TextBlock Text="Headlamp" /></StackPanel>
-        </Button>
         <Button Command="{Binding EditCommand}" ToolTip.Tip="Add or remove add-ons on the running cluster">
           <StackPanel Classes="label"><PathIcon Data="{StaticResource IconSettings}" /><TextBlock Text="Add-ons…" /></StackPanel>
         </Button>
@@ -38,7 +36,7 @@
       </WrapPanel>
     </StackPanel>
 
-    <TabControl Margin="4,0,4,0">
+    <TabControl Margin="4,0,4,0" SelectedIndex="{Binding $parent[UserControl].((clu:ClusterDetail)DataContext).SelectedTab}">
       <TabItem Header="Access">
         <ScrollViewer>
           <StackPanel Margin="12,8" Spacing="10">
@@ -78,7 +76,7 @@
                       <SelectableTextBlock Classes="muted mono" Text="{Binding Address}" IsVisible="{Binding HasAddress}"
                                            ToolTip.Tip="The service's load balancer IP on the kind network, as kubectl shows it under EXTERNAL-IP" />
                     </StackPanel>
-                    <ctl:PortLinks ItemsSource="{Binding Ports}" ShowUrl="True" OpenCommand="{Binding $parent[UserControl].((clu:ClustersViewModel)DataContext).OpenUrlCommand}" />
+                    <ctl:PortLinks ItemsSource="{Binding Ports}" ShowUrl="True" OpenCommand="{Binding $parent[UserControl].((clu:ClusterDetail)DataContext).Clusters.OpenUrlCommand}" />
                   </StackPanel>
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
@@ -113,6 +111,23 @@
           </StackPanel>
           <sh:CodeEditor Language="Yaml" Text="{Binding DefinitionYaml, Mode=OneWay}" IsReadOnly="True" />
         </DockPanel>
+      </TabItem>
+
+      <TabItem Header="Logs" DataContext="{Binding $parent[UserControl].((clu:ClusterDetail)DataContext)}" x:DataType="clu:ClusterDetail">
+        <Panel>
+          <ListBox Classes="log" ItemsSource="{Binding Logs.Rows}" Background="{DynamicResource Bg}"
+                   ScrollViewer.HorizontalScrollBarVisibility="Auto">
+            <ListBox.ItemTemplate>
+              <DataTemplate DataType="cont:LogRow">
+                <ctl:AnsiTextBlock Classes="mono" Classes.err="{Binding IsError}" Line="{Binding Line}" />
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+          <Button Classes="iconbtn" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,6,18,0" Command="{Binding OpenLogsCommand}"
+                  ToolTip.Tip="Open in the log panel, next to other logs" AutomationProperties.Name="Open in the log panel">
+            <PathIcon Data="{StaticResource IconExpand}" />
+          </Button>
+        </Panel>
       </TabItem>
     </TabControl>
   </DockPanel>

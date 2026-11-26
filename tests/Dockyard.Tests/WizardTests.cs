@@ -30,7 +30,7 @@ public sealed class WizardTests
     }
 
     [Fact]
-    public async Task Setup_on_an_older_install_only_offers_the_update_and_names_the_version()
+    public async Task Setup_on_an_older_install_offers_the_update_and_names_the_version()
     {
         using var settings = new TempSettings();
         var host = new FakeHost { Installed = true };
@@ -42,6 +42,40 @@ public sealed class WizardTests
         Assert.True(vm.ShowWizardManage);
         Assert.Equal("Dockyard Setup", vm.WindowTitle);
         Assert.Equal(vm.InstalledVersion == Paths.AppVersion ? "Run the setup again" : $"Update to {Paths.AppVersion}", vm.ReinstallText);
+    }
+
+    [Fact]
+    public async Task Setup_over_an_install_starts_from_what_it_has_and_adds_or_removes_what_is_changed()
+    {
+        using var settings = new TempSettings();
+        var host = new FakeHost { Installed = true, Dashboard = true, Components = [new("App", "Dockyard"), new("Compose", "Compose", Flag: "compose")] };
+        var vm = new MainViewModel(host, setupMode: true, userSettings: settings.Settings, openInTray: () => Task.FromResult(true));
+        await vm.LoadSetup();
+        var compose = vm.OptionalChoices.Single(c => c.Id == "Compose");
+
+        Assert.True(compose.Include);
+        Assert.True(vm.IncludeDashboard);
+
+        compose.Include = false;
+        await vm.InstallCommand.ExecuteAsync();
+
+        Assert.Contains("remove Compose", host.Calls);
+        Assert.Contains("Compose", settings.Settings.RemovedComponents);
+        Assert.True(host.Dashboard);
+
+        host.Calls.Clear();
+        var again = new MainViewModel(host, setupMode: true, userSettings: settings.Settings, openInTray: () => Task.FromResult(true));
+        await again.LoadSetup();
+        compose = again.OptionalChoices.Single(c => c.Id == "Compose");
+        Assert.False(compose.Include);
+
+        compose.Include = true;
+        again.IncludeDashboard = false;
+        await again.InstallCommand.ExecuteAsync();
+
+        Assert.Contains("add Compose", host.Calls);
+        Assert.DoesNotContain("Compose", settings.Settings.RemovedComponents);
+        Assert.False(host.Dashboard);
     }
 
     [Fact]

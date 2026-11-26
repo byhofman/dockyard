@@ -301,7 +301,7 @@ sealed class ContainersViewModel : Observable, ISearchable
         {
             ContainerItem item => new ContainerDetailViewModel(this, Session, item, shell.ShowError),
             ProjectRow p => new ComposeDetailViewModel(this, Session, p.Project, shell.ShowError, shell.Activity, shell.Tools),
-            ClusterRow k when shell.Clusters is { } clusters && clusters.Select(k.Cluster.Name) => new Features.Clusters.ClusterDetail(clusters, () => SelectedRow = null),
+            ClusterRow k when shell.Clusters is { } clusters && clusters.Select(k.Cluster.Name) => new Features.Clusters.ClusterDetail(clusters, k.Cluster, this, () => SelectedRow = null),
             _ => null,
         };
     }

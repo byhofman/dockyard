@@ -13,7 +13,7 @@
       <cont:ContainerDetailView />
     </DataTemplate>
     <DataTemplate DataType="clu:ClusterDetail">
-      <clu:ClusterDetailView DataContext="{Binding Clusters}" />
+      <clu:ClusterDetailView />
     </DataTemplate>
     <DataTemplate DataType="cont:ComposeDetailViewModel">
       <cont:ComposeDetailView />
@@ -33,7 +33,7 @@
                     ToolTip.Tip="Create a kind cluster">
               <StackPanel Classes="label">
                 <PathIcon Data="{StaticResource IconKubernetes}" />
-                <TextBlock Text="Cluster" />
+                <TextBlock Text="New cluster" />
               </StackPanel>
             </Button>
             <Button Click="OpenComposeFile" IsEnabled="{Binding Tools.HasCompose}" ToolTip.Tip="Start a compose project from a compose file (docker compose up -d)">
