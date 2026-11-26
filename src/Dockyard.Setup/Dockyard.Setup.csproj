@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Everything that installs, adds, removes and updates Dockyard's components, its settings and what runs in the background,
+       without a UI: the CLI, the tray and the dashboard all go through DockyardSetup. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Version>0.0.0</Version>
+    <Product>Dockyard</Product>
+    <Company>Thomas Hofman</Company>
+    <Copyright>Copyright (c) 2026 Thomas Hofman</Copyright>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Hosts\setup-linux.sh" LogicalName="setup-linux.sh" />
+    <EmbeddedResource Include="..\..\image\versions.env" LogicalName="versions.env" />
+    <EmbeddedResource Include="..\..\image\versions.sha256" LogicalName="versions.sha256" />
+    <EmbeddedResource Condition="'$(GuestBundle)' != ''" Include="$(GuestBundle)" LogicalName="guest.tar.gz" />
+    <EmbeddedResource Condition="'$(HostExe)' != ''" Include="$(HostExe)" LogicalName="dockyard-host.exe" />
+    <Compile Include="..\Shared\*.cs" Exclude="..\Shared\CodeEditor.cs;..\Shared\CodeColorizer.cs;..\Shared\DisplayGate.cs" LinkBase="Shared" />
+    <InternalsVisibleTo Include="Dockyard" />
+    <InternalsVisibleTo Include="Dockyard.Tests" />
+    <InternalsVisibleTo Include="Dockyard.Setup.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Dockyard.Engine\Dockyard.Engine.csproj" />
+    <ProjectReference Include="..\Dockyard.Kind\Dockyard.Kind.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.14" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.14" />
+  </ItemGroup>
+
+</Project>

@@ -16,7 +16,7 @@ public sealed class UninstallNetworkTests : IDisposable
     {
         var at = AppContext.BaseDirectory;
         while (!File.Exists(Path.Combine(at, "Dockyard.slnx"))) at = Path.GetDirectoryName(at)!;
-        return Path.Combine(at, "src", "Dockyard", "Hosts", "setup-linux.sh");
+        return Path.Combine(at, "src", "Dockyard.Setup", "Hosts", "setup-linux.sh");
     }
 
     // How `iptables -S` prints a rule the agent inserted: appended, and a single address with its prefix.

@@ -30,28 +30,20 @@
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
-    <EmbeddedResource Include="Hosts\setup-linux.sh" LogicalName="setup-linux.sh" />
-    <EmbeddedResource Include="..\..\image\versions.env" LogicalName="versions.env" />
-    <EmbeddedResource Include="..\..\image\versions.sha256" LogicalName="versions.sha256" />
-    <EmbeddedResource Condition="'$(GuestBundle)' != ''" Include="$(GuestBundle)" LogicalName="guest.tar.gz" />
-    <EmbeddedResource Condition="'$(HostExe)' != ''" Include="$(HostExe)" LogicalName="dockyard-host.exe" />
-    <Compile Include="..\Shared\*.cs" LinkBase="Shared" />
+    <!-- The rest of Shared is compiled into Dockyard.Setup, whose internals this project sees. -->
+    <Compile Include="..\Shared\CodeEditor.cs;..\Shared\CodeColorizer.cs;..\Shared\DisplayGate.cs" LinkBase="Shared" />
     <InternalsVisibleTo Include="Dockyard.Tests" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Dockyard.Engine\Dockyard.Engine.csproj" />
-    <ProjectReference Include="..\Dockyard.Kind\Dockyard.Kind.csproj" />
+    <ProjectReference Include="..\Dockyard.Setup\Dockyard.Setup.csproj" />
   </ItemGroup>
-
 
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.5" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.5" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.5" />
     <PackageReference Include="Avalonia.AvaloniaEdit" Version="12.0.0" />
-    <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.14" />
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.14" />
   </ItemGroup>
 
   <!-- The published Toolbox is dockyard-toolbox, next to dockyard-dashboard and dockyard-cli. Only the published file:

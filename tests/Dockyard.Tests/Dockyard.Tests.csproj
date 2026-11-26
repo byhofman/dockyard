@@ -12,6 +12,8 @@
   <ItemGroup>
     <Using Include="Xunit" />
     <ProjectReference Include="..\..\src\Dockyard\Dockyard.csproj" />
+    <!-- The Toolbox's window tests drive the same fakes as the install tests. -->
+    <Compile Include="..\Dockyard.Setup.Tests\FakeHost.cs;..\Dockyard.Setup.Tests\TempSettings.cs" LinkBase="Shared" />
   </ItemGroup>
 
   <ItemGroup>

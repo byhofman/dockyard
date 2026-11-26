@@ -36,12 +36,12 @@
     <Compile Include="..\Shared\LocalPipe.cs" LinkBase="Shared" />
     <Compile Include="..\Shared\TrayCommand.cs" LinkBase="Shared" />
     <Compile Include="..\Shared\TrayCommandKind.cs" LinkBase="Shared" />
-    <Compile Include="..\Dockyard\Core\WslEngineRelay.cs" LinkBase="Relays" />
-    <Compile Include="..\Dockyard\Core\AcceptLoop.cs" LinkBase="Relays" />
-    <Compile Include="..\Dockyard\Core\WslEngineGate.cs" LinkBase="Relays" />
-    <Compile Include="..\Dockyard\Core\TcpRelay.cs" LinkBase="Relays" />
-    <Compile Include="..\Dockyard\Core\DomainRelay.cs" LinkBase="Relays" />
-    <Compile Include="..\Dockyard\Core\LoopbackForwarder.cs" LinkBase="Relays" />
+    <Compile Include="..\Dockyard.Setup\Core\WslEngineRelay.cs" LinkBase="Relays" />
+    <Compile Include="..\Dockyard.Setup\Core\AcceptLoop.cs" LinkBase="Relays" />
+    <Compile Include="..\Dockyard.Setup\Core\WslEngineGate.cs" LinkBase="Relays" />
+    <Compile Include="..\Dockyard.Setup\Core\TcpRelay.cs" LinkBase="Relays" />
+    <Compile Include="..\Dockyard.Setup\Core\DomainRelay.cs" LinkBase="Relays" />
+    <Compile Include="..\Dockyard.Setup\Core\LoopbackForwarder.cs" LinkBase="Relays" />
   </ItemGroup>
 
   <ItemGroup>

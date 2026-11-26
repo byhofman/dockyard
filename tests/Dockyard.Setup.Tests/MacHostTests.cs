@@ -357,13 +357,6 @@ public sealed class MacInstallTests : IDisposable
         Assert.Contains("port 15353", MacLayout.InstallDomainResolver.Replace("\\n", " "));
     }
 
-    [Fact]
-    public void The_display_check_reaches_the_system_libraries()
-    {
-        Assert.SkipUnless(OperatingSystem.IsMacOS(), "macOS");
-        _ = Dockyard.Shared.DisplayGate.IsUsable();
-    }
-
     sealed class FailingStream : MemoryStream
     {
         public override Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken) =>
