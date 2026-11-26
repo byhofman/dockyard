@@ -151,7 +151,7 @@ sealed class MainViewModel : Observable
         ? $"Dockyard {InstalledVersion} is installed. Running the setup again keeps your images, containers and settings."
         : $"Dockyard {InstalledVersion} is installed. Update brings it to {Paths.AppVersion} and keeps your images, containers and settings.";
     public string ReinstallText => InstalledVersion == Paths.AppVersion ? "Run the setup again" : $"Update to {Paths.AppVersion}";
-    public string WindowTitle => IsSetupMode ? "Dockyard Setup" : "Dockyard";
+    public string WindowTitle => IsSetupMode ? "Dockyard Setup" : "Dockyard Toolbox";
 
     public string Version => "v" + Paths.AppVersion;
     public string Active => active;

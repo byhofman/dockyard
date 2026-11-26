@@ -35,6 +35,7 @@ IDs are permanent: never renumber or reuse one.
 - [ ] DOK-39 The Helm releases installed in a cluster, with their chart, version and status (owner 2026-11-25, a version after 0.9.0)
 - [ ] DOK-40 Images built locally are usable in kind clusters without pushing them anywhere: loaded into a cluster (kind load) from the dashboard and the CLI, or a local registry every cluster pulls from (owner 2026-11-25, a version after 0.9.0)
 - [ ] DOK-44 Edit a running cluster: the create dialog's add-ons (metrics-server, Traefik, cert-manager with its issuer, Headlamp), external-dns, NFS storage and the load balancer changed on a running cluster through Helm and manifests, in the right order, with its definition saved; host-folder storage and the kind config greyed out as needing Recreate; dockyard cluster edit for the same; plus the CLI's dashboard-token and a real-cluster test of Headlamp (feat/headlamp) (owner 2026-11-26, next)
+- [ ] DOK-45 The one-liner opened the installer window, but it offered no choice of what to install: the component checkboxes the wizard shows on a first install should be there whenever the one-liner opens it, also over an existing install, so a run of it is a way to add or leave out components (owner 2026-11-26)
 
 ## Quality
 

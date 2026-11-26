@@ -105,7 +105,7 @@ public sealed class WizardTests
         Assert.True(vm.ShowManage);
         Assert.False(vm.ShowWizardManage);
         Assert.True(vm.Dashboard.CanAdd);
-        Assert.Equal("Dockyard", vm.WindowTitle);
+        Assert.Equal("Dockyard Toolbox", vm.WindowTitle);
     }
 
     [Theory]
