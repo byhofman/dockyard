@@ -392,14 +392,20 @@ sealed class ContainersViewModel : Observable, ISearchable
             i => (Session.Client ?? throw new InvalidOperationException("The engine is not connected.")).RemoveContainerAsync(i.Id, force: i.IsRunning)), danger: true));
     }
 
-    public void AskDown(ComposeProject project) => shell.Open(new Dialog($"Down {project.Name}?",
-        "Stops and removes the project's containers and networks. Volumes and images stay.", "Down", d => ComposeDown(project, d), danger: true));
+    public void AskDown(ComposeProject project)
+    {
+        var volumes = DialogField.Check("Also remove its volumes, with the data in them", isChecked: false);
+        var images = DialogField.Check("Also remove the images it built or pulled", isChecked: false);
+        shell.Open(new Dialog($"Down {project.Name}?", "Stops and removes the project's containers and networks.", "Down",
+            d => ComposeDown(project, d, volumes.IsChecked, images.IsChecked), danger: true, fields: [volumes, images]));
+    }
 
-    async Task ComposeDown(ComposeProject project, Dialog dialog)
+    async Task ComposeDown(ComposeProject project, Dialog dialog, bool volumes = false, bool images = false)
     {
         var context = Session.ContextName.Length > 0 ? Session.ContextName : "default";
-        dialog.Report($"docker compose down {project.Name}…");
-        var exit = await CliRunner.Run(ComposeCli.Args(context, project, "down"), line => { if (line.Trim().Length > 0) dialog.Report(line.Trim()); }, Session.IsWindowsEngine);
+        string[] verb = ["down", .. volumes ? ["--volumes"] : Array.Empty<string>(), .. images ? ["--rmi", "all"] : Array.Empty<string>()];
+        dialog.Report($"docker compose {string.Join(' ', verb)} {project.Name}…");
+        var exit = await CliRunner.Run(ComposeCli.Args(context, project, verb), line => { if (line.Trim().Length > 0) dialog.Report(line.Trim()); }, Session.IsWindowsEngine);
         if (exit != 0) throw new InvalidOperationException($"docker compose down failed for {project.Name} (exit code {exit}). {dialog.Progress}");
     }
 

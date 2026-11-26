@@ -72,9 +72,16 @@ public sealed class ResourceLogicTests
     [Fact]
     public void Compose_cli_arguments()
     {
-        var withFiles = new ComposeProject("shop", @"C:\src\shop", [@"C:\src\shop\compose.yaml"], []);
-        Assert.Equal(["--context", "linux", "compose", "-p", "shop", "-f", @"C:\src\shop\compose.yaml", "--project-directory", @"C:\src\shop", "up", "-d"],
+        var dir = Directory.CreateTempSubdirectory("dockyard-compose").FullName;
+        var file = Path.Combine(dir, "compose.yaml");
+        File.WriteAllText(file, "services: {}\n");
+        var withFiles = new ComposeProject("shop", dir, [file], []);
+        Assert.Equal(["--context", "linux", "compose", "-p", "shop", "-f", file, "--project-directory", dir, "up", "-d"],
             ComposeCli.Args("linux", withFiles, "up", "-d"));
+
+        // Files moved or deleted since: compose still downs the project by its name.
+        Directory.Delete(dir, recursive: true);
+        Assert.Equal(["--context", "linux", "compose", "-p", "shop", "down", "--volumes"], ComposeCli.Args("linux", withFiles, "down", "--volumes"));
 
         var byName = new ComposeProject("shop", null, [], []);
         Assert.Equal(["--context", "win", "compose", "-p", "shop", "down"], ComposeCli.Args("win", byName, "down"));
