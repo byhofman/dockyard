@@ -1,31 +1,31 @@
 #!/bin/sh
-# Dockyard for Linux. This only fetches the installer, checks it and starts it:
+# Dockyard for Linux. This only fetches the dockyard command, checks it and runs dockyard setup:
 #   curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install.sh | sh
-# Arguments go to the installer: ... | sh -s -- --silent --no-dashboard
+# Arguments go to the command: ... | sh -s -- setup --silent --without dashboard
 set -eu
 repo=byhofman/dockyard
-asset=Dockyard-linux-x64
+asset=dockyard-linux-x64
 
 [ "$(uname -m)" = x86_64 ] || { echo "Dockyard for Linux is built for x86_64" >&2; exit 1; }
 
 if [ -n "${DOCKYARD_VERSION:-}" ]; then
-  tag="toolbox/$DOCKYARD_VERSION"
+  tag="cli/$DOCKYARD_VERSION"
 else
-  # The redirect names one release, so the file and its checksum come from the same one, and it has no API rate limit.
-  tag="$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$repo/releases/latest")"
-  tag="$(printf '%s' "${tag#*/releases/tag/}" | sed 's#%2[Ff]#/#g')"
+  # components.json names each component's latest release, from github.com, which has no API rate limit.
+  tag="$(curl -fsSL "https://github.com/$repo/releases/download/index/components.json" | grep -o '"cli/[0-9][^"]*"' | head -n 1 | tr -d '"')" || tag=""
 fi
 case "$tag" in
-  toolbox/[0-9]*) ;;
+  cli/[0-9]*) ;;
   *) echo "No Dockyard release found" >&2; exit 1 ;;
 esac
 
 dir="$(mktemp -d)"
 trap 'rm -rf "$dir"' EXIT
-echo "Downloading the Dockyard installer ($tag)"
+echo "Downloading the dockyard command ($tag)"
 curl -fsSL -o "$dir/$asset" "https://github.com/$repo/releases/download/$tag/$asset"
 curl -fsSL -o "$dir/SHA256SUMS" "https://github.com/$repo/releases/download/$tag/SHA256SUMS"
-(cd "$dir" && grep " $asset\$" SHA256SUMS | sha256sum -c - >/dev/null) || { echo "Checksum mismatch for $asset, not starting it" >&2; exit 1; }
+(cd "$dir" && grep " $asset\$" SHA256SUMS | sha256sum -c - >/dev/null) || { echo "Checksum mismatch for $asset, not running it" >&2; exit 1; }
 
 chmod +x "$dir/$asset"
+[ $# -gt 0 ] || set -- setup
 "$dir/$asset" "$@"
