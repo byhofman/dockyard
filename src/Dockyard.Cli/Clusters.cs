@@ -58,7 +58,7 @@ sealed class Clusters(Action<string> log)
             .ToList();
     }
 
-    public async Task Create(string name, int workers, IReadOnlyList<ClusterAddon> addons, ClusterStorage storage, bool loadBalancer, IReadOnlyList<int> ports, string? definition)
+    public async Task Create(string name, int workers, IReadOnlyList<ClusterAddon> addons, ClusterStorage storage, bool loadBalancer, IReadOnlyList<int> ports, string? definition, string? kubernetes = null)
     {
         await RequireLinuxEngine();
         if (workers is < 0 or > 10) throw new UsageException("--workers takes 0 to 10");
@@ -67,8 +67,9 @@ sealed class Clusters(Action<string> log)
         var helm = addons.Count > 0 || storage == ClusterStorage.Nfs
             ? CliLocator.Locate("helm") ?? throw new InvalidOperationException("The add-ons and NFS storage go in with Helm, which is not installed: dockyard --silent --with helm adds it")
             : null;
-        ClusterDefinitions.Save(name, new ClusterDefinition(definition, storage, addons.Select(a => a.Release).ToList(), loadBalancer, ports));
-        var file = await Actions().Create(name, log, storage: storage, addons: addons, helm: helm, definition: definition, publishNames: loadBalancer, clusterCa: ClusterCa);
+        var image = KindImages.Choose(kubernetes);
+        ClusterDefinitions.Save(name, new ClusterDefinition(definition, storage, addons.Select(a => a.Release).ToList(), loadBalancer, ports, image.Version));
+        var file = await Actions().Create(name, log, storage: storage, addons: addons, helm: helm, definition: definition, publishNames: loadBalancer, clusterCa: ClusterCa, image: image);
         if (loadBalancer) await CloudProvider.EnsureRunning(Context.Length > 0 ? Context : "default", log);
         log($"kubectl now uses {KindKubeconfig.Key(name)}, from {file}");
     }
@@ -82,14 +83,32 @@ sealed class Clusters(Action<string> log)
         var saved = ClusterDefinitions.Load(name) ?? throw new InvalidOperationException($"Dockyard has no definition of {name}: the dashboard puts one together from its nodes, under Definition");
         definition ??= saved.Yaml;
         if (ClusterDefinitions.Problem(definition) is { } problem) throw new InvalidOperationException(problem);
-        var helm = saved.Addons.Count > 0 || saved.Storage == ClusterStorage.Nfs ? CliLocator.Locate("helm") : null;
+        await Remake(name, saved with { Yaml = definition });
+        log($"{name} is made again from its definition");
+    }
+
+    // kind has no upgrade in place: the cluster is made again on the newer image, and its workloads and node-local volumes go.
+    public async Task Upgrade(string name, string? kubernetes)
+    {
+        await RequireLinuxEngine();
+        var saved = ClusterDefinitions.Load(name) ?? throw new InvalidOperationException($"Dockyard has no definition of {name}: the dashboard puts one together from its nodes, under Definition");
+        var running = await SharedStorage.Docker(["--context", Context.Length > 0 ? Context : "default", "inspect", "-f", "{{.Config.Image}}", name + "-control-plane"]);
+        var current = running.ExitCode == 0 ? KindImages.VersionOf(running.Output.Trim()) : saved.KubernetesVersion;
+        var image = KindImages.UpgradeTarget(current, kubernetes);
+        await Remake(name, saved with { KubernetesVersion = image.Version });
+        log($"{name} runs Kubernetes {image.Version}");
+    }
+
+    async Task Remake(string name, ClusterDefinition wanted)
+    {
+        var helm = wanted.Addons.Count > 0 || wanted.Storage == ClusterStorage.Nfs ? CliLocator.Locate("helm") : null;
         var actions = Actions();
         await DeleteWithProxies(actions, name);
-        var remade = saved with { Yaml = definition, Addons = helm is null ? [] : saved.Addons };
+        var remade = wanted with { Addons = helm is null ? [] : wanted.Addons };
         ClusterDefinitions.Save(name, remade);
-        await actions.Create(name, log, storage: remade.Storage, addons: remade.AddonList, helm: helm, definition: remade.Yaml, publishNames: remade.LoadBalancer, clusterCa: ClusterCa);
+        await actions.Create(name, log, storage: remade.Storage, addons: remade.AddonList, helm: helm, definition: remade.Yaml, publishNames: remade.LoadBalancer,
+            clusterCa: ClusterCa, image: KindImages.For(remade.KubernetesVersion));
         if (remade.LoadBalancer) await CloudProvider.EnsureRunning(Context.Length > 0 ? Context : "default", log);
-        log($"{name} is made again from its definition");
     }
 
     // A running cluster's add-ons and NFS storage, as the dashboard's Add-ons does; the rest is its nodes' and needs recreate.

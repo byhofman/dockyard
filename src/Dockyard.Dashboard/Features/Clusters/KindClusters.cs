@@ -21,7 +21,7 @@ static partial class KindClusters
             var front = nodes.FirstOrDefault(c => Role(c) == "external-load-balancer") ?? nodes.FirstOrDefault(c => Role(c) == "control-plane");
             var port = front?.Ports.FirstOrDefault(p => p.ContainerPort == ApiServerPort)?.HostPort;
             var version = nodes.Where(c => Role(c).StartsWith("control-plane", StringComparison.Ordinal))
-                .Select(c => NodeVersion().Match(c.Image)).FirstOrDefault(m => m.Success)?.Groups["v"].Value;
+                .Select(c => KindImages.VersionOf(c.Image)).FirstOrDefault(v => v is not null);
             var shared = SharedStorage.On(nodes.Select(c => (Role(c), (IEnumerable<string>)c.BindTargets)));
             return new KindCluster(g.Key, nodes.Select(c => new KindNode(c.Name, Role(c), c.State)).ToList(), version, port, shared);
         })
@@ -29,7 +29,4 @@ static partial class KindClusters
         .ToList();
 
     public static bool IsValidName(string name) => KindNames.IsValid(name);
-
-    [GeneratedRegex(@"^(?:[^@]*/)?node:(?<v>v\d+\.\d+\.\d+)")]
-    private static partial Regex NodeVersion();
 }

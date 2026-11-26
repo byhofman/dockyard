@@ -16,7 +16,7 @@ IDs are permanent: never renumber or reuse one.
 - [x] DOK-57 Be upfront about settings that only work on Linux, in the interface and the docs (owner 2026-11-26, next)
 - [ ] DOK-59 The Dockyard CLI is the core component and a package manager: every component's download source is always a package manager and Dockyard is one of them; for a bare minimum you install and maintain the container environment on a laptop, and possibly a server, with the Dockyard CLI alone; it is listed as the core component and owns the install (owner 2026-11-26, next)
 - [ ] DOK-60 Discuss whether the Toolbox stays, or is integrated into the dashboard (owner 2026-11-26, next)
-- [ ] DOK-61 Upgrade the Kubernetes version of an existing kind cluster: work out how, and support it (owner 2026-11-26, next)
+- [x] DOK-61 Upgrade the Kubernetes version of an existing kind cluster: work out how, and support it (owner 2026-11-26, next; built with data loss for now, owner 2026-11-26: a version per cluster from the images pinned with kind, and Upgrade… and `dockyard cluster upgrade` make it again on a newer one)
 
 ## Images and volumes
 
@@ -92,3 +92,4 @@ IDs are permanent: never renumber or reuse one.
 - [ ] DOK-68 Connect hardware to containers (owner 2026-11-26)
 - [ ] DOK-69 Choose the shell to install kubectl autocompletion and the like into; on Windows that can also be a WSL shell (owner 2026-11-26)
 - [ ] DOK-58 Container domains on Windows through the Windows service, without external DNS and without other Linux dependencies (owner 2026-11-26; postponed by the owner 2026-11-26)
+- [ ] DOK-71 Upgrade keeps a cluster's workloads: before the old nodes go, its namespaced resources outside the system namespaces, its CRDs and other cluster-scoped objects of its own, its Helm releases (chart, version, values) and the node-local volumes' data are saved, and after the cluster is made again they go back in that order; what does not apply is listed (owner 2026-11-26)

@@ -25,6 +25,8 @@ static class CliApp
                 b.AddCommand<ClusterCreateCommand>("create").WithDescription("Makes a cluster and adds its context to your kubeconfig.")
                     .WithExample("cluster", "create", "dev", "--workers", "2", "--addons", "metrics-server,traefik", "--storage", "nfs");
                 b.AddCommand<ClusterRecreateCommand>("recreate").WithDescription("Deletes it, with everything in it, and makes it again from its definition or the one given.");
+                b.AddCommand<ClusterUpgradeCommand>("upgrade").WithDescription("Makes it again on a newer Kubernetes: kind has no upgrade in place, so its workloads and node-local volumes go.")
+                    .WithExample("cluster", "upgrade", "dev", "--kubernetes", "v1.37.0");
                 b.AddCommand<ClusterDeleteCommand>("delete").WithDescription("Deletes it and takes its context out of your kubeconfig.");
         b.AddCommand<ClusterEditCommand>("edit").WithDescription("Changes the add-ons and NFS storage of a running cluster; the rest needs recreate.")
             .WithExample("cluster", "edit", "dev", "--addons", "metrics-server,traefik,headlamp", "--storage", "nfs");
@@ -99,6 +101,10 @@ sealed class CreateSettings : CommandSettings
     [Description("kind's cluster config to make it from, or - for standard input")]
     public string? File { get; init; }
 
+    [CommandOption("--kubernetes <version>")]
+    [Description("The Kubernetes version, one this kind brings; its default when not given")]
+    public string? Kubernetes { get; init; }
+
     public override ValidationResult Validate() =>
         Kind.KindNames.IsValid(Name) ? ValidationResult.Success() : ValidationResult.Error("A cluster name is lower case letters, digits, . and -");
 }
@@ -111,6 +117,25 @@ sealed class RecreateSettings : CommandSettings
     [CommandOption("--file <definition>")]
     [Description("kind's cluster config to make it from instead of its own, or - for standard input")]
     public string? File { get; init; }
+}
+
+sealed class UpgradeSettings : CommandSettings
+{
+    [CommandArgument(0, "<name>")]
+    public string Name { get; init; } = "";
+
+    [CommandOption("--kubernetes <version>")]
+    [Description("The version to go to; the newest this kind brings when not given")]
+    public string? Kubernetes { get; init; }
+}
+
+sealed class ClusterUpgradeCommand : AsyncCommand<UpgradeSettings>
+{
+    public override async Task<int> ExecuteAsync(CommandContext context, UpgradeSettings s, CancellationToken cancellation)
+    {
+        await new Clusters(Console.WriteLine).Upgrade(Clusters.ValidName(s.Name), s.Kubernetes);
+        return 0;
+    }
 }
 
 static class Files
@@ -139,7 +164,7 @@ sealed class ClusterCreateCommand : AsyncCommand<CreateSettings>
 {
     public override async Task<int> ExecuteAsync(CommandContext context, CreateSettings s, CancellationToken cancellation)
     {
-        await new Clusters(Console.WriteLine).Create(s.Name, s.Workers, Clusters.Addons(s.Addons), Clusters.Storage(s.Storage), !s.NoLoadBalancer, Clusters.Ports(s.Ports), Files.Read(s.File));
+        await new Clusters(Console.WriteLine).Create(s.Name, s.Workers, Clusters.Addons(s.Addons), Clusters.Storage(s.Storage), !s.NoLoadBalancer, Clusters.Ports(s.Ports), Files.Read(s.File), s.Kubernetes);
         return 0;
     }
 }

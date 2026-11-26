@@ -37,6 +37,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         UseContextCommand = new Command(UseContext, () => !IsBusy && HasKind && !NeedsLinuxEngine && Selected is { IsRunning: true });
         DuplicateCommand = new Command(() => { if (Selected is { } c) AskDuplicate(c); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine && Selected is not null);
         RecreateCommand = new Command(() => { if (Selected is { } c) AskRecreate(c); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine && Selected is not null);
+        UpgradeCommand = new Command(() => { if (Selected is { } c) AskUpgrade(c); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine && CanUpgrade);
         ToggleCommand = new Command(() => Selected is { } c ? Toggle(c) : Task.CompletedTask, () => !IsBusy && !NeedsLinuxEngine && Selected is not null);
         ToggleRowCommand = new Command<KindCluster>(c => IsBusy ? Task.CompletedTask : Toggle(c));
         LoadBalancerCommand = new Command(() => { if (Selected is { } c) AskLoadBalancer(c); return Task.CompletedTask; }, () => HasKind && !NeedsLinuxEngine && Selected is not null);
@@ -90,6 +91,8 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     public string DefinitionYaml => Selected is { } c ? DefinitionOf(c).Yaml : "";
     public Command DuplicateCommand { get; }
     public Command RecreateCommand { get; }
+    public Command UpgradeCommand { get; }
+    public bool CanUpgrade => Selected is { } c && KindImages.NewerThan(c.KubernetesVersion).Count > 0;
     public Command ToggleCommand { get; }
     public Command<KindCluster> ToggleRowCommand { get; }
     public Command<PublishedPort> OpenUrlCommand { get; }
@@ -284,6 +287,8 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         Raise(nameof(HeadlampUrl), nameof(HasHeadlamp), nameof(DefinitionYaml));
         DuplicateCommand.Refresh();
         RecreateCommand.Refresh();
+        UpgradeCommand.Refresh();
+        Raise(nameof(CanUpgrade));
         LoadBalancerCommand.Refresh();
         ToggleCommand.Refresh();
     }
@@ -336,6 +341,10 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         var helm = CliLocator.Locate("helm");
         var name = new DialogField("Name", placeholder: "dev");
         var workers = new DialogField("Worker nodes", choices: WorkerChoices);
+        var version = new DialogField("Kubernetes version", choices: KindImages.All.Select(i => i.Version).ToList())
+        {
+            Choice = KindImages.For(from?.KubernetesVersion)?.Version ?? KindImages.Default.Version,
+        };
         var storage = new DialogField("Storage that every node can use at once", choices: helm is null ? StorageChoices[..2] : StorageChoices)
         {
             Choice = StorageChoices[from?.Storage switch { ClusterStorage.HostFolder => 1, ClusterStorage.Nfs when helm is not null => 2, _ => 0 }],
@@ -357,7 +366,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
             + (helm is null ? " Add Helm in Dockyard's window for metrics-server, Traefik and NFS storage." : "");
         List<DialogField> fields =
         [
-            name, .. from is null ? [workers] : Array.Empty<DialogField>(), storage, balancer, ports,
+            name, version, .. from is null ? [workers] : Array.Empty<DialogField>(), storage, balancer, ports,
             .. helm is null ? Array.Empty<DialogField>() : [metrics, traefik, certManager, victoria, headlamp], definition,
         ];
         void Regenerate()
@@ -370,7 +379,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         storage.Changed += Regenerate;
         Shell.Open(new Dialog(fromName is null ? "Create a kind cluster" : $"Duplicate {fromName}", message, "Create",
             d => Create(d, name.Value, new ClusterDefinition(definition.Text, StorageOf(storage.Value), Addons(metrics, traefik, certManager, victoria, headlamp, helm).Select(a => a.Release).ToList(),
-                balancer.IsChecked, ClusterDefinitions.ParsePorts(ports.Text) ?? ClusterDefinition.DefaultPorts), helm),
+                balancer.IsChecked, ClusterDefinitions.ParsePorts(ports.Text) ?? ClusterDefinition.DefaultPorts, version.Value), helm),
             fields: fields,
             canConfirm: _ => KindClusters.IsValidName(name.Value) && all.All(c => c.Name != name.Value) && definition.Problem is null && (!balancer.IsChecked || ports.Problem is null)));
     }
@@ -388,7 +397,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         ClusterDefinitions.Save(name, definition);
         appliedPlan = null;
         var file = await actions.Create(name, onLine, storage: definition.Storage, addons: definition.AddonList, helm: helm, definition: definition.Yaml, publishNames: definition.LoadBalancer,
-            clusterCa: c => CertManager.FromToolbox(Dashboard.Shell.TrayClient.TrayExe, c));
+            clusterCa: ClusterCa, image: KindImages.For(definition.KubernetesVersion));
         Shell.ShowInfo($"kubectl now uses {KindKubeconfig.Key(name)}, from {file}");
     });
 
@@ -409,15 +418,43 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         Shell.Open(new Dialog($"{cluster.Name}: definition", message, "Recreate", d => RunKind(d, async (actions, onLine) =>
         {
             var helm = CliLocator.Locate("helm");
-            d.Report($"Deleting {cluster.Name}");
-            await actions.Delete(cluster.Name, onLine);
-            await RemoveProxies(cluster.Name);
-            var remade = current with { Yaml = definition.Text, Addons = helm is null ? [] : current.Addons };
-            ClusterDefinitions.Save(cluster.Name, remade);
-            await actions.Create(cluster.Name, onLine, storage: remade.Storage, addons: remade.AddonList, helm: helm, definition: remade.Yaml, publishNames: remade.LoadBalancer,
-                clusterCa: c => CertManager.FromToolbox(Dashboard.Shell.TrayClient.TrayExe, c));
+            await Remake(d, actions, onLine, cluster, current with { Yaml = definition.Text, Addons = helm is null ? [] : current.Addons }, helm);
             Shell.ShowInfo($"{cluster.Name} is made again from its definition");
         }), danger: true, fields: [definition], canConfirm: _ => definition.Problem is null));
+    }
+
+    static Task<string> ClusterCa(string cluster) => CertManager.FromToolbox(Dashboard.Shell.TrayClient.TrayExe, cluster);
+
+    // kind changes nothing in a cluster that exists: Recreate, a change to or from the host folder and Upgrade all delete
+    // it, with everything in it, and make it again from the definition.
+    async Task Remake(Dialog dialog, KindActions actions, Action<string> onLine, KindCluster cluster, ClusterDefinition remade, string? helm)
+    {
+        dialog.Report($"Deleting {cluster.Name}");
+        await actions.Delete(cluster.Name, onLine);
+        await RemoveProxies(cluster.Name);
+        ClusterDefinitions.Save(cluster.Name, remade);
+        await actions.Create(cluster.Name, onLine, storage: remade.Storage, addons: remade.AddonList, helm: helm, definition: remade.Yaml,
+            publishNames: remade.LoadBalancer, clusterCa: ClusterCa, image: KindImages.For(remade.KubernetesVersion));
+    }
+
+    // No upgrade in place (kind has none): the workloads and node-local volumes go, files on shared and NFS storage stay.
+    void AskUpgrade(KindCluster cluster)
+    {
+        var newer = KindImages.NewerThan(cluster.KubernetesVersion);
+        if (newer.Count == 0) return;
+        var version = new DialogField("Kubernetes version", choices: newer.Select(i => i.Version).ToList()) { Choice = newer[0].Version };
+        var current = DefinitionOf(cluster);
+        var addons = current.AddonList;
+        var message = $"kind cannot upgrade a cluster in place. Upgrade deletes {cluster.Name} on Kubernetes {cluster.KubernetesVersion ?? "(unknown)"}, with every workload in it and the data on its node-local volumes, "
+            + "and makes it again on the version chosen, from its definition"
+            + (addons.Count > 0 ? $", with {string.Join(" and ", addons.Select(a => a.Title))}" : "")
+            + ". Files on shared and NFS storage stay.";
+        Shell.Open(new Dialog($"Upgrade {cluster.Name}", message, "Upgrade", d => RunKind(d, async (actions, onLine) =>
+        {
+            var helm = CliLocator.Locate("helm");
+            await Remake(d, actions, onLine, cluster, current with { KubernetesVersion = version.Value, Addons = helm is null ? [] : current.Addons }, helm);
+            Shell.ShowInfo($"{cluster.Name} runs Kubernetes {version.Value}");
+        }), danger: true, fields: [version]));
     }
 
     void AskDelete(IReadOnlyList<KindCluster> clusters)
@@ -508,18 +545,13 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
                 var chosen = StorageOf(storage.Value);
                 if (NeedsRecreate())
                 {
-                    d.Report($"Deleting {cluster.Name}");
-                    await actions.Delete(cluster.Name, onLine);
-                    await RemoveProxies(cluster.Name);
-                    var remade = current with { Yaml = KindCli.WithSharedStorage(current.Yaml, chosen == ClusterStorage.HostFolder), Storage = chosen, Addons = wanted.Select(a => a.Release).ToList() };
-                    ClusterDefinitions.Save(cluster.Name, remade);
-                    await actions.Create(cluster.Name, onLine, storage: remade.Storage, addons: remade.AddonList, helm: helm, definition: remade.Yaml,
-                        publishNames: remade.LoadBalancer, clusterCa: c => CertManager.FromToolbox(Dashboard.Shell.TrayClient.TrayExe, c));
+                    await Remake(d, actions, onLine, cluster,
+                        current with { Yaml = KindCli.WithSharedStorage(current.Yaml, chosen == ClusterStorage.HostFolder), Storage = chosen, Addons = wanted.Select(a => a.Release).ToList() }, helm);
                     Shell.ShowInfo($"{cluster.Name} is made again with the add-ons and storage as chosen");
                     return;
                 }
                 bool? nfs = chosen == current.Storage ? null : chosen == ClusterStorage.Nfs;
-                await actions.EditAddons(cluster.Name, current.AddonList, wanted, helm, c => CertManager.FromToolbox(Dashboard.Shell.TrayClient.TrayExe, c), onLine, nfs);
+                await actions.EditAddons(cluster.Name, current.AddonList, wanted, helm, ClusterCa, onLine, nfs);
                 ClusterDefinitions.Save(cluster.Name, current with { Addons = wanted.Select(a => a.Release).ToList(), Storage = chosen });
                 Shell.ShowInfo($"{cluster.Name} has the add-ons and storage as chosen");
             }), fields: [metrics, traefik, certManager, victoria, headlamp, storage]);
