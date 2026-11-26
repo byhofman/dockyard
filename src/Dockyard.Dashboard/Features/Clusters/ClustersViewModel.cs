@@ -500,7 +500,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         try
         {
             await copy(await Headlamp.Token(Session.ContextName.Length > 0 ? Session.ContextName : "default", c.Name));
-            Shell.ShowInfo($"A Headlamp token for {c.Name} is on the clipboard, valid for a day: https://{Headlamp.Host(c.Name)}");
+            Shell.ShowInfo($"An admin token for {c.Name} is on the clipboard, valid for a day; sign in to Headlamp with it");
         }
         catch (Exception ex) { Shell.ShowError(ex.Message); }
     }

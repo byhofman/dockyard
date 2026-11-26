@@ -100,8 +100,8 @@
             <Button Command="{Binding OpenHeadlampCommand}" IsVisible="{Binding HasHeadlamp}" ToolTip.Tip="{Binding HeadlampUrl}">
               <StackPanel Classes="label"><PathIcon Data="{StaticResource IconOpenExternal}" /><TextBlock Text="Open Headlamp" /></StackPanel>
             </Button>
-            <Button Command="{Binding CopyHeadlampTokenCommand}" IsVisible="{Binding HasHeadlamp}" ToolTip.Tip="A token to sign in to Headlamp at https://dashboard.&lt;cluster&gt;.dockyard.internal, valid for a day">
-              <StackPanel Classes="label"><PathIcon Data="{StaticResource IconCopy}" /><TextBlock Text="Headlamp token" /></StackPanel>
+            <Button Command="{Binding CopyHeadlampTokenCommand}" IsVisible="{Binding HasHeadlamp}" ToolTip.Tip="A cluster-admin token, valid for a day, onto the clipboard: to sign in to Headlamp">
+              <StackPanel Classes="label"><PathIcon Data="{StaticResource IconCopy}" /><TextBlock Text="Admin token" /></StackPanel>
             </Button>
             <Button Command="{Binding DuplicateCommand}" ToolTip.Tip="A new cluster from this one's definition">
               <StackPanel Classes="label"><PathIcon Data="{StaticResource IconCopy}" /><TextBlock Text="Duplicate…" /></StackPanel>
