@@ -63,9 +63,6 @@
     <DataTemplate DataType="res:DiskViewModel">
       <res:DiskView />
     </DataTemplate>
-    <DataTemplate DataType="clu:ClustersViewModel">
-      <clu:ClustersView />
-    </DataTemplate>
   </Window.DataTemplates>
 
   <Window.Styles>

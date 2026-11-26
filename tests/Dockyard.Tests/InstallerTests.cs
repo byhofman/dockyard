@@ -13,7 +13,8 @@ sealed class FakeHost : IEngineHost
     public List<string> Calls { get; } = [];
 
     public IReadOnlyList<EngineInfo> Engines { get; } = [new("linux", "Linux", "Linux containers", "", "ctx", "unix:///x")];
-    public IReadOnlyList<ComponentInfo> Components { get; } = [new("App", "Dockyard")];
+    public IReadOnlyList<ComponentInfo> Components { get; init; } = [new("App", "Dockyard")];
+    public HashSet<string> Missing { get; } = [];
     public bool IsInstalled => Installed;
     public bool RunsFromInstallLocation => false;
     public bool HasDashboard => Dashboard;
@@ -23,7 +24,15 @@ sealed class FakeHost : IEngineHost
     public Task Stop(string engine) => Task.CompletedTask;
     public string ActiveEngine() => "linux";
     public Task UseContext(string engine) => Task.CompletedTask;
-    Task<Version?> IEngineHost.Installed(string component) => Task.FromResult<Version?>(Installed ? new Version(1, 0, 0) : null);
+    Task<Version?> IEngineHost.Installed(string component) => Task.FromResult<Version?>(Installed && !Missing.Contains(component) ? new Version(1, 0, 0) : null);
+
+    public Task<bool> SetComponent(Action<string> log, string component, bool installed, bool removeData = false)
+    {
+        if (component == ComponentRules.DashboardId) return SetDashboard(log, installed);
+        Calls.Add($"{(installed ? "add" : "remove")} {component}");
+        if (installed) Missing.Remove(component); else Missing.Add(component);
+        return Task.FromResult(false);
+    }
     public Task<Release?> Latest(string component) => Task.FromResult<Release?>(new Release(new Version(1, 0, 0), "v1.0.0", null));
     public Task<bool> Update(Action<string> log, IReadOnlyList<(string Component, Release? Release)> components) => Task.FromResult(false);
 

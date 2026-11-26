@@ -46,7 +46,7 @@ sealed class ContainersViewModel : Observable, ISearchable
         ToggleClusterCommand = new Command<ClusterRow>(k => { Store.ToggleProject(k.Key); return Task.CompletedTask; });
         ToggleSystemCommand = new Command<SystemRow>(_ => { Store.ToggleProject(SystemRow.Key); return Task.CompletedTask; });
         ClusterStartStopCommand = new Command<ClusterRow>(k => shell.Clusters?.StartOrStop(k.Cluster) ?? Task.CompletedTask);
-        OpenClusterCommand = new Command<ClusterRow>(k => { shell.Reveal("Kubernetes", k.Cluster); return Task.CompletedTask; });
+        OpenClusterCommand = new Command<ClusterRow>(k => { SelectedRow = k; return Task.CompletedTask; });
 
         StartPickedCommand = new Command(() => StartOrStopPicked(stop: false), () => PickedContainers.Any(c => !c.IsRunning) || PickedClusters.Any(c => !c.IsRunning));
         StopPickedCommand = new Command(() => StartOrStopPicked(stop: true), () => PickedContainers.Any(c => c.IsRunning) || PickedClusters.Any(c => c.Nodes.Any(n => n.IsRunning)));
@@ -121,7 +121,6 @@ sealed class ContainersViewModel : Observable, ISearchable
         var service = item.Labels.GetValueOrDefault(SystemRow.ServiceLabel);
         string? setting = service switch { "dns" or "etcd" => "domains", "proxy" => "proxy", _ => null };
         if (setting is not null && TrayClient.Send(new Shared.TrayCommand(Shared.TrayCommandKind.Highlight, setting))) return;
-        if (service is "cloud-provider-kind" or "nfs") shell.ShowSection("Kubernetes");
         shell.ShowInfo(SystemHint(item));
     }
 
@@ -179,6 +178,11 @@ sealed class ContainersViewModel : Observable, ISearchable
     public void OpenLogs(string key, string title, IReadOnlyList<LogSource> sources)
     {
         if (Session.Client is { } client) shell.Logs.Open(key, title, client, sources);
+    }
+
+    public void OpenLogsSideBySide(IReadOnlyList<(string Title, LogSource Source)> containers)
+    {
+        if (Session.Client is { } client) shell.Logs.OpenSideBySide(client, containers);
     }
 
     public string? Busy { get => busy; private set { if (Set(ref busy, value)) Raise(nameof(IsBusy)); } }
@@ -295,6 +299,7 @@ sealed class ContainersViewModel : Observable, ISearchable
         {
             case ContainerItem item when Detail is ContainerDetailViewModel d && d.Item == item:
             case ProjectRow p when Detail is ComposeDetailViewModel cd && cd.Project.Name == p.Name:
+            case ClusterRow k when Detail is Features.Clusters.ClusterDetail kd && kd.Name == k.Name:
                 return;
         }
         detail?.Dispose();
@@ -302,6 +307,7 @@ sealed class ContainersViewModel : Observable, ISearchable
         {
             ContainerItem item => new ContainerDetailViewModel(this, Session, item, shell.ShowError),
             ProjectRow p => new ComposeDetailViewModel(this, Session, p.Project, shell.ShowError, shell.Activity, shell.Tools),
+            ClusterRow k when shell.Clusters is { } clusters && clusters.Select(k.Cluster.Name) => new Features.Clusters.ClusterDetail(clusters, k.Cluster, this, () => SelectedRow = null),
             _ => null,
         };
     }

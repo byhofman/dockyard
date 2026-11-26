@@ -23,28 +23,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         CreateCommand = new Command(() => { AskCreate(); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine);
         DeleteCommand = new Command(() => { AskDelete(Picked); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine && SelectionCount > 0);
         DeleteRowCommand = new Command<KindCluster>(c => { AskDelete([c]); return Task.CompletedTask; });
-        ClusterNodes.Unfolded = c => unfolded.Contains(c.Name);
-        ClusterNodes.Rows = NodeRowsOf;
-        ToggleNodesCommand = new Command<KindCluster>(c =>
-        {
-            if (!unfolded.Remove(c.Name)) unfolded.Add(c.Name);
-            // A new instance makes the row bind again, chevron and nodes alike.
-            if (Rows.IndexOf(c) is var i and >= 0) Rows[i] = c with { };
-            // Asking every cluster every 10 seconds only while one is unfolded.
-            if (readinessTimer is null)
-            {
-                readinessTimer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
-                readinessTimer.Tick += async (_, _) => { foreach (var r in Rows.Where(r => r.IsRunning && unfolded.Contains(r.Name)).ToList()) await CheckReadiness(r); };
-            }
-            readinessTimer.IsEnabled = unfolded.Count > 0;
-            return c.IsRunning && unfolded.Contains(c.Name) ? CheckReadiness(c) : Task.CompletedTask;
-        });
 
-        OpenNodeCommand = new Command<NodeRow>(n =>
-        {
-            if (n.Container is { } item) Shell.Reveal("Containers", item);
-            return Task.CompletedTask;
-        });
         EditCommand = new Command(() => Selected is { } c ? AskEdit(c) : Task.CompletedTask, () => !IsBusy && HasKind && !NeedsLinuxEngine && Selected is { IsRunning: true });
         OpenHeadlampCommand = new Command(() =>
         {
@@ -93,41 +72,22 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     public Command UseContextCommand { get; }
     public Command CopyHeadlampTokenCommand { get; }
     public Command EditCommand { get; }
-    public Command<NodeRow> OpenNodeCommand { get; }
 
-    public Command<KindCluster> ToggleNodesCommand { get; }
-    readonly HashSet<string> unfolded = [];
-    readonly Dictionary<string, List<NodeRow>> nodeRows = [];
-    // Made on the first unfold, on the UI thread: a timer made with the view model would claim a dispatcher too early.
-    Avalonia.Threading.DispatcherTimer? readinessTimer;
-
-    // Kept per cluster, so readiness and the containers' usage carry over when the row binds again; the dashboard samples
-    // CPU and memory only for containers in view, so these are put in view.
-    IReadOnlyList<NodeRow> NodeRowsOf(KindCluster cluster)
+    // Points the details at a cluster by name, for Containers, whose rows are its own copies.
+    public bool Select(string name)
     {
-        if (nodeRows.TryGetValue(cluster.Name, out var rows) && rows.Select(r => r.Node).SequenceEqual(cluster.Nodes)) return rows;
-        rows = cluster.Nodes.Select(n =>
-        {
-            var item = Session.Containers.Items.FirstOrDefault(i => i.Name == n.Name);
-            if (item is not null) Shell.Containers?.SetVisible(item.Id, true);
-            return new NodeRow(n, item);
-        }).ToList();
-        nodeRows[cluster.Name] = rows;
-        return rows;
+        if (Rows.FirstOrDefault(r => r.Name == name) is not { } row) return false;
+        Selected = row;
+        return true;
     }
 
-    async Task CheckReadiness(KindCluster cluster)
-    {
-        if (kind is not { } exe) return;
-        var ready = await new KindActions(exe, Session.ContextName, kubeconfig).NodeReadiness(cluster.Name);
-        foreach (var row in NodeRowsOf(cluster)) row.Ready = ready.TryGetValue(row.Name, out var r) ? r : false;
-    }
     public Command OpenHeadlampCommand { get; }
 
     // Headlamp's address for the selected cluster, as its definition has it: https with cert-manager's certificate.
     public string? HeadlampUrl => Selected is { } c && ClusterDefinitions.Load(c.Name) is { } d && d.Addons.Contains(Headlamp.Addon.Release)
         ? $"{(d.Addons.Contains(CertManager.Addon.Release) ? "https" : "http")}://{Headlamp.Host(c.Name)}" : null;
     public bool HasHeadlamp => HeadlampUrl is not null;
+    public string DefinitionYaml => Selected is { } c ? DefinitionOf(c).Yaml : "";
     public Command DuplicateCommand { get; }
     public Command RecreateCommand { get; }
     public Command ToggleCommand { get; }
@@ -168,6 +128,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         : "";
 
     public bool HasHint => Hint.Length > 0;
+    public string? HintLink => HasKind ? null : "Engines and settings";
     public string KubectlHint => Selected is { } c ? $"kubectl --context {c.Context} get nodes" : "";
 
     public bool HasSharedStorage => Selected?.HasSharedStorage == true;
@@ -193,7 +154,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     public override void OnShown()
     {
         kind = KindCli.Locate();
-        Raise(nameof(HasKind), nameof(Hint), nameof(HasHint));
+        Raise(nameof(HasKind), nameof(Hint), nameof(HasHint), nameof(HintLink));
         RefreshCommands();
     }
 
@@ -203,7 +164,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         all = NeedsLinuxEngine ? [] : KindClusters.From(Session.Containers.Items);
         ApplyFilter();
         ShowLoadBalancers();
-        Raise(nameof(HasKind), nameof(Hint), nameof(HasHint));
+        Raise(nameof(HasKind), nameof(Hint), nameof(HasHint), nameof(HintLink));
         RefreshCommands();
         return SyncController();
     }
@@ -320,7 +281,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         EditCommand.Refresh();
         CopyHeadlampTokenCommand.Refresh();
         OpenHeadlampCommand.Refresh();
-        Raise(nameof(HeadlampUrl), nameof(HasHeadlamp));
+        Raise(nameof(HeadlampUrl), nameof(HasHeadlamp), nameof(DefinitionYaml));
         DuplicateCommand.Refresh();
         RecreateCommand.Refresh();
         LoadBalancerCommand.Refresh();

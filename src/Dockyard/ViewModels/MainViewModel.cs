@@ -342,6 +342,7 @@ sealed class MainViewModel : Observable
     public async Task LoadSetup()
     {
         IsInstalled = host.IsInstalled;
+        if (IsInstalled) ChooseWhatIsThere();
         await RefreshState();
         if (options.Resume)
         {
@@ -354,6 +355,15 @@ sealed class MainViewModel : Observable
             });
         }
         if (IsInstalled) await Run("Checking for updates", () => CheckUpdates(all: false));
+    }
+
+    // Over an existing install the boxes start from what it has, then what the command line asked for.
+    void ChooseWhatIsThere()
+    {
+        foreach (var c in Components.Where(c => c.IsOptional && c != Dashboard))
+            c.Include = c.Info.Flag is { } flag && options.With.Contains(flag)
+                || !settings.RemovedComponents.Contains(c.Id) && !(c.Info.Flag is { } without && options.Without.Contains(without));
+        IncludeDashboard = options.Dashboard ?? host.HasDashboard;
     }
 
     // Its version comes from the update check; whether it is there at all is known without one, as soon as the window opens.
@@ -509,7 +519,7 @@ sealed class MainViewModel : Observable
 
     async Task InstallCore()
     {
-        var dashboard = IsInstalled ? DashboardChoice.Resolve(options.Dashboard, true, host.HasDashboard, host.RunsFromInstallLocation) : IncludeDashboard;
+        var dashboard = IsInstalled && !IsSetupMode ? DashboardChoice.Resolve(options.Dashboard, true, host.HasDashboard, host.RunsFromInstallLocation) : IncludeDashboard;
         if (options.KubectlShell is { } shell && shell != settings.KubectlShell)
         {
             settings.KubectlShell = shell;
@@ -520,7 +530,9 @@ sealed class MainViewModel : Observable
             settings.UsePackageManager = use;
             settings.Save();
         }
-        if (!IsInstalled)
+        var removedBefore = settings.RemovedComponents.ToList();
+        var wasInstalled = IsInstalled;
+        if (!IsInstalled || IsSetupMode)
         {
             var left = Components.Where(c => c.IsOptional && !c.Include && c != Dashboard).Select(c => c.Id).Order().ToList();
             if (ComponentRules.Problems(host.Components, [], [], left) is { Count: > 0 } problems) throw new InvalidOperationException(problems[0]);
@@ -528,6 +540,13 @@ sealed class MainViewModel : Observable
             settings.Save();
         }
         var reboot = await host.Install(Log, new InstallRequest(dashboard) { Without = settings.RemovedComponents });
+        if (wasInstalled && IsSetupMode)
+            foreach (var c in Components.Where(c => c.IsOptional && c != Dashboard))
+            {
+                var present = await host.Installed(c.Id) is not null;
+                if (c.Include && (removedBefore.Contains(c.Id) || !present)) await host.SetComponent(Log, c.Id, installed: true);
+                else if (!c.Include && present) await host.SetComponent(Log, c.Id, installed: false);
+            }
         ShellSetup.Apply(settings, Log);
         IsInstalled = true;
         NeedsReboot = reboot;

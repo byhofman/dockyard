@@ -1,4 +1,5 @@
 <UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:ctl="using:Dockyard.Dashboard.Controls"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:bld="using:Dockyard.Dashboard.Features.Builds"
              x:Class="Dockyard.Dashboard.Features.Builds.BuildsView"
@@ -40,7 +41,7 @@
             <Button Grid.Column="2" Classes="link" Content="Clear" Command="{Binding ClearSelectionCommand}" Margin="12,0,0,0" />
           </Grid>
         </Border>
-        <TextBlock Classes="muted" Text="{Binding Hint}" TextWrapping="Wrap" IsVisible="{Binding HasHint}" />
+        <ctl:SectionHint Text="{Binding Hint}" IsVisible="{Binding HasHint}" />
       </StackPanel>
       <ListBox x:Name="List" Classes="rows" ItemsSource="{Binding Rows}" SelectionMode="Multiple" SelectedItems="{Binding SelectedItems}" Padding="0,4">
         <ListBox.ItemTemplate>

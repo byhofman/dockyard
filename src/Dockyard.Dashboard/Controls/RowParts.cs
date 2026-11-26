@@ -1,8 +1,10 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
+using Avalonia.Controls.Templates;
 using Avalonia.Layout;
 using Avalonia.Media;
+using System.Globalization;
 
 namespace Dockyard.Dashboard.Controls;
 
@@ -181,5 +183,174 @@ sealed class EmptyState : StackPanel
         base.OnPropertyChanged(change);
         if (change.Property == TextProperty) text.Text = Text;
         else if (change.Property == IconProperty && Icon is { } key && this.FindResource(key) is Geometry g) icon.Data = g;
+    }
+}
+// A container's or load balancer's published ports as links to http://127.0.0.1:<port>: the port alone, or the whole URL.
+sealed class PortLinks : ItemsControl
+{
+    public static readonly StyledProperty<bool> ShowUrlProperty = AvaloniaProperty.Register<PortLinks, bool>(nameof(ShowUrl));
+    // Opens a port; the section's own, so a failure is said where it happened.
+    public static readonly StyledProperty<System.Windows.Input.ICommand?> OpenCommandProperty = AvaloniaProperty.Register<PortLinks, System.Windows.Input.ICommand?>(nameof(OpenCommand));
+
+    public bool ShowUrl { get => GetValue(ShowUrlProperty); set => SetValue(ShowUrlProperty, value); }
+    public System.Windows.Input.ICommand? OpenCommand { get => GetValue(OpenCommandProperty); set => SetValue(OpenCommandProperty, value); }
+
+    protected override Type StyleKeyOverride => typeof(ItemsControl);
+
+    public PortLinks()
+    {
+        VerticalAlignment = VerticalAlignment.Center;
+        ItemsPanel = new FuncTemplate<Panel?>(() => new WrapPanel { ItemSpacing = 10 });
+        ItemTemplate = new FuncDataTemplate<Store.PublishedPort>((port, _) =>
+        {
+            var icon = new PathIcon { Width = 10, Height = 10 };
+            if (this.FindResource("IconOpenExternal") is Geometry g) icon.Data = g;
+            var text = new TextBlock { Text = ShowUrl ? port.Url : port.HostPort.ToString(CultureInfo.InvariantCulture) };
+            if (ShowUrl) text.Classes.Add("mono");
+            var label = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 3, Children = { text, icon } };
+            label.Classes.Add("label");
+            var link = new Button { Content = label, CommandParameter = port };
+            link.Classes.Add("link");
+            ToolTip.SetTip(link, ShowUrl ? port.Text : port.Url);
+            link.Click += (_, _) => { if (OpenCommand?.CanExecute(port) == true) OpenCommand.Execute(port); };
+            return link;
+        });
+    }
+}
+
+// The All / In use / Unused filter of a list whose items something may use, over a UsageFilter as its DataContext.
+sealed class UsageFilterBar : Border
+{
+    readonly Button all = Segment("All", null);
+    readonly Button used = Segment("Used", "Used by a container, running or not");
+    readonly Button unused = Segment("Unused", "No container uses it");
+    Features.Resources.UsageFilter? filter;
+
+    static Button Segment(string kind, string? tip)
+    {
+        var b = new Button { CommandParameter = kind };
+        b.Classes.Add("segment");
+        if (tip is not null) ToolTip.SetTip(b, tip);
+        return b;
+    }
+
+    public UsageFilterBar()
+    {
+        BorderThickness = new Thickness(1);
+        CornerRadius = new CornerRadius(7);
+        Padding = new Thickness(3);
+        HorizontalAlignment = HorizontalAlignment.Left;
+        VerticalAlignment = VerticalAlignment.Center;
+        Child = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, Children = { all, used, unused } };
+        AttachedToVisualTree += (_, _) =>
+        {
+            if (this.FindResource("Bg") is IBrush bg) Background = bg;
+            if (this.FindResource("Line") is IBrush line) BorderBrush = line;
+        };
+    }
+
+    protected override void OnDataContextChanged(EventArgs e)
+    {
+        base.OnDataContextChanged(e);
+        if (filter is not null) filter.PropertyChanged -= Update;
+        filter = DataContext as Features.Resources.UsageFilter;
+        if (filter is null) return;
+        filter.PropertyChanged += Update;
+        foreach (var b in new[] { all, used, unused }) b.Command = filter.ShowCommand;
+        Update(null, null!);
+    }
+
+    void Update(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (filter is null) return;
+        all.Content = filter.AllText;
+        used.Content = filter.UsedText;
+        unused.Content = filter.UnusedText;
+        all.Classes.Set("selected", filter.IsAll);
+        used.Classes.Set("selected", filter.IsUsed);
+        unused.Classes.Set("selected", filter.IsUnused);
+    }
+}
+
+// A section's line on what is missing or what to do, with a link to act on it when there is one.
+sealed class SectionHint : StackPanel
+{
+    public static readonly StyledProperty<string?> TextProperty = AvaloniaProperty.Register<SectionHint, string?>(nameof(Text));
+    public static readonly StyledProperty<string?> LinkTextProperty = AvaloniaProperty.Register<SectionHint, string?>(nameof(LinkText));
+    public static readonly StyledProperty<System.Windows.Input.ICommand?> LinkCommandProperty = AvaloniaProperty.Register<SectionHint, System.Windows.Input.ICommand?>(nameof(LinkCommand));
+
+    public string? Text { get => GetValue(TextProperty); set => SetValue(TextProperty, value); }
+    public string? LinkText { get => GetValue(LinkTextProperty); set => SetValue(LinkTextProperty, value); }
+    public System.Windows.Input.ICommand? LinkCommand { get => GetValue(LinkCommandProperty); set => SetValue(LinkCommandProperty, value); }
+
+    protected override Type StyleKeyOverride => typeof(StackPanel);
+
+    readonly TextBlock text = new() { TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+    readonly Button link = new() { IsVisible = false };
+
+    public SectionHint()
+    {
+        Orientation = Orientation.Horizontal;
+        Spacing = 10;
+        text.Classes.Add("muted");
+        link.Classes.Add("link");
+        Children.Add(text);
+        Children.Add(link);
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == TextProperty) text.Text = Text;
+        else if (change.Property == LinkTextProperty || change.Property == LinkCommandProperty)
+        {
+            link.Content = LinkText;
+            link.Command = LinkCommand;
+            link.IsVisible = !string.IsNullOrEmpty(LinkText) && LinkCommand is not null;
+        }
+    }
+}
+// A filter that is on or off, drawn like one segment of UsageFilterBar.
+sealed class FilterSwitch : Border
+{
+    public static readonly StyledProperty<bool> IsCheckedProperty =
+        AvaloniaProperty.Register<FilterSwitch, bool>(nameof(IsChecked), defaultBindingMode: Avalonia.Data.BindingMode.TwoWay);
+    public static readonly StyledProperty<string?> TextProperty = AvaloniaProperty.Register<FilterSwitch, string?>(nameof(Text));
+    public static readonly StyledProperty<Geometry?> IconProperty = AvaloniaProperty.Register<FilterSwitch, Geometry?>(nameof(Icon));
+
+    public bool IsChecked { get => GetValue(IsCheckedProperty); set => SetValue(IsCheckedProperty, value); }
+    public string? Text { get => GetValue(TextProperty); set => SetValue(TextProperty, value); }
+    public Geometry? Icon { get => GetValue(IconProperty); set => SetValue(IconProperty, value); }
+
+    readonly Button segment = new();
+    readonly PathIcon icon = new();
+    readonly TextBlock text = new();
+
+    public FilterSwitch()
+    {
+        BorderThickness = new Thickness(1);
+        CornerRadius = new CornerRadius(7);
+        Padding = new Thickness(3);
+        VerticalAlignment = VerticalAlignment.Center;
+        segment.Classes.Add("segment");
+        var label = new StackPanel { Children = { icon, text } };
+        label.Classes.Add("label");
+        segment.Content = label;
+        segment.Click += (_, _) => IsChecked = !IsChecked;
+        Child = segment;
+        AttachedToVisualTree += (_, _) =>
+        {
+            if (this.FindResource("Bg") is IBrush bg) Background = bg;
+            if (this.FindResource("Line") is IBrush line) BorderBrush = line;
+        };
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == IsCheckedProperty) segment.Classes.Set("selected", IsChecked);
+        else if (change.Property == TextProperty) { text.Text = Text; Avalonia.Automation.AutomationProperties.SetName(segment, Text); }
+        else if (change.Property == IconProperty) { icon.Data = Icon; icon.IsVisible = Icon is not null; }
+        else if (change.Property == ToolTip.TipProperty) ToolTip.SetTip(segment, ToolTip.GetTip(this));
     }
 }

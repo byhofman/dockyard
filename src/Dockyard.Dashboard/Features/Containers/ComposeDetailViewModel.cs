@@ -321,7 +321,8 @@ sealed class ComposeDetailViewModel : Observable, IDisposable
     async Task OpenLogs()
     {
         if (session.Client is not { } client) return;
-        owner.OpenLogs($"compose:{Project.Name}", Project.Name, await Sources(client));
+        var names = Project.Services.SelectMany(s => s.Containers).ToDictionary(c => c.Id, c => c.Name);
+        owner.OpenLogsSideBySide((await Sources(client)).Select(s => (names.GetValueOrDefault(s.Id, s.Id), s with { Prefix = null })).ToList());
     }
 
     public void Dispose()

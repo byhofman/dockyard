@@ -1,0 +1,134 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:ctl="using:Dockyard.Dashboard.Controls"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:clu="using:Dockyard.Dashboard.Features.Clusters"
+             xmlns:kind="using:Dockyard.Kind"
+             xmlns:store="using:Dockyard.Dashboard.Store"
+             xmlns:sh="using:Dockyard.Shared"
+             xmlns:cont="using:Dockyard.Dashboard.Features.Containers"
+             x:Class="Dockyard.Dashboard.Features.Clusters.ClusterDetailView"
+             x:DataType="clu:ClusterDetail">
+  <DockPanel DataContext="{Binding Clusters}" x:DataType="clu:ClustersViewModel">
+    <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="16,14,16,10">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Classes="title" Text="{Binding Selected.Name, FallbackValue=''}" TextWrapping="Wrap" VerticalAlignment="Center" />
+        <Button Grid.Column="1" Classes="iconbtn" Command="{Binding ClearSelectionCommand}" ToolTip.Tip="Close">
+          <PathIcon Data="{StaticResource IconClose}" />
+        </Button>
+      </Grid>
+      <TextBlock Classes="muted" Text="{Binding Selected.Summary, FallbackValue=''}" TextWrapping="Wrap" />
+      <WrapPanel ItemSpacing="6" LineSpacing="6" Margin="0,4,0,0">
+        <Button Command="{Binding ToggleCommand}" ToolTip.Tip="Stops or starts its nodes; everything in the cluster stays">
+          <Panel>
+            <StackPanel Classes="label" IsVisible="{Binding Selected.IsRunning, FallbackValue=False}"><PathIcon Data="{StaticResource IconStop}" /><TextBlock Text="Stop" /></StackPanel>
+            <StackPanel Classes="label" IsVisible="{Binding !Selected.IsRunning, FallbackValue=False}"><PathIcon Data="{StaticResource IconPlay}" /><TextBlock Text="Start" /></StackPanel>
+          </Panel>
+        </Button>
+        <Button Command="{Binding UseContextCommand}" ToolTip.Tip="Makes it the current context in your kubeconfig, adding it back if it went missing">
+          <TextBlock Text="Use context" />
+        </Button>
+        <Button Command="{Binding EditCommand}" ToolTip.Tip="Add or remove add-ons on the running cluster">
+          <StackPanel Classes="label"><PathIcon Data="{StaticResource IconSettings}" /><TextBlock Text="Add-ons…" /></StackPanel>
+        </Button>
+        <Button Classes="danger" Command="{Binding DeleteCommand}" ToolTip.Tip="Delete (Del)">
+          <StackPanel Classes="label"><PathIcon Data="{StaticResource IconDelete}" /><TextBlock Text="Delete…" /></StackPanel>
+        </Button>
+      </WrapPanel>
+    </StackPanel>
+
+    <TabControl Margin="4,0,4,0" SelectedIndex="{Binding $parent[UserControl].((clu:ClusterDetail)DataContext).SelectedTab}">
+      <TabItem Header="Access">
+        <ScrollViewer>
+          <StackPanel Margin="12,8" Spacing="10">
+            <TextBlock Classes="muted small" Text="Context" />
+            <SelectableTextBlock Classes="mono" Text="{Binding Selected.Context, FallbackValue=''}" />
+            <TextBlock Classes="muted small" Text="API server" />
+            <SelectableTextBlock Classes="mono" Text="{Binding Selected.ApiServer, FallbackValue=''}" />
+            <SelectableTextBlock Classes="mono muted small" Text="{Binding KubectlHint}" TextWrapping="Wrap" />
+            <WrapPanel ItemSpacing="6" LineSpacing="6">
+              <Button Command="{Binding CopyKubeconfigCommand}" ToolTip.Tip="kind get kubeconfig, onto the clipboard">
+                <StackPanel Classes="label"><PathIcon Data="{StaticResource IconCopy}" /><TextBlock Text="Copy kubeconfig" /></StackPanel>
+              </Button>
+              <Button Command="{Binding CopyHeadlampTokenCommand}" IsVisible="{Binding HasHeadlamp}" ToolTip.Tip="A cluster-admin token, valid for a day, onto the clipboard: to sign in to Headlamp">
+                <StackPanel Classes="label"><PathIcon Data="{StaticResource IconCopy}" /><TextBlock Text="Admin token" /></StackPanel>
+              </Button>
+            </WrapPanel>
+            <StackPanel IsVisible="{Binding HasHeadlamp}" Spacing="4">
+              <TextBlock Classes="muted small" Text="Headlamp" />
+              <Button Classes="link" Content="{Binding HeadlampUrl}" Command="{Binding OpenHeadlampCommand}" HorizontalAlignment="Left" />
+            </StackPanel>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <TabItem Header="Load balancer">
+        <ScrollViewer>
+          <StackPanel Margin="12,8" Spacing="10">
+            <Button Content="Change…" Command="{Binding LoadBalancerCommand}" HorizontalAlignment="Left"
+                    ToolTip.Tip="On or off for this cluster, and its ports on 127.0.0.1" />
+            <SelectableTextBlock Classes="mono" Text="{Binding ForwardsText}" TextWrapping="Wrap" IsVisible="{Binding HasForwards}" />
+            <ItemsControl ItemsSource="{Binding LoadBalancerRows}" IsVisible="{Binding HasLoadBalancers}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="clu:LoadBalancer">
+                  <StackPanel Margin="0,2">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Text="{Binding Service}" TextTrimming="CharacterEllipsis" />
+                      <SelectableTextBlock Classes="muted mono" Text="{Binding Address}" IsVisible="{Binding HasAddress}"
+                                           ToolTip.Tip="The service's load balancer IP on the kind network, as kubectl shows it under EXTERNAL-IP" />
+                    </StackPanel>
+                    <ctl:PortLinks ItemsSource="{Binding Ports}" ShowUrl="True" OpenCommand="{Binding $parent[UserControl].((clu:ClusterDetail)DataContext).Clusters.OpenUrlCommand}" />
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Classes="muted small" Text="{Binding LoadBalancerHint}" TextWrapping="Wrap" />
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <TabItem Header="Storage">
+        <ScrollViewer>
+          <StackPanel Margin="12,8" Spacing="10">
+            <TextBlock Classes="muted" Text="{Binding SharedStorageText}" TextWrapping="Wrap" />
+            <Button Content="Open the shared folder" Command="{Binding OpenSharedFolderCommand}" IsVisible="{Binding HasSharedFolder}"
+                    HorizontalAlignment="Left" ToolTip.Tip="{Binding SharedFolder}" />
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <TabItem Header="Definition">
+        <DockPanel Margin="12,8">
+          <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8">
+            <WrapPanel ItemSpacing="6" LineSpacing="6">
+              <Button Command="{Binding RecreateCommand}" ToolTip.Tip="kind cannot change a cluster that exists: this deletes it and makes it again from a changed definition">
+                <StackPanel Classes="label"><PathIcon Data="{StaticResource IconRestart}" /><TextBlock Text="Change and recreate…" /></StackPanel>
+              </Button>
+              <Button Command="{Binding DuplicateCommand}" ToolTip.Tip="A new cluster from this one's definition">
+                <StackPanel Classes="label"><PathIcon Data="{StaticResource IconCopy}" /><TextBlock Text="Duplicate…" /></StackPanel>
+              </Button>
+            </WrapPanel>
+            <TextBlock Classes="muted small" Text="kind's cluster config this cluster was made from." TextWrapping="Wrap" />
+          </StackPanel>
+          <sh:CodeEditor Language="Yaml" Text="{Binding DefinitionYaml, Mode=OneWay}" IsReadOnly="True" />
+        </DockPanel>
+      </TabItem>
+
+      <TabItem Header="Logs" DataContext="{Binding $parent[UserControl].((clu:ClusterDetail)DataContext)}" x:DataType="clu:ClusterDetail">
+        <Panel>
+          <ListBox Classes="log" ItemsSource="{Binding Logs.Rows}" Background="{DynamicResource Bg}"
+                   ScrollViewer.HorizontalScrollBarVisibility="Auto">
+            <ListBox.ItemTemplate>
+              <DataTemplate DataType="cont:LogRow">
+                <ctl:AnsiTextBlock Classes="mono" Classes.err="{Binding IsError}" Line="{Binding Line}" />
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+          <Button Classes="iconbtn" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,6,18,0" Command="{Binding OpenLogsCommand}"
+                  ToolTip.Tip="Open each container's logs in the log panel, side by side" AutomationProperties.Name="Open in the log panel">
+            <PathIcon Data="{StaticResource IconExpand}" />
+          </Button>
+        </Panel>
+      </TabItem>
+    </TabControl>
+  </DockPanel>
+</UserControl>

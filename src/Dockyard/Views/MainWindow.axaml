@@ -156,10 +156,20 @@
         <StackPanel Spacing="10" IsVisible="{Binding ShowWizardManage}">
           <TextBlock Classes="h2" Text="MANAGE" />
           <Border Classes="card">
-            <Grid ColumnDefinitions="*,Auto">
-              <TextBlock TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,16,0" Text="{Binding ManageText}" />
-              <Button Grid.Column="1" Classes="primary" Content="{Binding ReinstallText}" Command="{Binding InstallCommand}" />
-            </Grid>
+            <StackPanel Spacing="14">
+              <TextBlock TextWrapping="Wrap" Text="{Binding ManageText}" />
+              <ItemsControl ItemsSource="{Binding OptionalChoices}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ComponentViewModel">
+                    <CheckBox IsChecked="{Binding Include}" ToolTip.Tip="Checked is installed when you go on, unchecked is removed.">
+                      <TextBlock Text="{Binding IncludeText}" TextWrapping="Wrap" />
+                    </CheckBox>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="{Binding RequiredSummary}" />
+              <Button Classes="primary" Content="{Binding ReinstallText}" Command="{Binding InstallCommand}" HorizontalAlignment="Right" />
+            </StackPanel>
           </Border>
         </StackPanel>
 
