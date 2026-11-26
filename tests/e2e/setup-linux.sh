@@ -4,11 +4,12 @@
 set -eu
 container=0; [ "${1:-}" = --container ] && container=1
 
-dockyard() {
-  if [ -n "${ONELINER:-}" ]; then curl -fsSL "$ONELINER" | sh -s -- "$@"; else "$DOCKYARD" "$@"; fi
-}
+# The one-liner runs dockyard setup with its arguments; other commands go to the dockyard it installed.
 setup() {
-  if [ -n "${ONELINER:-}" ]; then dockyard setup "$@"; else dockyard setup "$@" --assets "$(dirname "$DOCKYARD")"; fi
+  if [ -n "${ONELINER:-}" ]; then curl -fsSL "$ONELINER" | sh -s -- "$@"; else "$DOCKYARD" setup "$@" --assets "$(dirname "$DOCKYARD")"; fi
+}
+dockyard() {
+  if [ -z "${ONELINER:-}" ]; then "$DOCKYARD" "$@"; elif [ -x /usr/bin/dockyard ]; then /usr/bin/dockyard "$@"; else "$HOME/.local/bin/dockyard" "$@"; fi
 }
 ok() { echo "  ok   $1"; }
 fail() { echo "  FAIL $1" >&2; exit 1; }
@@ -271,7 +272,7 @@ if [ "$container" -eq 1 ] && [ "$ID" != arch ]; then
   echo "== removed again, silent without root has no way up"
   dockyard uninstall
   useradd -m dockyard-e2e 2>/dev/null || true
-  if [ -n "${ONELINER:-}" ]; then as_user="curl -fsSL $ONELINER | sh -s -- setup --silent --no-start"; else as_user="$DOCKYARD setup --silent --no-start --assets $(dirname "$DOCKYARD")"; fi
+  if [ -n "${ONELINER:-}" ]; then as_user="curl -fsSL $ONELINER | sh -s -- --silent --no-start"; else as_user="$DOCKYARD setup --silent --no-start --assets $(dirname "$DOCKYARD")"; fi
   out="$(su dockyard-e2e -c "$as_user" 2>&1)" && fail "exited 0 without root"
   echo "$out" | grep -q "needs root" && ok "non-zero with a clear message" || fail "message was: $out"
 fi

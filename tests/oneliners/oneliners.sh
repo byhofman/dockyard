@@ -1,5 +1,5 @@
 #!/bin/sh
-# The one-liners only fetch the dockyard command, check it and run `dockyard setup`. Fake curl, a fake dockyard, and a
+# The one-liners only fetch the dockyard command, check it and run `dockyard setup` with their arguments. Fake curl, a fake dockyard, and a
 # PATH with a trap for everything an install would run, so a script that does more than its job fails here.
 set -eu
 root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -90,9 +90,9 @@ scenario() {
   echo "== $name"
 
   good_sums; reset
-  env PATH="$bin:$PATH" sh "$script" setup --silent --without tray --without dashboard >/dev/null || fail "$name: exit $?"
+  env PATH="$bin:$PATH" sh "$script" --silent --without tray --without dashboard >/dev/null || fail "$name: exit $?"
   [ "$(cat "$work/dockyard-runs")" = ran ] && pass "runs dockyard once" || fail "$name: dockyard did not run"
-  [ "$(tr '\n' ' ' < "$work/dockyard-args")" = "setup --silent --without tray --without dashboard " ] && pass "passes setup and its arguments through" || fail "$name: arguments were: $(cat "$work/dockyard-args")"
+  [ "$(tr '\n' ' ' < "$work/dockyard-args")" = "setup --silent --without tray --without dashboard " ] && pass "runs dockyard setup with the arguments" || fail "$name: arguments were: $(cat "$work/dockyard-args")"
   [ ! -f "$work/forbidden" ] && pass "installs nothing itself" || fail "$name: ran $(cat "$work/forbidden")"
   downloads="$(grep -o '/releases/download/[^ ]*' "$work/curl.log" | LC_ALL=C sort | tr '\n' ' ')"
   [ "$downloads" = "/releases/download/cli/9.9.9/SHA256SUMS /releases/download/cli/9.9.9/$asset /releases/download/index/components.json " ] \
@@ -103,7 +103,7 @@ scenario() {
   [ "$(tr '\n' ' ' < "$work/dockyard-args")" = "setup " ] && pass "without arguments it runs dockyard setup" || fail "$name: arguments were: $(cat "$work/dockyard-args")"
 
   good_sums; reset
-  env PATH="$bin:$PATH" DOCKYARD_VERSION=1.2.3 sh "$script" setup >/dev/null 2>&1 || true
+  env PATH="$bin:$PATH" DOCKYARD_VERSION=1.2.3 sh "$script" >/dev/null 2>&1 || true
   grep -q '/releases/download/cli/1.2.3/' "$work/curl.log" && ! grep -q 'components.json' "$work/curl.log" \
     && pass "DOCKYARD_VERSION names the command's release" || fail "$name: $(cat "$work/curl.log")"
 
@@ -113,7 +113,7 @@ scenario() {
 
   good_sums; reset
   sed -i.bak "s/^[0-9a-f]\{8\}\(.* $asset\)\$/00000000\1/" "$assets/SHA256SUMS"
-  rc=0; env PATH="$bin:$PATH" sh "$script" setup --silent >/dev/null 2>&1 || rc=$?
+  rc=0; env PATH="$bin:$PATH" sh "$script" --silent >/dev/null 2>&1 || rc=$?
   [ "$rc" -ne 0 ] && pass "fails on a bad checksum" || fail "$name: exit 0 on a bad checksum"
   [ ! -f "$work/dockyard-runs" ] && pass "and does not run dockyard" || fail "$name: ran a file with a bad checksum"
 

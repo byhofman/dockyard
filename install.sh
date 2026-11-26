@@ -1,7 +1,7 @@
 #!/bin/sh
 # Dockyard for Linux. This only fetches the dockyard command, checks it and runs dockyard setup:
 #   curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install.sh | sh
-# Arguments go to the command: ... | sh -s -- setup --silent --without dashboard
+# Arguments go to setup: ... | sh -s -- --silent --without dashboard
 set -eu
 repo=byhofman/dockyard
 asset=dockyard-linux-x64
@@ -27,5 +27,4 @@ curl -fsSL -o "$dir/SHA256SUMS" "https://github.com/$repo/releases/download/$tag
 (cd "$dir" && grep " $asset\$" SHA256SUMS | sha256sum -c - >/dev/null) || { echo "Checksum mismatch for $asset, not running it" >&2; exit 1; }
 
 chmod +x "$dir/$asset"
-[ $# -gt 0 ] || set -- setup
-"$dir/$asset" "$@"
+"$dir/$asset" setup "$@"

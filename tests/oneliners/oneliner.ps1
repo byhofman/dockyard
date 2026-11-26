@@ -40,8 +40,8 @@ function global:Invoke-WebRequest {
 
 function Run { & ([scriptblock]::Create($script)) @args }
 
-Write-Host '== passes setup and its arguments through and installs nothing itself'
-Run setup --silent --without tray --without dashboard | Out-Null
+Write-Host '== runs dockyard setup with the arguments and installs nothing itself'
+Run --silent --without tray --without dashboard | Out-Null
 if ((Get-Content $record -Raw) -ne 'setup --silent --without tray --without dashboard') { Fail "arguments were: $(Get-Content $record -Raw)" }
 Ok 'arguments'
 $expected = @('https://github.com/byhofman/dockyard/releases/download/index/components.json',
@@ -62,23 +62,23 @@ Ok 'setup'
 Write-Host '== DOCKYARD_VERSION names the command''s release'
 $global:requests = @()
 $env:DOCKYARD_VERSION = '9.9.9'
-Run setup | Out-Null
+Run | Out-Null
 Remove-Item Env:DOCKYARD_VERSION
 if ($global:requests -like '*components.json' -or -not ($global:requests -like '*/cli/9.9.9/*')) { Fail "downloads: $($global:requests -join ', ')" }
 Ok 'no index, the cli release named'
 
 Write-Host '== a failing dockyard is a failure, a reboot is not'
-$threw = $false; try { Run setup --fail | Out-Null } catch { $threw = $true }
+$threw = $false; try { Run --fail | Out-Null } catch { $threw = $true }
 if (-not $threw) { Fail 'exit code 7 did not throw' }
 Ok 'exit code 7 throws'
-Run setup --reboot | Out-Null
+Run --reboot | Out-Null
 if ($global:LASTEXITCODE -ne 3010) { Fail "LASTEXITCODE is $global:LASTEXITCODE" }
 Ok '3010 passes as the exit code'
 
 Write-Host '== a bad checksum stops it'
 Remove-Item $record
 $global:sums = "$('0' * 64)  $asset`n"
-$threw = $false; try { Run setup --silent | Out-Null } catch { $threw = $true }
+$threw = $false; try { Run --silent | Out-Null } catch { $threw = $true }
 if (-not $threw) { Fail 'no failure on a bad checksum' }
 if (Test-Path $record) { Fail 'ran a file with a bad checksum' }
 if (Test-Path (Join-Path $work "Downloads\$asset")) { Fail 'left the file behind' }
@@ -86,14 +86,14 @@ Ok 'not run, not left behind'
 
 Write-Host '== checksums without the command stop it'
 $global:sums = "$hash  other.exe`n"
-$threw = $false; try { Run setup --silent | Out-Null } catch { $threw = $true }
+$threw = $false; try { Run --silent | Out-Null } catch { $threw = $true }
 if (-not $threw -or (Test-Path $record)) { Fail 'ran without a listed checksum' }
 Ok 'not run'
 
 Write-Host '== an index without the command stops it'
 $global:sums = "$hash  $asset`n"
 $global:index = '{ "tray": { "version": "9.8.0", "tag": "tray/9.8.0" } }'
-$threw = $false; try { Run setup --silent | Out-Null } catch { $threw = $true }
+$threw = $false; try { Run --silent | Out-Null } catch { $threw = $true }
 if (-not $threw -or (Test-Path $record)) { Fail 'ran without a cli release' }
 Ok 'not run'
 

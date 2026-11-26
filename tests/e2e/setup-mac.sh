@@ -44,11 +44,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
-dockyard() {
-  if [ -n "${ONELINER:-}" ]; then curl -fsSL "$ONELINER" | sh -s -- "$@"; else "$DOCKYARD" "$@"; fi
-}
+# The one-liner runs dockyard setup with its arguments; other commands go to the dockyard it installed.
 setup() {
-  if [ -n "${ONELINER:-}" ]; then dockyard setup "$@"; else dockyard setup "$@" --assets "$(dirname "$DOCKYARD")"; fi
+  if [ -n "${ONELINER:-}" ]; then curl -fsSL "$ONELINER" | sh -s -- "$@"; else "$DOCKYARD" setup "$@" --assets "$(dirname "$DOCKYARD")"; fi
+}
+dockyard() {
+  if [ -n "${ONELINER:-}" ]; then "$macos/dockyard-cli" "$@"; else "$DOCKYARD" "$@"; fi
 }
 
 fingerprint() {

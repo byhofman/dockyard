@@ -60,17 +60,17 @@ What you removed stays removed when you run setup again or update.
 
 ### Without a window
 
-Add `setup` and its arguments to the same line:
+Add `dockyard setup`'s arguments to the same line:
 
 ```pwsh
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/byhofman/dockyard/main/install.ps1))) setup --silent --without dashboard
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/byhofman/dockyard/main/install.ps1))) --silent --without dashboard
 ```
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install.sh | sh -s -- setup --silent --without dashboard
+curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install.sh | sh -s -- --silent --without dashboard
 ```
 
-Any `dockyard` command goes the same way, for example `… | sh -s -- uninstall`. These are `dockyard setup`'s arguments:
+The line runs `dockyard setup` with them; once installed, `dockyard` itself takes every other command. These are setup's arguments:
 
 | Argument | Meaning |
 |---|---|
@@ -91,12 +91,12 @@ Any `dockyard` command goes the same way, for example `… | sh -s -- uninstall`
 The engine, the docker CLI and the Dockyard CLI, with no tray and no dashboard. On Windows Server the Linux engine is not part of a new install, so there is no WSL either; `--with linux-engine` adds it.
 
 ```pwsh
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/byhofman/dockyard/main/install.ps1))) setup --silent --without tray --without dashboard
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/byhofman/dockyard/main/install.ps1))) --silent --without tray --without dashboard
 ```
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install-mac.sh | sh -s -- setup --silent --without tray --without dashboard
-curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install.sh | sh -s -- setup --silent --without tray --without dashboard
+curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install-mac.sh | sh -s -- --silent --without tray --without dashboard
+curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install.sh | sh -s -- --silent --without tray --without dashboard
 ```
 
 The first sh line is for macOS, the second for Linux.

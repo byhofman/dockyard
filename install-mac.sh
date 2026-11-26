@@ -1,7 +1,7 @@
 #!/bin/sh
 # Dockyard for macOS (Apple silicon, macOS 14+). This only fetches the dockyard command, checks it and runs dockyard setup:
 #   curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install-mac.sh | sh
-# Arguments go to the command: ... | sh -s -- setup --silent --without dashboard
+# Arguments go to setup: ... | sh -s -- --silent --without dashboard
 # curl sets no quarantine attribute, so Gatekeeper does not block the ad-hoc signed command.
 set -eu
 repo=byhofman/dockyard
@@ -28,5 +28,4 @@ curl -fsSL -o "$dir/SHA256SUMS" "https://github.com/$repo/releases/download/$tag
 (cd "$dir" && grep " $asset\$" SHA256SUMS | shasum -a 256 -c - >/dev/null) || { echo "Checksum mismatch for $asset, not running it" >&2; exit 1; }
 
 chmod +x "$dir/$asset"
-[ $# -gt 0 ] || set -- setup
-"$dir/$asset" "$@"
+"$dir/$asset" setup "$@"

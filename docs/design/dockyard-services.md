@@ -1,6 +1,6 @@
 # Dockyard services and dockyard-host
 
-Status: direction set by the owner 2026-11-25: "[the installer] should not host any port. These
+Status: direction set by the owner 2026-11-25: "the toolbox is just the installer, it should not host any port. These
 services for DNS and port proxying should be in containers as much as possible, and if any OS integration is needed, that
 should be a separate OS native service providing only the integration part (adapter)."
 

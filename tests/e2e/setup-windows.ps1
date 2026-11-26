@@ -33,25 +33,25 @@ function Ok($text) { Write-Host "  ok   $text" }
 function Check($text, $condition) { if ($condition) { Ok $text } else { throw "FAIL $text" } }
 function Section($text) { Write-Host "== $text" -ForegroundColor Cyan }
 
-# dockyard <args>: the one-liner passes its arguments to the command it downloads.
+# dockyard <args>: the command under test, or the one the one-liner installed.
 function Run-Dockyard {
+    $exe = if ($OneLiner) { $cli } else { (Resolve-Path $Dockyard).Path }
+    $out = New-TemporaryFile; $err = New-TemporaryFile
+    $p = Start-Process $exe -ArgumentList @($args) -Wait -PassThru -NoNewWindow -RedirectStandardOutput $out -RedirectStandardError $err
+    Get-Content $out, $err | Write-Host
+    Find-Tools
+    return $p.ExitCode
+}
+
+# dockyard setup <args>: the one-liner runs it with its arguments. A build takes the tray, the image and the dashboard
+# built next to the command, which a build before its release cannot download.
+function Run {
     if ($OneLiner) {
         & ([scriptblock]::Create((Invoke-RestMethod $OneLiner))) @args
         $exit = $global:LASTEXITCODE
         Find-Tools
         return $exit
     }
-    $out = New-TemporaryFile; $err = New-TemporaryFile
-    $p = Start-Process (Resolve-Path $Dockyard) -ArgumentList @($args) -Wait -PassThru -NoNewWindow -RedirectStandardOutput $out -RedirectStandardError $err
-    Get-Content $out, $err | Write-Host
-    Find-Tools
-    return $p.ExitCode
-}
-
-# dockyard setup <args>, with the tray, the image and the dashboard built next to the command, which a build before its
-# release cannot download.
-function Run {
-    if ($OneLiner) { return Run-Dockyard setup @args }
     return Run-Dockyard setup @args --assets (Split-Path (Resolve-Path $Dockyard))
 }
 

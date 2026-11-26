@@ -3,9 +3,9 @@
 
     irm https://raw.githubusercontent.com/byhofman/dockyard/main/install.ps1 | iex
 
-  Arguments go to the command:
+  Arguments go to setup:
 
-    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/byhofman/dockyard/main/install.ps1))) setup --silent --without dashboard
+    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/byhofman/dockyard/main/install.ps1))) --silent --without dashboard
 #>
 & {
     $ErrorActionPreference = 'Stop'
@@ -39,7 +39,7 @@
         throw "The checksum of $name does not match the one in $tag, not running it."
     }
 
-    $arguments = if ($args) { @($args) } else { @('setup') }
+    $arguments = @('setup') + @($args)
     $parameters = @{ FilePath = $exe; Wait = $true; PassThru = $true; NoNewWindow = $true }
     $parameters.ArgumentList = @($arguments | ForEach-Object { if ($_ -match '\s') { "`"$_`"" } else { $_ } })
     try {
