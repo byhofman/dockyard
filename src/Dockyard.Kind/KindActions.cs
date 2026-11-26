@@ -82,6 +82,32 @@ sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
         finally { scratch.Delete(recursive: true); }
     }
 
+    // What the cluster has now, not what Dockyard once put in: a chart removed with helm or kubectl is gone here too.
+    public async Task<(List<ClusterAddon> Addons, bool Nfs)> Actual(string name, string helm)
+    {
+        var scratch = Directory.CreateTempSubdirectory("dockyard-kind-");
+        try
+        {
+            var own = Path.Combine(scratch.FullName, "config");
+            await File.WriteAllTextAsync(own, await Kubeconfig(name));
+            var psi = new System.Diagnostics.ProcessStartInfo(helm) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+            foreach (var a in new[] { "list", "--all-namespaces", "--output", "json", "--kubeconfig", own, "--kube-context", KindKubeconfig.Key(name) }) psi.ArgumentList.Add(a);
+            using var process = System.Diagnostics.Process.Start(psi) ?? throw new InvalidOperationException("Could not start helm");
+            var output = await process.StandardOutput.ReadToEndAsync();
+            var error = await process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+            if (process.ExitCode != 0) throw new InvalidOperationException($"Could not read the add-ons of {name}: {error.Trim()}");
+            var releases = new HashSet<(string, string)>();
+            foreach (var r in System.Text.Json.JsonDocument.Parse(output.Length > 0 ? output : "[]").RootElement.EnumerateArray())
+                releases.Add((r.GetProperty("name").GetString() ?? "", r.GetProperty("namespace").GetString() ?? ""));
+            var context = dockerContext.Length > 0 ? dockerContext : "default";
+            var nfs = (await SharedStorage.Docker(["--context", context, "exec", name + "-control-plane", "kubectl", "--kubeconfig", SharedStorage.AdminConfig,
+                "get", "storageclass", NfsStorage.ClassName])).ExitCode == 0;
+            return (ClusterAddons.All.Where(a => releases.Contains((a.Release, a.Namespace))).ToList(), nfs);
+        }
+        finally { scratch.Delete(recursive: true); }
+    }
+
     public async Task Delete(string name, Action<string>? onLine = null)
     {
         var scratch = Directory.CreateTempSubdirectory("dockyard-kind-");

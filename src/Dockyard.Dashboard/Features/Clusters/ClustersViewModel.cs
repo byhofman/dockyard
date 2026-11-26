@@ -23,7 +23,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         CreateCommand = new Command(() => { AskCreate(); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine);
         DeleteCommand = new Command(() => { AskDelete(Picked); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine && SelectionCount > 0);
         DeleteRowCommand = new Command<KindCluster>(c => { AskDelete([c]); return Task.CompletedTask; });
-        EditCommand = new Command(() => { if (Selected is { } c) AskEdit(c); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine && Selected is { IsRunning: true });
+        EditCommand = new Command(() => Selected is { } c ? AskEdit(c) : Task.CompletedTask, () => !IsBusy && HasKind && !NeedsLinuxEngine && Selected is { IsRunning: true });
         OpenHeadlampCommand = new Command(() =>
         {
             if (HeadlampUrl is { } url)
@@ -188,6 +188,13 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
             plans.Add((cluster, forwards, taken));
         }
         var wanted = HasKind && all.Any(c => c.IsRunning && WantsLoadBalancer(c.Name));
+        // dockyard-nfs runs while a running cluster stores on it: removed, stopped or broken, it is started again.
+        var nfsWanted = HasKind && all.Any(c => c.IsRunning && DefinitionFor(c.Name)?.Storage == ClusterStorage.Nfs);
+        if (nfsWanted && !syncing && Session.Containers.Items.All(i => i.Name != NfsStorage.ContainerName || !i.IsRunning))
+        {
+            try { await NfsStorage.EnsureServer(context, line => Shell.Activity.Note(line, ActivityKind.Info)); }
+            catch (InvalidOperationException ex) { Shell.Activity.Note(ex.Message, ActivityKind.Error); }
+        }
         var plan = $"{wanted};" + string.Join(';', plans.Select(p => $"{p.Cluster.Name}:{p.Cluster.IsRunning}:{LoadBalancers.Describe(p.Forwards)}"));
         if (plan == appliedPlan) return;
         syncing = true;
@@ -443,14 +450,30 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
 
     // What can change on a running cluster: its add-ons, through Helm. Storage and the kind config are the nodes' own and
     // need Recreate.
-    void AskEdit(KindCluster cluster)
+    async Task AskEdit(KindCluster cluster)
     {
         if (CliLocator.Locate("helm") is not { } helm)
         {
             Shell.ShowError("The add-ons go in with Helm, which is not installed. Add it in the Dockyard Toolbox.");
             return;
         }
-        var current = DefinitionOf(cluster);
+        var saved = DefinitionOf(cluster);
+        if (kind is not { } exe) return;
+        // As the cluster is now: a chart taken out with helm or kubectl, or NFS removed by hand, shows as gone.
+        List<ClusterAddon> actual;
+        bool actualNfs;
+        try { (actual, actualNfs) = await new KindActions(exe, Session.ContextName, kubeconfig).Actual(cluster.Name, helm); }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or System.Text.Json.JsonException) { Shell.ShowError(ex.Message); return; }
+        var current = saved with
+        {
+            Addons = actual.Select(a => a.Release).ToList(),
+            Storage = saved.Storage == ClusterStorage.HostFolder ? ClusterStorage.HostFolder : actualNfs ? ClusterStorage.Nfs : ClusterStorage.None,
+        };
+        if (!current.Addons.SequenceEqual(saved.Addons) || current.Storage != saved.Storage)
+        {
+            ClusterDefinitions.Save(cluster.Name, current);
+            RefreshCommands();
+        }
         bool Has(ClusterAddon a) => current.Addons.Contains(a.Release);
         var metrics = DialogField.Check($"metrics-server {ClusterAddons.MetricsServer.Version}: kubectl top and pod autoscaling", Has(ClusterAddons.MetricsServer));
         var traefik = DialogField.Check($"Traefik {ClusterAddons.Traefik.Version}: an ingress controller, reachable through the load balancer", Has(ClusterAddons.Traefik));
