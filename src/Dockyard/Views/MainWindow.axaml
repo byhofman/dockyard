@@ -263,11 +263,11 @@
               <Border Grid.Row="3" x:Name="DomainsSetting" Classes="setting" Classes.highlight="{Binding HighlightDomains}" />
               <ToggleSwitch Grid.Row="3" IsChecked="{Binding ContainerDomains}"
                             ToolTip.Tip="Every running container answers at http://name.dockyard.internal without a published port, a kind cluster's ingress at host.cluster.dockyard.internal, and names a cluster publishes resolve everywhere. Served by dockyard-proxy and dockyard-etcd, which go when this is off; containers keep their DNS."
-                            OnContent="Container domains" OffContent="Container domains" />
+                            OnContent="{x:Static vm:MainViewModel.DomainsLabel}" OffContent="{x:Static vm:MainViewModel.DomainsLabel}" />
               <Border Grid.Row="4" x:Name="HttpsSetting" Classes="setting" Classes.highlight="{Binding HighlightHttps}" />
               <ToggleSwitch Grid.Row="4" IsChecked="{Binding HttpsSwitch}" IsEnabled="{Binding ContainerDomains}"
                             ToolTip.Tip="Every running container answers at http://name.dockyard.internal without a published port. Trusted HTTPS adds a certificate authority of Dockyard's own, made on this computer and valid only for names under dockyard.internal; your system asks to trust it. Off takes it out of the trust store again."
-                            OnContent="Trusted HTTPS for container domains" OffContent="Trusted HTTPS for container domains" />
+                            OnContent="{x:Static vm:MainViewModel.HttpsLabel}" OffContent="{x:Static vm:MainViewModel.HttpsLabel}" />
               <ToggleSwitch IsChecked="{Binding StopOtherOnSwitch}" IsVisible="{Binding HasEngineSwitch}"
                             OnContent="Stop the other engine when switching" OffContent="Stop the other engine when switching" />
               <ToggleSwitch Grid.Row="1" IsChecked="{Binding StartActiveAtLogon}" OnContent="Start the active engine at logon" OffContent="Start the active engine at logon" />
