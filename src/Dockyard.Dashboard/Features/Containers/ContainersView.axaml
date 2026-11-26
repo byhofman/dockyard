@@ -179,7 +179,11 @@
                 </ItemsControl>
                 <TextBlock Grid.Column="5" Classes="muted mono" Text="{Binding UsageText}" MinWidth="120" TextAlignment="Right"
                            VerticalAlignment="Center" />
-                <StackPanel Grid.Column="6" Classes="rowactions" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0" IsVisible="{Binding IsManaged}">
+                <StackPanel Grid.Column="6" Classes="rowactions" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                  <Button Classes="iconbtn" ToolTip.Tip="Restart" IsVisible="{Binding IsSystem}"
+                          Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).RestartCommand}" CommandParameter="{Binding}">
+                    <PathIcon Data="{StaticResource IconRestart}" />
+                  </Button>
                   <Button Classes="iconbtn" ToolTip.Tip="Start or stop (S)"
                           Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).ToggleCommand}" CommandParameter="{Binding}">
                     <Panel>
@@ -187,11 +191,11 @@
                       <PathIcon Data="{StaticResource IconPlay}" IsVisible="{Binding IsStopped}" />
                     </Panel>
                   </Button>
-                  <Button Classes="iconbtn" ToolTip.Tip="Terminal (E)" IsEnabled="{Binding IsRunning}"
+                  <Button Classes="iconbtn" ToolTip.Tip="Terminal (E)" IsEnabled="{Binding IsRunning}" IsVisible="{Binding IsManaged}"
                           Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).ExecCommand}" CommandParameter="{Binding}">
                     <PathIcon Data="{StaticResource IconTerminal}" />
                   </Button>
-                  <Button Classes="iconbtn danger" ToolTip.Tip="Remove (Del)"
+                  <Button Classes="iconbtn danger" ToolTip.Tip="Remove (Del)" IsVisible="{Binding IsManaged}"
                           Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).AskRemoveCommand}" CommandParameter="{Binding}">
                     <PathIcon Data="{StaticResource IconDelete}" />
                   </Button>

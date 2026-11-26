@@ -24,6 +24,10 @@ sealed class AgentApi(DomainTable table, DomainProxy proxy, Services? services =
                 case "choose-port" when request is { Container: { } container }:
                     table.Choose(container, request.Port);
                     return new AgentReply { Domains = table.List(), Https = proxy.HasCertificate };
+                case "names" when request is { On: { } on }:
+                    table.Enabled = on;
+                    services?.NamesChanged();
+                    return new AgentReply();
                 case "tls" when request is { Cert: { } cert, Key: { } key }:
                     proxy.SetCertificate(cert, key);
                     services?.SetCertificate(cert, key);

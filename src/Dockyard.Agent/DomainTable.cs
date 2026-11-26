@@ -19,13 +19,38 @@ sealed class DomainTable(Func<DockerClient> connect, string choicesFile, Action<
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException) { return []; }
     }
 
+    // Container domains switched off in the Toolbox: no names, no routes, no cluster ingress; kept in a file next to the
+    // port choices, so a restarted agent stays off.
+    string OffMarker => Path.Combine(Path.GetDirectoryName(choicesFile)!, "names-off");
+
+    public bool Enabled
+    {
+        get => !File.Exists(OffMarker);
+        set
+        {
+            try
+            {
+                if (value) File.Delete(OffMarker);
+                else
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(OffMarker)!);
+                    File.WriteAllText(OffMarker, "");
+                }
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { log($"cannot keep container domains {(value ? "on" : "off")}: {e.Message}"); }
+            Changed();
+        }
+    }
+
     public DomainTarget? Find(string domain)
     {
+        if (!Enabled) return null;
         lock (gate) return byDomain.GetValueOrDefault(domain);
     }
 
     public ClusterIngress? Ingress(string domain)
     {
+        if (!Enabled) return null;
         lock (gate) return DomainNames.ClusterOf(domain, clusters.Keys) is { } cluster ? clusters[cluster] : null;
     }
 
@@ -73,16 +98,19 @@ sealed class DomainTable(Func<DockerClient> connect, string choicesFile, Action<
 
     public List<string> Names()
     {
+        if (!Enabled) return [];
         lock (gate) return byDomain.Keys.ToList();
     }
 
     public List<ClusterIngress> Clusters()
     {
+        if (!Enabled) return [];
         lock (gate) return clusters.Values.ToList();
     }
 
     public List<ProxyRoute> Routes()
     {
+        if (!Enabled) return [];
         List<DomainTarget> targets;
         lock (gate) targets = byDomain.Values.ToList();
         List<ProxyRoute> routes = [];

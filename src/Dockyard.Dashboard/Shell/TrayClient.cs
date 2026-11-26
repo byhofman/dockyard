@@ -19,6 +19,7 @@ static class TrayClient
             TrayCommandKind.Settings => ["--tray", "--settings"],
             TrayCommandKind.Start => ["--tray", "--start", command.Engine!],
             TrayCommandKind.Switch => ["--tray", "--switch", command.Engine!],
+            TrayCommandKind.Highlight => ["--tray", "--highlight", command.Engine!],
             _ => ["--tray"],
         };
         try

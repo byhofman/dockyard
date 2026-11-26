@@ -9,6 +9,10 @@ static class ShellSetup
 
     public enum Kind { Bash, Zsh, PowerShell }
 
+    // How each shell uses them: PowerShell splats the array (kubectl run web --image nginx @do), bash and zsh expand it.
+    public static string DoAndNow(Kind kind) => kind == Kind.PowerShell ? "@do and @now" : "$do and $now";
+    public static string DoAndNowHere => DoAndNow(OperatingSystem.IsWindows() ? Kind.PowerShell : Kind.Bash);
+
     public static string Block(Kind kind) => string.Join('\n', kind switch
     {
         Kind.Bash =>
@@ -60,6 +64,23 @@ static class ShellSetup
         var block = Block(kind).Replace("\n", newline);
         return without.Length == 0 ? block : without.TrimEnd('\r', '\n') + newline + newline + block;
     }
+
+    // The profiles that should have the block and do not.
+    public static IEnumerable<string> Missing(string? home = null, string? documents = null)
+    {
+        home ??= Paths.UserProfile;
+        documents ??= Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        foreach (var (file, _) in Profiles(home, documents))
+        {
+            string? content = null;
+            try { content = File.Exists(file) ? File.ReadAllText(file) : null; }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+            if (!HasBlock(content)) yield return file;
+        }
+    }
+
+    static bool HasBlock(string? content) =>
+        content is not null && content.IndexOf(Begin, StringComparison.Ordinal) is var start and >= 0 && content.IndexOf(End, start, StringComparison.Ordinal) >= 0;
 
     public static bool HasBrokenBlock(string content) =>
         content.IndexOf(Begin, StringComparison.Ordinal) is var start and >= 0 && content.IndexOf(End, start, StringComparison.Ordinal) < 0;
@@ -127,7 +148,7 @@ static class ShellSetup
             if (updated is null || updated == existing) continue;
             Directory.CreateDirectory(Path.GetDirectoryName(file)!);
             File.WriteAllText(file, updated);
-            log(enabled ? $"kubectl set up in {file}: k, completion, $do and $now" : $"Took Dockyard's kubectl setup out of {file}");
+            log(enabled ? $"kubectl set up in {file}: k, completion, {DoAndNow(kind)}" : $"Took Dockyard's kubectl setup out of {file}");
         }
     }
 }

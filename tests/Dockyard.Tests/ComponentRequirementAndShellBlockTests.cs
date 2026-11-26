@@ -29,6 +29,23 @@ public class ShellBlockTests
     }
 
     [Fact]
+    public void Missing_names_each_profile_without_the_whole_block()
+    {
+        var home = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            var documents = Path.Combine(home, "Documents");
+            Assert.NotEmpty(ShellSetup.Missing(home, documents));
+            ShellSetup.Apply(true, _ => { }, home, documents);
+            Assert.Empty(ShellSetup.Missing(home, documents));
+            var first = ShellSetup.Profiles(home, documents).First().File;
+            File.WriteAllText(first, $"{ShellSetup.Begin}\nalias k=kubectl\n");
+            Assert.Equal([first], ShellSetup.Missing(home, documents));
+        }
+        finally { Directory.Delete(home, recursive: true); }
+    }
+
+    [Fact]
     public void Applying_leaves_a_profile_with_a_broken_block_as_it_is()
     {
         var home = Directory.CreateTempSubdirectory().FullName;

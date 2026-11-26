@@ -27,8 +27,15 @@ sealed class ContainersViewModel : Observable, ISearchable
         Session = session;
         sampler = new StatsSampler(session);
 
-        ToggleCommand = new Command<ContainerItem>(i => i.IsSystem ? Task.CompletedTask : Act(i, c => i.IsRunning ? c.StopContainerAsync(i.Id) : c.StartContainerAsync(i.Id)));
-        RestartCommand = new Command<ContainerItem>(i => i.IsSystem ? Task.CompletedTask : Act(i, c => c.RestartContainerAsync(i.Id)));
+        // Dockyard's own containers come back by themselves, so Stop says what switches their feature off instead.
+        ToggleCommand = new Command<ContainerItem>(i =>
+        {
+            if (!i.IsSystem) return Act(i, c => i.IsRunning ? c.StopContainerAsync(i.Id) : c.StartContainerAsync(i.Id));
+            if (!i.IsRunning) return Act(i, c => c.StartContainerAsync(i.Id));
+            StopSystem(i);
+            return Task.CompletedTask;
+        });
+        RestartCommand = new Command<ContainerItem>(i => Act(i, c => c.RestartContainerAsync(i.Id)));
         AskRemoveCommand = new Command<ContainerItem>(i => { if (!i.IsSystem) AskRemove([i]); return Task.CompletedTask; });
         ExecCommand = new Command<ContainerItem>(Exec);
         OpenPortCommand = new Command<PublishedPort>(OpenPort);
@@ -107,6 +114,26 @@ sealed class ContainersViewModel : Observable, ISearchable
         get => SelectionCount == 0 ? false : SelectionCount == Pickable.Count ? true : null;
         set => Pick(value == true ? Pickable : []);
     }
+
+    // The setting that switches the container's feature off: in the Toolbox, highlighted there, or the cluster it serves.
+    void StopSystem(ContainerItem item)
+    {
+        var service = item.Labels.GetValueOrDefault(SystemRow.ServiceLabel);
+        string? setting = service switch { "dns" or "etcd" => "domains", "proxy" => "proxy", _ => null };
+        if (setting is not null && TrayClient.Send(new Shared.TrayCommand(Shared.TrayCommandKind.Highlight, setting))) return;
+        if (service is "cloud-provider-kind" or "nfs") shell.ShowSection("Clusters");
+        shell.ShowInfo(SystemHint(item));
+    }
+
+    internal static string SystemHint(ContainerItem item) => item.Labels.GetValueOrDefault(SystemRow.ServiceLabel) switch
+    {
+        "dns" => $"{item.Name} is the DNS server of every container: it answers names under dockyard.internal and passes the rest to your network's DNS. It always runs with the engine. To stop the names, turn off Container domains in the Dockyard Toolbox's settings.",
+        "proxy" => $"{item.Name} serves http and https://<name>.dockyard.internal and the ingress of kind clusters. Turn off Container domains in the Dockyard Toolbox's settings to remove it, or only Trusted HTTPS to keep plain http.",
+        "etcd" => $"{item.Name} holds the names kind clusters publish with external-dns. Turn off Container domains in the Dockyard Toolbox's settings to remove it.",
+        "cloud-provider-kind" => $"{item.Name} gives LoadBalancer services in kind clusters an address. It goes when no running cluster has its load balancer on: switch that off per cluster under Clusters.",
+        "nfs" => $"{item.Name} serves NFS storage to the kind clusters that use it, and goes when the last of them is deleted.",
+        _ => $"{item.Name} is one of Dockyard's own containers, which Dockyard starts and removes itself.",
+    };
 
     List<object> Pickable => Store.Rows.Where(r => r is not SystemRow and not ContainerItem { IsSystem: true }).ToList();
 
@@ -365,14 +392,20 @@ sealed class ContainersViewModel : Observable, ISearchable
             i => (Session.Client ?? throw new InvalidOperationException("The engine is not connected.")).RemoveContainerAsync(i.Id, force: i.IsRunning)), danger: true));
     }
 
-    public void AskDown(ComposeProject project) => shell.Open(new Dialog($"Down {project.Name}?",
-        "Stops and removes the project's containers and networks. Volumes and images stay.", "Down", d => ComposeDown(project, d), danger: true));
+    public void AskDown(ComposeProject project)
+    {
+        var volumes = DialogField.Check("Also remove its volumes, with the data in them", isChecked: false);
+        var images = DialogField.Check("Also remove the images it built or pulled", isChecked: false);
+        shell.Open(new Dialog($"Down {project.Name}?", "Stops and removes the project's containers and networks.", "Down",
+            d => ComposeDown(project, d, volumes.IsChecked, images.IsChecked), danger: true, fields: [volumes, images]));
+    }
 
-    async Task ComposeDown(ComposeProject project, Dialog dialog)
+    async Task ComposeDown(ComposeProject project, Dialog dialog, bool volumes = false, bool images = false)
     {
         var context = Session.ContextName.Length > 0 ? Session.ContextName : "default";
-        dialog.Report($"docker compose down {project.Name}…");
-        var exit = await CliRunner.Run(ComposeCli.Args(context, project, "down"), line => { if (line.Trim().Length > 0) dialog.Report(line.Trim()); }, Session.IsWindowsEngine);
+        string[] verb = ["down", .. volumes ? ["--volumes"] : Array.Empty<string>(), .. images ? ["--rmi", "all"] : Array.Empty<string>()];
+        dialog.Report($"docker compose {string.Join(' ', verb)} {project.Name}…");
+        var exit = await CliRunner.Run(ComposeCli.Args(context, project, verb), line => { if (line.Trim().Length > 0) dialog.Report(line.Trim()); }, Session.IsWindowsEngine);
         if (exit != 0) throw new InvalidOperationException($"docker compose down failed for {project.Name} (exit code {exit}). {dialog.Progress}");
     }
 
