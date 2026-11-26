@@ -44,6 +44,10 @@
             </Button>
           </StackPanel>
         </Grid>
+        <ctl:SectionHint Text="{Binding $parent[Window].((shell:ShellViewModel)DataContext).Clusters.Hint, FallbackValue={x:Null}}"
+                         LinkText="{Binding $parent[Window].((shell:ShellViewModel)DataContext).Clusters.HintLink, FallbackValue={x:Null}}"
+                         LinkCommand="{Binding $parent[Window].((shell:ShellViewModel)DataContext).Clusters.HintCommand, FallbackValue={x:Null}}"
+                         IsVisible="{Binding $parent[Window].((shell:ShellViewModel)DataContext).Clusters.MissingKind, FallbackValue=False}" />
         <SelectableTextBlock Classes="small" Foreground="{DynamicResource Warn}" TextWrapping="Wrap"
                              Text="{Binding $parent[Window].((shell:ShellViewModel)DataContext).Clusters.ServicesError, FallbackValue={x:Null}}"
                              IsVisible="{Binding $parent[Window].((shell:ShellViewModel)DataContext).Clusters.HasServicesError, FallbackValue=False}" />

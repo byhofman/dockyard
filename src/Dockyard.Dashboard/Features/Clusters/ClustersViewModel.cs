@@ -128,13 +128,16 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     public Command LoadBalancerCommand { get; }
 
     public string Hint =>
-        !HasKind ? "kind is not installed. Add it under Engines and settings, or run the setup again with --with kind."
+        !HasKind ? "kind is not installed, so clusters cannot be made or shown. Add it in"
         : NeedsLinuxEngine ? "kind runs on the Linux engine. Switch to Linux to see and create clusters."
         : Rows.Count == 0 ? "No clusters yet. kind runs each node as a container on this engine."
         : "";
 
     public bool HasHint => Hint.Length > 0;
-    public string? HintLink => HasKind ? null : "Engines and settings";
+    // Above the containers, with Tools as its link, as the banner for a missing docker tool has.
+    public bool MissingKind => !HasKind;
+    public string? HintLink => HasKind ? null : "Tools";
+    public Command HintCommand => Shell.OpenToolsCommand;
     public string KubectlHint => Selected is { } c ? $"kubectl --context {c.Context} get nodes" : "";
 
     public bool HasSharedStorage => Selected?.HasSharedStorage == true;
@@ -160,7 +163,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     public override void OnShown()
     {
         kind = KindCli.Locate();
-        Raise(nameof(HasKind), nameof(Hint), nameof(HasHint), nameof(HintLink));
+        Raise(nameof(HasKind), nameof(MissingKind), nameof(Hint), nameof(HasHint), nameof(HintLink));
         RefreshCommands();
     }
 
@@ -170,7 +173,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         all = NeedsLinuxEngine ? [] : KindClusters.From(Session.Containers.Items);
         ApplyFilter();
         ShowLoadBalancers();
-        Raise(nameof(HasKind), nameof(Hint), nameof(HasHint), nameof(HintLink));
+        Raise(nameof(HasKind), nameof(MissingKind), nameof(Hint), nameof(HasHint), nameof(HintLink));
         RefreshCommands();
         return RefreshForwards();
     }

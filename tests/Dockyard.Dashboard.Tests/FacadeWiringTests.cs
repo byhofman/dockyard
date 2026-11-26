@@ -71,6 +71,15 @@ public sealed class FacadeWiringTests
             Assert.Equal("Settings", shell.CurrentSection.Title);
             Assert.DoesNotContain("Toolbox", ToolCheck.Missing(docker: false, compose: false, buildx: false));
             Assert.Contains("in Tools", ToolCheck.Missing(docker: true, compose: false, buildx: true));
+
+            // kind is a missing tool too: its hint names Tools, and its link opens it.
+            typeof(ClustersViewModel).GetField("kind", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.SetValue(shell.Clusters, null);
+            Assert.True(shell.Clusters.MissingKind);
+            Assert.Equal("kind is not installed, so clusters cannot be made or shown. Add it in", shell.Clusters.Hint);
+            Assert.Equal("Tools", shell.Clusters.HintLink);
+            shell.ShowSection("Images");
+            shell.Clusters.HintCommand.Execute(null);
+            Assert.Equal("Tools", shell.CurrentSection.Title);
         }, TestContext.Current.CancellationToken);
     }
 
