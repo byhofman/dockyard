@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using Dockyard.Core;
 using Dockyard.Hosts;
@@ -24,7 +25,7 @@ public sealed partial class DockyardSetup : IDisposable
     readonly Settings settings;
     readonly ShellProfiles shell;
     // The releases the last check found, which an update installs.
-    readonly Dictionary<string, Release?> newest = [];
+    readonly ConcurrentDictionary<string, Release?> newest = new();
 
     internal DockyardSetup(IEngineHost host, Settings settings, ShellProfiles? shell = null)
     {
@@ -87,6 +88,7 @@ public sealed partial class DockyardSetup : IDisposable
         foreach (var c in Catalog.Where(c => ids is null || ids.Contains(c.Id)))
             if (!skipStoppedEngines || c.CheckNeedsEngine is not { } needs || await host.IsRunning(needs)) targets.Add(c);
         var checks = await Task.WhenAll(targets.Select(CheckOne));
+        foreach (var check in checks.Where(c => c.Error is null)) newest[check.Row.Id] = check.Latest;
         ct.ThrowIfCancellationRequested();
         if (ids is null) Duties.Checked(all: checks.All(c => c.Error is null));
         return checks;
@@ -103,7 +105,6 @@ public sealed partial class DockyardSetup : IDisposable
             source = installed is null ? null : await host.Source(c.Id);
             present = c.Id == ComponentRules.DashboardId ? host.HasDashboard : installed is not null;
             var latest = await host.Latest(c.Id);
-            newest[c.Id] = latest;
             return new ComponentCheck(Row(c, present, installed, latest, source), present, null, false, latest);
         }
         catch (Exception e)
@@ -177,7 +178,7 @@ public sealed partial class DockyardSetup : IDisposable
         var log = Log(progress);
         List<(string Component, Release? Release)> items = [];
         if (ids is null)
-            items.AddRange((await Check(null, skipStoppedEngines: false, CancellationToken.None)).Where(c => c.Row.CanUpdate).Select(c => (c.Row.Id, newest[c.Row.Id])));
+            items.AddRange((await Check(null, skipStoppedEngines: false, CancellationToken.None)).Where(c => c.Row.CanUpdate).Select(c => (c.Row.Id, c.Latest)));
         else
             foreach (var component in ids.Select(Find))
                 items.Add((component.Id, newest.TryGetValue(component.Id, out var known) && known is not null ? known : await host.Latest(component.Id)));

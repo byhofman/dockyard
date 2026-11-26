@@ -22,7 +22,8 @@ sealed class FakeHost : IEngineHost
     public string CaDirectory { get; } = Path.Combine(Path.GetTempPath(), "dockyard-tests-ca-" + Guid.NewGuid().ToString("N"));
     public Task<bool> TrustCa(Action<string> log, string certificateFile, bool silent) => Task.FromResult(true);
 
-    public Task<bool> IsRunning(string engine) => Task.FromResult(false);
+    public Func<string, Task<bool>>? Running { get; set; }
+    public Task<bool> IsRunning(string engine) => Running?.Invoke(engine) ?? Task.FromResult(false);
     public Task Start(string engine) => Task.CompletedTask;
     public Task Stop(string engine) => Task.CompletedTask;
     public string ActiveEngine() => "linux";
