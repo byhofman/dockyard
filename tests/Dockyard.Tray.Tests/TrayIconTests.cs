@@ -1,8 +1,8 @@
 using System.Text.RegularExpressions;
 using Avalonia.Media;
-using Dockyard.Views;
+using Dockyard.Tray;
 
-namespace Dockyard.Tests;
+namespace Dockyard.Tray.Tests;
 
 public sealed partial class TrayIconTests
 {

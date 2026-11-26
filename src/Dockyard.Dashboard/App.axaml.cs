@@ -4,6 +4,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using Dockyard.Dashboard.Shell;
+using Dockyard.Setup;
 using Dockyard.Shared;
 
 namespace Dockyard.Dashboard;
@@ -31,7 +32,16 @@ public partial class App : Application
         if (ShellViewModel.InitialSection is { } first) vm.ShowSection(first);
         StartupTrace.Mark("main window built");
         desktop.MainWindow = window;
-        desktop.Exit += (_, _) => vm.Stop();
+        // The tray runs the background duties while there is one; without it the dashboard does, for as long as it is open.
+        var duties = new CancellationTokenSource();
+        var setup = DockyardSetup.ForThisMachine();
+        _ = setup.Duties.RunWhenFree(new Progress<SetupProgress>(), startEngine: false, duties.Token, yieldTo: () => TrayInstance.IsRunning);
+        desktop.Exit += (_, _) =>
+        {
+            duties.Cancel();
+            setup.Dispose();
+            vm.Stop();
+        };
 
         // Closing hides it and it stays connected, so opening it again from the tray is instant; the tray's Quit ends it.
         var quitting = false;

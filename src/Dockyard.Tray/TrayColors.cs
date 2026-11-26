@@ -1,6 +1,6 @@
 using Avalonia.Media;
 
-namespace Dockyard.Views;
+namespace Dockyard.Tray;
 
 // A blue from the logo container's own gradient, and amber and grey, each at least 3:1 on a light and a dark menu bar or taskbar.
 static class TrayColors

@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The tray: an icon and its menu, no window. A process of its own, so that the dockyard command and the tray are a whole
+       install without the dashboard. Everything it does goes through Dockyard.Setup. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">$(NETCoreSdkRuntimeIdentifier)</RuntimeIdentifier>
+    <ApplicationIcon>..\Dockyard\Assets\dockyard.ico</ApplicationIcon>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <PublishAot>true</PublishAot>
+    <Version>0.0.0</Version>
+    <Product>Dockyard</Product>
+    <AssemblyTitle>Dockyard Tray</AssemblyTitle>
+    <Company>Thomas Hofman</Company>
+    <Copyright>Copyright (c) 2026 Thomas Hofman</Copyright>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Dockyard.Tray.Tests" />
+    <!-- The rest of Shared is compiled into Dockyard.Setup, whose internals this project sees. -->
+    <Compile Include="..\Shared\DisplayGate.cs" LinkBase="Shared" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Dockyard.Setup\Dockyard.Setup.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.5" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.5" />
+  </ItemGroup>
+
+  <!-- What Task Manager, Activity Monitor and ps show. Native AOT puts its binary in place in a target that runs after
+       Publish, so the rename follows that one there. -->
+  <Target Name="NameTheProcess" AfterTargets="CopyNativeBinary" Condition="'$(PublishAot)' == 'true'">
+    <PropertyGroup>
+      <NativeExtension Condition="$(RuntimeIdentifier.StartsWith('win'))">.exe</NativeExtension>
+    </PropertyGroup>
+    <Move SourceFiles="$(PublishDir)$(AssemblyName)$(NativeExtension)" DestinationFiles="$(PublishDir)dockyard-tray$(NativeExtension)" />
+  </Target>
+
+</Project>

@@ -9,6 +9,7 @@ using Dockyard.Engine;
 using Dockyard.Engine.Transport;
 using Dockyard.Setup;
 using Dockyard.Shared;
+using Dockyard.Tray;
 using Dockyard.ViewModels;
 using Dockyard.Views;
 namespace Dockyard;

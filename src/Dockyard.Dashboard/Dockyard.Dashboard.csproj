@@ -35,6 +35,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Dockyard.Engine\Dockyard.Engine.csproj" />
     <ProjectReference Include="..\Dockyard.Kind\Dockyard.Kind.csproj" />
+    <ProjectReference Include="..\Dockyard.Setup\Dockyard.Setup.csproj" />
     <Using Include="Dockyard.Kind" />
   </ItemGroup>
 

@@ -33,6 +33,8 @@
     <!-- The rest of Shared is compiled into Dockyard.Setup, whose internals this project sees. -->
     <Compile Include="..\Shared\CodeEditor.cs;..\Shared\CodeColorizer.cs;..\Shared\DisplayGate.cs" LinkBase="Shared" />
     <InternalsVisibleTo Include="Dockyard.Tests" />
+    <!-- The tray's icon, until the Toolbox goes. -->
+    <Compile Include="..\Dockyard.Tray\TrayColors.cs;..\Dockyard.Tray\TrayIconRenderer.cs" LinkBase="Tray" />
   </ItemGroup>
 
   <ItemGroup>

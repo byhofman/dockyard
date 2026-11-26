@@ -4,7 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 
-namespace Dockyard.Views;
+namespace Dockyard.Tray;
 
 // The app icon's crane and container (branding/app-icon/icon.svg, 100x100 units) tinted by engine state, with a context badge.
 static class TrayIconRenderer
