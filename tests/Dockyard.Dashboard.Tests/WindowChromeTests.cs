@@ -11,7 +11,7 @@ public sealed class WindowChromeTests
     {
         var mac = WindowChrome.For(HostOs.MacOS);
         Assert.True(mac.ExtendsIntoTitleBar);
-        Assert.True(mac.RowInset.Left > 0, "the traffic lights sit on the left");
+        Assert.Equal(64, mac.RowInset.Left);
         Assert.Equal(0, mac.RowInset.Right);
 
         var windows = WindowChrome.For(HostOs.Windows);

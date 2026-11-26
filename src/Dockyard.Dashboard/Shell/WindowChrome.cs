@@ -9,11 +9,12 @@ sealed record WindowChrome(bool ExtendsIntoTitleBar, Thickness RowInset)
 {
     public const double RowHeight = 52;
 
-    // The traffic lights end about 70 px from the left edge. Avalonia draws Windows' minimize, maximize and close itself,
+    // The traffic lights end about 70 px from the left edge. The inset comes on top of the row's 16 px gutter, so 64 puts
+    // the logo at 80 px, a 10 px gap after the lights, as macOS apps leave. Avalonia draws Windows' minimize, maximize and close itself,
     // 46 px wide each, as Windows does.
     public static WindowChrome For(HostOs host) => host switch
     {
-        HostOs.MacOS => new(true, new Thickness(72, 0, 0, 0)),
+        HostOs.MacOS => new(true, new Thickness(64, 0, 0, 0)),
         HostOs.Windows => new(true, new Thickness(0, 0, 3 * 46, 0)),
         _ => new(false, default),
     };
