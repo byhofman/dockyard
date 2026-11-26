@@ -27,6 +27,18 @@ static class ClusterAddons
         .. addon.Values.SelectMany(v => new[] { "--set", v }),
     ];
 
+    public static async Task Uninstall(string helm, ClusterAddon addon, string kubeconfig, string cluster, Action<string>? onLine)
+    {
+        onLine?.Invoke($"Removing {addon.Title}");
+        var psi = new ProcessStartInfo(helm) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        foreach (var a in new[] { "uninstall", addon.Release, "--namespace", addon.Namespace, "--kubeconfig", kubeconfig, "--kube-context", KindKubeconfig.Key(cluster), "--ignore-not-found" })
+            psi.ArgumentList.Add(a);
+        using var process = Process.Start(psi) ?? throw new InvalidOperationException("Could not start helm");
+        var error = await process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        if (process.ExitCode != 0) throw new InvalidOperationException($"{addon.Title} was not removed: {error.Trim()}");
+    }
+
     public static async Task Install(string helm, ClusterAddon addon, string kubeconfig, string cluster, string scratch, Action<string>? onLine)
     {
         onLine?.Invoke($"Installing {addon.Title} {addon.Version} with Helm");

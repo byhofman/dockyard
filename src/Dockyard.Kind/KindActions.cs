@@ -46,6 +46,30 @@ sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
         finally { scratch.Delete(recursive: true); }
     }
 
+    // A running cluster's add-ons changed: removed in reverse order, so nothing goes before what uses it, then added as at
+    // creation, Headlamp's address and cert-manager's issuer with them.
+    public async Task EditAddons(string name, IReadOnlyList<ClusterAddon> current, IReadOnlyList<ClusterAddon> wanted, string helm,
+        Func<string, Task<string>>? clusterCa, Action<string>? onLine)
+    {
+        var scratch = Directory.CreateTempSubdirectory("dockyard-kind-");
+        try
+        {
+            var own = Path.Combine(scratch.FullName, "config");
+            await File.WriteAllTextAsync(own, await Kubeconfig(name));
+            var context = dockerContext.Length > 0 ? dockerContext : "default";
+            foreach (var addon in ClusterAddons.All.Reverse().Where(a => current.Contains(a) && !wanted.Contains(a)))
+                await ClusterAddons.Uninstall(helm, addon, own, name, onLine);
+            var added = ClusterAddons.All.Where(a => wanted.Contains(a) && !current.Contains(a)).ToList();
+            foreach (var addon in added)
+                await ClusterAddons.Install(helm, addon, own, name, Path.Combine(scratch.FullName, "helm"), onLine);
+            if (added.Contains(CertManager.Addon) && clusterCa is not null)
+                await CertManager.AddIssuer(context, name, await clusterCa(name), onLine);
+            if (wanted.Contains(Headlamp.Addon) && (added.Contains(Headlamp.Addon) || added.Contains(CertManager.Addon)))
+                await Headlamp.Expose(context, name, tls: wanted.Contains(CertManager.Addon), onLine);
+        }
+        finally { scratch.Delete(recursive: true); }
+    }
+
     public async Task Delete(string name, Action<string>? onLine = null)
     {
         var scratch = Directory.CreateTempSubdirectory("dockyard-kind-");
