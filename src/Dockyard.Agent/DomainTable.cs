@@ -182,6 +182,9 @@ sealed class DomainTable(Func<DockerClient> connect, string choicesFile, Action<
                 if (onKind is not null) balancers.Add((cluster, summary.Name, onKind, exposed.Contains(80), exposed.Contains(443)));
                 continue;
             }
+            // A kind node serves Kubernetes on its own ports, not a site, and the cluster answers by <host>.<cluster> instead;
+            // Dockyard's own containers are not for browsing either.
+            if (labels is not null && (labels.ContainsKey("io.x-k8s.kind.cluster") || labels.ContainsKey(Services.ServiceLabel))) continue;
             foreach (var domain in DomainNames.For(summary.Name, labels?.GetValueOrDefault("com.docker.compose.project"), labels?.GetValueOrDefault("com.docker.compose.service")))
                 // The first running replica answers for a Compose service's shared name.
                 next.TryAdd(domain, new DomainTarget(summary.Id, summary.Name, domain, address is null ? null : IPAddress.Parse(address),

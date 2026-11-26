@@ -23,6 +23,14 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         CreateCommand = new Command(() => { AskCreate(); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine);
         DeleteCommand = new Command(() => { AskDelete(Picked); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine && SelectionCount > 0);
         DeleteRowCommand = new Command<KindCluster>(c => { AskDelete([c]); return Task.CompletedTask; });
+        // A node's container, found among the engine's; unfolding a cluster has its nodes sampled for CPU and memory.
+        ClusterNodes.Container = name => Session.Containers.Items.FirstOrDefault(i => i.Name == name) is { } item
+            ? WithUsage(item) : null;
+        OpenNodeCommand = new Command<NodeRow>(n =>
+        {
+            if (n.Container is { } item) Shell.Reveal("Containers", item);
+            return Task.CompletedTask;
+        });
         EditCommand = new Command(() => Selected is { } c ? AskEdit(c) : Task.CompletedTask, () => !IsBusy && HasKind && !NeedsLinuxEngine && Selected is { IsRunning: true });
         OpenHeadlampCommand = new Command(() =>
         {
@@ -71,6 +79,13 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     public Command UseContextCommand { get; }
     public Command CopyHeadlampTokenCommand { get; }
     public Command EditCommand { get; }
+    public Command<NodeRow> OpenNodeCommand { get; }
+
+    Store.ContainerItem WithUsage(Store.ContainerItem item)
+    {
+        Shell.Containers?.SetVisible(item.Id, true);
+        return item;
+    }
     public Command OpenHeadlampCommand { get; }
 
     // Headlamp's address for the selected cluster, as its definition has it: https with cert-manager's certificate.
