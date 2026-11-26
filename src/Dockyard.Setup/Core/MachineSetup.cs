@@ -25,7 +25,14 @@ static class MachineSetup
         else await RouteDomains(log);
         if (withWindows) await MachineEngine.Configure(log, userSid, userName);
         await InstallApps(log, keepPid, tray: !without.Contains(nameof(Component.Tray)), dashboard: !engineOnly);
+        MarkInstalled(Paths.InstalledMarker);
         return reboot;
+    }
+
+    public static void MarkInstalled(string marker)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(marker)!);
+        File.WriteAllText(marker, "");
     }
 
     static async Task InstallApps(Action<string> log, int keepPid, bool tray, bool dashboard)

@@ -75,7 +75,7 @@ static class Program
         try
         {
             return setup.IsInstalled
-                && TrayLink.HandsOver(Updates.ParseVersion(Paths.AppVersion), setup.InstalledVersion(nameof(Component.Tray)).GetAwaiter().GetResult())
+                && TrayLink.HandsOver(Updates.ParseVersion(Paths.AppVersion), setup.InstalledSelfVersion().GetAwaiter().GetResult())
                 && setup.ShowInstalledWindow(TimeSpan.FromSeconds(20)).GetAwaiter().GetResult();
         }
         catch (Exception)

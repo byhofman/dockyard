@@ -58,11 +58,26 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
         log($"{Paths.AppName} no longer starts at login");
     }
 
-    public async Task Uninstall(Action<string> log, bool removeData, bool silent, IEngineHost host)
+    // The bundles are found through the login item, which the first stage removes.
+    public Task Uninstall(Action<string> log, bool removeData, bool silent, IEngineHost host)
+    {
+        var bundles = InstalledBundles();
+        return Uninstall(log, removeData, RemoveUserParts(silent, host, bundles), RemoveSystemParts, (l, data) => RemoveApp(l, data, bundles));
+    }
+
+    // The administrator step comes before the app is deleted: if it is declined or fails, the app, which is the command,
+    // is still there to run the uninstall again.
+    internal static async Task Uninstall(Action<string> log, bool removeData, Func<Action<string>, Task> user, Func<Action<string>, Task> system, Func<Action<string>, bool, Task> app)
+    {
+        await user(log);
+        await system(log);
+        await app(log, removeData);
+    }
+
+    Func<Action<string>, Task> RemoveUserParts(bool silent, IEngineHost host, IReadOnlyList<string> bundles) => async log =>
     {
         await vm.Stop();
         await runner.Run("/bin/sh", "-c", MacLayout.RemoveHost);
-        var bundles = MacLayout.InstalledBundles(File.Exists(MacLayout.LaunchAgent) ? await File.ReadAllTextAsync(MacLayout.LaunchAgent) : null, MacLayout.UserApplications);
         var own = MacLayout.Bundle(AppContext.BaseDirectory);
         foreach (var bundle in bundles.Where(b => b != own))
             await runner.Run("/usr/bin/pkill", "-f", Path.Combine(bundle, "Contents", "MacOS", "Dockyard"));
@@ -77,6 +92,28 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
         await CredentialStore.Forget(MacLayout.CredentialStoreMarker, MacLayout.CredentialHelper, log);
         await EngineConfig.ApplyClientProxy("unix://" + MacLayout.DockerSocket, null);
         UnlinkUserSocket();
+    };
+
+    static IReadOnlyList<string> InstalledBundles() =>
+        MacLayout.InstalledBundles(File.Exists(MacLayout.LaunchAgent) ? File.ReadAllText(MacLayout.LaunchAgent) : null, MacLayout.UserApplications);
+
+    async Task RemoveSystemParts(Action<string> log)
+    {
+        var steps = MacLayout.AdministratorUninstall(
+            pathEntry: await PathEntryIs(MacLayout.SharedBinDir),
+            resolver: File.Exists(MacLayout.DomainResolver),
+            socketDaemon: File.Exists(MacLayout.SocketDaemon) || SystemSocketUse() == MacLayout.SocketUse.Ours,
+            cliLink: new FileInfo(MacLayout.CliLink).LinkTarget is not null,
+            MacLayout.DockerSocket);
+        if (steps.Count == 0) return;
+        var script = string.Join(" ; ", steps);
+        if ((await runner.Run("sudo", "-n", "/bin/sh", "-c", script)).ExitCode != 0
+            && (await runner.Run("/usr/bin/osascript", MacLayout.AdminShell(script))).ExitCode != 0)
+            throw new InvalidOperationException("The administrator step was declined or failed, so Dockyard is still installed. Run the uninstall again with an administrator's approval.");
+    }
+
+    Task RemoveApp(Action<string> log, bool removeData, IReadOnlyList<string> bundles)
+    {
         if (Directory.Exists(MacLayout.BinDir)) Directory.Delete(MacLayout.BinDir, recursive: true);
         foreach (var plugin in new[] { "docker-compose", "docker-buildx" })
             MacComponents.RemovePlugin(plugin);
@@ -91,18 +128,7 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
             log("Removed your images and containers");
         }
         else log($"Your images and containers were kept in {Path.Combine(MacLayout.DataDir, "data.img")}");
-        var steps = MacLayout.AdministratorUninstall(
-            pathEntry: await PathEntryIs(MacLayout.SharedBinDir),
-            resolver: File.Exists(MacLayout.DomainResolver),
-            socketDaemon: File.Exists(MacLayout.SocketDaemon) || SystemSocketUse() == MacLayout.SocketUse.Ours,
-            cliLink: new FileInfo(MacLayout.CliLink).LinkTarget is not null,
-            MacLayout.DockerSocket);
-        if (steps.Count > 0)
-        {
-            var script = string.Join(" ; ", steps);
-            if ((await runner.Run("sudo", "-n", "/bin/sh", "-c", script)).ExitCode != 0)
-                await runner.Run("/usr/bin/osascript", MacLayout.AdminShell(script));
-        }
+        return Task.CompletedTask;
     }
 
     // Copies the wizard's bundle to where the app belongs, from a download, a disk image or a translocated copy.

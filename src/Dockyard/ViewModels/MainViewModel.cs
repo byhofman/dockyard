@@ -411,7 +411,7 @@ sealed class MainViewModel : Observable
         var c = Components.First(c => c.Id == check.Row.Id);
         c.Installed = check.Row.Installed ?? "–";
         c.Source = check.Row.Installed is null ? null : check.Row.Source;
-        if (c.Id == nameof(Component.Tray)) InstalledVersion = c.Installed;
+        if (c.Id == setup.SelfId) InstalledVersion = c.Installed;
         c.IsPresent = check.IsPresent;
         c.LatestRelease = check.Latest;
         c.Latest = check.Row.Newest ?? "–";
@@ -430,10 +430,10 @@ sealed class MainViewModel : Observable
     {
         // The wizard is the new version: installing it also does what the jump from an old version needs, such as
         // moving to the dockyard distro, which replacing only the app would skip.
-        if (IsSetupMode && items.Any(i => i.Id == nameof(Component.Tray)))
+        if (IsSetupMode && items.Any(i => i.Id == setup.SelfId))
         {
             await InstallCore();
-            items = items.Where(i => i.Id != nameof(Component.Tray)).ToList();
+            items = items.Where(i => i.Id != setup.SelfId).ToList();
         }
         if (items.Count == 0) return;
         await setup.Update(items.Select(i => i.Id).ToList(), progress);

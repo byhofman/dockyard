@@ -56,7 +56,8 @@ sealed class WindowsHost : IEngineHost
         new(nameof(Component.Dashboard), Updates.Title(Component.Dashboard), Flag: "dashboard", Note: "Optional. Opens from the tray.", Default: desktop),
     ];
 
-    public bool IsInstalled => File.Exists(Paths.DockyardCliExe);
+    public bool IsInstalled => IsInstalledWhere(File.Exists);
+    internal static bool IsInstalledWhere(Func<string, bool> exists) => exists(Paths.InstalledMarker);
     public ICaKeyStore CaKeys => new DpapiCaKey(((IEngineHost)this).CaDirectory);
 
     public Task<bool> IsRunning(string engine) => Task.Run(() => engine == Linux ? wsl.IsRunning() : WindowsServiceEngine.IsRunning());

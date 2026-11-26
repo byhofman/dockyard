@@ -344,7 +344,9 @@ public sealed partial class DockyardSetup : IDisposable
     // Dockyard's own release files from this folder instead of downloading them, unchecked.
     internal static string? LocalAssets { get => Updates.LocalAssets; set => Updates.LocalAssets = value; }
     internal bool RunsFromInstallLocation => host.RunsFromInstallLocation;
-    internal Task<Version?> InstalledVersion(string id) => host.Installed(Find(id).Id);
+    // Dockyard itself: the row whose update replaces the running program, and whose version is what is installed.
+    internal string SelfId => host.SelfComponent;
+    internal Task<Version?> InstalledSelfVersion() => host.Installed(host.SelfComponent);
     internal void StartApp() => host.StartApp();
     internal void Reboot() => host.Reboot();
     internal Task<bool> ShowInstalledWindow(TimeSpan wait) => TrayLink.ShowSettings(host, wait);

@@ -374,6 +374,21 @@ public sealed class MacInstallTests : IDisposable
     }
 
     [Fact]
+    public async Task The_administrator_step_runs_before_the_app_is_deleted_and_a_failed_one_leaves_the_app()
+    {
+        List<string> order = [];
+        Func<Action<string>, Task> Step(string name, Exception? fails = null) => _ => { order.Add(name); return fails is null ? Task.CompletedTask : Task.FromException(fails); };
+        Func<Action<string>, bool, Task> app = (_, _) => { order.Add("app"); return Task.CompletedTask; };
+
+        await MacSetup.Uninstall(_ => { }, removeData: false, Step("user"), Step("system"), app);
+        Assert.Equal(["user", "system", "app"], order);
+
+        order.Clear();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => MacSetup.Uninstall(_ => { }, false, Step("user"), Step("system", new InvalidOperationException("declined")), app));
+        Assert.Equal(["user", "system"], order);
+    }
+
+    [Fact]
     public void The_CLI_is_linked_into_usr_local_bin_and_the_link_is_taken_back_only_when_it_is_ours()
     {
         Assert.Equal("/usr/local/bin/dockyard", MacLayout.CliLink);

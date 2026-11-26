@@ -11,6 +11,8 @@ sealed class FakeHost : IEngineHost
     public Exception? Failure { get; set; }
     public Exception? FailureOnSetComponent { get; set; }
     public bool IgnoresDashboard { get; set; }
+    public string SelfComponent { get; set; } = "Tray";
+    public Version Newest { get; set; } = new(1, 0, 0);
     public List<string> Calls { get; } = [];
     public List<InstallRequest> Requests { get; } = [];
 
@@ -40,8 +42,12 @@ sealed class FakeHost : IEngineHost
         if (installed) Missing.Remove(component); else Missing.Add(component);
         return Task.FromResult(false);
     }
-    public Task<Release?> Latest(string component) => Task.FromResult<Release?>(new Release(new Version(1, 0, 0), "v1.0.0", null));
-    public Task<bool> Update(Action<string> log, IReadOnlyList<(string Component, Release? Release)> components) => Task.FromResult(false);
+    public Task<Release?> Latest(string component) => Task.FromResult<Release?>(new Release(Newest, $"v{Newest}", null));
+    public Task<bool> Update(Action<string> log, IReadOnlyList<(string Component, Release? Release)> components)
+    {
+        Calls.Add("update " + string.Join(",", components.Select(c => c.Component)));
+        return Task.FromResult(false);
+    }
 
     public Task<bool> Install(Action<string> log, InstallRequest request)
     {

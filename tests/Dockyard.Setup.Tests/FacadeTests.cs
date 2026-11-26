@@ -128,6 +128,29 @@ public sealed class FacadeTests : IDisposable
         Assert.Null(app.Flag);
     }
 
+    [Fact]
+    public async Task Dockyard_itself_is_the_tray_on_Windows_and_the_bundle_where_the_CLI_carries_the_update()
+    {
+        var windows = new FakeHost { Installed = true };
+        var bundle = new FakeHost { Installed = true, SelfComponent = "DockyardCli" };
+        Assert.Equal("Tray", For(windows).SelfId);
+        Assert.Equal("DockyardCli", For(bundle).SelfId);
+        Assert.Equal(new Version(1, 0, 0), await For(bundle).InstalledSelfVersion());
+        windows.Missing.Add("Tray");
+        Assert.Null(await For(windows).InstalledSelfVersion());
+    }
+
+    [Theory]
+    [InlineData("Tray", "update DockyardCli,Dashboard")]
+    [InlineData("DockyardCli", "update Tray,Dashboard")]
+    public async Task The_update_command_leaves_dockyard_itself_to_its_own_restart(string self, string expected)
+    {
+        var host = new FakeHost { Installed = true, SelfComponent = self, Newest = new Version(2, 0, 0) };
+        var lines = new List<string>();
+        Assert.Equal(0, await For(host).RunCommand(["update"], lines.Add, lines.Add));
+        Assert.Equal([expected], host.Calls);
+    }
+
     static IReadOnlyList<ComponentInfo> TrayCatalog(bool desktop) =>
         [new("DockyardCli", "Dockyard CLI", RequiredBecause: "it installs everything"), new("Tray", "Dockyard tray", Flag: "tray", Default: desktop), new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard", Default: desktop)];
 

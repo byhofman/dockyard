@@ -172,7 +172,7 @@ static class Cli
         return 0;
     }
 
-    // Dockyard itself is left to the tray, which has to restart for it.
+    // Dockyard itself, the row the facade names, has to restart for its update, so it is left out.
     static async Task<int> Update(DockyardSetup setup, bool checkOnly, Action<string> log, Action<string> error)
     {
         var checks = await setup.Check(null, skipStoppedEngines: false, CancellationToken.None);
@@ -182,7 +182,7 @@ static class Cli
             if (check.Row.Installed is not { } installed) continue;
             log($"{check.Row.Title}\t{installed}\t{(check.Row.CanUpdate ? $"{check.Row.Newest} available" : "up to date")}");
         }
-        var available = checks.Where(c => c.Row.CanUpdate && c.Row.Id != nameof(Component.Tray)).Select(c => c.Row.Id).ToList();
+        var available = checks.Where(c => c.Row.CanUpdate && c.Row.Id != setup.SelfId).Select(c => c.Row.Id).ToList();
         if (checkOnly || available.Count == 0) return 0;
         await setup.Update(available, Progress(log));
         return 0;

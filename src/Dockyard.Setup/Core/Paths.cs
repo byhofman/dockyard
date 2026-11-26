@@ -23,6 +23,9 @@ static class Paths
     public static string DockyardCliExe => OperatingSystem.IsWindows() ? Path.Combine(CommandDir, "dockyard.exe")
         : OperatingSystem.IsMacOS() ? Hosts.MacLayout.CliLink
         : "/usr/bin/dockyard";
+    // Written when an install has finished, and not by the CLI that is put in place first: an install that stopped after
+    // that is still a first install on the next run.
+    public static readonly string InstalledMarker = Path.Combine(AppDir, "installed");
     public const string DashboardProcess = "dockyard-dashboard";
     public static readonly string DashboardExe = Path.Combine(AppDir, DashboardProcess + ".exe");
     public static bool HasDashboard => File.Exists(DashboardExe);

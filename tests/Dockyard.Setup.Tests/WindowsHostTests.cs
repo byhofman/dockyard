@@ -124,6 +124,19 @@ public sealed class WindowsHostTests
     }
 
     [Fact]
+    public void A_CLI_without_the_finished_mark_is_not_an_install_yet()
+    {
+        Assert.NotEqual(Paths.DockyardCliExe, Paths.InstalledMarker);
+        Assert.False(WindowsHost.IsInstalledWhere(path => path == Paths.DockyardCliExe));
+        Assert.True(WindowsHost.IsInstalledWhere(path => path == Paths.InstalledMarker));
+
+        var marker = Path.Combine(Directory.CreateTempSubdirectory().FullName, "app", "installed");
+        MachineSetup.MarkInstalled(marker);
+        Assert.True(File.Exists(marker));
+        Directory.Delete(Path.GetDirectoryName(Path.GetDirectoryName(marker))!, recursive: true);
+    }
+
+    [Fact]
     public void Uninstall_removes_the_CLI_last()
     {
         string[] files = [Paths.DockyardCliExe, Paths.AppExe, Paths.HostExe, Paths.DashboardExe, Path.Combine(Paths.AppDir, "bin", "other.dll")];
