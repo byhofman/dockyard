@@ -11,10 +11,8 @@ public sealed class ElevationTests
     [Fact]
     public void The_worker_is_the_installed_CLI_and_else_this_executable()
     {
-        Assert.Equal(Paths.DockyardCliExe, Elevation.WorkerExe(path => path == Paths.DockyardCliExe, isToolbox: false));
-        Assert.Equal(Paths.Self, Elevation.WorkerExe(_ => false, isToolbox: false));
-        // The Toolbox is the one that answers the worker's arguments until the CLI does.
-        Assert.Equal(Paths.Self, Elevation.WorkerExe(_ => true, isToolbox: true));
+        Assert.Equal(Paths.DockyardCliExe, Elevation.WorkerExe(path => path == Paths.DockyardCliExe));
+        Assert.Equal(Paths.Self, Elevation.WorkerExe(_ => false));
     }
 
     [Fact]

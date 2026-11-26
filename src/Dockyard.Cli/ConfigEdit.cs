@@ -1,24 +1,17 @@
 using System.Diagnostics;
+using Dockyard.Setup;
+using Spectre.Console;
 
 namespace Dockyard.Cli;
 
-// dockyard config edit: the engine's settings in the user's editor, checked by the Toolbox, until they are valid or left
-// unchanged, then applied by the Toolbox.
+// An engine's settings in the user's editor, checked by the library until they are valid or left unchanged, then applied.
 static class ConfigEdit
 {
-    public static int Run(IReadOnlyList<string> args)
+    public static async Task<int> Run(DockyardSetup setup, string engine, CliEnvironment env)
     {
-        var engine = Arguments.Option(args, "--engine");
-        string[] Engine() => engine is null ? [] : ["--engine", engine];
-        var lines = new List<string>();
-        var errors = new List<string>();
-        if (Toolbox.Run(["config", "show", .. Engine()], lines.Add, errors.Add) != 0)
-        {
-            foreach (var e in errors) Console.Error.WriteLine(e);
-            return 1;
-        }
-        var current = string.Join('\n', lines) + "\n";
-        var file = Path.Combine(Path.GetTempPath(), $"dockyard-{engine ?? "engine"}-daemon.json");
+        var key = SettingDefinitions.EngineFilePrefix + engine;
+        var current = setup.GetSetting(key).TrimEnd() + "\n";
+        var file = Path.Combine(Path.GetTempPath(), $"dockyard-{engine}-daemon.json");
         File.WriteAllText(file, current);
         try
         {
@@ -28,14 +21,17 @@ static class ConfigEdit
                 var edited = File.ReadAllText(file);
                 if (edited.Trim() == current.Trim())
                 {
-                    Console.WriteLine("No changes");
+                    env.Console.WriteLine("No changes");
                     return 0;
                 }
-                var problems = new List<string>();
-                if (Toolbox.Run(["config", "validate", .. Engine(), "--file", file], _ => { }, problems.Add) == 0)
-                    return Toolbox.Run(["config", "apply", .. Engine(), "--file", file], Console.WriteLine, Console.Error.WriteLine);
-                foreach (var p in problems) Console.Error.WriteLine(p);
-                Console.Error.Write("Edit it again? [Y/n] ");
+                if (await setup.CheckSetting(key, edited) is not { } problem)
+                {
+                    await setup.SetSetting(key, edited, new ProgressRenderer(env.Console, env.Error));
+                    return 0;
+                }
+                env.Error.WriteLine(problem);
+                if (!env.HasTerminal) return 1;
+                env.Error.Write("Edit it again? [Y/n] ");
                 if (Console.ReadLine()?.Trim().ToLowerInvariant() is "n" or "no") return 1;
             }
         }

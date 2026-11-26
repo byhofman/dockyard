@@ -66,6 +66,8 @@ interface IEngineHost
     string SelfComponent => nameof(Core.Component.Tray);
 
     bool HasDashboard { get; }
+    // Where the dashboard is, or would be; null when this host has no fixed place for it.
+    string? DashboardExe => null;
     // Returns true when Dockyard itself is being replaced and should exit.
     Task<bool> SetDashboard(Action<string> log, bool installed);
     // Adds or removes any component with a flag. Returns true when Dockyard itself is being replaced and should exit.

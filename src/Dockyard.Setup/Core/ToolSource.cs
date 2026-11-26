@@ -11,7 +11,7 @@ public enum ToolSource
     [JsonStringEnumMemberName("dockyard")] Dockyard,
 }
 
-static class ToolSourceArgument
+public static class ToolSourceArgument
 {
     public static string Argument(this ToolSource source) => source == ToolSource.Dockyard ? "dockyard" : "package-manager";
 

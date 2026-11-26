@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Dockyard.Kind;
+using Dockyard.Setup;
 
 namespace Dockyard.Cli;
 
@@ -10,7 +11,7 @@ sealed class Clusters(Action<string> log)
     // The docker context of the Linux engine Dockyard set up: its own on Windows and macOS, the system's on Linux.
     public static string Context => OperatingSystem.IsWindows() ? "linux" : OperatingSystem.IsMacOS() ? "dockyard" : "default";
 
-    static string KindExe => CliLocator.Locate("kind") ?? throw new InvalidOperationException("kind is not installed: add it in the Dockyard Toolbox, or run dockyard --silent --with kind");
+    static string KindExe => CliLocator.Locate("kind") ?? throw new InvalidOperationException("kind is not installed: dockyard component add kind");
 
     static KindActions Actions() => new(KindExe, Context, HostKubeconfig.FromEnvironment());
 
@@ -74,8 +75,11 @@ sealed class Clusters(Action<string> log)
         log($"kubectl now uses {KindKubeconfig.Key(name)}, from {file}");
     }
 
-    static Task<string> ClusterCa(string cluster) =>
-        CertManager.FromToolbox(Toolbox.Locate() ?? throw new InvalidOperationException("The Dockyard Toolbox is not installed next to this command"), cluster);
+    static async Task<string> ClusterCa(string cluster)
+    {
+        using var setup = DockyardSetup.ForThisMachine();
+        return await setup.ClusterCa(cluster);
+    }
 
     public async Task Recreate(string name, string? definition)
     {

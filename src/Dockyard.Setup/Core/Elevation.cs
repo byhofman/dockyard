@@ -119,12 +119,9 @@ static partial class Elevation
         ? new InvalidOperationException("Administrator approval was declined")
         : new InvalidOperationException($"Could not ask for administrator rights ({ex.Message}). In a session without a desktop, run this from an elevated shell.");
 
-    // The installed CLI is the worker. Until it answers the --machine-* arguments itself, only the Toolbox does, so a
-    // Toolbox process keeps starting itself; the first install runs from the download, before there is an installed CLI.
-    internal static string WorkerExe(Func<string, bool> exists, bool? isToolbox = null) =>
-        exists(Paths.DockyardCliExe) && !(isToolbox ?? IsToolbox) ? Paths.DockyardCliExe : Paths.Self;
-
-    static bool IsToolbox => System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name == "Dockyard";
+    // The installed CLI is the worker; the first install runs from the download, before there is an installed CLI.
+    internal static string WorkerExe(Func<string, bool> exists) =>
+        exists(Paths.DockyardCliExe) ? Paths.DockyardCliExe : Paths.Self;
 
     public static int Worker(string[] args)
     {

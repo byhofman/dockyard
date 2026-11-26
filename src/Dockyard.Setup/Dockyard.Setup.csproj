@@ -23,6 +23,7 @@
     <InternalsVisibleTo Include="Dockyard" />
     <InternalsVisibleTo Include="Dockyard.Tests" />
     <InternalsVisibleTo Include="Dockyard.Setup.Tests" />
+    <InternalsVisibleTo Include="Dockyard.Cli.Tests" />
   </ItemGroup>
 
   <ItemGroup>

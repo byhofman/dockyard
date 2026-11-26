@@ -5,11 +5,10 @@ using Spectre.Console.Cli;
 
 namespace Dockyard.Cli;
 
-// The dockyard command tree. Cluster commands run here; engine, config, https and update act on what the Toolbox owns and
-// go to it with the arguments as they were typed.
+// The dockyard command tree: parsing and rendering over Dockyard.Setup, and the cluster commands.
 static class CliApp
 {
-    public static CommandApp Create(IReadOnlyList<string> args)
+    public static CommandApp Create(CliEnvironment env)
     {
         var app = new CommandApp();
         app.Configure(c =>
@@ -17,7 +16,8 @@ static class CliApp
             c.SetApplicationName("dockyard");
             c.SetApplicationVersion(Commands.Version);
             c.PropagateExceptions();
-            c.Settings.Registrar.RegisterInstance(new RawArguments(args));
+            c.Settings.Console = env.Console;
+            c.Settings.Registrar.RegisterInstance(env);
             c.AddBranch("cluster", b =>
             {
                 b.SetDescription("kind clusters as the dashboard makes them: the context in your kubeconfig, the definition kept.");
@@ -35,31 +35,47 @@ static class CliApp
                 b.AddCommand<ClusterKubeconfigCommand>("kubeconfig").WithDescription("Prints its kubeconfig.");
                 b.AddCommand<ClusterDefinitionCommand>("definition").WithDescription("Prints the kind config it was made from.");
             });
+            c.AddCommand<SetupCommand>("setup").WithDescription("Installs Dockyard, or brings an install up to date; asks which optional components, or takes --silent with --with and --without.")
+                .WithExample("setup", "--silent", "--without", "tray,dashboard");
+            c.AddBranch("component", b =>
+            {
+                b.SetDescription("The components: what Dockyard installs and where each comes from.");
+                b.AddCommand<ComponentListCommand>("ls").WithDescription("The components, with their versions and source.");
+                b.AddCommand<ComponentAddCommand>("add").WithDescription("Adds a component, by the flag ls shows.");
+                b.AddCommand<ComponentRemoveCommand>("remove").WithDescription("Removes it; an engine keeps its images unless --remove-data.");
+            });
+            c.AddCommand<UpdateCommand>("update").WithDescription("Brings the components up to date; --check only lists them.");
+            c.AddCommand<UninstallCommand>("uninstall").WithDescription("Removes Dockyard; images and containers stay unless --remove-data.");
+            c.AddBranch("settings", b =>
+            {
+                b.SetDescription("Dockyard's settings.");
+                b.AddCommand<SettingsListCommand>("ls").WithDescription("Every setting with its value.");
+                b.AddCommand<SettingsGetCommand>("get").WithDescription("Prints a setting's value.");
+                b.AddCommand<SettingsSetCommand>("set").WithDescription("Changes a setting; an engine's settings open in your editor.");
+            });
             c.AddBranch("engine", b =>
             {
                 b.SetDescription("The engines: linux, and win on Windows.");
-                b.AddCommand<ToolboxCommand>("ls").WithDescription("The engines and whether they run; * marks the docker context's.");
-                b.AddCommand<EngineCommand>("start").WithDescription("Starts an engine.");
-                b.AddCommand<EngineCommand>("stop").WithDescription("Stops an engine.");
-                b.AddCommand<EngineCommand>("use").WithDescription("Makes it the docker context.");
+                b.AddCommand<EngineListCommand>("ls").WithDescription("The engines and whether they run; * marks the docker context's.");
+                b.AddCommand<EngineStartCommand>("start").WithDescription("Starts an engine.");
+                b.AddCommand<EngineStopCommand>("stop").WithDescription("Stops an engine.");
+                b.AddCommand<EngineUseCommand>("use").WithDescription("Makes it the docker context.");
             });
             c.AddBranch("config", b =>
             {
                 b.SetDescription("An engine's daemon.json: what you set in it, without the keys Dockyard adds.");
-                b.AddCommand<ConfigCommand>("show").WithDescription("Prints it.");
-                b.AddCommand<ConfigFileCommand>("validate").WithDescription("Checks a file without applying it.");
-                b.AddCommand<ConfigFileCommand>("apply").WithDescription("Checks it, restarts the engine if it runs, and puts the previous one back if it will not start.");
+                b.AddCommand<ConfigShowCommand>("show").WithDescription("Prints it.");
+                b.AddCommand<ConfigValidateCommand>("validate").WithDescription("Checks a file without applying it.");
+                b.AddCommand<ConfigApplyCommand>("apply").WithDescription("Checks it, restarts the engine if it runs, and puts the previous one back if it will not start.");
                 b.AddCommand<ConfigEditCommand>("edit").WithDescription("Opens it in your editor (VISUAL or EDITOR) and applies it.");
             });
             c.AddCommand<HttpsCommand>("https").WithDescription("Trusted HTTPS for container domains, with Dockyard's own certificate authority: on or off.");
-            c.AddCommand<UpdateCommand>("update").WithDescription("Brings the components up to date; --check only lists them.");
+            c.AddCommand<ImportCommand>("import").WithDescription("Copies images, volumes and containers from Docker Desktop, which keeps them.");
             c.AddCommand<VersionCommand>("version").WithDescription("Prints this command's version.");
         });
         return app;
     }
 }
-
-sealed record RawArguments(IReadOnlyList<string> Args);
 
 sealed class NameSettings : CommandSettings
 {
@@ -245,87 +261,6 @@ sealed class ClusterDefinitionCommand : Command<NameSettings>
         new Clusters(Console.WriteLine).Definition(s.Name);
         return 0;
     }
-}
-
-// The arguments go to the Toolbox as they were typed: it checks them again, being the one that knows its engines.
-class ToolboxCommand(RawArguments raw) : Command
-{
-    public override int Execute(CommandContext context, CancellationToken cancellation) =>
-        Toolbox.Run(raw.Args, Console.WriteLine, Console.Error.WriteLine);
-}
-
-sealed class EngineSettings : CommandSettings
-{
-    [CommandArgument(0, "<engine>")]
-    [Description("linux, or win on Windows")]
-    public string Engine { get; init; } = "";
-}
-
-sealed class EngineCommand(RawArguments raw) : Command<EngineSettings>
-{
-    public override int Execute(CommandContext context, EngineSettings s, CancellationToken cancellation) =>
-        Toolbox.Run(raw.Args, Console.WriteLine, Console.Error.WriteLine);
-}
-
-class ConfigSettings : CommandSettings
-{
-    [CommandOption("--engine <engine>")]
-    [Description("linux or win (Windows); the active engine without it")]
-    public string? Engine { get; init; }
-}
-
-sealed class ConfigFileSettings : ConfigSettings
-{
-    [CommandOption("--file <file>")]
-    [Description("A daemon.json, or - for standard input")]
-    public string File { get; init; } = "";
-
-    public override ValidationResult Validate() => File.Length > 0 ? ValidationResult.Success() : ValidationResult.Error("--file is required");
-}
-
-sealed class ConfigCommand(RawArguments raw) : Command<ConfigSettings>
-{
-    public override int Execute(CommandContext context, ConfigSettings s, CancellationToken cancellation) =>
-        Toolbox.Run(raw.Args, Console.WriteLine, Console.Error.WriteLine);
-}
-
-sealed class ConfigFileCommand(RawArguments raw) : Command<ConfigFileSettings>
-{
-    public override int Execute(CommandContext context, ConfigFileSettings s, CancellationToken cancellation) =>
-        Toolbox.Run(raw.Args, Console.WriteLine, Console.Error.WriteLine);
-}
-
-sealed class ConfigEditCommand : Command<ConfigSettings>
-{
-    public override int Execute(CommandContext context, ConfigSettings s, CancellationToken cancellation) =>
-        ConfigEdit.Run(s.Engine is null ? [] : ["--engine", s.Engine]);
-}
-
-sealed class HttpsSettings : CommandSettings
-{
-    [CommandArgument(0, "<on|off>")]
-    public string State { get; init; } = "";
-
-    public override ValidationResult Validate() => State is "on" or "off" ? ValidationResult.Success() : ValidationResult.Error("https takes on or off");
-}
-
-sealed class HttpsCommand(RawArguments raw) : Command<HttpsSettings>
-{
-    public override int Execute(CommandContext context, HttpsSettings s, CancellationToken cancellation) =>
-        Toolbox.Run(raw.Args, Console.WriteLine, Console.Error.WriteLine);
-}
-
-sealed class UpdateSettings : CommandSettings
-{
-    [CommandOption("--check")]
-    [Description("Only list what has an update")]
-    public bool Check { get; init; }
-}
-
-sealed class UpdateCommand(RawArguments raw) : Command<UpdateSettings>
-{
-    public override int Execute(CommandContext context, UpdateSettings s, CancellationToken cancellation) =>
-        Toolbox.Run(raw.Args, Console.WriteLine, Console.Error.WriteLine);
 }
 
 sealed class VersionCommand : Command

@@ -37,6 +37,9 @@ public sealed partial class DockyardSetup
         return definition.Kind == SettingKind.EngineFile ? await host.ValidateEngineSettings(EngineOf(key), value) : null;
     }
 
+    // The keys of an engine's settings that Dockyard sets itself, so that these replace the ones given.
+    public IReadOnlyList<string> Overridden(string key, string json) => EngineSettings.Overridden(EngineOf(Definition(key).Key), json);
+
     // Validates, saves and applies. A setting that needs an administrator asks for one where the system does.
     public async Task SetSetting(string key, string value, IProgress<SetupProgress> progress)
     {

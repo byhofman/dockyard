@@ -233,7 +233,7 @@ dockyard https on
 dockyard update --check
 ```
 
-`cluster` runs in the command itself. `engine`, `config`, `https` and `update` act on what the Toolbox owns, so they go to the running Toolbox, or to the Toolbox started for that one command. `dockyard` without a command opens the Toolbox, and with the installer's options (`dockyard --silent …`) it installs. The exit code is `0` when done, `1` on failure and `2` for wrong arguments.
+Every command runs in the command itself, over the same library the Toolbox uses. `dockyard setup` installs and asks which optional components you want (`dockyard setup --silent --with kind --without tray` does not ask), `dockyard component ls|add|remove <flag>` changes them, and `dockyard settings ls|get|set`, `dockyard uninstall` and `dockyard import` do what their names say. The exit code is `0` when done, `1` on failure and `2` for wrong arguments.
 
 ## Container domains
 

@@ -164,6 +164,7 @@ sealed class LinuxHost : IEngineHost
     public string SelfComponent => nameof(Component.DockyardCli);
 
     public bool HasDashboard => LinuxComponents.HasDashboard;
+    public string? DashboardExe => LinuxLayout.Dashboard;
 
     public async Task<bool> SetDashboard(Action<string> log, bool installed)
     {

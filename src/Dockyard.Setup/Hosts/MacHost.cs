@@ -88,6 +88,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
     public string SelfComponent => nameof(Component.DockyardCli);
 
     public bool HasDashboard => MacComponents.HasDashboard;
+    public string? DashboardExe => Path.Combine(MacLayout.AppBase, MacLayout.DashboardName);
 
     public async Task<bool> SetDashboard(Action<string> log, bool installed)
     {

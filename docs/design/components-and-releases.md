@@ -50,10 +50,8 @@ shares. So one release with the fixed tag `index` carries a single asset, `compo
 
 - Its own executable, `dockyard` (`dockyard.exe` on Windows), trimmed and self-contained.
 - `cluster …` runs in the CLI: it needs kind, the docker CLI and the kubeconfig, which it reads itself.
-- `engine …`, `config …`, `https …` and `update …` act on what the Toolbox owns, so they go to the Toolbox over its local
-  pipe. When the Toolbox is not running, the CLI runs the Toolbox for that one command and passes its output and exit code on.
-- Without a command, or with the installer's options (`--silent`, `--with`, …), it hands over to the Toolbox, so
-  `dockyard` keeps opening the Toolbox and `dockyard --silent …` keeps installing.
+- Every other command (`setup`, `component`, `settings`, `engine`, `config`, `https`, `update`, `uninstall`, `import`)
+  calls the install library, `Dockyard.Setup`, in the CLI's own process. It is also the elevated worker on Windows.
 - Windows: in `Program Files\Dockyard\bin`, which is on the machine PATH. Linux: `/usr/bin/dockyard`. macOS: inside the app,
   linked from `/usr/local/bin/dockyard` by the Toolbox's setup.
 

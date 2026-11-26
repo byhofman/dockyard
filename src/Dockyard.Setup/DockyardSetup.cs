@@ -11,6 +11,8 @@ internal sealed record ShellProfiles(Action<bool, Action<string>> Apply, Func<IR
     public static ShellProfiles User { get; } = new(ShellSetup.TryApply, () => ShellSetup.Missing().ToList());
 }
 
+public sealed record UpdateStatus(ComponentRow Row, string? Error);
+
 // Everything a front end can do with Dockyard's install, its components, its settings and its engines. A front end parses its
 // input, calls this and shows the progress; what to install, in which order and what a setting does is decided here.
 // An argument that names nothing here throws ArgumentException; a request this machine refuses, InvalidOperationException.
@@ -40,7 +42,17 @@ public sealed partial class DockyardSetup : IDisposable
     // Dockyard itself is being replaced, and the process that asked should exit.
     public event Action? ExitRequested;
 
+    // The elevated half of an install, which Windows starts as this program with --machine-*.
+    public static bool IsElevatedWorker(string[] args) => OperatingSystem.IsWindows() && Elevation.IsWorker(args);
+    public static int RunElevatedWorker(string[] args) =>
+        OperatingSystem.IsWindows() ? Elevation.Worker(args) : throw new PlatformNotSupportedException("The elevated step is for Windows");
+
+    public const string DashboardFlag = "dashboard";
+    public const string TrayFlag = "tray";
+
     public bool IsInstalled => host.IsInstalled;
+    public bool HasDashboard => host.HasDashboard;
+    public string? DashboardExe => host.DashboardExe;
     public BackgroundDuties Duties { get; }
 
     // Releases what this process holds of an engine, such as the macOS VM it started.
@@ -50,6 +62,21 @@ public sealed partial class DockyardSetup : IDisposable
 
     public IReadOnlyList<EngineInfo> Engines => host.Engines;
     public Task<bool> IsRunning(string id) => host.IsRunning(Engine(id).Id);
+
+    // Outside the tray, which holds the Linux engine's relay on Windows, an engine runs when its endpoint answers.
+    public async Task<bool> IsAnswering(string id)
+    {
+        var engine = Engine(id);
+        if (await host.IsRunning(engine.Id)) return true;
+        try
+        {
+            using var client = new Dockyard.Engine.DockerClient(Dockyard.Engine.Transport.DockerEndpoint.Parse(engine.Endpoint));
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            await client.PingAsync(timeout.Token);
+            return true;
+        }
+        catch (Exception e) when (e is HttpRequestException or IOException or OperationCanceledException or TimeoutException or Dockyard.Engine.EngineUnavailableException) { return false; }
+    }
     public string ActiveEngine() => host.ActiveEngine();
     public Task StartEngine(string id) => host.Start(Engine(id).Id);
     public Task StopEngine(string id) => host.Stop(Engine(id).Id);
@@ -77,6 +104,17 @@ public sealed partial class DockyardSetup : IDisposable
     // With the installed versions and the newest releases from the index.
     public async Task<IReadOnlyList<ComponentRow>> ComponentsAsync(CancellationToken ct) =>
         (await Check(null, skipStoppedEngines: false, ct)).Select(c => c.Row).ToList();
+
+    // Whether each component has an update, and why a check failed.
+    public async Task<IReadOnlyList<UpdateStatus>> CheckUpdates(CancellationToken ct) =>
+        (await Check(null, skipStoppedEngines: false, ct)).Select(c => new UpdateStatus(c.Row, c.Error)).ToList();
+
+    // Dockyard itself has to restart for its update, so it is left to that restart.
+    public Task UpdateAvailable(IReadOnlyList<UpdateStatus> checks, IProgress<SetupProgress> progress)
+    {
+        var ids = checks.Where(c => c.Row.CanUpdate && c.Row.Id != SelfId).Select(c => c.Row.Id).ToList();
+        return ids.Count == 0 ? Task.CompletedTask : Update(ids, progress);
+    }
 
     internal sealed record ComponentCheck(ComponentRow Row, bool IsPresent, string? Error, bool CouldNotCheck, Release? Latest = null);
 
@@ -282,9 +320,6 @@ public sealed partial class DockyardSetup : IDisposable
         return reboot ? RebootRequired : Ok;
     }
 
-    const string DashboardFlag = "dashboard";
-    const string TrayFlag = "tray";
-
     // The dashboard and the tray go with the install itself rather than as components of their own.
     IEnumerable<ComponentInfo> Changed(IEnumerable<string> flags) =>
         flags.Where(f => f is not (DashboardFlag or TrayFlag)).Select(f => ComponentRules.ByFlag(Catalog, f)).OfType<ComponentInfo>();
@@ -340,12 +375,11 @@ public sealed partial class DockyardSetup : IDisposable
 
     static Action<string> Log(IProgress<SetupProgress> progress) => line => progress.Report(new SetupProgress(line));
 
-    // For the Toolbox's window until it goes: what only it does.
     // Dockyard's own release files from this folder instead of downloading them, unchecked.
-    internal static string? LocalAssets { get => Updates.LocalAssets; set => Updates.LocalAssets = value; }
+    public static string? LocalAssets { get => Updates.LocalAssets; set => Updates.LocalAssets = value; }
     internal bool RunsFromInstallLocation => host.RunsFromInstallLocation;
     // Dockyard itself: the row whose update replaces the running program, and whose version is what is installed.
-    internal string SelfId => host.SelfComponent;
+    public string SelfId => host.SelfComponent;
     internal Task<Version?> InstalledSelfVersion() => host.Installed(host.SelfComponent);
     internal void StartApp() => host.StartApp();
     internal void Reboot() => host.Reboot();

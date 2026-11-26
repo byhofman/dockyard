@@ -130,7 +130,7 @@ static class Cli
         {
             var active = setup.ActiveEngine();
             foreach (var e in setup.Engines)
-                log($"{(e.Id == active ? "*" : " ")} {e.Id}\t{e.Title}\t{(await setup.IsRunning(e.Id) || await Answers(e.Endpoint) ? "running" : "stopped")}");
+                log($"{(e.Id == active ? "*" : " ")} {e.Id}\t{e.Title}\t{(await setup.IsAnswering(e.Id) ? "running" : "stopped")}");
             return 0;
         }
         var engine = args.FirstOrDefault() is { } id && setup.Engines.Any(e => e.Id == id)
@@ -143,19 +143,6 @@ static class Cli
             default: throw new UsageException($"Unknown engine command: {verb}");
         }
         return 0;
-    }
-
-    // Outside the tray, which holds the Linux engine's relay on Windows, the engine runs when its endpoint answers.
-    static async Task<bool> Answers(string endpoint)
-    {
-        try
-        {
-            using var client = new Dockyard.Engine.DockerClient(Dockyard.Engine.Transport.DockerEndpoint.Parse(endpoint));
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-            await client.PingAsync(timeout.Token);
-            return true;
-        }
-        catch (Exception e) when (e is HttpRequestException or IOException or OperationCanceledException or TimeoutException or Dockyard.Engine.EngineUnavailableException) { return false; }
     }
 
     static async Task<int> HttpsCommand(DockyardSetup setup, string state, Action<string> log)
@@ -172,19 +159,16 @@ static class Cli
         return 0;
     }
 
-    // Dockyard itself, the row the facade names, has to restart for its update, so it is left out.
     static async Task<int> Update(DockyardSetup setup, bool checkOnly, Action<string> log, Action<string> error)
     {
-        var checks = await setup.Check(null, skipStoppedEngines: false, CancellationToken.None);
+        var checks = await setup.CheckUpdates(CancellationToken.None);
         foreach (var check in checks)
         {
             if (check.Error is { } problem) { error($"{check.Row.Title}: {problem}"); continue; }
             if (check.Row.Installed is not { } installed) continue;
             log($"{check.Row.Title}\t{installed}\t{(check.Row.CanUpdate ? $"{check.Row.Newest} available" : "up to date")}");
         }
-        var available = checks.Where(c => c.Row.CanUpdate && c.Row.Id != setup.SelfId).Select(c => c.Row.Id).ToList();
-        if (checkOnly || available.Count == 0) return 0;
-        await setup.Update(available, Progress(log));
+        if (!checkOnly) await setup.UpdateAvailable(checks, Progress(log));
         return 0;
     }
 }
