@@ -156,7 +156,8 @@ sealed class ClusterUpgradeCommand : AsyncCommand<UpgradeSettings>
 
 static class Files
 {
-    public static string? Read(string? file) => file is null ? null : file == "-" ? Console.In.ReadToEnd() : System.IO.File.ReadAllText(file);
+    public static string? Read(string? file) => file is null ? null : file == "-" ? Console.In.ReadToEnd()
+        : System.IO.File.Exists(file) ? System.IO.File.ReadAllText(file) : throw new UsageException($"{file} does not exist");
 }
 
 sealed class ClusterListCommand : AsyncCommand

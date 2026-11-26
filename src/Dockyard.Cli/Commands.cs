@@ -27,7 +27,8 @@ static class Commands
             env.Error.WriteLine("dockyard --help lists the commands.");
             return DockyardSetup.WrongArguments;
         }
-        catch (Exception e) when (e is InvalidOperationException or IOException or UnauthorizedAccessException or TimeoutException)
+        // Whatever else went wrong, as a network, a process or a file can: its message, never a stack trace.
+        catch (Exception e)
         {
             env.Error.WriteLine(e.Message);
             return DockyardSetup.Failed;

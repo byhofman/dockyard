@@ -49,7 +49,8 @@ sealed class FakeHost : IEngineHost
         if (installed) Missing.Remove(component); else Missing.Add(component);
         return Task.FromResult(false);
     }
-    public Task<Release?> Latest(string component) => Task.FromResult<Release?>(new Release(Newest, $"v{Newest}", null));
+    public Exception? LatestFailure { get; set; }
+    public Task<Release?> Latest(string component) => LatestFailure is { } failure ? Task.FromException<Release?>(failure) : Task.FromResult<Release?>(new Release(Newest, $"v{Newest}", null));
     public Task<bool> Update(Action<string> log, IReadOnlyList<(string Component, Release? Release)> components)
     {
         Calls.Add("update " + string.Join(",", components.Select(c => c.Component)));

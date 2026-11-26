@@ -206,7 +206,7 @@ sealed class UpdateCommand(CliEnvironment env) : AsyncCommand<UpdateSettings>
             env.Console.WriteLine($"{check.Row.Title}\t{installed}\t{(check.Row.CanUpdate ? $"{check.Row.Newest} available" : "up to date")}");
         }
         if (!s.Check) await setup.UpdateAvailable(checks, new ProgressRenderer(env.Console, env.Error));
-        return 0;
+        return checks.Any(c => c.Error is not null) ? DockyardSetup.Failed : DockyardSetup.Ok;
     }
 }
 

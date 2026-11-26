@@ -189,6 +189,42 @@ public sealed class SetupCommandTests
     }
 
     [Fact]
+    public void Update_fails_when_a_check_failed()
+    {
+        using var h = new CliHarness(Catalog);
+        h.Host.Installed = true;
+        h.Host.LatestFailure = new HttpRequestException("github.com answered 503");
+
+        Assert.Equal(1, h.Run("update"));
+        Assert.Equal(1, h.Run("update", "--check"));
+
+        Assert.Contains("github.com answered 503", h.Error);
+    }
+
+    [Fact]
+    public void Any_failure_is_its_message_and_exit_1_without_a_stack_trace()
+    {
+        using var h = new CliHarness(Catalog);
+        h.Host.Installed = true;
+        h.Host.FailureOnSetComponent = new HttpRequestException("github.com answered 503");
+
+        Assert.Equal(1, h.Run("component", "add", "kind"));
+
+        Assert.Contains("github.com answered 503", h.Error);
+        Assert.DoesNotContain("   at ", h.Error);
+    }
+
+    [Fact]
+    public void A_file_that_is_not_there_is_a_wrong_argument()
+    {
+        using var h = new CliHarness(Catalog);
+        h.Host.Installed = true;
+
+        Assert.Equal(2, h.Run("config", "apply", "--file", Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json")));
+        Assert.Contains("does not exist", h.Error);
+    }
+
+    [Fact]
     public void Update_check_only_lists()
     {
         using var h = new CliHarness(Catalog);
