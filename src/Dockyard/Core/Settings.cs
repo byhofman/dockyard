@@ -5,14 +5,10 @@ namespace Dockyard.Core;
 
 sealed class Settings
 {
-    public string? Distro { get; set; }
     public bool StopOtherOnSwitch { get; set; } = true;
     public bool StartActiveAtLogon { get; set; } = true;
     // Components removed on purpose, so that rerunning the wizard or updating does not bring them back.
     public List<string> RemovedComponents { get; set; } = [];
-    public string? RegistryMirrors { get; set; }
-    public string? InsecureRegistries { get; set; }
-    public string? AddressPools { get; set; }
     public bool HttpsEnabled { get; set; }
     // Names under dockyard.internal, the proxy and the names clusters publish; off leaves containers' DNS as it is.
     public bool ContainerDomains { get; set; } = true;
@@ -50,13 +46,9 @@ sealed class Settings
         Directory.CreateDirectory(Path.GetDirectoryName(file)!);
         File.WriteAllText(file, merged.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
         var current = Load(file);
-        Distro = current.Distro;
         StopOtherOnSwitch = current.StopOtherOnSwitch;
         StartActiveAtLogon = current.StartActiveAtLogon;
         RemovedComponents = current.RemovedComponents;
-        RegistryMirrors = current.RegistryMirrors;
-        InsecureRegistries = current.InsecureRegistries;
-        AddressPools = current.AddressPools;
         HttpsEnabled = current.HttpsEnabled;
         ContainerDomains = current.ContainerDomains;
         UsePackageManager = current.UsePackageManager;

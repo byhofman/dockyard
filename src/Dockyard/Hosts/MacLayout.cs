@@ -34,7 +34,6 @@ static class MacLayout
     public const string SystemSocket = "/var/run/docker.sock";
     public static string LoginKeychain => Path.Combine(Home, "Library", "Keychains", "login.keychain-db");
     public const string DomainResolver = "/etc/resolver/dockyard.internal";
-    public const string LegacyDomainResolver = "/etc/resolver/dockyard.test";
     public const int DomainDnsPort = 15353;
     public const string SocketDaemonLabel = "com.byhofman.dockyard.socket";
     public const string SocketDaemon = "/Library/LaunchDaemons/" + SocketDaemonLabel + ".plist";
@@ -171,7 +170,7 @@ static class MacLayout
         + $"if [ \"$(readlink {SystemSocket})\" = {Shell.ShQuote(ourSocket)} ]; then rm -f {SystemSocket}; fi";
 
     public static string InstallDomainResolver =>
-        $"mkdir -p /etc/resolver && printf 'nameserver 127.0.0.1\\nport {DomainDnsPort}\\n' > {DomainResolver} && rm -f {LegacyDomainResolver}";
+        $"mkdir -p /etc/resolver && printf 'nameserver 127.0.0.1\\nport {DomainDnsPort}\\n' > {DomainResolver}";
 
     // One administrator prompt: AppleScript runs the shell command with administrator privileges.
     public static string[] AdminShell(string command) =>
@@ -202,11 +201,10 @@ static class MacLayout
 
     // Everything of the dashboard in the bundle: the tray links none of the dylibs, the engine-only edition leaves them out too.
     public static IEnumerable<string> DashboardFiles(string macosDir) =>
-        !Directory.Exists(macosDir) ? [] : Directory.GetFiles(macosDir).Where(f => DashboardNames.Contains(Path.GetFileName(f)) || f.EndsWith(".dylib", StringComparison.Ordinal));
+        !Directory.Exists(macosDir) ? [] : Directory.GetFiles(macosDir).Where(f => Path.GetFileName(f) == DashboardName || f.EndsWith(".dylib", StringComparison.Ordinal));
 
-    // The first is what ships now; an install from up to v0.2.1 has the second until its bundle is replaced.
-    public static readonly string[] DashboardNames = ["Dockyard Dashboard", "Dockyard.Dashboard"];
-    public static bool HasDashboardIn(string macosDir) => DashboardNames.Any(n => File.Exists(Path.Combine(macosDir, n)));
+    public const string DashboardName = "Dockyard Dashboard";
+    public static bool HasDashboardIn(string macosDir) => File.Exists(Path.Combine(macosDir, DashboardName));
 
     public static Version? BundleVersion(string infoPlist)
     {

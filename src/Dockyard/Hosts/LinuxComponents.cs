@@ -25,12 +25,8 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
         _ => null,
     };
 
-    // Asking the old binary would open its window, since it has no --version: it came with the app's version.
-    async Task<Version?> InstalledDashboardVersion()
-    {
-        if (File.Exists(LinuxLayout.Dashboard)) return Updates.ParseVersion((await runner.Run(LinuxLayout.Dashboard, "--version")).Output);
-        return HasDashboard ? await InstalledAppVersion() : null;
-    }
+    async Task<Version?> InstalledDashboardVersion() =>
+        HasDashboard ? Updates.ParseVersion((await runner.Run(LinuxLayout.Dashboard, "--version")).Output) : null;
 
     // The wizard runs from a download and can be newer than what is installed.
     async Task<Version?> InstalledAppVersion()
@@ -100,7 +96,7 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
         log($"Removed {package}");
     }
 
-    public async Task StopDashboard() => await root.TryRun("pkill", "-f", "/(dockyard-dashboard|Dockyard[. ]Dashboard)$");
+    public async Task StopDashboard() => await root.TryRun("pkill", "-f", "/dockyard-dashboard$");
 
     public async Task SetDashboard(Action<string> log, bool installed)
     {
@@ -193,8 +189,6 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
                 var name = Path.GetFileName(file);
                 if (dashboard || !LinuxLayout.DashboardFiles.Contains(name)) File.Move(file, Path.Combine(LinuxLayout.HomeDir, name), overwrite: true);
             }
-            foreach (var old in LinuxLayout.ToolboxNames.Skip(1).Concat(LinuxLayout.DashboardNames.Skip(1)))
-                File.Delete(Path.Combine(LinuxLayout.HomeDir, old));
             if (!dashboard)
                 foreach (var name in LinuxLayout.DashboardFiles) File.Delete(Path.Combine(LinuxLayout.HomeDir, name));
             await File.WriteAllTextAsync(LinuxLayout.VersionFile, Updates.ParseVersion(Path.GetFileName(tarball))?.ToString() ?? "");

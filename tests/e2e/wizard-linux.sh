@@ -21,8 +21,7 @@ if [ "$container" -eq 1 ]; then
 else
   app_dir=/usr/lib/dockyard
 fi
-# Either name: the one-liner test runs the release that is out, and the rename reaches it with the next release.
-dash() { for f in "$app_dir/dockyard-dashboard" "$app_dir/Dockyard Dashboard" "$app_dir/Dockyard.Dashboard"; do [ -e "$f" ] && { echo "$f"; return; }; done; echo "$app_dir/dockyard-dashboard"; }
+dash() { echo "$app_dir/dockyard-dashboard"; }
 marker=/etc/dockyard/installed
 
 echo "== wrong arguments are refused"
@@ -200,8 +199,7 @@ check "with its libraries" test -f "$app_dir/libSkiaSharp.so"
 
 if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
   echo "== the process name"
-  check "the new file name" test -x "$app_dir/dockyard-dashboard"
-  check "no old file" missing "$app_dir/Dockyard.Dashboard"
+  check "the file name" test -x "$app_dir/dockyard-dashboard"
   echo "  for the record, /proc comm of that file name is 15 characters: $(printf 'dockyard-dashboard' | cut -c1-15)"
 fi
 
@@ -242,12 +240,9 @@ if [ "$container" -eq 0 ]; then
   if [ -n "${WIZARD:-}" ]; then
     grep -q "\"$upstream\"" /etc/docker/daemon.json && ok "and names its own server again" || fail "daemon.json: $(cat /etc/docker/daemon.json)"
   fi
-  # The one-liner runs the release that is out, which may predate this cleanup.
-  if [ -n "${WIZARD:-}" ]; then
-    if ip addr show lo | grep -q 198.19.250.; then fail "lo kept the agent's addresses: $(ip addr show lo)"; else ok "lo no longer has the agent's addresses"; fi
-    left="$( { sudo iptables -S; sudo iptables -t nat -S; } | grep -E '198\.19\.250\.|127\.77\.0\.1|DOCKYARD-INPUT|--dports 2378,2380,2381 ' || true)"
-    [ -z "$left" ] && ok "no rule of the agent's is left" || fail "rules left after uninstall: $left"
-  fi
+  if ip addr show lo | grep -q 198.19.250.; then fail "lo kept the agent's addresses: $(ip addr show lo)"; else ok "lo no longer has the agent's addresses"; fi
+  left="$( { sudo iptables -S; sudo iptables -t nat -S; } | grep -E '198\.19\.250\.|127\.77\.0\.1|DOCKYARD-INPUT|--dports 2378,2380,2381 ' || true)"
+  [ -z "$left" ] && ok "no rule of the agent's is left" || fail "rules left after uninstall: $left"
 fi
 if [ "$container" -eq 0 ]; then
   sudo systemctl reset-failed docker.socket docker.service || true

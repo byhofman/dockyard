@@ -27,7 +27,6 @@ public sealed class ComponentIndexTests
     {
         Assert.Equal("toolbox/0.9.0", Updates.TagOfLatestRedirect(new Uri("https://github.com/byhofman/dockyard/releases/tag/toolbox%2F0.9.0")));
         Assert.Equal("toolbox/0.9.0", Updates.TagOfLatestRedirect(new Uri("https://github.com/byhofman/dockyard/releases/tag/toolbox/0.9.0")));
-        Assert.Equal("v0.8.0", Updates.TagOfLatestRedirect(new Uri("https://github.com/byhofman/dockyard/releases/tag/v0.8.0")));
         Assert.Null(Updates.TagOfLatestRedirect(new Uri("https://github.com/byhofman/dockyard/releases")));
         Assert.Equal(new Version(0, 9, 0), Updates.ParseVersion("toolbox/0.9.0"));
         Assert.Equal("cli/1.2.3", Updates.ComponentTag(Updates.CliComponent, "1.2.3"));

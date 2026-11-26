@@ -37,12 +37,12 @@ function Find-Named($window, $name) {
     $window.FindFirst($tree, $condition)
 }
 
-# By the row's id: every optional row has an Add or a Remove now. A release from before that has only the dashboard's.
+# By the row's id: every optional row has an Add or a Remove.
 function Find-Button($window, $name) {
     $condition = New-Object System.Windows.Automation.PropertyCondition($auto::AutomationIdProperty, "$name-Dashboard")
     $byId = $window.FindFirst($tree, $condition)
     if ($byId) { return $byId }
-    if ($name -eq 'Check for updates' -or -not (Find-Named $window 'Docker CLI')) { Find-Named $window $name }
+    if ($name -eq 'Check for updates') { Find-Named $window $name }
 }
 
 function Click($window, $name) {
@@ -51,7 +51,7 @@ function Click($window, $name) {
     $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
 }
 
-$appExes = 'dockyard-toolbox.exe', 'Dockyard.exe' | ForEach-Object { Join-Path $env:ProgramFiles "Dockyard\$_" }
+$appExe = Join-Path $env:ProgramFiles 'Dockyard\dockyard-toolbox.exe'
 $process = if ($Assets) { Start-Process $Exe -ArgumentList '--assets', $Assets -PassThru } else { Start-Process $Exe -PassThru }
 $handedOver = $false
 try {
@@ -60,7 +60,7 @@ try {
         if (-not $process.HasExited -and $process.MainWindowHandle -ne 0) { return $auto::FromHandle($process.MainWindowHandle) }
         if ($process.HasExited) {
             if ($process.ExitCode -ne 0) { throw "FAIL the exe exited with $($process.ExitCode)" }
-            $tray = Get-Process dockyard-toolbox, Dockyard -ErrorAction SilentlyContinue | Where-Object { $_.Path -in $appExes -and $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+            $tray = Get-Process dockyard-toolbox -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $appExe -and $_.MainWindowHandle -ne 0 } | Select-Object -First 1
             if ($tray) { $script:handedOver = $true; $auto::FromHandle($tray.MainWindowHandle) }
         }
     }
@@ -94,12 +94,10 @@ try {
     if ($version -like '0.0.0*') {
         Click $window 'Check for updates'
         Click $window 'Update'
-        # The release that is out may still name it as before 0.9.0.
-        $named = $Dashboard, (Join-Path (Split-Path $Dashboard) 'Dockyard Dashboard.exe'), (Join-Path (Split-Path $Dashboard) 'Dockyard.Dashboard.exe')
-        Wait-For 'the dashboard to be updated' { $named | Where-Object { (Test-Path $_) -and (Get-Item $_).VersionInfo.ProductVersion -notlike '0.0.0*' } | Select-Object -First 1 } | Out-Null
+        Wait-For 'the dashboard to be updated' { if ((Test-Path $Dashboard) -and (Get-Item $Dashboard).VersionInfo.ProductVersion -notlike '0.0.0*') { $Dashboard } } | Out-Null
         Wait-For 'the Remove button' { Find-Button $window 'Remove' } | Out-Null
         Shot 'updated'
-        Write-Host "  ok   Update brings the dashboard to $((Get-Item ($named | Where-Object { Test-Path $_ } | Select-Object -First 1)).VersionInfo.ProductVersion) and it stays removable"
+        Write-Host "  ok   Update brings the dashboard to $((Get-Item $Dashboard).VersionInfo.ProductVersion) and it stays removable"
     }
 
     Click $window 'Remove'

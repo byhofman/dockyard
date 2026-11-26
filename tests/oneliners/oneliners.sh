@@ -28,7 +28,7 @@ while [ \$# -gt 0 ]; do
   esac
   shift
 done
-if [ \$effective -eq 1 ]; then printf '%s' "https://github.com/byhofman/dockyard/releases/tag/v9.9.9"; exit 0; fi
+if [ \$effective -eq 1 ]; then printf '%s' "https://github.com/byhofman/dockyard/releases/tag/toolbox%2F9.9.9"; exit 0; fi
 file="$assets/\${url##*/}"
 [ -f "\$file" ] || { echo "curl: 404 \$url" >&2; exit 22; }
 cp "\$file" "\$output"

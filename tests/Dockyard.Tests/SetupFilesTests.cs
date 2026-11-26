@@ -27,16 +27,16 @@ public sealed class DashboardFilesTests : IDisposable
     [Fact]
     public void Adding_and_removing_leaves_the_rest_of_the_install_alone()
     {
-        File.WriteAllText(Path.Combine(dir, "Dockyard.exe"), "tray");
-        DashboardFiles.Extract(Zip("Dockyard.Dashboard.exe", "libSkiaSharp.dll"), dir);
-        Assert.True(File.Exists(Path.Combine(dir, "Dockyard.Dashboard.exe")));
+        File.WriteAllText(Path.Combine(dir, "dockyard-toolbox.exe"), "tray");
+        DashboardFiles.Extract(Zip("dockyard-dashboard.exe", "libSkiaSharp.dll"), dir);
+        Assert.True(File.Exists(Path.Combine(dir, "dockyard-dashboard.exe")));
         Assert.True(File.Exists(Path.Combine(dir, "libSkiaSharp.dll")));
 
-        DashboardFiles.Remove(dir, ["Dockyard Dashboard.exe", "Dockyard.Dashboard.exe"], _ => { });
-        Assert.Equal(["Dockyard.exe"], Directory.GetFiles(dir).Select(Path.GetFileName));
+        DashboardFiles.Remove(dir, _ => { });
+        Assert.Equal(["dockyard-toolbox.exe"], Directory.GetFiles(dir).Select(Path.GetFileName));
 
-        DashboardFiles.Extract(Zip("Dockyard.Dashboard.exe"), dir);
-        Assert.True(File.Exists(Path.Combine(dir, "Dockyard.Dashboard.exe")));
+        DashboardFiles.Extract(Zip("dockyard-dashboard.exe"), dir);
+        Assert.True(File.Exists(Path.Combine(dir, "dockyard-dashboard.exe")));
     }
 
     [Fact]
@@ -53,32 +53,23 @@ public sealed class DashboardFilesTests : IDisposable
         var outside = Path.Combine(Path.GetDirectoryName(dir)!, $"{Guid.NewGuid():N}.txt");
         File.WriteAllText(outside, "keep");
         File.WriteAllLines(Path.Combine(dir, DashboardFiles.ManifestName), [$"../{Path.GetFileName(outside)}"]);
-        DashboardFiles.Remove(dir, ["x"], _ => { });
+        DashboardFiles.Remove(dir, _ => { });
         Assert.True(File.Exists(outside));
         File.Delete(outside);
     }
 
     [Fact]
-    public void A_dashboard_with_the_old_name_makes_way_for_the_new_one_and_the_rest_stays()
+    public void A_file_the_new_dashboard_no_longer_brings_goes_and_the_rest_stays()
     {
-        File.WriteAllText(Path.Combine(dir, "Dockyard.exe"), "tray");
-        DashboardFiles.Extract(Zip("Dockyard.Dashboard.exe", "libOld.dll", "libSkiaSharp.dll"), dir);
+        File.WriteAllText(Path.Combine(dir, "dockyard-toolbox.exe"), "tray");
+        DashboardFiles.Extract(Zip("dockyard-dashboard.exe", "libOld.dll", "libSkiaSharp.dll"), dir);
 
-        DashboardFiles.Extract(Zip("Dockyard Dashboard.exe", "libSkiaSharp.dll"), dir, "Dockyard.Dashboard.exe");
+        DashboardFiles.Extract(Zip("dockyard-dashboard.exe", "libSkiaSharp.dll"), dir);
 
-        Assert.True(File.Exists(Path.Combine(dir, "Dockyard Dashboard.exe")));
+        Assert.True(File.Exists(Path.Combine(dir, "dockyard-dashboard.exe")));
         Assert.True(File.Exists(Path.Combine(dir, "libSkiaSharp.dll")));
-        Assert.False(File.Exists(Path.Combine(dir, "Dockyard.Dashboard.exe")));
         Assert.False(File.Exists(Path.Combine(dir, "libOld.dll")));
-        Assert.True(File.Exists(Path.Combine(dir, "Dockyard.exe")));
-    }
-
-    [Fact]
-    public void A_dashboard_from_before_the_manifest_goes_by_the_old_name_too()
-    {
-        File.WriteAllText(Path.Combine(dir, "Dockyard.Dashboard.exe"), "old");
-        DashboardFiles.Extract(Zip("Dockyard Dashboard.exe"), dir, "Dockyard.Dashboard.exe");
-        Assert.False(File.Exists(Path.Combine(dir, "Dockyard.Dashboard.exe")));
+        Assert.True(File.Exists(Path.Combine(dir, "dockyard-toolbox.exe")));
     }
 }
 

@@ -6,7 +6,7 @@ namespace Dockyard.Hosts;
 // Dockyard's settings, and an engine that will not start with a new one gets the previous one back.
 static class RenderedEngineSettings
 {
-    public static string Read() => EngineSettings.Load(EngineSettings.Linux, Settings.Load());
+    public static string Read() => EngineSettings.Load(EngineSettings.Linux);
 
     public static async Task Apply(Action<string> log, string json, Func<Action<string>, Task> restart)
     {

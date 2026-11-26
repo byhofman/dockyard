@@ -26,7 +26,7 @@
         $tag = [Uri]::UnescapeDataString(($response.ResponseUri.AbsolutePath -split '/releases/tag/', 2)[-1])
         $response.Dispose()
     }
-    if ($tag -notmatch '^(v|toolbox/)\d') { throw 'No Dockyard release found.' }
+    if ($tag -notmatch '^toolbox/\d') { throw 'No Dockyard release found.' }
 
     New-Item -ItemType Directory -Force $dir | Out-Null
     Write-Host "Downloading the Dockyard Toolbox ($tag)"

@@ -182,17 +182,4 @@ public sealed class LocalCaTests : IDisposable
 
         Assert.False(chain.Build(issued));
     }
-
-    [Fact]
-    public void A_root_from_before_the_IP_and_usage_limits_is_not_trusted_any_more()
-    {
-        using var key = System.Security.Cryptography.ECDsa.Create();
-        var old = new CertificateRequest($"CN={LocalCa.SubjectName}", key, System.Security.Cryptography.HashAlgorithmName.SHA256);
-        old.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, true, 0, true));
-        // The constraint as earlier versions wrote it: dockyard.internal permitted, nothing excluded, no extended key usage.
-        old.CertificateExtensions.Add(new X509Extension("2.5.29.30", Convert.FromHexString("3013A011300F820D646F636B796172642E74657374"), critical: true));
-        using var earlier = old.CreateSelfSigned(Now, Now.AddDays(1));
-
-        Assert.False(LocalCa.IsConstrainedRoot(earlier.ExportCertificatePem()));
-    }
 }

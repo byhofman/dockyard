@@ -16,7 +16,7 @@ else
   tag="$(printf '%s' "${tag#*/releases/tag/}" | sed 's#%2[Ff]#/#g')"
 fi
 case "$tag" in
-  v[0-9]* | toolbox/[0-9]*) ;;
+  toolbox/[0-9]*) ;;
   *) echo "No Dockyard release found" >&2; exit 1 ;;
 esac
 

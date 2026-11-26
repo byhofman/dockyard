@@ -524,7 +524,7 @@ sealed class MainViewModel : Observable
 
     async Task InstallCore()
     {
-        var dashboard = IsInstalled && !IsSetupMode ? DashboardChoice.Resolve(options.Dashboard, true, host.HasDashboard, host.RunsFromInstallLocation) : IncludeDashboard;
+        var dashboard = IsInstalled && !IsSetupMode ? DashboardChoice.Resolve(options.Dashboard, true, host.HasDashboard) : IncludeDashboard;
         if (options.KubectlShell is { } shell && shell != settings.KubectlShell)
         {
             settings.KubectlShell = shell;

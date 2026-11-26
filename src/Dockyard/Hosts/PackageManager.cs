@@ -42,7 +42,7 @@ sealed class Winget(ICommandRunner runner, Action<IReadOnlyList<string>>? exclud
 
     public static string? Command(CliTool tool) => Command(tool, LinkDirs, [MachinePackages]);
 
-    // One an earlier Dockyard installed for the user, or the user did: it takes over once the machine's is in place.
+    // One the user installed for themselves: it takes over once the machine's is in place.
     public static string? UserCommand(CliTool tool) => Command(tool, UserLinkDirs, UserPackageDirs);
 
     // A link where winget could make one; the file in the package's own folder, which has the command's name too, otherwise.
