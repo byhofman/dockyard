@@ -25,7 +25,7 @@ sealed class WindowsHost : IEngineHost
         distro = new WslDistro(runner);
         wsl = new WslEngine(distro);
         winget = new Winget(runner);
-        tools = new ToolComponents(winget, new WindowsOwnCopies(), () => Settings.Load().UsePackageManager);
+        tools = new ToolComponents(winget, new WindowsOwnCopies(), () => Settings.Load().UsePackageManager, MachineTools.Ledger);
     }
 
     public IReadOnlyList<EngineInfo> Engines { get; } =

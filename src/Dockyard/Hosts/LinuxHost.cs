@@ -22,7 +22,7 @@ sealed class LinuxHost : IEngineHost
         this.runner = runner;
         var root = new LinuxRoot(runner);
         components = new LinuxComponents(runner, root);
-        tools = new ToolComponents(new LinuxPackages(root), new LinuxOwnCopies(runner, root), () => Settings.Load().UsePackageManager);
+        tools = new ToolComponents(new LinuxPackages(root), new LinuxOwnCopies(runner, root), () => Settings.Load().UsePackageManager, new ToolLedger(Path.Combine(Paths.SettingsDir, "package-tools.json")));
         setup = new LinuxSetup(root, components, tools);
         trust = new LinuxTrust(root);
     }

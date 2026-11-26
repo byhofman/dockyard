@@ -216,9 +216,11 @@ sealed class MainViewModel : Observable
         get => settings.UsePackageManager;
         set
         {
+            var changed = settings.UsePackageManager != value;
             settings.UsePackageManager = value;
             if (IsInstalled) settings.Save();
             Raise(nameof(UsePackageManager), nameof(ToolSource));
+            if (changed && IsInstalled) _ = MoveTools(value);
         }
     }
 
@@ -247,6 +249,17 @@ sealed class MainViewModel : Observable
         OperatingSystem.IsWindows() ? "winget" : OperatingSystem.IsMacOS() ? "Homebrew" : "apt / dnf",
         "Direct download",
     ];
+
+    // Every tool that is there comes from the new source at once, so there is never one of each on the PATH.
+    Task MoveTools(bool toPackageManager) => Run(toPackageManager ? "Moving the tools to the package manager" : "Moving the tools to Dockyard's own copies", async () =>
+    {
+        List<(string Component, Release? Release)> present = [];
+        // On Linux docker, Compose and Buildx are the distribution's packages whatever this says.
+        foreach (var tool in OperatingSystem.IsLinux() ? Tools.Standalone : Tools.All)
+            if (await host.Installed(tool.Id) is not null) present.Add((tool.Id, null));
+        if (present.Count > 0) await host.Update(Log, present);
+        await RefreshState();
+    });
 
     public int ToolSource
     {

@@ -42,5 +42,8 @@ static class MachineTools
     }
 
     public static ToolComponents For(bool usePackageManager) =>
-        new(new Winget(ProcessRunner.Instance, MachineApps.ExcludeFromAsr), new OwnCopies(), () => usePackageManager);
+        new(new Winget(ProcessRunner.Instance, MachineApps.ExcludeFromAsr), new OwnCopies(), () => usePackageManager, Ledger);
+
+    // In Program Files, next to the tools: winget runs in the administrator step, which may be another account.
+    public static ToolLedger Ledger => new(Path.Combine(Paths.AppDir, "package-tools.json"));
 }
