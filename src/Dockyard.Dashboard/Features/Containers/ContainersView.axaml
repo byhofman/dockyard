@@ -1,4 +1,5 @@
 <UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:ctl="using:Dockyard.Dashboard.Controls"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:cont="using:Dockyard.Dashboard.Features.Containers"
              xmlns:store="using:Dockyard.Dashboard.Store"
@@ -66,19 +67,10 @@
             <DataTemplate DataType="store:ProjectRow">
               <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto">
                 <CheckBox Classes="pick" IsChecked="{Binding $parent[ListBoxItem].IsSelected}" AutomationProperties.Name="{Binding Name}" />
-                <Button Grid.Column="1" Classes="iconbtn" Padding="2" Margin="-6,0,4,0" ToolTip.Tip="Expand or collapse"
-                        Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).ToggleProjectCommand}" CommandParameter="{Binding}">
-                  <Panel>
-                    <PathIcon Data="{StaticResource IconChevronDown}" IsVisible="{Binding IsExpanded}" />
-                    <PathIcon Data="{StaticResource IconChevronRight}" IsVisible="{Binding !IsExpanded}" />
-                  </Panel>
-                </Button>
+                <ctl:ExpandToggle Grid.Column="1" IsExpanded="{Binding IsExpanded}" Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).ToggleProjectCommand}" CommandParameter="{Binding}" />
                 <PathIcon Grid.Column="2" Data="{StaticResource IconCompose}" Width="16" Height="16" Margin="0,0,10,0"
                           Foreground="{DynamicResource Muted}" Classes.running="{Binding IsRunning}" />
-                <StackPanel Grid.Column="3" VerticalAlignment="Center">
-                  <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                  <TextBlock Classes="muted small" Text="{Binding Location}" TextTrimming="CharacterEllipsis" />
-                </StackPanel>
+                <ctl:RowLabel Grid.Column="3" Title="{Binding Name}" Detail="{Binding Location}" />
                 <TextBlock Grid.Column="4" Classes="muted small" Text="{Binding Summary}" VerticalAlignment="Center" Margin="12,0" />
                 <StackPanel Grid.Column="5" Classes="rowactions" Orientation="Horizontal" VerticalAlignment="Center">
                   <Button Classes="iconbtn" ToolTip.Tip="Start or stop the project"
@@ -102,19 +94,10 @@
             <DataTemplate DataType="store:ClusterRow">
               <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto">
                 <CheckBox Classes="pick" IsChecked="{Binding $parent[ListBoxItem].IsSelected}" AutomationProperties.Name="{Binding Name}" />
-                <Button Grid.Column="1" Classes="iconbtn" Padding="2" Margin="-6,0,4,0" ToolTip.Tip="Expand or collapse"
-                        Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).ToggleClusterCommand}" CommandParameter="{Binding}">
-                  <Panel>
-                    <PathIcon Data="{StaticResource IconChevronDown}" IsVisible="{Binding IsExpanded}" />
-                    <PathIcon Data="{StaticResource IconChevronRight}" IsVisible="{Binding !IsExpanded}" />
-                  </Panel>
-                </Button>
-                <PathIcon Grid.Column="2" Data="{StaticResource IconClusters}" Width="16" Height="16" Margin="0,0,10,0"
+                <ctl:ExpandToggle Grid.Column="1" IsExpanded="{Binding IsExpanded}" Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).ToggleClusterCommand}" CommandParameter="{Binding}" />
+                <PathIcon Grid.Column="2" Data="{StaticResource IconKubernetes}" Width="16" Height="16" Margin="0,0,10,0"
                           Foreground="{DynamicResource Muted}" Classes.running="{Binding IsRunning}" />
-                <StackPanel Grid.Column="3" VerticalAlignment="Center">
-                  <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                  <TextBlock Classes="muted small" Text="{Binding Location}" TextTrimming="CharacterEllipsis" />
-                </StackPanel>
+                <ctl:RowLabel Grid.Column="3" Title="{Binding Name}" Detail="{Binding Location}" />
                 <TextBlock Grid.Column="4" Classes="muted small" Text="{Binding Summary}" VerticalAlignment="Center" Margin="12,0" />
                 <StackPanel Grid.Column="5" Classes="rowactions" Orientation="Horizontal" VerticalAlignment="Center">
                   <Button Classes="iconbtn" ToolTip.Tip="Start or stop the cluster; everything in it stays"
@@ -124,7 +107,7 @@
                       <PathIcon Data="{StaticResource IconPlay}" IsVisible="{Binding !IsRunning}" />
                     </Panel>
                   </Button>
-                  <Button Classes="iconbtn" ToolTip.Tip="Open in Clusters"
+                  <Button Classes="iconbtn" ToolTip.Tip="Open in Kubernetes"
                           Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).OpenClusterCommand}" CommandParameter="{Binding}">
                     <PathIcon Data="{StaticResource IconOpenExternal}" />
                   </Button>
@@ -135,13 +118,7 @@
             <DataTemplate DataType="store:SystemRow">
               <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto" Opacity="0.6" ToolTip.Tip="{Binding Location}">
                 <Border Width="28" />
-                <Button Grid.Column="1" Classes="iconbtn" Padding="2" Margin="-6,0,4,0" ToolTip.Tip="Expand or collapse"
-                        Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).ToggleSystemCommand}" CommandParameter="{Binding}">
-                  <Panel>
-                    <PathIcon Data="{StaticResource IconChevronDown}" IsVisible="{Binding IsExpanded}" />
-                    <PathIcon Data="{StaticResource IconChevronRight}" IsVisible="{Binding !IsExpanded}" />
-                  </Panel>
-                </Button>
+                <ctl:ExpandToggle Grid.Column="1" IsExpanded="{Binding IsExpanded}" Command="{Binding $parent[UserControl].((cont:ContainersViewModel)DataContext).ToggleSystemCommand}" CommandParameter="{Binding}" />
                 <PathIcon Grid.Column="2" Data="{StaticResource IconLock}" Width="16" Height="16" Margin="0,0,10,0" Foreground="{DynamicResource Muted}" />
                 <StackPanel Grid.Column="3" VerticalAlignment="Center">
                   <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
@@ -154,11 +131,8 @@
               <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto" Classes.system="{Binding IsSystem}">
                 <CheckBox Grid.Column="1" Classes="pick" Classes.unpickable="{Binding IsSystem}" IsChecked="{Binding $parent[ListBoxItem].IsSelected}" AutomationProperties.Name="{Binding Name}" />
                 <Border Width="24" IsVisible="{Binding IsGrouped}" />
-                <Ellipse Grid.Column="2" Classes="dot" Classes.on="{Binding IsRunning}" />
-                <StackPanel Grid.Column="3" Margin="12,0" VerticalAlignment="Center">
-                  <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                  <TextBlock Classes="muted small" Text="{Binding Image}" TextTrimming="CharacterEllipsis" />
-                </StackPanel>
+                <ctl:StatusDot Grid.Column="2" IsOn="{Binding IsRunning}" />
+                <ctl:RowLabel Grid.Column="3" Margin="12,0" Title="{Binding Name}" Detail="{Binding Image}" />
                 <ItemsControl Grid.Column="4" ItemsSource="{Binding Ports}" VerticalAlignment="Center">
                   <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>

@@ -209,7 +209,7 @@ kind delete cluster --name dev
 
 On Windows, kind uses the `linux` context, the default; with `win` active it has no Linux engine to run on.
 
-In the dashboard, **Clusters** lists them from the engine with their Kubernetes version, nodes and API server, creates and deletes them, copies a cluster's kubeconfig and makes its context the current one. Creating a cluster there adds its context to `~/.kube/config` (or the first existing file in `$KUBECONFIG`) and makes it current; deleting it takes exactly those entries out again and goes back to the context that was current before. The first time Dockyard changes that file it keeps a copy next to it, `config.dockyard-backup`. Any kubectl reaches the cluster with `--context kind-<name>`.
+In the dashboard, **Kubernetes** lists them from the engine with their Kubernetes version, nodes and API server, creates and deletes them, copies a cluster's kubeconfig and makes its context the current one. Creating a cluster there adds its context to `~/.kube/config` (or the first existing file in `$KUBECONFIG`) and makes it current; deleting it takes exactly those entries out again and goes back to the context that was current before. The first time Dockyard changes that file it keeps a copy next to it, `config.dockyard-backup`. Any kubectl reaches the cluster with `--context kind-<name>`.
 
 - **Add-ons:** with Helm installed, creating a cluster can put these charts in it, at versions fixed per Dockyard release: [metrics-server](https://github.com/kubernetes-sigs/metrics-server) (on by default), so `kubectl top` and pod autoscaling work, and [Traefik](https://traefik.io) as an ingress controller, whose `LoadBalancer` service shows up under the cluster's load balancers with its `http://127.0.0.1:<port>` links. kind's kubelets serve certificates without their IP address, so metrics-server runs with `--kubelet-insecure-tls`. The third is [cert-manager](https://cert-manager.io), with a `ClusterIssuer` called `dockyard` when trusted HTTPS is on: a certificate authority under Dockyard's own, valid only for `*.<cluster>.dockyard.internal`, so an Ingress with `cert-manager.io/cluster-issuer: dockyard` gets a certificate your browser already trusts. Its key is in the cluster; Dockyard's root key never leaves this computer. All three are ordinary Helm releases: `helm upgrade` and `helm uninstall` work on them.
 
@@ -311,4 +311,4 @@ The dashboard is a native AOT build and needs the platform's C++ tools. Each com
 
 ## License
 
-MIT. The dashboard icons are [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons) (MIT, Microsoft).
+MIT. The dashboard icons are [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons) (MIT, Microsoft); the Kubernetes logo is from [Simple Icons](https://simpleicons.org) (CC0), and Kubernetes is a trademark of The Linux Foundation.

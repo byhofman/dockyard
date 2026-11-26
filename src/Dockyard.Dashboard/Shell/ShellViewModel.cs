@@ -33,7 +33,7 @@ sealed class ShellViewModel : Observable
             new Section("Volumes", new VolumesViewModel(this, Session), Section.Resource("IconVolumes")),
             new Section("Networks", new NetworksViewModel(this, Session), Section.Resource("IconNetworks")),
             new Section("Builds", new Features.Builds.BuildsViewModel(this, Session), Section.Resource("IconBuilds")),
-            new Section("Clusters", new ClustersViewModel(this, Session), Section.Resource("IconClusters")),
+            new Section("Kubernetes", new ClustersViewModel(this, Session), Section.Resource("IconKubernetes")),
             new Section("Disk", new DiskViewModel(this, Session), Section.Resource("IconDisk")),
         ];
         currentSection = Sections[0];

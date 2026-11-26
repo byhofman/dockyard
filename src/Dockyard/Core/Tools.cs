@@ -16,7 +16,7 @@ static class Tools
     public static readonly CliTool Compose = new(nameof(Core.Component.Compose), "Docker Compose", "docker-compose", ["version", "--short"], "Docker.DockerCompose", "docker-compose", "compose");
     public static readonly CliTool Buildx = new(nameof(Core.Component.Buildx), "Docker Buildx", "docker-buildx", ["version"], "Docker.Buildx", "docker-buildx", "buildx");
     public static readonly CliTool Kind = new(nameof(Core.Component.Kind), "kind (Kubernetes in Docker)", "kind", ["version"], "Kubernetes.kind", "kind", "kind",
-        "Local Kubernetes clusters in containers, on the Linux engine. The dashboard's Clusters section uses it.");
+        "Local Kubernetes clusters in containers, on the Linux engine. The dashboard's Kubernetes section uses it.");
     public static readonly CliTool Kubectl = new(nameof(Core.Component.Kubectl), "kubectl", "kubectl", ["version", "--client"], "Kubernetes.kubectl", "kubernetes-cli", "kubectl",
         "The Kubernetes command line, for kind's clusters and any other.");
     public static readonly CliTool Helm = new(nameof(Core.Component.Helm), "Helm", "helm", ["version", "--short"], "Helm.Helm", "helm", "helm",
