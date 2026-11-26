@@ -3,11 +3,11 @@ using Dockyard.Hosts;
 namespace Dockyard.Core;
 
 // The tools in the administrator step: winget for the whole machine where it may be used and Windows runs what it brings,
-// Dockyard's own copies in Program Files\Docker otherwise. Runs elevated.
+// the source Dockyard, in Program Files\Docker, otherwise. Runs elevated.
 [System.Runtime.Versioning.SupportedOSPlatform("windows")]
 static class MachineTools
 {
-    sealed class OwnCopies : IOwnCopies
+    sealed class DockyardSource : IDockyardSource
     {
         public Task<Version?> Installed(CliTool tool) => Updates.Installed(Enum.Parse<Component>(tool.Id));
 
@@ -41,8 +41,8 @@ static class MachineTools
         }
     }
 
-    public static ToolComponents For(bool usePackageManager) =>
-        new(new Winget(ProcessRunner.Instance, MachineApps.ExcludeFromAsr), new OwnCopies(), () => usePackageManager, Ledger);
+    public static ToolComponents For(ToolSource source) =>
+        new(new Winget(ProcessRunner.Instance, MachineApps.ExcludeFromAsr), new DockyardSource(), () => source, Ledger);
 
     // In Program Files, next to the tools: winget runs in the administrator step, which may be another account.
     public static ToolLedger Ledger => new(Path.Combine(Paths.AppDir, "package-tools.json"));

@@ -12,8 +12,8 @@ sealed class Settings
     public bool HttpsEnabled { get; set; }
     // Names under dockyard.internal, the proxy and the names clusters publish; off leaves containers' DNS as it is.
     public bool ContainerDomains { get; set; } = true;
-    // Tools from winget, Homebrew or apt/dnf where there is one; otherwise Dockyard's own pinned copies.
-    public bool UsePackageManager { get; set; } = true;
+    // Tools from winget, Homebrew or apt/dnf where there is one; otherwise Dockyard's own pinned downloads.
+    public ToolSource Source { get; set; } = ToolSource.PackageManager;
     // k, completion, $do and $now in the shell's profile.
     public bool KubectlShell { get; set; }
 
@@ -51,7 +51,7 @@ sealed class Settings
         RemovedComponents = current.RemovedComponents;
         HttpsEnabled = current.HttpsEnabled;
         ContainerDomains = current.ContainerDomains;
-        UsePackageManager = current.UsePackageManager;
+        Source = current.Source;
         KubectlShell = current.KubectlShell;
         loaded = current.loaded;
     }

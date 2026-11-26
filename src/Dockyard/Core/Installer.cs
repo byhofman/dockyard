@@ -48,7 +48,7 @@ static class Installer
             var removedBefore = settings.RemovedComponents.ToList();
             var removed = ComponentRules.Removed(host.Components, removedBefore, options.With, options.Without);
             settings.RemovedComponents = removed;
-            settings.UsePackageManager = options.PackageManager ?? settings.UsePackageManager;
+            settings.Source = options.Source ?? settings.Source;
             settings.KubectlShell = options.KubectlShell ?? settings.KubectlShell;
             settings.Save();
 

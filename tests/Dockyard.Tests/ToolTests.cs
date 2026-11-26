@@ -38,7 +38,7 @@ public sealed class ToolTests : IDisposable
         }
     }
 
-    sealed class FakeOwn(Version? installed = null) : IOwnCopies
+    sealed class FakeOwn(Version? installed = null) : IDockyardSource
     {
         public Version? InstalledVersion = installed;
         public static readonly Release Pin = new(new Version(0, 33, 0), "v0.33.0", "https://example.com/kind");
@@ -64,18 +64,18 @@ public sealed class ToolTests : IDisposable
     static readonly List<string> Log = [];
 
     [Fact]
-    public async Task Moving_to_own_copies_takes_away_the_package_Dockyard_installed()
+    public async Task Moving_to_the_Dockyard_source_takes_away_the_package_Dockyard_installed()
     {
         var ledger = new ToolLedger(Path.Combine(dir, "package-tools.json"));
         var packages = new FakePackages(newest: new Version(0, 34, 0));
         var own = new FakeOwn();
-        var usePackages = true;
-        var tools = new ToolComponents(packages, own, () => usePackages, ledger);
+        var source = ToolSource.PackageManager;
+        var tools = new ToolComponents(packages, own, () => source, ledger);
 
         await tools.Install(Log.Add, Tools.Kind);
         Assert.True(ledger.Has(Tools.Kind.Id));
 
-        usePackages = false;
+        source = ToolSource.Dockyard;
         await tools.Install(Log.Add, Tools.Kind);
 
         Assert.Equal(["install kind", "remove kind"], packages.Calls);
@@ -84,18 +84,18 @@ public sealed class ToolTests : IDisposable
     }
 
     [Fact]
-    public async Task A_package_the_user_had_before_stays_when_moving_to_own_copies()
+    public async Task A_package_the_user_had_before_stays_when_moving_to_the_Dockyard_source()
     {
         var ledger = new ToolLedger(Path.Combine(dir, "package-tools.json"));
         var packages = new FakePackages(installed: new Version(0, 33, 0), newest: new Version(0, 34, 0));
         var own = new FakeOwn();
-        var usePackages = true;
-        var tools = new ToolComponents(packages, own, () => usePackages, ledger);
+        var source = ToolSource.PackageManager;
+        var tools = new ToolComponents(packages, own, () => source, ledger);
 
         await tools.Install(Log.Add, Tools.Kind);
         Assert.False(ledger.Has(Tools.Kind.Id));
 
-        usePackages = false;
+        source = ToolSource.Dockyard;
         await tools.Install(Log.Add, Tools.Kind);
 
         Assert.DoesNotContain("remove kind", packages.Calls);
@@ -110,7 +110,7 @@ public sealed class ToolTests : IDisposable
         var packages = new FakePackages(available: false, installed: new Version(0, 33, 0));
         var own = new FakeOwn();
 
-        await new ToolComponents(packages, own, () => true, ledger).Install(Log.Add, Tools.Kind);
+        await new ToolComponents(packages, own, () => ToolSource.PackageManager, ledger).Install(Log.Add, Tools.Kind);
 
         Assert.Empty(packages.Calls);
         Assert.True(ledger.Has(Tools.Kind.Id));
@@ -139,7 +139,7 @@ public sealed class ToolTests : IDisposable
     }
 
     [Fact]
-    public async Task A_package_manager_that_fails_leaves_the_tool_to_Dockyard_s_own_copy()
+    public async Task A_package_manager_that_fails_leaves_the_tool_to_Dockyard_s_copy()
     {
         var own = new FakeOwn();
         List<string> log = [];
@@ -147,7 +147,7 @@ public sealed class ToolTests : IDisposable
         Assert.False(await new ToolComponents(new FakePackages(fails: true), own).Install(log.Add, Tools.Helm));
 
         Assert.Equal(["install helm"], own.Calls);
-        Assert.Contains(log, l => l.Contains("blocked by policy") && l.Contains("own copy"));
+        Assert.Contains(log, l => l.Contains("blocked by policy") && l.Contains("Dockyard's copy"));
     }
 
     [Fact]
@@ -177,11 +177,11 @@ public sealed class ToolTests : IDisposable
     }
 
     [Fact]
-    public async Task Choosing_not_to_use_the_package_manager_keeps_Dockyard_s_copies_and_leaves_the_packages_alone()
+    public async Task Choosing_the_Dockyard_source_keeps_Dockyard_s_copies_and_leaves_the_packages_alone()
     {
         var packages = new FakePackages(installed: new Version(1, 37, 2), newest: new Version(1, 38, 0));
         var own = new FakeOwn();
-        var tools = new ToolComponents(packages, own, usePackages: () => false);
+        var tools = new ToolComponents(packages, own, source: () => ToolSource.Dockyard);
 
         Assert.Null(tools.Packages);
         Assert.False(await tools.IsManaged(Tools.Kubectl));
@@ -199,7 +199,7 @@ public sealed class ToolTests : IDisposable
         var packages = new FakePackages(installed: new Version(1, 37, 2));
         var own = new FakeOwn(installed: FakeOwn.Pin.Version);
 
-        await new ToolComponents(packages, own).RemoveOwn(Log.Add, Tools.Kubectl);
+        await new ToolComponents(packages, own).RemoveDockyardCopy(Log.Add, Tools.Kubectl);
 
         Assert.Empty(packages.Calls);
         Assert.Equal(["remove kubectl"], own.Calls);
@@ -222,7 +222,7 @@ public sealed class ToolTests : IDisposable
     {
         Assert.Equal("fake", await new ToolComponents(new FakePackages(installed: new Version(1, 0, 0)), new FakeOwn()).Source(Tools.Kind));
         Assert.Equal("Dockyard", await new ToolComponents(new FakePackages(), new FakeOwn(installed: FakeOwn.Pin.Version)).Source(Tools.Kind));
-        Assert.Equal("Dockyard", await new ToolComponents(new FakePackages(installed: new Version(1, 0, 0)), new FakeOwn(installed: FakeOwn.Pin.Version), () => false).Source(Tools.Kind));
+        Assert.Equal("Dockyard", await new ToolComponents(new FakePackages(installed: new Version(1, 0, 0)), new FakeOwn(installed: FakeOwn.Pin.Version), () => ToolSource.Dockyard).Source(Tools.Kind));
         Assert.Null(await new ToolComponents(new FakePackages(), new FakeOwn()).Source(Tools.Kind));
     }
 
@@ -342,13 +342,11 @@ public sealed class ToolTests : IDisposable
     }
 
     [Fact]
-    public void The_choice_of_package_manager_is_a_flag_that_is_remembered()
+    public void The_source_is_a_flag_that_is_remembered()
     {
-        Assert.Null(SetupOptions.Parse(["--silent"]).PackageManager);
-        Assert.False(SetupOptions.Parse(["--silent", "--no-package-manager"]).PackageManager);
-        Assert.True(SetupOptions.Parse(["--silent", "--package-manager"]).PackageManager);
-        Assert.Throws<SetupUsageException>(() => SetupOptions.Parse(["--package-manager", "--no-package-manager"]));
-        Assert.True(new Settings().UsePackageManager);
+        Assert.Null(SetupOptions.Parse(["--silent"]).Source);
+        Assert.Equal(ToolSource.Dockyard, SetupOptions.Parse(["--silent", "--source", "dockyard"]).Source);
+        Assert.Equal(ToolSource.PackageManager, new Settings().Source);
     }
 
     [Fact]

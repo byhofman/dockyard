@@ -15,12 +15,33 @@ public class SettingsTests
 
         toolbox.KubectlShell = true;
         toolbox.Save();
-        setup.UsePackageManager = false;
+        setup.Source = ToolSource.Dockyard;
         setup.Save();
 
         var now = Settings.Load(temp.File);
         Assert.True(now.KubectlShell);
-        Assert.False(now.UsePackageManager);
+        Assert.Equal(ToolSource.Dockyard, now.Source);
         Assert.True(setup.KubectlShell);
+    }
+
+    [Fact]
+    public void The_Dockyard_source_round_trips()
+    {
+        using var temp = new TempSettings();
+        Directory.CreateDirectory(Path.GetDirectoryName(temp.File)!);
+        File.WriteAllText(temp.File, """{ "Source": "dockyard" }""");
+        var settings = Settings.Load(temp.File);
+        Assert.Equal(ToolSource.Dockyard, settings.Source);
+
+        settings.Source = ToolSource.PackageManager;
+        settings.Save();
+        Assert.Contains("\"Source\": \"package-manager\"", File.ReadAllText(temp.File));
+    }
+
+    [Fact]
+    public void The_source_defaults_to_the_package_manager()
+    {
+        using var temp = new TempSettings();
+        Assert.Equal(ToolSource.PackageManager, Settings.Load(temp.File).Source);
     }
 }

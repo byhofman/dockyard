@@ -34,7 +34,7 @@ sealed class LinuxSetup(LinuxRoot root, LinuxComponents components, ToolComponen
         {
             try
             {
-                if (request.Without.Contains(tool.Id)) await tools.RemoveOwn(log, tool);
+                if (request.Without.Contains(tool.Id)) await tools.RemoveDockyardCopy(log, tool);
                 else await tools.Ensure(log, tool);
             }
             catch (Exception e) when (e is HttpRequestException or InvalidOperationException or IOException)

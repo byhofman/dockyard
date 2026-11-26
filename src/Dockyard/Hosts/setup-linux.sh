@@ -99,7 +99,7 @@ add_helm_repo() {
   apt-get update -qq
 }
 
-# Installs or upgrades the package, and takes away Dockyard's own copy, which would come first on the PATH.
+# Installs or upgrades the package, and takes away Dockyard's copy, which would come first on the PATH.
 add_tool() {
   name="$(tool_name)"
   case "$name" in

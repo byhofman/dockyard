@@ -49,7 +49,7 @@
       <StackPanel Spacing="12" MaxWidth="320" x:DataType="vm:MainViewModel">
         <TextBlock FontWeight="SemiBold" Text="Uninstall Dockyard?" />
         <TextBlock TextWrapping="Wrap" Classes="muted"
-                   Text="Removes Dockyard, its engines, its own copies of the tools and the docker contexts. Tools your package manager installed stay, to remove with it." />
+                   Text="Removes Dockyard, its engines, the tools it downloaded and the docker contexts. Tools your package manager installed stay, to remove with it." />
         <CheckBox IsChecked="{Binding RemoveData}" Content="Also delete my images and containers" />
         <Button Classes="dangerfill" Content="Uninstall" Command="{Binding UninstallCommand}" HorizontalAlignment="Right" />
       </StackPanel>
@@ -140,8 +140,8 @@
               </ItemsControl>
               <StackPanel Orientation="Horizontal" Spacing="10">
                 <TextBlock Text="Install docker, kind, kubectl and helm with" VerticalAlignment="Center" />
-                <ComboBox ItemsSource="{x:Static vm:MainViewModel.ToolSources}" SelectedIndex="{Binding ToolSource}" MinWidth="160"
-                          ToolTip.Tip="A package manager updates them with everything else. Direct download: Dockyard keeps its own copies, at the versions it was tested with, and updates them itself." />
+                <ComboBox ItemsSource="{x:Static vm:MainViewModel.ToolSources}" SelectedIndex="{Binding SourceIndex}" MinWidth="160"
+                          ToolTip.Tip="A package manager updates them with everything else. Dockyard keeps its own downloads, at the versions it was tested with, and updates them itself." />
               </StackPanel>
               <CheckBox IsChecked="{Binding KubectlShell}" ToolTip.Tip="{x:Static vm:MainViewModel.ShellProfilesText}">
                 <TextBlock Text="{x:Static vm:MainViewModel.ShellSetupLabel}" TextWrapping="Wrap" />
@@ -225,7 +225,7 @@
           <Grid ColumnDefinitions="*,Auto">
             <TextBlock Classes="h2" Text="COMPONENTS" VerticalAlignment="Bottom" />
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-              <ComboBox ItemsSource="{x:Static vm:MainViewModel.ToolSources}" SelectedIndex="{Binding ToolSource}" MinWidth="160"
+              <ComboBox ItemsSource="{x:Static vm:MainViewModel.ToolSources}" SelectedIndex="{Binding SourceIndex}" MinWidth="160"
                         ToolTip.Tip="Where docker, kind, kubectl and helm come from; changing it moves them at once." AutomationProperties.Name="Download source" />
               <Button Content="Check for updates" Command="{Binding CheckUpdatesCommand}" />
               <Button Classes="primary" Content="Update all" Command="{Binding UpdateAllCommand}" />

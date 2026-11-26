@@ -52,7 +52,7 @@ sealed class LinuxPackages(LinuxRoot root) : IPackageManager
 // Dockyard's own copies in /usr/local/bin, where every shell finds them, each with a marker in /etc/dockyard: one without
 // a marker is someone else's and stays as it is.
 [SupportedOSPlatform("linux")]
-sealed class LinuxOwnCopies(ICommandRunner runner, LinuxRoot root) : IOwnCopies
+sealed class LinuxDockyardSource(ICommandRunner runner, LinuxRoot root) : IDockyardSource
 {
     public static string Bin(CliTool tool) => $"/usr/local/bin/{tool.Command}";
     public static string Marker(CliTool tool) => $"/etc/dockyard/{tool.Command}";

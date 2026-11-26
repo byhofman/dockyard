@@ -69,9 +69,9 @@ if [ "$rc" -eq 2 ]; then ok "exit 2"; else fail "--typo exits $rc"; fi
 check "and nothing was installed" missing "$app"
 
 echo "== first install, no dashboard"
-# Homebrew installs for the whole Mac, outside this throwaway home, so Dockyard keeps its own copies here.
+# Homebrew installs for the whole Mac, outside this throwaway home, so the source here is Dockyard.
 unset XDG_CONFIG_HOME
-run --silent --no-dashboard --no-start --no-package-manager
+run --silent --no-dashboard --no-start --source dockyard
 check "app in place" test -x "$macos/Dockyard"
 check "the VM helper too" test -x "$macos/dockyard-host"
 check "no dashboard" missing "$macos/Dockyard Dashboard"

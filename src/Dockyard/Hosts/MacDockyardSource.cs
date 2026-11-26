@@ -6,7 +6,7 @@ namespace Dockyard.Hosts;
 // Dockyard's own copies on a Mac without Homebrew: the CLI and the other tools in ~/.dockyard/bin, the plugins in
 // ~/.docker/cli-plugins.
 [SupportedOSPlatform("macos")]
-sealed class MacOwnCopies(ICommandRunner runner, MacComponents parts) : IOwnCopies
+sealed class MacDockyardSource(ICommandRunner runner, MacComponents parts) : IDockyardSource
 {
     static string? Plugin(CliTool tool) => tool == Tools.Compose || tool == Tools.Buildx ? Path.Combine(MacLayout.PluginDir, tool.Command) : null;
     static string File(CliTool tool) => Plugin(tool) ?? Path.Combine(MacLayout.BinDir, tool.Command);

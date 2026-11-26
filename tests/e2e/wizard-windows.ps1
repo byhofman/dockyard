@@ -397,7 +397,7 @@ if ($Wizard) {
         & $docker buildx version
         Check 'and docker buildx' ($LASTEXITCODE -eq 0)
     }
-    else { Ok 'no winget here: the tools are Dockyard''s own copies' }
+    else { Ok 'no winget here: the tools come from Dockyard' }
     foreach ($tool in @{ Name = 'kubectl'; Path = $kubectl; Args = @('version', '--client') }, @{ Name = 'helm'; Path = $helm; Args = @('version', '--short') }) {
         Check "$($tool.Name) is installed: $($tool.Path)" (Test-Path $tool.Path)
         Check "it runs: $(& $tool.Path @($tool.Args) | Select-Object -First 1)" ($LASTEXITCODE -eq 0)
@@ -514,7 +514,7 @@ $source = Join-Path (New-Item -ItemType Directory (Join-Path $env:TEMP ([guid]::
 Copy-Item $appExe $source
 $log = New-TemporaryFile
 $id = [Security.Principal.WindowsIdentity]::GetCurrent()
-$p = Start-Process $appExe -ArgumentList "--machine-update App --source `"$source`" --user-sid $($id.User.Value) --user-name `"$($id.Name)`" --log `"$log`" --keep-pid 0" -Wait -PassThru
+$p = Start-Process $appExe -ArgumentList "--machine-update App --app-file `"$source`" --user-sid $($id.User.Value) --user-name `"$($id.Name)`" --log `"$log`" --keep-pid 0" -Wait -PassThru
 Get-Content $log | Write-Host
 Check "worker exit 0 (was $($p.ExitCode))" ($p.ExitCode -eq 0)
 Get-Process dockyard-toolbox, Dockyard -ErrorAction SilentlyContinue | Stop-Process -Force

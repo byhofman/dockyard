@@ -14,11 +14,11 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
     {
         await InstallBundle(log, request.Dashboard);
 
-        if (tools.Packages is null) log("The tools are Dockyard's own copies, in " + MacLayout.BinDir);
-        else if (!await tools.Packages.IsAvailable()) log($"No Homebrew here, so the tools are Dockyard's own copies, in {MacLayout.BinDir}");
+        if (tools.Packages is null) log("The tools come from Dockyard, in " + MacLayout.BinDir);
+        else if (!await tools.Packages.IsAvailable()) log($"No Homebrew here, so the tools come from Dockyard, in {MacLayout.BinDir}");
         foreach (var tool in Tools.All)
         {
-            if (request.Without.Contains(tool.Id)) await tools.RemoveOwn(log, tool);
+            if (request.Without.Contains(tool.Id)) await tools.RemoveDockyardCopy(log, tool);
             else await tools.Ensure(log, tool);
         }
         await FindBrewPlugins(log, tools);

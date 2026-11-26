@@ -4,7 +4,7 @@ sealed record SetupOptions
 {
     public const string Usage = """
         Usage: Dockyard [--silent] [--with <names>] [--without <names>] [--no-start] [--image <file>] [--assets <folder>] [--trust-https]
-                        [--no-package-manager] [--kubectl-shell]
+                        [--source dockyard|package-manager] [--kubectl-shell]
                Dockyard --silent --uninstall [--remove-data]
                Dockyard --silent --import [--import-from <endpoint>]
                Dockyard --version
@@ -18,9 +18,8 @@ sealed record SetupOptions
           --no-dashboard     The same as --without dashboard.
           --no-start         Do not start Dockyard afterwards.
           --trust-https      Add Dockyard's own certificate to this computer's trust store, for HTTPS on container domains.
-          --no-package-manager
-                             Keep Dockyard's own pinned copies of docker, kind, kubectl and helm instead of installing them
-                             with winget, Homebrew or apt/dnf. --package-manager goes back. Either is remembered.
+          --source <name>    Where docker, kind, kubectl and helm come from: package-manager (winget, Homebrew or apt/dnf, the
+                             default) or dockyard (Dockyard's own pinned downloads). Remembered.
           --kubectl-shell    Set up kubectl in your shell: k, completion, $do (--dry-run=client -o yaml) and $now (--force
                              --grace-period 0), @do and @now in PowerShell, in a marked block in its profile.
                              --no-kubectl-shell takes it out. Remembered.
@@ -54,7 +53,7 @@ sealed record SetupOptions
     public IReadOnlyList<string> Without { get; init; } = [];
     public bool TrustHttps { get; init; }
     // null keeps what an earlier install chose.
-    public bool? PackageManager { get; init; }
+    public ToolSource? Source { get; init; }
     public bool? KubectlShell { get; init; }
     public string? ImportFrom { get; init; }
 
@@ -77,8 +76,7 @@ sealed record SetupOptions
                 "--with" => Names(options, ++i < args.Count ? args[i] : throw new SetupUsageException("--with needs names"), wanted: true),
                 "--without" => Names(options, ++i < args.Count ? args[i] : throw new SetupUsageException("--without needs names"), wanted: false),
                 "--trust-https" => options with { TrustHttps = true },
-                "--package-manager" => options with { PackageManager = options.PackageManager == false ? throw new SetupUsageException("--package-manager and --no-package-manager exclude each other") : true },
-                "--no-package-manager" => options with { PackageManager = options.PackageManager == true ? throw new SetupUsageException("--package-manager and --no-package-manager exclude each other") : false },
+                "--source" => options with { Source = ToolSourceArgument.Parse(++i < args.Count ? args[i] : null) ?? throw new SetupUsageException("--source is dockyard or package-manager") },
                 "--kubectl-shell" => options with { KubectlShell = true },
                 "--no-kubectl-shell" => options with { KubectlShell = false },
                 "--no-start" => options with { Start = false },

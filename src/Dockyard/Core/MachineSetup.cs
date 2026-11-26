@@ -7,7 +7,7 @@ static class MachineSetup
 {
     // Returns true when a reboot is needed.
     public static async Task<bool> Install(Action<string> log, string userSid, string userName, int keepPid, bool engineOnly, IReadOnlyCollection<string> without,
-        bool usePackageManager)
+        ToolSource source)
     {
         InUseFiles.CleanUp(Paths.DockerDir);
         var withWindows = !without.Contains(nameof(Component.Engine));
@@ -17,7 +17,7 @@ static class MachineSetup
         if (withWindows) await MachineEngine.Update(log, onlyIfNewer: true);
         else await MachineEngine.Remove(log);
         MachineApps.AddToMachinePath(Paths.DockerDir);
-        await InstallTools(log, without, usePackageManager);
+        await InstallTools(log, without, source);
         await MachineApps.InstallCredentialHelper(log);
         if (without.Contains(nameof(Component.LinuxEngine))) await UnrouteDomains();
         else await RouteDomains(log);
@@ -26,17 +26,17 @@ static class MachineSetup
         return reboot;
     }
 
-    // A tool left out loses only Dockyard's own copy: winget's may be the user's. One that will not install is no reason to
+    // A tool left out loses only Dockyard's copy: winget's may be the user's. One that will not install is no reason to
     // fail the rest, but docker is.
-    static async Task InstallTools(Action<string> log, IReadOnlyCollection<string> without, bool usePackageManager)
+    static async Task InstallTools(Action<string> log, IReadOnlyCollection<string> without, ToolSource source)
     {
-        var tools = MachineTools.For(usePackageManager);
-        if (tools.Packages is { } winget && !await winget.IsAvailable()) log("winget is not available, so the tools are Dockyard's own copies, in Program Files");
+        var tools = MachineTools.For(source);
+        if (tools.Packages is { } winget && !await winget.IsAvailable()) log("winget is not available, so the tools come from Dockyard, in Program Files");
         foreach (var tool in Tools.All)
         {
             if (without.Contains(tool.Id))
             {
-                await tools.RemoveOwn(log, tool);
+                await tools.RemoveDockyardCopy(log, tool);
                 continue;
             }
             try { await tools.Ensure(log, tool); }
@@ -47,11 +47,11 @@ static class MachineSetup
         }
     }
 
-    public static async Task Update(Action<string> log, Component component, string? source, int keepPid, bool usePackageManager)
+    public static async Task Update(Action<string> log, Component component, string? appFile, int keepPid, ToolSource source)
     {
         if (Tools.Find(component.ToString()) is { } tool)
         {
-            await MachineTools.For(usePackageManager).Install(log, tool);
+            await MachineTools.For(source).Install(log, tool);
             return;
         }
         switch (component)
@@ -61,7 +61,7 @@ static class MachineSetup
                 // Defender's rule goes by path, and an update can bring a file that is not excluded yet.
                 await MachineApps.AddDefenderExclusions(log);
                 // Next to the new exe in the folder the tray downloaded and checked both into.
-                var exe = source ?? throw new ArgumentException("--source is required for the app update");
+                var exe = appFile ?? throw new ArgumentException("--app-file is required for the app update");
                 await MachineApps.InstallApp(log, exe, keepPid, engineOnly: !Paths.HasDashboard, Path.GetDirectoryName(Path.GetFullPath(exe)));
                 Shell.StartUnelevated(Paths.AppExe);
                 break;
@@ -96,11 +96,11 @@ static class MachineSetup
         log($"Windows images and containers under {Path.GetDirectoryName(Paths.DaemonConfigDir)} were left in place");
     }
 
-    public static async Task SetComponent(Action<string> log, Component component, bool installed, string userSid, string userName, bool usePackageManager)
+    public static async Task SetComponent(Action<string> log, Component component, bool installed, string userSid, string userName, ToolSource source)
     {
         if (Tools.Find(component.ToString()) is { } tool)
         {
-            var tools = MachineTools.For(usePackageManager);
+            var tools = MachineTools.For(source);
             if (installed) await tools.Install(log, tool);
             else await tools.Remove(log, tool);
             return;

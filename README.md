@@ -38,11 +38,11 @@ Dockyard's own parts are released on their own, each with its own version: the T
 
 The tray looks for updates by itself every six hours. A blue dot on its icon and an **Update Dockyard to …** item in its menu say one is there; **What's new** next to the version opens its release notes.
 
-The command-line tools (the Docker CLI, Compose, Buildx, kind, kubectl and Helm) come from the system's package manager wherever it has them: winget on Windows, Homebrew on macOS, and on Linux the Docker, Kubernetes and Helm apt or dnf repositories. They then update the way everything else on the computer does (`winget upgrade`, `brew upgrade`, `apt upgrade`), and Dockyard's **Update** offers what the package manager has. Where there is no package manager, where it fails, or when you choose **Direct download** under **Install docker, kind, kubectl and helm with** in the Toolbox or its Settings (`--no-package-manager`), Dockyard keeps its own copies. On Windows, winget installs them for all users (`C:\Program Files\WinGet`), and Defender's prevalence rule gets an exclusion for exactly those files, so a brand-new release of a tool is not blocked.
+The command-line tools (the Docker CLI, Compose, Buildx, kind, kubectl and Helm) come from the system's package manager wherever it has them: winget on Windows, Homebrew on macOS, and on Linux the Docker, Kubernetes and Helm apt or dnf repositories. They then update the way everything else on the computer does (`winget upgrade`, `brew upgrade`, `apt upgrade`), and Dockyard's **Update** offers what the package manager has. Where there is no package manager, where it fails, or when you choose **Dockyard** under **Install docker, kind, kubectl and helm with** in the Toolbox or its Settings (`--source dockyard`), the source is Dockyard: its own pinned downloads. On Windows, winget installs them for all users (`C:\Program Files\WinGet`), and Defender's prevalence rule gets an exclusion for exactly those files, so a brand-new release of a tool is not blocked.
 
 With kubectl comes an optional shell setup (**Set up kubectl in my shell**, `--kubectl-shell`): `k` for kubectl with its completion, `$do` for `--dry-run=client -o yaml` and `$now` for `--force --grace-period 0`, as the Kubernetes exams have it; in PowerShell you splat them, `kubectl run web --image nginx @do`. It is a marked block in your PowerShell profiles and Git Bash's `.bashrc` on Windows, `.zshrc` on macOS and `.bashrc` on Linux, which Dockyard takes out again when you turn it off. In PowerShell `$do` and `$now` are lists, so `k run web --image nginx $do` passes them as separate arguments.
 
-Everything Dockyard downloads itself (its own copies of those tools, the engines and the credential helpers) has its version fixed per Dockyard release and is checked against a SHA-256 kept in Dockyard (`image/versions.env`, `image/versions.sha256`), so a replaced file upstream is refused. A new Dockyard release is what moves them.
+Everything Dockyard downloads itself (its own downloads of those tools, the engines and the credential helpers) has its version fixed per Dockyard release and is checked against a SHA-256 kept in Dockyard (`image/versions.env`, `image/versions.sha256`), so a replaced file upstream is refused. A new Dockyard release is what moves them.
 
 | Component | | |
 |---|---|---|
@@ -75,7 +75,7 @@ curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install.sh |
 | `--silent` | No window: install, or update what is installed. Progress goes to the console. Needs no display. |
 | `--with <names>` | Add components, comma separated, also on an existing install: `dashboard`, `compose`, `buildx`, `kind`, `kubectl`, `helm`, and on Windows `linux-engine`, `windows-engine`. |
 | `--without <names>` | Leave them out, or remove them, also when the package manager brought them. Asking for a required one or for the last engine exits 2 and changes nothing. With `--remove-data`, an engine's images go too. A later run leaves a tool that stayed out alone, also one you installed yourself. |
-| `--no-package-manager`, `--package-manager` | Keep Dockyard's own pinned copies of the tools instead of winget's, Homebrew's or apt/dnf's, or go back. Remembered for later runs and the Toolbox. |
+| `--source dockyard`, `--source package-manager` | Where the tools come from: Dockyard's own pinned downloads, or winget, Homebrew or apt/dnf (the default). Remembered for later runs and the Toolbox. |
 | `--dashboard`, `--no-dashboard` | The same as `--with dashboard`, `--without dashboard`. |
 | `--kubectl-shell`, `--no-kubectl-shell` | Add or take out the kubectl shell setup (`k`, completion, `$do`, `$now`; `@do` and `@now` in PowerShell). |
 | `--no-start` | Do not start Dockyard afterwards. |
@@ -196,7 +196,7 @@ The footer shows the step at hand and the version; the log icon at its left open
 
 ## Kubernetes with kind
 
-Dockyard installs [kind](https://kind.sigs.k8s.io), which runs a Kubernetes cluster as containers on the Linux engine, with kubectl and [Helm](https://helm.sh): from winget on Windows and Homebrew on macOS, like the other tools. Without them, and for kind on Linux, which has no repository, they are Dockyard's own copies in `C:\Program Files\Docker`, `~/.dockyard/bin` or `/usr/local/bin`, with a version fixed per Dockyard release and checked against a checksum kept in Dockyard. A kind, kubectl or helm that someone else put in `/usr/local/bin` on Linux is left alone and used.
+Dockyard installs [kind](https://kind.sigs.k8s.io), which runs a Kubernetes cluster as containers on the Linux engine, with kubectl and [Helm](https://helm.sh): from winget on Windows and Homebrew on macOS, like the other tools. Without them, and for kind on Linux, which has no repository, they come from Dockyard, as its own downloads in `C:\Program Files\Docker`, `~/.dockyard/bin` or `/usr/local/bin`, with a version fixed per Dockyard release and checked against a checksum kept in Dockyard. A kind, kubectl or helm that someone else put in `/usr/local/bin` on Linux is left alone and used.
 
 From a terminal it is kind itself:
 

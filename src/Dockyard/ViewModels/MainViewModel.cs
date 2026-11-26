@@ -212,15 +212,15 @@ sealed class MainViewModel : Observable
     }
 
     // Read by the hosts from the saved settings, so a new install saves it with the rest just before installing.
-    public bool UsePackageManager
+    public ToolSource Source
     {
-        get => settings.UsePackageManager;
+        get => settings.Source;
         set
         {
-            var changed = settings.UsePackageManager != value;
-            settings.UsePackageManager = value;
+            var changed = settings.Source != value;
+            settings.Source = value;
             if (IsInstalled) settings.Save();
-            Raise(nameof(UsePackageManager), nameof(ToolSource));
+            Raise(nameof(Source), nameof(SourceIndex));
             if (changed && IsInstalled) _ = MoveTools(value);
         }
     }
@@ -304,11 +304,11 @@ sealed class MainViewModel : Observable
     public static string[] ToolSources { get; } =
     [
         OperatingSystem.IsWindows() ? "winget" : OperatingSystem.IsMacOS() ? "Homebrew" : "apt / dnf",
-        "Direct download",
+        "Dockyard",
     ];
 
     // Every tool that is there comes from the new source at once, so there is never one of each on the PATH.
-    Task MoveTools(bool toPackageManager) => Run(toPackageManager ? "Moving the tools to the package manager" : "Moving the tools to Dockyard's own copies", async () =>
+    Task MoveTools(ToolSource to) => Run(to == ToolSource.PackageManager ? "Moving the tools to the package manager" : "Moving the tools to Dockyard", async () =>
     {
         List<(string Component, Release? Release)> present = [];
         // On Linux docker, Compose and Buildx are the distribution's packages whatever this says.
@@ -318,10 +318,10 @@ sealed class MainViewModel : Observable
         await RefreshState();
     });
 
-    public int ToolSource
+    public int SourceIndex
     {
-        get => UsePackageManager ? 0 : 1;
-        set { UsePackageManager = value == 0; Raise(nameof(ToolSource)); }
+        get => Source == ToolSource.PackageManager ? 0 : 1;
+        set { Source = value == 0 ? ToolSource.PackageManager : ToolSource.Dockyard; Raise(nameof(SourceIndex)); }
     }
 
     public bool StartActiveAtLogon
@@ -530,9 +530,9 @@ sealed class MainViewModel : Observable
             settings.KubectlShell = shell;
             settings.Save();
         }
-        if (options.PackageManager is { } use && use != settings.UsePackageManager)
+        if (options.Source is { } source && source != settings.Source)
         {
-            settings.UsePackageManager = use;
+            settings.Source = source;
             settings.Save();
         }
         var removedBefore = settings.RemovedComponents.ToList();

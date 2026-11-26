@@ -2,8 +2,8 @@ using Dockyard.Core;
 
 namespace Dockyard.Hosts;
 
-// Dockyard's own pinned copy of a tool, for where no package manager brings it.
-interface IOwnCopies
+// Dockyard's own pinned download of a tool, for where no package manager brings it, or when the source is Dockyard.
+interface IDockyardSource
 {
     Task<Version?> Installed(CliTool tool);
     Release? Pinned(CliTool tool);
@@ -12,14 +12,14 @@ interface IOwnCopies
 }
 
 // A tool comes from the package manager wherever there is one, and then takes the place of a copy Dockyard put there
-// earlier. Only without one, or when the user chose so, does Dockyard keep a pinned copy of its own. usePackages is that
-// choice, read each time so that a change applies at once.
+// earlier. Only without one, or when the user chose the source Dockyard, does Dockyard keep a pinned copy of its own.
+// source is that choice, read each time so that a change applies at once.
 // ledger holds what Dockyard itself installed through the package manager.
-sealed class ToolComponents(IPackageManager? packages, IOwnCopies own, Func<bool>? usePackages = null, ToolLedger? ledger = null)
+sealed class ToolComponents(IPackageManager? packages, IDockyardSource own, Func<ToolSource>? source = null, ToolLedger? ledger = null)
 {
-    bool ChoseOwnCopies => usePackages?.Invoke() == false;
+    bool ChoseDockyard => source?.Invoke() == ToolSource.Dockyard;
 
-    public IPackageManager? Packages => usePackages?.Invoke() != false ? packages : null;
+    public IPackageManager? Packages => ChoseDockyard ? null : packages;
 
     bool Carries(CliTool tool) => Packages?.Carries(tool) == true;
 
@@ -52,13 +52,13 @@ sealed class ToolComponents(IPackageManager? packages, IOwnCopies own, Func<bool
         }
         if (own.Pinned(tool) is not { } pinned) throw new InvalidOperationException($"{tool.Title} needs {packages?.Name ?? "a package manager"}");
         if (!onlyIfChanged || await own.Installed(tool) != pinned.Version) await own.Install(log, tool);
-        if (ChoseOwnCopies) await RemoveOwnPackage(log, tool);
+        if (ChoseDockyard) await RemovePackage(log, tool);
         return false;
     }
 
-    // Moving to Dockyard's own copies: the package Dockyard installed goes, so only one copy is on the PATH. One the user
+    // Moving to the source Dockyard: the package Dockyard installed goes, so only one copy is on the PATH. One the user
     // installed before Dockyard stays theirs.
-    async Task RemoveOwnPackage(Action<string> log, CliTool tool)
+    async Task RemovePackage(Action<string> log, CliTool tool)
     {
         if (packages is null || ledger?.Has(tool.Id) != true) return;
         try
@@ -67,11 +67,11 @@ sealed class ToolComponents(IPackageManager? packages, IOwnCopies own, Func<bool
                 await packages.Remove(log, tool);
             ledger.Remove(tool.Id);
         }
-        catch (InvalidOperationException e) { log($"{tool.Title} from {packages.Name} stays ({e.Message}); Dockyard's own copy is in place next to it"); }
+        catch (InvalidOperationException e) { log($"{tool.Title} from {packages.Name} stays ({e.Message}); Dockyard's copy is in place next to it"); }
     }
 
-    // The package manager's half alone, for a host that takes away its own copies in a step of its own. Returns true when
-    // the package manager has the tool; a failure is logged and leaves it to Dockyard's own copy.
+    // The package manager's half alone, for a host that takes away Dockyard's copies in a step of its own. Returns true when
+    // the package manager has the tool; a failure is logged and leaves it to Dockyard's copy.
     public async Task<bool> FromPackageManager(Action<string> log, CliTool tool, bool onlyIfChanged = true)
     {
         if (!Carries(tool) || !await packages!.IsAvailable()) return false;
@@ -89,13 +89,13 @@ sealed class ToolComponents(IPackageManager? packages, IOwnCopies own, Func<bool
         {
             // An upgrade that failed leaves the package that was there, which stays the one in use.
             var kept = await packages.Installed(tool) is not null;
-            log(kept ? $"{e.Message}; the installed version stays" : $"{e.Message}; Dockyard puts its own copy in place instead");
+            log(kept ? $"{e.Message}; the installed version stays" : $"{e.Message}; Dockyard's copy is put in place instead");
             return kept;
         }
     }
 
     // For a tool left out of an install: only what Dockyard put there itself, since the package manager's may be the user's own.
-    public async Task RemoveOwn(Action<string> log, CliTool tool)
+    public async Task RemoveDockyardCopy(Action<string> log, CliTool tool)
     {
         if (await own.Installed(tool) is not null) await own.Remove(log, tool);
     }

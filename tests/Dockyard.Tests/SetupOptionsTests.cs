@@ -132,4 +132,16 @@ public sealed class SetupOptionsTests
             Directory.Delete(dir);
         }
     }
+
+    [Fact]
+    public void Source_takes_dockyard_or_package_manager()
+    {
+        Assert.Null(SetupOptions.Parse(["--silent"]).Source);
+        Assert.Equal(ToolSource.Dockyard, SetupOptions.Parse(["--silent", "--source", "dockyard"]).Source);
+        Assert.Equal(ToolSource.PackageManager, SetupOptions.Parse(["--silent", "--source", "package-manager"]).Source);
+        Assert.Equal("--source is dockyard or package-manager", Assert.Throws<SetupUsageException>(() => SetupOptions.Parse(["--source", "winget"])).Message);
+        Assert.Throws<SetupUsageException>(() => SetupOptions.Parse(["--source"]));
+        Assert.Contains("Unknown argument", Assert.Throws<SetupUsageException>(() => SetupOptions.Parse(["--no-package-manager"])).Message);
+        Assert.Contains("Unknown argument", Assert.Throws<SetupUsageException>(() => SetupOptions.Parse(["--package-manager"])).Message);
+    }
 }

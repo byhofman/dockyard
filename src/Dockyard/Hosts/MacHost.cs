@@ -11,7 +11,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
     readonly MacVm vm = new(runner, ping, helperAnswers);
     readonly MacComponents parts = new(runner);
     readonly MacTrust trust = new(runner);
-    ToolComponents Tools => new(new Homebrew(runner), new MacOwnCopies(runner, parts), () => Settings.Load().UsePackageManager, new ToolLedger(Path.Combine(Paths.SettingsDir, "package-tools.json")));
+    ToolComponents Tools => new(new Homebrew(runner), new MacDockyardSource(runner, parts), () => Settings.Load().Source, new ToolLedger(Path.Combine(Paths.SettingsDir, "package-tools.json")));
     MacSetup Setup => new(runner, parts, vm, Tools);
 
     public IReadOnlyList<EngineInfo> Engines { get; } =

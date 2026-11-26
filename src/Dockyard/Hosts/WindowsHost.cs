@@ -25,7 +25,7 @@ sealed class WindowsHost : IEngineHost
         distro = new WslDistro(runner);
         wsl = new WslEngine(distro);
         winget = new Winget(runner);
-        tools = new ToolComponents(winget, new WindowsOwnCopies(), () => Settings.Load().UsePackageManager, MachineTools.Ledger);
+        tools = new ToolComponents(winget, new WindowsDockyardSource(), () => Settings.Load().Source, MachineTools.Ledger);
     }
 
     public IReadOnlyList<EngineInfo> Engines { get; } =
@@ -98,7 +98,7 @@ sealed class WindowsHost : IEngineHost
         {
             log($"Downloading Dockyard {app.Tag}");
             var exe = await Updates.DownloadApp(app);
-            Elevation.StartDetached("--machine-update", nameof(Component.App), "--source", exe);
+            Elevation.StartDetached("--machine-update", nameof(Component.App), "--app-file", exe);
             log("Restarting Dockyard");
             return true;
         }
