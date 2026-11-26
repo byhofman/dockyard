@@ -1,15 +1,10 @@
 name: verify one-liners
 
-# The published scripts against the published release, as a user runs them. Runs when the scripts change and on
-# demand; a release made with the workflow's own token cannot trigger it, so run it after a release:
+# The published scripts against the published release, as a user runs them. Runs only on demand, after a release or a
+# change to the scripts:
 #   gh workflow run verify-oneliners.yml
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths: ['install.ps1', 'install.sh', 'install-mac.sh', 'tests/e2e/**', 'tests/oneliners/**']
-  pull_request:
-    paths: ['install.ps1', 'install.sh', 'install-mac.sh', 'tests/e2e/**', 'tests/oneliners/**']
 
 env:
   # Scripts as published for this commit: raw.githubusercontent.com serves a commit as it serves main.

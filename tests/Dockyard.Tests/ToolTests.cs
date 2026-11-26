@@ -64,6 +64,59 @@ public sealed class ToolTests : IDisposable
     static readonly List<string> Log = [];
 
     [Fact]
+    public async Task Moving_to_own_copies_takes_away_the_package_Dockyard_installed()
+    {
+        var ledger = new ToolLedger(Path.Combine(dir, "package-tools.json"));
+        var packages = new FakePackages(newest: new Version(0, 34, 0));
+        var own = new FakeOwn();
+        var usePackages = true;
+        var tools = new ToolComponents(packages, own, () => usePackages, ledger);
+
+        await tools.Install(Log.Add, Tools.Kind);
+        Assert.True(ledger.Has(Tools.Kind.Id));
+
+        usePackages = false;
+        await tools.Install(Log.Add, Tools.Kind);
+
+        Assert.Equal(["install kind", "remove kind"], packages.Calls);
+        Assert.Equal(["install kind"], own.Calls);
+        Assert.False(ledger.Has(Tools.Kind.Id));
+    }
+
+    [Fact]
+    public async Task A_package_the_user_had_before_stays_when_moving_to_own_copies()
+    {
+        var ledger = new ToolLedger(Path.Combine(dir, "package-tools.json"));
+        var packages = new FakePackages(installed: new Version(0, 33, 0), newest: new Version(0, 34, 0));
+        var own = new FakeOwn();
+        var usePackages = true;
+        var tools = new ToolComponents(packages, own, () => usePackages, ledger);
+
+        await tools.Install(Log.Add, Tools.Kind);
+        Assert.False(ledger.Has(Tools.Kind.Id));
+
+        usePackages = false;
+        await tools.Install(Log.Add, Tools.Kind);
+
+        Assert.DoesNotContain("remove kind", packages.Calls);
+        Assert.Equal(["install kind"], own.Calls);
+    }
+
+    [Fact]
+    public async Task A_package_manager_that_is_not_there_keeps_its_package_when_Dockyard_falls_back()
+    {
+        var ledger = new ToolLedger(Path.Combine(dir, "package-tools.json"));
+        ledger.Add(Tools.Kind.Id);
+        var packages = new FakePackages(available: false, installed: new Version(0, 33, 0));
+        var own = new FakeOwn();
+
+        await new ToolComponents(packages, own, () => true, ledger).Install(Log.Add, Tools.Kind);
+
+        Assert.Empty(packages.Calls);
+        Assert.True(ledger.Has(Tools.Kind.Id));
+    }
+
+    [Fact]
     public async Task The_package_manager_brings_a_tool_and_takes_the_place_of_Dockyard_s_own_copy()
     {
         var packages = new FakePackages(newest: new Version(0, 34, 0));

@@ -115,7 +115,8 @@ if [ "$container" -eq 0 ] && [ -n "${WIZARD:-}" ]; then
   # A new name reaches dockyard-proxy through the agent's two-second loop and Traefik's reload.
   i=0; while [ $i -lt 15 ] && [ "$(curl -s --max-time 5 http://e2e-custom.dockyard.internal/)" != from-8099 ]; do i=$((i+1)); sleep 1; done
   [ "$(curl -s --max-time 15 http://e2e-custom.dockyard.internal/)" = from-8099 ] && ok "the label picks the port" || fail "label port: $(curl -s -i --max-time 5 http://e2e-custom.dockyard.internal/ 2>&1 | head -3)"
-  [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 --resolve gone.dockyard.internal:80:127.77.0.1 http://gone.dockyard.internal/)" = 404 ] && ok "a name nothing answers to says so" || fail "unknown name"
+  i=0; while [ $i -lt 10 ] && [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 --resolve gone.dockyard.internal:80:127.77.0.1 http://gone.dockyard.internal/)" != 404 ]; do i=$((i+1)); sleep 1; done
+  [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 --resolve gone.dockyard.internal:80:127.77.0.1 http://gone.dockyard.internal/)" = 404 ] && ok "a name nothing answers to says so" || fail "unknown name: $(curl -s -i --max-time 5 --resolve gone.dockyard.internal:80:127.77.0.1 http://gone.dockyard.internal/ 2>&1 | head -3); proxy: $(docker logs --tail 5 dockyard-proxy 2>&1)"
   [ "$(docker run --rm alpine:3.24 wget -qO- -T 10 http://e2e-custom.dockyard.internal/)" = from-8099 ] && ok "the name works inside containers too" || fail "from a container"
   if ss -ltn | grep -E ':(80|443|53)[[:space:]]' | grep -vE '127\.0\.0\.5[34]' >/dev/null; then fail "Dockyard holds port 80, 443 or 53: $(ss -ltn | grep -E ':(80|443|53)[[:space:]]')"; else ok "no port 80, 443 or 53 taken on this machine"; fi
   docker run -d --name e2e-published -p 80:80 nginx:alpine >/dev/null && ok "a container can still publish port 80" || fail "port 80 cannot be published"

@@ -65,16 +65,22 @@ shares. So one release with the fixed tag `index` carries a single asset, `compo
 
 ## Pipelines
 
-| Workflow | Runs on | Does |
-|---|---|---|
-| `ci.yml` | pull requests, main | builds and tests everything, as before, without publishing |
-| `release-toolbox.yml` | `toolbox/*` | Toolbox for Windows, Linux (tarball, deb, rpm) and macOS; the wizard end-to-end tests; marks the release latest |
-| `release-dashboard.yml` | `dashboard/*` | the dashboard for Windows, Linux and macOS |
-| `release-cli.yml` | `cli/*` | the CLI for Windows, Linux and macOS |
-| `release-engine.yml` | `engine/*` | the WSL image and the macOS VM images, with their boot tests |
+One workflow, `release.yml`. Its `plan` job reads the ref and turns on only the jobs a component needs:
 
-Each release workflow ends in the same reusable step: write `SHA256SUMS`, publish the release as a draft, check its assets,
-make it public, and update `components.json`.
+| Ref | Builds and tests | Releases |
+|---|---|---|
+| pull request, `main` | everything | nothing |
+| `toolbox/<version>` | the Toolbox for Windows, Linux (tarball, deb, rpm) and macOS, with the wizard end-to-end tests | the Toolbox, marked latest |
+| `dashboard/<version>` | the dashboard for Windows, Linux and macOS | the dashboard |
+| `cli/<version>` | the CLI for Windows, Linux and macOS | the CLI |
+| `engine/<version>` | the WSL image and the macOS VM images, with their boot tests | the engine |
+| `v<version>` | everything, as for a pull request | all four at `<version>`, in order: engine, dashboard, CLI, Toolbox |
+
+A single component's release writes `SHA256SUMS`, publishes the release as a draft, checks its assets, makes it public and
+updates `components.json`. A `v` tag does the same for each component in turn (`scripts/release-component.sh`): it creates
+`<component>/<version>` at the tagged commit with the `v` tag's message as its notes, and uploads only that component's
+assets, as `check-release-assets.sh --list` names them. A component already released is skipped, so rerunning a `v` release
+that stopped halfway carries on. Use a `v` tag when everything changed together, and a component tag for a fix to one part.
 
 ## Not in this step
 

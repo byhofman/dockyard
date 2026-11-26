@@ -14,6 +14,17 @@ sealed class Clusters(Action<string> log)
 
     static KindActions Actions() => new(KindExe, Context, HostKubeconfig.FromEnvironment());
 
+    // kind runs only on the Linux engine: the Windows engine has no clusters, and kind's own error for an engine that is
+    // not there says little.
+    static async Task RequireLinuxEngine()
+    {
+        var (exit, output, _) = await SharedStorage.Docker(["--context", Context, "version", "--format", "{{.Server.Os}}"]);
+        if (exit == 0 && output.Trim() == "linux") return;
+        throw new InvalidOperationException(OperatingSystem.IsWindows()
+            ? "kind runs on the Linux engine, which is not running: dockyard engine start linux"
+            : "kind runs on the Linux engine, which is not running: dockyard engine start");
+    }
+
     public static string ValidName(string? name) => name is not null && KindNames.IsValid(name)
         ? name : throw new UsageException("A cluster name is needed: lower case letters, digits, . and -");
 
@@ -38,6 +49,7 @@ sealed class Clusters(Action<string> log)
 
     public async Task<IReadOnlyList<(string Name, string Details)>> List()
     {
+        await RequireLinuxEngine();
         var r = await KindCli.Run(KindExe, Context, KindCli.Clusters);
         if (r.ExitCode != 0) throw new InvalidOperationException(r.Error.Trim());
         return r.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -48,6 +60,7 @@ sealed class Clusters(Action<string> log)
 
     public async Task Create(string name, int workers, IReadOnlyList<ClusterAddon> addons, ClusterStorage storage, bool loadBalancer, IReadOnlyList<int> ports, string? definition)
     {
+        await RequireLinuxEngine();
         if (workers is < 0 or > 10) throw new UsageException("--workers takes 0 to 10");
         definition ??= KindCli.Config(workers, storage == ClusterStorage.HostFolder);
         if (ClusterDefinitions.Problem(definition) is { } problem) throw new InvalidOperationException(problem);
@@ -65,6 +78,7 @@ sealed class Clusters(Action<string> log)
 
     public async Task Recreate(string name, string? definition)
     {
+        await RequireLinuxEngine();
         var saved = ClusterDefinitions.Load(name) ?? throw new InvalidOperationException($"Dockyard has no definition of {name}: the dashboard puts one together from its nodes, under Definition");
         definition ??= saved.Yaml;
         if (ClusterDefinitions.Problem(definition) is { } problem) throw new InvalidOperationException(problem);
@@ -80,6 +94,7 @@ sealed class Clusters(Action<string> log)
 
     public async Task Delete(string name)
     {
+        await RequireLinuxEngine();
         await DeleteWithProxies(Actions(), name);
         ClusterDefinitions.Remove(name);
         var left = await List();
@@ -87,7 +102,11 @@ sealed class Clusters(Action<string> log)
         log($"Deleted {name}");
     }
 
-    public async Task Use(string name) => log($"kubectl now uses {KindKubeconfig.Key(name)}, from {await Actions().UseContext(name)}");
+    public async Task Use(string name)
+    {
+        await RequireLinuxEngine();
+        log($"kubectl now uses {KindKubeconfig.Key(name)}, from {await Actions().UseContext(name)}");
+    }
 
     public async Task Kubeconfig(string name) => log((await Actions().Kubeconfig(name)).TrimEnd());
 
