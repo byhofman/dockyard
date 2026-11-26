@@ -218,8 +218,19 @@ static partial class UserSetup
 
     public static async Task AddContext(string name, string host)
     {
-        var exists = (await Shell.Run(Paths.DockerCli, "context", "inspect", name)).ExitCode == 0;
-        await Shell.Check(Paths.DockerCli, "context", exists ? "update" : "create", name, "--docker", $"host={host}");
+        var inspect = await Shell.Run(Paths.DockerCli, "context", "inspect", name, "--format", "{{.Endpoints.docker.Host}}");
+        if (inspect.ExitCode == 0 && inspect.Output.Trim() == host) return;
+        string[] args = ["context", inspect.ExitCode == 0 ? "update" : "create", name, "--docker", $"host={host}"];
+        // docker replaces meta.json by renaming a new one over it, which Windows refuses while another docker process, such
+        // as the dashboard, has it open.
+        for (var attempt = 1; attempt < 4; attempt++)
+        {
+            var r = await Shell.Run(Paths.DockerCli, args);
+            if (r.ExitCode == 0) return;
+            if (!(r.Error + r.Output).Contains("Access is denied", StringComparison.OrdinalIgnoreCase)) break;
+            await Task.Delay(TimeSpan.FromSeconds(attempt));
+        }
+        await Shell.Check(Paths.DockerCli, args);
     }
 
     // The docker command must not be left pointing at an engine that is gone.
