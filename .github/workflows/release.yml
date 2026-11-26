@@ -400,11 +400,6 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      - name: The dashboard's assets that ride along with a Toolbox release
-        if: needs.plan.outputs.component == 'toolbox'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: sh scripts/component-assets.sh dashboard dist Dockyard.Dashboard.zip 'dockyard-dashboard_*_amd64.deb' 'dockyard-dashboard-*-1.x86_64.rpm'
       - name: Everything the one-liners and the Toolbox download is there
         run: |
           rm -f dist/*.png
@@ -447,9 +442,6 @@ jobs:
               sh scripts/release-component.sh "$component" "$VERSION" "$RUNNER_TEMP/notes.md" dist
             done
             exit 0
-          fi
-          if [ "$COMPONENT" = toolbox ]; then
-            sh scripts/component-assets.sh dashboard dist Dockyard.Dashboard.zip 'dockyard-dashboard_*_amd64.deb' 'dockyard-dashboard-*-1.x86_64.rpm'
           fi
           (cd dist && sha256sum -- * > SHA256SUMS)
           # The release notes are the annotated tag's message.

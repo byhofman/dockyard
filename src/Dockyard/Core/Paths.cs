@@ -21,7 +21,6 @@ static class Paths
     public const string DashboardProcess = "dockyard-dashboard";
     public static readonly string DashboardExe = Path.Combine(AppDir, DashboardProcess + ".exe");
     public static bool HasDashboard => File.Exists(DashboardExe);
-    // The asset keeps its name: scripts and trays already out there ask for it.
     public const string DashboardZipName = "Dockyard.Dashboard.zip";
     public static readonly string DaemonConfigDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "docker", "config");
     public static readonly string UserProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);

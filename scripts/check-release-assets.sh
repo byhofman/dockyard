@@ -9,11 +9,8 @@ if [ "$1" = --list ]; then list=1; shift; fi
 component="$1"; version="$2"; assets="${3:-}"
 
 toolbox() {
-  # The dashboard's assets ride along with the Toolbox's release while 0.8.x Toolboxes, which take the dashboard from
-  # the release they update to, are about: any version of them will do.
   echo SHA256SUMS Dockyard.exe Dockyard-linux-x64 "Dockyard-$1-linux-x64.tar.gz" "dockyard_$1_amd64.deb" \
-    "dockyard-$1-1.x86_64.rpm" "Dockyard-$1-macos.zip" "Dockyard-$1-macos-engine-only.zip" "Dockyard-$1-macos.dmg" \
-    Dockyard.Dashboard.zip 'dockyard-dashboard_*_amd64.deb' 'dockyard-dashboard-*-1.x86_64.rpm'
+    "dockyard-$1-1.x86_64.rpm" "Dockyard-$1-macos.zip" "Dockyard-$1-macos-engine-only.zip" "Dockyard-$1-macos.dmg"
 }
 dashboard() { echo SHA256SUMS Dockyard.Dashboard.zip "dockyard-dashboard_$1_amd64.deb" "dockyard-dashboard-$1-1.x86_64.rpm"; }
 cli() { echo SHA256SUMS dockyard-windows-x64.exe dockyard-linux-x64 dockyard-macos-arm64; }

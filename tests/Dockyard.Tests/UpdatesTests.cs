@@ -58,14 +58,14 @@ public sealed class UpdatesTests : IDisposable
     [Fact]
     public async Task The_latest_release_comes_from_the_redirect_and_its_checksums_without_the_api()
     {
-        github.Redirect($"{Base}/latest", $"{Base}/tag/v1.2.3");
-        ServeRelease("v1.2.3", "Dockyard-linux-x64", "app");
+        github.Redirect($"{Base}/latest", $"{Base}/tag/toolbox/1.2.3");
+        ServeRelease("toolbox/1.2.3", "Dockyard-linux-x64", "app");
 
         var release = await Updates.LatestApp(LinuxLayout.AppAsset);
 
         Assert.Equal(new Version(1, 2, 3), release!.Version);
-        Assert.Equal("v1.2.3", release.Tag);
-        Assert.Equal($"{Base}/download/v1.2.3/Dockyard-linux-x64", release.DownloadUrl);
+        Assert.Equal("toolbox/1.2.3", release.Tag);
+        Assert.Equal($"{Base}/download/toolbox/1.2.3/Dockyard-linux-x64", release.DownloadUrl);
         Assert.DoesNotContain(github.Requested, url => url.Contains("api.github.com"));
     }
 
@@ -80,9 +80,9 @@ public sealed class UpdatesTests : IDisposable
     [Fact]
     public async Task A_download_finds_the_asset_by_pattern_and_verifies_it()
     {
-        ServeRelease("v1.2.3", "dockyard-linux-1.2.3-x86_64.tar.gz", "image");
+        ServeRelease("toolbox/1.2.3", "dockyard-linux-1.2.3-x86_64.tar.gz", "image");
 
-        var file = await Updates.DownloadReleaseAsset(Updates.ImageAsset, dir, isPattern: true, tag: "v1.2.3");
+        var file = await Updates.DownloadReleaseAsset(Updates.ImageAsset, dir, isPattern: true, tag: "toolbox/1.2.3");
 
         Assert.Equal("image", File.ReadAllText(file));
         Assert.DoesNotContain(github.Requested, url => url.Contains("api.github.com"));
@@ -91,9 +91,9 @@ public sealed class UpdatesTests : IDisposable
     [Fact]
     public async Task A_download_that_does_not_match_its_checksum_is_removed()
     {
-        ServeRelease("v1.2.3", "Dockyard.exe", "tampered", sums: $"{Sum("original")}  Dockyard.exe\n");
+        ServeRelease("toolbox/1.2.3", "Dockyard.exe", "tampered", sums: $"{Sum("original")}  Dockyard.exe\n");
 
-        var e = await Assert.ThrowsAsync<InvalidOperationException>(() => Updates.DownloadReleaseAsset("Dockyard.exe", dir, tag: "v1.2.3"));
+        var e = await Assert.ThrowsAsync<InvalidOperationException>(() => Updates.DownloadReleaseAsset("Dockyard.exe", dir, tag: "toolbox/1.2.3"));
 
         Assert.Contains("Checksum mismatch", e.Message);
         Assert.Empty(Directory.GetFiles(dir));
@@ -102,11 +102,11 @@ public sealed class UpdatesTests : IDisposable
     [Fact]
     public async Task An_asset_the_checksums_do_not_list_is_named_in_the_error()
     {
-        ServeRelease("v1.2.3", "Dockyard.exe", "app");
+        ServeRelease("toolbox/1.2.3", "Dockyard.exe", "app");
 
-        var e = await Assert.ThrowsAsync<InvalidOperationException>(() => Updates.DownloadReleaseAsset("other.zip", dir, tag: "v1.2.3"));
+        var e = await Assert.ThrowsAsync<InvalidOperationException>(() => Updates.DownloadReleaseAsset("other.zip", dir, tag: "toolbox/1.2.3"));
 
-        Assert.Equal("Release v1.2.3 has no other.zip", e.Message);
+        Assert.Equal("Release toolbox/1.2.3 has no other.zip", e.Message);
     }
 
     [Theory]
@@ -126,10 +126,10 @@ public sealed class UpdatesTests : IDisposable
     [Fact]
     public async Task Any_other_failure_names_what_could_not_be_fetched()
     {
-        var e = await Assert.ThrowsAsync<HttpRequestException>(() => Updates.DownloadReleaseAsset("Dockyard.exe", dir, tag: "v9.9.9"));
+        var e = await Assert.ThrowsAsync<HttpRequestException>(() => Updates.DownloadReleaseAsset("Dockyard.exe", dir, tag: "toolbox/9.9.9"));
 
         Assert.False(Updates.IsRateLimited(e));
-        Assert.Equal($"Could not get {Base}/download/v9.9.9/SHA256SUMS: github.com answered 404 (NotFound).", e.Message);
+        Assert.Equal($"Could not get {Base}/download/toolbox/9.9.9/SHA256SUMS: github.com answered 404 (NotFound).", e.Message);
     }
 
     [Fact]

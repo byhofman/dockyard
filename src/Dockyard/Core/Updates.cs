@@ -194,13 +194,13 @@ static partial class Updates
     internal static bool RequirementsMet(ComponentEntry entry, Version? toolbox) =>
         !entry.Requires.TryGetValue(ToolboxComponent, out var needed) || toolbox is null || toolbox == new Version(0, 0, 0) || toolbox >= needed;
 
-    // A component's latest release, or null when the index does not name it (a release from before the split).
+    // A component's latest release, or null when the index does not name it.
     internal static async Task<ComponentEntry?> LatestComponent(string component) =>
         (await Index()).GetValueOrDefault(component);
 
     public static async Task<Release?> LatestComponentAsset(string component, string assetPattern)
     {
-        if (await LatestComponent(component) is not { } entry) return await LatestApp(assetPattern);
+        if (await LatestComponent(component) is not { } entry) return null;
         if (!RequirementsMet(entry, ParseVersion(Paths.AppVersion))) return null;
         if (await GetTextIfFound(AssetUrl(Paths.Repo, entry.Tag, "SHA256SUMS")) is not { } sums) return null;
         return Checksums.Names(sums).FirstOrDefault(n => Regex.IsMatch(n, assetPattern)) is { } asset
@@ -208,7 +208,7 @@ static partial class Updates
             : null;
     }
 
-    // --assets wins; then the component's own latest release; then, before the split, the Toolbox's release.
+    // --assets wins; otherwise the component's own latest release.
     public static async Task<string> DownloadComponentAsset(string component, string assetPattern, string targetDir)
     {
         if (LocalAsset(assetPattern) is { } local)
@@ -218,11 +218,9 @@ static partial class Updates
             File.Copy(local, copy, overwrite: true);
             return copy;
         }
-        var entry = await LatestComponent(component);
-        // Since 0.9.0 only the index says where a component other than the Toolbox is; the Toolbox's release does not carry it.
-        if (entry is null && component != ToolboxComponent && Paths.AppVersion != "0.0.0" && ParseVersion(Paths.AppVersion) >= new Version(0, 9, 0))
-            throw new InvalidOperationException($"Could not read which {component} release is the latest (components.json on the release tagged index); check the connection to github.com, or pass the files with --assets");
-        return await DownloadReleaseAsset(assetPattern, targetDir, isPattern: true, tag: entry?.Tag);
+        var entry = await LatestComponent(component)
+            ?? throw new InvalidOperationException($"Could not read which {component} release is the latest (components.json on the release tagged index); check the connection to github.com, or pass the files with --assets");
+        return await DownloadReleaseAsset(assetPattern, targetDir, isPattern: true, tag: entry.Tag);
     }
 
     // From the given release; without one, the release of this build, or the latest for development builds.
