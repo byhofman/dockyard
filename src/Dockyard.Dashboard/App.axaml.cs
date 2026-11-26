@@ -26,7 +26,9 @@ public partial class App : Application
             base.OnFrameworkInitializationCompleted();
             return;
         }
-        var vm = new ShellViewModel();
+        // One facade for the screens and the background duties alike.
+        var setup = DockyardSetup.ForThisMachine();
+        var vm = new ShellViewModel(new Features.Setup.DockyardSetupSource(setup));
         Failures.Show = vm.ShowError;
         var window = new MainWindow { DataContext = vm };
         if (ShellViewModel.InitialSection is { } first) vm.ShowSection(first);
@@ -34,8 +36,7 @@ public partial class App : Application
         desktop.MainWindow = window;
         // The tray runs the background duties while there is one; without it the dashboard does, for as long as it is open.
         var duties = new CancellationTokenSource();
-        var setup = DockyardSetup.ForThisMachine();
-        _ = setup.Duties.RunWhenFree(new Progress<SetupProgress>(), startEngine: false, duties.Token, yieldTo: () => TrayInstance.IsRunning);
+        _ = setup.Duties.RunWhenFree(new Progress<SetupProgress>(vm.OnDuty), startEngine: false, duties.Token, yieldTo: () => TrayInstance.IsRunning);
         desktop.Exit += (_, _) =>
         {
             duties.Cancel();
@@ -55,11 +56,6 @@ public partial class App : Application
 
         LocalPipe.Serve(LocalPipe.DashboardName, line => Dispatcher.UIThread.Post(() =>
         {
-            if (EngineSwitch.ParseResult(line) is not null)
-            {
-                vm.OnTrayMessage(line);
-                return;
-            }
             if (line == "quit")
             {
                 quitting = true;

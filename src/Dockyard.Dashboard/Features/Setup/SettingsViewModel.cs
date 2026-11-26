@@ -4,7 +4,8 @@ using Dockyard.Setup;
 
 namespace Dockyard.Dashboard.Features.Setup;
 
-// A row per setting definition. A change applies at once; an engine's daemon.json is edited in a dialog and applied there.
+// A row per setting definition but the download source, which is set in Tools, beside the tools it moves. A change applies
+// at once; an engine's daemon.json is edited in a dialog and applied there.
 sealed class SettingsViewModel : Observable
 {
     readonly ISetupSource source;
@@ -15,6 +16,7 @@ sealed class SettingsViewModel : Observable
         this.source = source;
         this.shell = shell;
         Items = source.SettingDefinitions
+            .Where(d => d.Key != SettingDefinitions.Source)
             .Select(d => new SettingItem(d, d.Kind == SettingKind.EngineFile ? "" : source.GetSetting(d.Key), Change, Edit))
             .ToList();
     }

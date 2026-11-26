@@ -20,4 +20,8 @@ interface ISetupSource
     Task Update(IReadOnlyList<string>? ids, IProgress<SetupProgress> progress);
     Task Uninstall(bool removeData, IProgress<SetupProgress> progress);
     Task Import(IProgress<SetupProgress> progress);
+    Task StartEngine(string id);
+    Task UseEngine(string id);
+    Task<string> ClusterCa(string cluster);
+    Task PushClusterWants();
 }

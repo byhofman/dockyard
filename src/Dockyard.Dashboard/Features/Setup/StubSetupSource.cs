@@ -2,10 +2,10 @@ using Dockyard.Setup;
 
 namespace Dockyard.Dashboard.Features.Setup;
 
-// Stands in for DockyardSetup until the dashboard is wired to it: installed, nothing listed, and every action refused.
+// Stands in for DockyardSetup where there is none, as in the tests: installed, nothing listed, and every action refused.
 sealed class StubSetupSource : ISetupSource
 {
-    const string NotYet = "The dashboard does not manage Dockyard yet. Use the Toolbox from the tray for now.";
+    const string NotYet = "There is no Dockyard setup here to do this with.";
 
     public bool IsInstalled => true;
     public string SelfId => "DockyardCli";
@@ -26,4 +26,8 @@ sealed class StubSetupSource : ISetupSource
     public Task Update(IReadOnlyList<string>? ids, IProgress<SetupProgress> progress) => throw new InvalidOperationException(NotYet);
     public Task Uninstall(bool removeData, IProgress<SetupProgress> progress) => throw new InvalidOperationException(NotYet);
     public Task Import(IProgress<SetupProgress> progress) => throw new InvalidOperationException(NotYet);
+    public Task StartEngine(string id) => throw new InvalidOperationException(NotYet);
+    public Task UseEngine(string id) => throw new InvalidOperationException(NotYet);
+    public Task<string> ClusterCa(string cluster) => throw new InvalidOperationException(NotYet);
+    public Task PushClusterWants() => Task.CompletedTask;
 }

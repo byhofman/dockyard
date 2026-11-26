@@ -118,6 +118,11 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     public bool HasForwards => ForwardsText.Length > 0;
 
     Dictionary<string, string> forwardNotes = [];
+
+    // What failed for every cluster, such as kind's cloud provider: said once, above the containers, with or without clusters.
+    public string ServicesError { get => servicesError; private set { if (Set(ref servicesError, value)) Raise(nameof(HasServicesError)); } }
+    public bool HasServicesError => servicesError.Length > 0;
+    string servicesError = "";
     readonly Dictionary<string, string> loggedForwards = [];
 
     public Command LoadBalancerCommand { get; }
@@ -191,22 +196,21 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         Dockyard.Engine.ClusterServicesStatus report;
         try { report = await agent.ClusterStatusAsync(); }
         catch (Exception ex) when (ex is IOException or System.Net.Sockets.SocketException or InvalidOperationException or TimeoutException) { return; }
+        var errors = LoadBalancers.ServiceErrors(report);
+        if (errors != ServicesError && errors.Length > 0) Shell.Activity.Note(errors, ActivityKind.Error);
+        ServicesError = errors;
         foreach (var status in report.Clusters)
         {
-            var note = LoadBalancers.Activity(status, report.Errors);
+            var note = LoadBalancers.Activity(status);
             if (note != loggedForwards.GetValueOrDefault(status.Cluster, "") && (note.Length > 0 || loggedForwards.ContainsKey(status.Cluster)))
                 Shell.Activity.Note($"{status.Cluster} load balancer: {(note.Length > 0 ? note : "no ports")}", ActivityKind.Info);
             loggedForwards[status.Cluster] = note;
         }
-        forwardNotes = report.Clusters.ToDictionary(st => st.Cluster, st => LoadBalancers.Notes(st, report.Errors));
+        forwardNotes = report.Clusters.ToDictionary(st => st.Cluster, st => LoadBalancers.Notes(st));
         Raise(nameof(ForwardsText), nameof(HasForwards));
     }
 
-    static async Task PushWants()
-    {
-        using var setup = Dockyard.Setup.DockyardSetup.ForThisMachine();
-        await setup.PushClusterWants();
-    }
+    internal Task PushWants() => Shell.SetupSource.PushClusterWants();
 
     void AskLoadBalancer(KindCluster cluster)
     {
@@ -383,7 +387,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         }), danger: true, fields: [definition], canConfirm: _ => definition.Problem is null));
     }
 
-    static Task<string> ClusterCa(string cluster) => CertManager.FromToolbox(Dashboard.Shell.TrayClient.TrayExe, cluster);
+    internal Task<string> ClusterCa(string cluster) => Shell.SetupSource.ClusterCa(cluster);
 
     // kind changes nothing in a cluster that exists: Recreate, a change to or from the host folder and Upgrade all delete
     // it, with everything in it, and make it again from the definition.
@@ -463,7 +467,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     {
         if (CliLocator.Locate("helm") is not { } helm)
         {
-            Shell.ShowError("The add-ons go in with Helm, which is not installed. Add it in the Dockyard Toolbox.");
+            Shell.ShowError("The add-ons go in with Helm, which is not installed. Add it in Tools.");
             return;
         }
         var saved = DefinitionOf(cluster);

@@ -31,16 +31,20 @@ static class LoadBalancers
         .ToList();
 
     // Under Load balancer, one line per fixed port, then what failed: for this cluster, or for all of them.
-    public static string Notes(ClusterStatus status, IReadOnlyList<string> errors) => string.Join("\n",
+    public static string Notes(ClusterStatus status) => string.Join("\n",
         status.Forwards.Select(f => $"127.0.0.1:{f.Port} → {f.Service}")
             .Concat(status.Taken.Select(t => $"Port {t.Port} is used by cluster {t.Cluster}; its service keeps the port Docker picked"))
             .Concat(status.Busy.Select(p => $"Port {p} is in use by another program; its service keeps the port Docker picked. Dockyard tries again when the cluster starts."))
-            .Concat(Failures(status, errors)));
+            .Concat(Failures(status)));
 
     // For the footer's activity, when it changes.
-    public static string Activity(ClusterStatus status, IReadOnlyList<string> errors) => string.Join(", ",
-        status.Forwards.Select(f => $"127.0.0.1:{f.Port} → {f.Service}").Concat(status.Busy.Select(p => $"port {p} in use by another program")).Concat(Failures(status, errors)));
+    public static string Activity(ClusterStatus status) => string.Join(", ",
+        status.Forwards.Select(f => $"127.0.0.1:{f.Port} → {f.Service}").Concat(status.Busy.Select(p => $"port {p} in use by another program")).Concat(Failures(status)));
 
-    static IEnumerable<string> Failures(ClusterStatus status, IReadOnlyList<string> errors) =>
-        (status.Error is { } error ? errors.Prepend(error) : errors).Select(e => $"Load balancers for kind: {e}");
+    // What failed for every cluster, once, rather than under each of them.
+    public static string ServiceErrors(ClusterServicesStatus report) => string.Join("\n", report.Errors.Distinct().Select(Failure));
+
+    static IEnumerable<string> Failures(ClusterStatus status) => status.Error is { } error ? [Failure(error)] : [];
+
+    static string Failure(string error) => $"Load balancers for kind: {error}";
 }

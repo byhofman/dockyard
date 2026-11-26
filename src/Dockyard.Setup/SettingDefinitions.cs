@@ -22,6 +22,11 @@ public static class SettingDefinitions
     // This computer's settings.
     public static IReadOnlyList<SettingDefinition> All => ThisMachine.Value;
 
+    // Where Linux is the only engine, as on macOS and Linux, saying a setting is for it tells nothing.
+    public static bool ShowsLinuxEngineOnly(SettingDefinition definition) => ShowsLinuxEngineOnly(definition, OperatingSystem.IsWindows());
+
+    public static bool ShowsLinuxEngineOnly(SettingDefinition definition, bool windows) => definition.LinuxEngineOnly && windows;
+
     // The package manager's name, as the first choice of the source setting.
     public static string PackageManager => OperatingSystem.IsWindows() ? "winget"
         : OperatingSystem.IsMacOS() ? "Homebrew"

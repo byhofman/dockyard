@@ -46,7 +46,7 @@ sealed class BuildsViewModel : SelectableSection<BuildRecord>
 
     public string Hint =>
         Session.IsWindowsEngine ? "The Windows engine builds without BuildKit, which is what keeps a build history. Switch to Linux to see builds."
-        : !Shell.Tools.HasBuildx ? "The build history comes from Docker Buildx, which is not installed. Add it in the Dockyard Toolbox, under Components."
+        : !Shell.Tools.HasBuildx ? "The build history comes from Docker Buildx, which is not installed. Add it in Tools."
         : error is not null ? error
         : all.Count == 0 ? "No builds yet. Every docker build on this engine shows up here, with its steps and logs."
         : "";

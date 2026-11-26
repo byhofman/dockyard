@@ -115,21 +115,21 @@ sealed class ContainersViewModel : Observable, ISearchable
         set => Pick(value == true ? Pickable : []);
     }
 
-    // The setting that switches the container's feature off: in the Toolbox, highlighted there, or the cluster it serves.
+    // What switches the container's feature off: a setting, in Settings, or the cluster it serves.
     void StopSystem(ContainerItem item)
     {
         var service = item.Labels.GetValueOrDefault(SystemRow.ServiceLabel);
         string? setting = service switch { "dns" or "etcd" => "domains", "proxy" => "proxy", _ => null };
-        if (setting is not null && TrayClient.Send(new Shared.TrayCommand(Shared.TrayCommandKind.Highlight, setting))) return;
+        if (setting is not null) shell.ShowSection("Settings");
         shell.ShowInfo(SystemHint(item));
     }
 
     internal static string SystemHint(ContainerItem item) => item.Labels.GetValueOrDefault(SystemRow.ServiceLabel) switch
     {
-        "dns" => $"{item.Name} is the DNS server of every container: it answers names under dockyard.internal and passes the rest to your network's DNS. It always runs with the engine. To stop the names, turn off Container domains in the Dockyard Toolbox's settings.",
-        "proxy" => $"{item.Name} serves http and https://<name>.dockyard.internal and the ingress of kind clusters. Turn off Container domains in the Dockyard Toolbox's settings to remove it, or only Trusted HTTPS to keep plain http.",
-        "etcd" => $"{item.Name} holds the names kind clusters publish with external-dns. Turn off Container domains in the Dockyard Toolbox's settings to remove it.",
-        "cloud-provider-kind" => $"{item.Name} gives LoadBalancer services in kind clusters an address. It goes when no running cluster has its load balancer on: switch that off per cluster under Kubernetes.",
+        "dns" => $"{item.Name} is the DNS server of every container: it answers names under dockyard.internal and passes the rest to your network's DNS. It always runs with the engine. To stop the names, turn off Container domains in Settings.",
+        "proxy" => $"{item.Name} serves http and https://<name>.dockyard.internal and the ingress of kind clusters. Turn off Container domains in Settings to remove it, or only Trusted HTTPS to keep plain http.",
+        "etcd" => $"{item.Name} holds the names kind clusters publish with external-dns. Turn off Container domains in Settings to remove it.",
+        "cloud-provider-kind" => $"{item.Name} gives LoadBalancer services in kind clusters an address. It goes when no running cluster has its load balancer on: switch that off in a cluster's definition.",
         "nfs" => $"{item.Name} serves NFS storage to the kind clusters that use it, and goes when the last of them is deleted.",
         _ => $"{item.Name} is one of Dockyard's own containers, which Dockyard starts and removes itself.",
     };

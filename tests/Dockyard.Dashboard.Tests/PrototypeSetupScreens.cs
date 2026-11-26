@@ -15,7 +15,7 @@ namespace Dockyard.Dashboard.Tests;
 // next to Dockyard's own, and required rows. Each in light and dark, at the window's default and its minimum size.
 public sealed partial class PrototypeScreens
 {
-    static IReadOnlyList<ComponentRow> MacRows(bool installed)
+    internal static IReadOnlyList<ComponentRow> MacRows(bool installed)
     {
         const string brew = "Homebrew", own = SettingDefinitions.DockyardSource;
         ComponentRow Row(string id, string title, string group, string? at, string? newest, string source, string? required, string? needs, string? flag, bool canRemove = false) =>
@@ -31,7 +31,7 @@ public sealed partial class PrototypeScreens
             Row("DockerCli", "Docker CLI", "Docker", "28.5.1", "29.0.2", brew, "the engine, Compose and Buildx are used through it.", null, null),
             Row("Compose", "Docker Compose", "Docker", "2.40.3", "2.40.3", brew, null, "Needs the Docker CLI. The dashboard's Compose actions use it.", "compose", canRemove: true),
             Row("Buildx", "Docker Buildx", "Docker", "0.29.1", "0.29.1", brew, null, "Needs the Docker CLI. docker build uses it.", "buildx", canRemove: true),
-            Row("Kind", "kind (Kubernetes in Docker)", "Kubernetes", "0.29.0", "0.30.0", brew, null, "Local Kubernetes clusters in containers, on the Linux engine. The dashboard's Kubernetes section uses it.", "kind", canRemove: true),
+            Row("Kind", "kind (Kubernetes in Docker)", "Kubernetes", "0.29.0", "0.30.0", brew, null, "Local Kubernetes clusters in containers, on the Linux engine. The dashboard makes and runs its clusters with it.", "kind", canRemove: true),
             Row("Kubectl", "kubectl", "Kubernetes", "1.34.2", "1.34.2", brew, null, "The Kubernetes command line, for kind's clusters and any other.", "kubectl", canRemove: true),
             Row("Helm", "Helm", "Kubernetes", null, "3.19.2", brew, null, "Kubernetes packages. The dashboard installs Traefik and metrics-server into new clusters with it.", "helm", canRemove: true),
         ];
@@ -77,6 +77,10 @@ public sealed partial class PrototypeScreens
         public Task Update(IReadOnlyList<string>? ids, IProgress<SetupProgress> progress) => Play(progress);
         public Task Uninstall(bool removeData, IProgress<SetupProgress> progress) => Play(progress);
         public Task Import(IProgress<SetupProgress> progress) => Play(progress);
+        public Task StartEngine(string id) => Task.CompletedTask;
+        public Task UseEngine(string id) => Task.CompletedTask;
+        public Task<string> ClusterCa(string cluster) => Task.FromResult("");
+        public Task PushClusterWants() => Task.CompletedTask;
     }
 
     static SetupProgress Step(int n, string line) => new(line, Step: n, Steps: 7);

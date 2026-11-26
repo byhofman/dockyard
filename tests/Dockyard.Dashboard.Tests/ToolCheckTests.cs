@@ -12,6 +12,6 @@ public sealed class ToolCheckTests
         Assert.StartsWith("Docker Compose and Docker Buildx", ToolCheck.Missing(docker: true, compose: false, buildx: false), StringComparison.Ordinal);
         Assert.StartsWith("Docker Compose is not installed", ToolCheck.Missing(docker: true, compose: false, buildx: true), StringComparison.Ordinal);
         Assert.StartsWith("Docker Buildx is not installed", ToolCheck.Missing(docker: true, compose: true, buildx: false), StringComparison.Ordinal);
-        Assert.All(new[] { ToolCheck.Missing(false, true, true), ToolCheck.Missing(true, false, true) }, h => Assert.Contains("Dockyard Toolbox", h, StringComparison.Ordinal));
+        Assert.All(new[] { ToolCheck.Missing(false, true, true), ToolCheck.Missing(true, false, true) }, h => Assert.EndsWith("in Tools.", h, StringComparison.Ordinal));
     }
 }

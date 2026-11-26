@@ -4,7 +4,7 @@ using Dockyard.Kind;
 namespace Dockyard.Dashboard.Shell;
 
 // The dashboard talks to the engine itself, but compose projects, terminals and the build history go through the docker
-// command and its compose and buildx plugins, which the Toolbox installs as components and can leave out.
+// command and its compose and buildx plugins, which Tools installs as components and can leave out.
 sealed class ToolCheck : Observable
 {
     bool hasDocker = true;
@@ -20,10 +20,10 @@ sealed class ToolCheck : Observable
     public bool HasHint => Hint.Length > 0;
 
     public static string Missing(bool docker, bool compose, bool buildx) =>
-        !docker ? "The docker command is not installed, so compose projects, terminals and builds are unavailable. Add the Docker CLI in the Dockyard Toolbox, under Components."
-        : !compose && !buildx ? "Docker Compose and Docker Buildx are not installed. Add them in the Dockyard Toolbox, under Components."
-        : !compose ? "Docker Compose is not installed, so compose projects cannot be started or changed. Add it in the Dockyard Toolbox, under Components."
-        : !buildx ? "Docker Buildx is not installed, so the build history is unavailable. Add it in the Dockyard Toolbox, under Components."
+        !docker ? "The docker command is not installed, so compose projects, terminals and builds are unavailable. Add the Docker CLI in Tools."
+        : !compose && !buildx ? "Docker Compose and Docker Buildx are not installed. Add them in Tools."
+        : !compose ? "Docker Compose is not installed, so compose projects cannot be started or changed. Add it in Tools."
+        : !buildx ? "Docker Buildx is not installed, so the build history is unavailable. Add it in Tools."
         : "";
 
     public Task Refresh() => running is { IsCompleted: false } ? running : running = Check();

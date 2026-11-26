@@ -293,7 +293,7 @@
               IsVisible="{Binding Tools.HasHint}">
         <Grid ColumnDefinitions="*,Auto">
           <TextBlock Text="{Binding Tools.Hint}" Foreground="{DynamicResource Warn}" TextWrapping="Wrap" VerticalAlignment="Center" />
-          <Button Grid.Column="1" Classes="link" Content="Open the Toolbox" Command="{Binding SettingsCommand}" Margin="12,0,0,0" />
+          <Button Grid.Column="1" Classes="link" Content="Open Tools" Command="{Binding OpenToolsCommand}" Margin="12,0,0,0" />
         </Grid>
       </Border>
 

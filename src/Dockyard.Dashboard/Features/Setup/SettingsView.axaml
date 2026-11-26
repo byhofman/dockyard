@@ -15,7 +15,7 @@
           <ItemsControl.ItemTemplate>
             <DataTemplate DataType="setup:SettingItem">
               <dctl:SettingRow Margin="16,12" Title="{Binding Definition.Title}" Description="{Binding Definition.Description}"
-                               IsLinuxEngineOnly="{Binding Definition.LinuxEngineOnly}" NeedsAdmin="{Binding Definition.NeedsAdmin}"
+                               IsLinuxEngineOnly="{Binding ShowsLinuxEngineOnly}" NeedsAdmin="{Binding Definition.NeedsAdmin}"
                                Status="{Binding Status}" Error="{Binding Error}">
                 <dctl:SettingEditor Kind="{Binding Definition.Kind}" Choices="{Binding Definition.Choices}" Value="{Binding Value}"
                                     Label="{Binding Definition.Title}" EditText="{Binding EditText}" EditCommand="{Binding EditCommand}"

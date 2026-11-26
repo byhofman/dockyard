@@ -51,7 +51,7 @@ sealed class WindowsHost : IEngineHost
         new(nameof(Component.LinuxEngine), Updates.Title(Component.LinuxEngine), CheckNeedsEngine: Linux, Flag: "linux-engine", Note: "Linux containers. Its images stay when you remove it. One engine has to stay.", IsEngine: true, Default: !server),
         new(nameof(Component.Compose), Updates.Title(Component.Compose), Flag: "compose", Note: "Needs the Docker CLI. The dashboard's Compose actions use it."),
         new(nameof(Component.Buildx), Updates.Title(Component.Buildx), Flag: "buildx", Note: "Needs the Docker CLI. docker build uses it."),
-        Tools.Kind.Component with { Note = "Local Kubernetes clusters in containers. Needs the Linux engine; the dashboard's Kubernetes section uses it." },
+        Tools.Kind.Component with { Note = "Local Kubernetes clusters in containers. Needs the Linux engine; the dashboard makes and runs its clusters with it." },
         Tools.Kubectl.Component,
         Tools.Helm.Component,
         new(nameof(Component.Tray), Updates.Title(Component.Tray), Flag: "tray", Note: "Optional. Keeps the engines in the notification area and starts at logon.", Default: desktop),

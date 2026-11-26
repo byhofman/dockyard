@@ -19,6 +19,7 @@ sealed class SettingItem : Observable
     }
 
     public SettingDefinition Definition { get; }
+    public bool ShowsLinuxEngineOnly => SettingDefinitions.ShowsLinuxEngineOnly(Definition);
     public Command EditCommand { get; }
     public string EditText => "Edit daemon.json";
 
