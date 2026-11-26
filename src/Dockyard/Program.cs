@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Dockyard.Core;
+using Dockyard.Setup;
 using Dockyard.Shared;
 
 namespace Dockyard;
@@ -30,9 +31,9 @@ static class Program
             AttachParentConsole();
             Console.Error.WriteLine(ex.Message);
             Console.Error.WriteLine(SetupOptions.Usage);
-            return Installer.WrongArguments;
+            return DockyardSetup.WrongArguments;
         }
-        Updates.LocalAssets = options.Assets;
+        DockyardSetup.LocalAssets = options.Assets;
         if (options.ShowVersion || options.ShowHelp)
         {
             AttachParentConsole();
@@ -41,8 +42,8 @@ static class Program
         }
         if (options.Silent) return RunSilent(options);
 
-        var host = Hosts.HostFactory.Create();
-        var isTray = host.RunsFromInstallLocation && host.IsInstalled || args.Contains("--tray");
+        var setup = DockyardSetup.ForThisMachine();
+        var isTray = setup.RunsFromInstallLocation && setup.IsInstalled || args.Contains("--tray");
         if (!isTray || options.OpenSetup)
         {
             if (OperatingSystem.IsLinux() && !Hosts.LinuxLayout.HasDisplay(Environment.GetEnvironmentVariable("DISPLAY"), Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")))
@@ -51,7 +52,7 @@ static class Program
                 return RunSilent(options);
             }
             if (!DisplayGate.WaitUntilUsable(TimeSpan.FromMinutes(10))) return 0;
-            if (!isTray && !options.OpenSetup && HandOver(host)) return 0;
+            if (!isTray && !options.OpenSetup && HandOver(setup)) return 0;
             return Build(AppMode.Setup, args).StartWithClassicDesktopLifetime(args, ShutdownMode.OnMainWindowClose);
         }
 
@@ -69,13 +70,13 @@ static class Program
         return Build(AppMode.Tray, args).StartWithClassicDesktopLifetime(args, ShutdownMode.OnExplicitShutdown);
     }
 
-    static bool HandOver(Hosts.IEngineHost host)
+    static bool HandOver(DockyardSetup setup)
     {
         try
         {
-            return host.IsInstalled
-                && TrayLink.HandsOver(Updates.ParseVersion(Paths.AppVersion), host.Installed(nameof(Component.App)).GetAwaiter().GetResult())
-                && TrayLink.ShowSettings(host, TimeSpan.FromSeconds(20)).GetAwaiter().GetResult();
+            return setup.IsInstalled
+                && TrayLink.HandsOver(Updates.ParseVersion(Paths.AppVersion), setup.InstalledVersion(nameof(Component.App)).GetAwaiter().GetResult())
+                && setup.ShowInstalledWindow(TimeSpan.FromSeconds(20)).GetAwaiter().GetResult();
         }
         catch (Exception)
         {
@@ -96,7 +97,8 @@ static class Program
             log = line => File.AppendAllLines(file, [line]);
             error = log;
         }
-        return Installer.RunSilent(Hosts.HostFactory.Create(), options, log, error).GetAwaiter().GetResult();
+        var progress = new ReportTo(p => { if (p.Kind == SetupProgressKind.Error) error("ERROR: " + p.Line); else log(p.Line); });
+        return options.Run(DockyardSetup.ForThisMachine(), progress).GetAwaiter().GetResult();
     }
 
     static void AttachParentConsole()

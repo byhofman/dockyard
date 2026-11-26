@@ -1,7 +1,7 @@
 using Dockyard.Core;
 using Xunit;
 
-namespace Dockyard.Tests;
+namespace Dockyard.Setup.Tests;
 
 public class SettingsTests
 {

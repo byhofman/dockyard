@@ -45,6 +45,12 @@ sealed class Settings
             if (!JsonNode.DeepEquals(value, loaded[name])) merged[name] = value?.DeepClone();
         Directory.CreateDirectory(Path.GetDirectoryName(file)!);
         File.WriteAllText(file, merged.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        Reload();
+    }
+
+    // What is on disk now, which another process may have changed.
+    public void Reload()
+    {
         var current = Load(file);
         StopOtherOnSwitch = current.StopOtherOnSwitch;
         StartActiveAtLogon = current.StartActiveAtLogon;

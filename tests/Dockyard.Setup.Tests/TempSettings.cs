@@ -1,6 +1,6 @@
 using Dockyard.Core;
 
-namespace Dockyard.Tests;
+namespace Dockyard.Setup.Tests;
 
 /// <summary>Settings in a file of the test's own, so no test reads or writes the user's real
 /// settings or another test's.</summary>

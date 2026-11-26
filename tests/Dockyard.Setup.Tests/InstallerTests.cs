@@ -1,7 +1,7 @@
 using Dockyard.Core;
 using Dockyard.Hosts;
 
-namespace Dockyard.Tests;
+namespace Dockyard.Setup.Tests;
 
 public sealed class InstallerTests : IDisposable
 {
@@ -11,8 +11,14 @@ public sealed class InstallerTests : IDisposable
 
     public void Dispose() => settings.Dispose();
 
-    Task<int> Run(FakeHost host, params string[] args) =>
-        Installer.RunSilent(host, SetupOptions.Parse(args), output.Add, errors.Add, settings.Settings, (_, _) => { });
+    async Task<int> Run(FakeHost host, params string[] args)
+    {
+        var progress = new ProgressLines();
+        var code = await SetupOptions.Parse(args).Run(Facade.For(host, settings), progress);
+        output.AddRange(progress.All.Where(p => p.Kind != SetupProgressKind.Error).Select(p => p.Line));
+        errors.AddRange(progress.All.Where(p => p.Kind == SetupProgressKind.Error).Select(p => p.Line));
+        return code;
+    }
 
     [Fact]
     public async Task Fresh_silent_install_gets_the_dashboard_and_starts()
@@ -62,8 +68,8 @@ public sealed class InstallerTests : IDisposable
     public async Task Failure_exits_non_zero_with_the_reason()
     {
         var host = new FakeHost { Failure = new InvalidOperationException("Administrator approval was declined") };
-        Assert.Equal(Installer.Failed, await Run(host, "--silent"));
-        Assert.Equal(["ERROR: Administrator approval was declined"], errors);
+        Assert.Equal(DockyardSetup.Failed, await Run(host, "--silent"));
+        Assert.Equal(["Administrator approval was declined"], errors);
         Assert.DoesNotContain("start", host.Calls);
     }
 
@@ -71,7 +77,7 @@ public sealed class InstallerTests : IDisposable
     public async Task A_dashboard_that_did_not_arrive_is_a_failure()
     {
         var host = new FakeHost { IgnoresDashboard = true };
-        Assert.Equal(Installer.Failed, await Run(host, "--silent", "--dashboard"));
+        Assert.Equal(DockyardSetup.Failed, await Run(host, "--silent", "--dashboard"));
         Assert.Contains("dashboard", errors[0]);
     }
 
@@ -79,7 +85,7 @@ public sealed class InstallerTests : IDisposable
     public async Task A_needed_reboot_is_its_own_exit_code_and_does_not_start_the_app()
     {
         var host = new FakeHost { RebootNeeded = true };
-        Assert.Equal(Installer.RebootRequired, await Run(host, "--silent"));
+        Assert.Equal(DockyardSetup.RebootRequired, await Run(host, "--silent"));
         Assert.DoesNotContain("start", host.Calls);
     }
 

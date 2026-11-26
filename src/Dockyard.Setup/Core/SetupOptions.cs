@@ -114,3 +114,40 @@ sealed record SetupOptions
         ? wanted
         : throw new SetupUsageException("--dashboard and --no-dashboard exclude each other");
 }
+
+static class SetupOptionsRun
+{
+    // The window-less wizard: what these options ask of the facade, with the outcome in the exit code.
+    public static async Task<int> Run(this SetupOptions options, Setup.DockyardSetup setup, IProgress<Setup.SetupProgress> progress)
+    {
+        try
+        {
+            switch (options.Action)
+            {
+                case SetupAction.Uninstall:
+                    await setup.Uninstall(options.RemoveData, progress, silent: true);
+                    return Setup.DockyardSetup.Ok;
+                case SetupAction.Import:
+                    await setup.Import(progress, options.ImportFrom);
+                    return Setup.DockyardSetup.Ok;
+            }
+            if (options.KubectlShell == false) await setup.SetSetting(Setup.SettingDefinitions.KubectlShell, Setup.SettingDefinitions.Off, progress);
+        }
+        catch (Exception ex)
+        {
+            progress.Report(new Setup.SetupProgress(ex.Message, Setup.SetupProgressKind.Error));
+            return Setup.DockyardSetup.Failed;
+        }
+        return await setup.Setup(options.Request(), progress, CancellationToken.None);
+    }
+
+    public static Setup.SetupRequest Request(this SetupOptions options) => new(
+        options.Dashboard == true ? [.. options.With, "dashboard"] : options.With,
+        options.Dashboard == false ? [.. options.Without, "dashboard"] : options.Without,
+        options.Source, options.TrustHttps, options.KubectlShell == true, options.Silent, options.Resume)
+    {
+        Start = options.Start,
+        Image = options.Image,
+        RemoveData = options.RemoveData,
+    };
+}

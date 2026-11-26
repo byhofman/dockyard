@@ -10,7 +10,7 @@ static class GuestBundle
     // The agent out of the bundle Dockyard carries; null for a build without one.
     public static async Task<string?> ExtractAgent(string directory)
     {
-        await using var resource = typeof(GuestBundle).Assembly.GetManifestResourceStream(ResourceName);
+        await using var resource = typeof(Paths).Assembly.GetManifestResourceStream(ResourceName);
         if (resource is null) return null;
         await using var gzip = new GZipStream(resource, CompressionMode.Decompress);
         await using var tar = new TarReader(gzip);

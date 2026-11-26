@@ -1,7 +1,7 @@
 using Dockyard.Core;
 using Dockyard.Hosts;
 
-namespace Dockyard.Tests;
+namespace Dockyard.Setup.Tests;
 
 sealed class FakeHost : IEngineHost
 {
@@ -13,11 +13,14 @@ sealed class FakeHost : IEngineHost
     public List<string> Calls { get; } = [];
 
     public IReadOnlyList<EngineInfo> Engines { get; } = [new("linux", "Linux", "Linux containers", "", "ctx", "unix:///x")];
-    public IReadOnlyList<ComponentInfo> Components { get; init; } = [new("App", "Dockyard")];
+    public IReadOnlyList<ComponentInfo> Components { get; init; } = [new("App", "Dockyard"), new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard")];
     public HashSet<string> Missing { get; } = [];
     public bool IsInstalled => Installed;
     public bool RunsFromInstallLocation => false;
     public bool HasDashboard => Dashboard;
+    // The certificate authority goes in a folder of the test's own, never the user's.
+    public string CaDirectory { get; } = Path.Combine(Path.GetTempPath(), "dockyard-tests-ca-" + Guid.NewGuid().ToString("N"));
+    public Task<bool> TrustCa(Action<string> log, string certificateFile, bool silent) => Task.FromResult(true);
 
     public Task<bool> IsRunning(string engine) => Task.FromResult(false);
     public Task Start(string engine) => Task.CompletedTask;
@@ -70,4 +73,11 @@ sealed class FakeHost : IEngineHost
     }
 
     public void ReleaseResources() { }
+}
+
+static class Facade
+{
+    // Over the test's own settings, and with the shell's profiles left alone.
+    public static DockyardSetup For(IEngineHost host, TempSettings settings) =>
+        new(host, settings.Settings, new ShellProfiles((_, _) => { }, () => []));
 }

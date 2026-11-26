@@ -5,7 +5,7 @@ namespace Dockyard.Core;
 // Where docker, kind, kubectl and helm come from: the system's package manager (winget, Homebrew, apt, dnf), or Dockyard's
 // own pinned downloads.
 [JsonConverter(typeof(JsonStringEnumConverter<ToolSource>))]
-enum ToolSource
+public enum ToolSource
 {
     [JsonStringEnumMemberName("package-manager")] PackageManager,
     [JsonStringEnumMemberName("dockyard")] Dockyard,

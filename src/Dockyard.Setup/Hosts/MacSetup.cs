@@ -39,7 +39,7 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
         await runner.Check(MacLayout.Docker, "context", "use", MacLayout.Context);
         log($"Docker context '{MacLayout.Context}' → {dockerHost}");
 
-        if (request.TrustHttps) await Https.Enable(host, log, request.Silent);
+        if (request.TrustHttps) await Https.Enable(host, Settings.Load(), log, request.Silent);
 
         Directory.CreateDirectory(Path.GetDirectoryName(MacLayout.LaunchAgent)!);
         await File.WriteAllTextAsync(MacLayout.LaunchAgent, MacLayout.LaunchAgentPlist(MacLayout.InstalledExe));
@@ -61,7 +61,7 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
             await runner.Run(MacLayout.Docker, "context", "use", MacLayout.ContextToRestore(previous));
             await runner.Run(MacLayout.Docker, "context", "rm", "-f", MacLayout.Context);
         }
-        await Https.Disable(host, log, silent);
+        await Https.Disable(host, Settings.Load(), log, silent);
         await CredentialStore.Forget(MacLayout.CredentialStoreMarker, MacLayout.CredentialHelper, log);
         await EngineConfig.ApplyClientProxy("unix://" + MacLayout.DockerSocket, null);
         UnlinkUserSocket();

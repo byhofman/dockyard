@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Dockyard.Core;
 using Dockyard.Hosts;
+using Dockyard.Setup.Tests;
 using Dockyard.Shared;
 
 namespace Dockyard.Tests;
@@ -92,7 +93,11 @@ public sealed class EngineSettingsTests : IDisposable
     readonly List<string> output = [];
     readonly List<string> errors = [];
 
-    Task<int> Run(IEngineHost host, params string[] args) => Cli.Execute(host, args, output.Add, errors.Add);
+    async Task<int> Run(IEngineHost host, params string[] args)
+    {
+        using var settings = new TempSettings();
+        return await Cli.Execute(Facade.For(host, settings), args, output.Add, errors.Add);
+    }
 
     [Fact]
     public async Task Config_show_prints_the_active_engine_s_settings_or_the_one_named()

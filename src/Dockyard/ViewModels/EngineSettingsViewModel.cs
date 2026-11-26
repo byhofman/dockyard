@@ -1,6 +1,7 @@
 using Avalonia.Threading;
 using Dockyard.Core;
 using Dockyard.Hosts;
+using Dockyard.Setup;
 using Dockyard.Shared;
 
 namespace Dockyard.ViewModels;
@@ -8,7 +9,8 @@ namespace Dockyard.ViewModels;
 // One engine's daemon.json: checked as it is typed, by dockerd itself shortly after, and applied with the engine restarted.
 sealed class EngineSettingsViewModel : Observable
 {
-    readonly IEngineHost host;
+    readonly DockyardSetup setup;
+    readonly string key;
     readonly Action<string> log;
     readonly DispatcherTimer settle = new() { Interval = TimeSpan.FromMilliseconds(1500) };
     string text = "";
@@ -19,9 +21,10 @@ sealed class EngineSettingsViewModel : Observable
     int checkRun;
     IReadOnlyList<DaemonJsonSchema.Issue> issues = [];
 
-    public EngineSettingsViewModel(IEngineHost host, EngineInfo engine, Action<string> log)
+    public EngineSettingsViewModel(DockyardSetup setup, EngineInfo engine, Action<string> log)
     {
-        this.host = host;
+        this.setup = setup;
+        key = SettingDefinitions.EngineFilePrefix + engine.Id;
         this.log = log;
         Engine = engine;
         ApplyCommand = new Command(Apply, () => busy is null && IsDirty && !HasErrors);
@@ -42,9 +45,7 @@ sealed class EngineSettingsViewModel : Observable
 
     public EngineInfo Engine { get; }
     public string Title => $"{Engine.Name} engine · daemon.json";
-    public string Explanation => Engine.Id == EngineSettings.Windows
-        ? "C:\\ProgramData\\docker\\config\\daemon.json. Dockyard keeps \"hosts\" on its pipe and adds you and docker-users to \"group\". Applying asks for administrator approval and restarts the engine if it runs."
-        : "Dockyard adds \"dns\", which container domains need, and this computer's proxy when the file names none. Applying restarts the engine if it runs, which stops containers without a restart policy; one that does not start with the new settings gets the previous ones back.";
+    public string Explanation => setup.SettingDefinitions.First(d => d.Key == key).Description;
 
     public IReadOnlyList<SnippetItem> Snippets { get; }
     public Func<IReadOnlyList<CodeCompletion>> Completions { get; }
@@ -92,7 +93,7 @@ sealed class EngineSettingsViewModel : Observable
 
     public async Task Load()
     {
-        var current = await host.ReadEngineSettings(Engine.Id) ?? "{}";
+        var current = await Task.Run(() => setup.GetSetting(key));
         original = current.TrimEnd() + "\n";
         Text = original;
     }
@@ -109,7 +110,7 @@ sealed class EngineSettingsViewModel : Observable
         var json = text;
         try
         {
-            var problem = await Task.Run(() => host.ValidateEngineSettings(Engine.Id, json));
+            var problem = await Task.Run(() => setup.CheckSetting(key, json));
             if (run != checkRun) return;
             VerdictOk = problem is null;
             Verdict = problem ?? "dockerd accepts these settings";
@@ -128,13 +129,7 @@ sealed class EngineSettingsViewModel : Observable
         Busy = "Applying";
         try
         {
-            if (await host.ValidateEngineSettings(Engine.Id, json) is { } problem)
-            {
-                VerdictOk = false;
-                Verdict = problem;
-                return;
-            }
-            await host.ApplyEngineSettings(line => { log(line); Dispatcher.UIThread.Post(() => Busy = line); }, Engine.Id, json);
+            await setup.SetSetting(key, json, new ReportTo(p => { log(p.Line); Dispatcher.UIThread.Post(() => Busy = p.Line); }));
             original = json;
             VerdictOk = true;
             Verdict = $"The {Engine.Name} engine has these settings";

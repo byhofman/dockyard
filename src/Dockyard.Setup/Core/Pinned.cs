@@ -1,4 +1,3 @@
-using System.Reflection;
 using Dockyard.Hosts;
 
 namespace Dockyard.Core;
@@ -69,7 +68,7 @@ static class Pinned
 
     static string Resource(string name)
     {
-        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(name)
+        using var stream = typeof(Paths).Assembly.GetManifestResourceStream(name)
             ?? throw new InvalidOperationException($"{name} is not embedded");
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd();

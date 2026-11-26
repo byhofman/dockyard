@@ -1,6 +1,8 @@
 using Dockyard.Core;
 using Dockyard.ViewModels;
 
+using Dockyard.Setup.Tests;
+
 namespace Dockyard.Tests;
 
 public sealed class WizardTests
@@ -10,7 +12,7 @@ public sealed class WizardTests
     {
         using var settings = new TempSettings();
         var host = new FakeHost { Installed = true, Dashboard = false };
-        var vm = new MainViewModel(host, setupMode: false, userSettings: settings.Settings);
+        var vm = new MainViewModel(Facade.For(host, settings), setupMode: false);
         await vm.OnWindowShown();
 
         Assert.True(vm.ShowManage);
@@ -34,7 +36,7 @@ public sealed class WizardTests
     {
         using var settings = new TempSettings();
         var host = new FakeHost { Installed = true };
-        var vm = new MainViewModel(host, setupMode: true, userSettings: settings.Settings);
+        var vm = new MainViewModel(Facade.For(host, settings), setupMode: true);
         await vm.LoadSetup();
 
         Assert.False(vm.ShowInstall);
@@ -48,8 +50,8 @@ public sealed class WizardTests
     public async Task Setup_over_an_install_starts_from_what_it_has_and_adds_or_removes_what_is_changed()
     {
         using var settings = new TempSettings();
-        var host = new FakeHost { Installed = true, Dashboard = true, Components = [new("App", "Dockyard"), new("Compose", "Compose", Flag: "compose")] };
-        var vm = new MainViewModel(host, setupMode: true, userSettings: settings.Settings, openInTray: () => Task.FromResult(true));
+        var host = new FakeHost { Installed = true, Dashboard = true, Components = [new("App", "Dockyard"), new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard"), new("Compose", "Compose", Flag: "compose")] };
+        var vm = new MainViewModel(Facade.For(host, settings), setupMode: true, openInTray: () => Task.FromResult(true));
         await vm.LoadSetup();
         var compose = vm.OptionalChoices.Single(c => c.Id == "Compose");
 
@@ -64,7 +66,7 @@ public sealed class WizardTests
         Assert.True(host.Dashboard);
 
         host.Calls.Clear();
-        var again = new MainViewModel(host, setupMode: true, userSettings: settings.Settings, openInTray: () => Task.FromResult(true));
+        var again = new MainViewModel(Facade.For(host, settings), setupMode: true, openInTray: () => Task.FromResult(true));
         await again.LoadSetup();
         compose = again.OptionalChoices.Single(c => c.Id == "Compose");
         Assert.False(compose.Include);
@@ -84,7 +86,7 @@ public sealed class WizardTests
         using var settings = new TempSettings();
         var host = new FakeHost();
         var opened = 0;
-        var vm = new MainViewModel(host, setupMode: true, userSettings: settings.Settings, openInTray: () => { opened++; return Task.FromResult(true); });
+        var vm = new MainViewModel(Facade.For(host, settings), setupMode: true, openInTray: () => { opened++; return Task.FromResult(true); });
         var handedOver = false;
         vm.HandedOver += () => handedOver = true;
         await vm.LoadSetup();
@@ -106,7 +108,7 @@ public sealed class WizardTests
     {
         using var settings = new TempSettings();
         var host = new FakeHost();
-        var vm = new MainViewModel(host, setupMode: true, userSettings: settings.Settings, openInTray: () => Task.FromResult(false));
+        var vm = new MainViewModel(Facade.For(host, settings), setupMode: true, openInTray: () => Task.FromResult(false));
         var handedOver = false;
         vm.HandedOver += () => handedOver = true;
         await vm.LoadSetup();
@@ -121,7 +123,7 @@ public sealed class WizardTests
     {
         using var settings = new TempSettings();
         var host = new FakeHost { Installed = true, Dashboard = true };
-        var vm = new MainViewModel(host, setupMode: true, userSettings: settings.Settings, openInTray: () => Task.FromResult(true));
+        var vm = new MainViewModel(Facade.For(host, settings), setupMode: true, openInTray: () => Task.FromResult(true));
         await vm.LoadSetup();
         await vm.InstallCommand.ExecuteAsync();
         Assert.True(host.Dashboard);
@@ -134,7 +136,7 @@ public sealed class WizardTests
     {
         using var settings = new TempSettings();
         var host = new FakeHost { Installed = true };
-        var vm = new MainViewModel(host, setupMode: false, userSettings: settings.Settings);
+        var vm = new MainViewModel(Facade.For(host, settings), setupMode: false);
         await vm.OnWindowShown();
         Assert.True(vm.ShowManage);
         Assert.False(vm.ShowWizardManage);

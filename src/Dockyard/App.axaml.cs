@@ -7,6 +7,7 @@ using Avalonia.Threading;
 using Dockyard.Core;
 using Dockyard.Engine;
 using Dockyard.Engine.Transport;
+using Dockyard.Setup;
 using Dockyard.Shared;
 using Dockyard.ViewModels;
 using Dockyard.Views;
@@ -44,7 +45,7 @@ public partial class App : Application
     public override void OnFrameworkInitializationCompleted()
     {
         desktop = (IClassicDesktopStyleApplicationLifetime)ApplicationLifetime!;
-        vm = new MainViewModel(Hosts.HostFactory.Create(), setupMode: mode == AppMode.Setup, SetupOptions.Parse(args));
+        vm = new MainViewModel(DockyardSetup.ForThisMachine(), setupMode: mode == AppMode.Setup, SetupOptions.Parse(args));
         vm.StartPolling();
         vm.ShutdownRequested += () => Dispatcher.UIThread.Post(Quit);
 
@@ -97,9 +98,9 @@ public partial class App : Application
         {
             case TrayCommandKind.Show: OpenDashboardOrWindow(); break;
             case TrayCommandKind.Settings:
-                if (command.Assets is { } folder && Directory.Exists(folder) && Updates.LocalAssets != folder)
+                if (command.Assets is { } folder && Directory.Exists(folder) && DockyardSetup.LocalAssets != folder)
                 {
-                    Updates.LocalAssets = folder;
+                    DockyardSetup.LocalAssets = folder;
                     vm.Note($"Installs and updates use the files in {folder}, as setup was given them");
                 }
                 ShowWindow();
@@ -126,7 +127,7 @@ public partial class App : Application
                 try { lock (writer) writer.WriteLine(line); }
                 catch (IOException) { }
             }
-            var code = await Cli.Execute(vm.Host, args, Write, Write);
+            var code = await vm.Setup.RunCommand(args, Write, Write);
             Write(LocalPipe.ExitLine + code);
         }
     }

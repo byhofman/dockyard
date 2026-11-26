@@ -6,12 +6,12 @@ static class Paths
 {
     public static readonly string DockerDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Docker");
     public static readonly string DockerExe = Path.Combine(DockerDir, "docker.exe");
-    // Dockyard's own copy where there is one, which a choice against winget or a winget copy Windows will not run leaves.
+    // The Dockyard source's copy where there is one, which a choice against winget or a winget copy Windows will not run leaves.
     public static string DockerCli => File.Exists(DockerExe) ? DockerExe : (OperatingSystem.IsWindows() ? Hosts.Winget.Command(Tools.Docker) : null) ?? DockerExe;
     public static readonly string CredentialHelper = Path.Combine(DockerDir, "docker-credential-wincred.exe");
     public static readonly string DockerdExe = Path.Combine(DockerDir, "dockerd.exe");
     public static readonly string PluginDir = Path.Combine(DockerDir, "cli-plugins");
-    // Where Dockyard puts its own copy of a tool that winget did not bring.
+    // Where the Dockyard source puts a tool that winget did not bring.
     public static string ToolExe(CliTool tool) => Path.Combine(DockerDir, tool.FileName);
     public static readonly string AppDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Dockyard");
     public const string AppProcess = "dockyard-toolbox";
@@ -44,7 +44,7 @@ static class Paths
     public static bool IsInstalledCopy => string.Equals(Path.GetFullPath(Self), AppExe, StringComparison.OrdinalIgnoreCase);
 
     public static string AppVersion =>
-        (Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0").Split('+')[0];
+        (typeof(Paths).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0").Split('+')[0];
 
     public static readonly string CredentialStoreMarker = Path.Combine(SettingsDir, "credential-store");
 

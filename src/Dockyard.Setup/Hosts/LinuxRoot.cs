@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Runtime.Versioning;
 using Dockyard.Core;
 
@@ -48,7 +47,7 @@ sealed class LinuxRoot(ICommandRunner runner)
     public async Task RunSetup(Action<string> log, params string[] args)
     {
         var script = Path.Combine(Path.GetTempPath(), $"dockyard-setup-{Guid.NewGuid():N}.sh");
-        await using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("setup-linux.sh")!)
+        await using (var stream = typeof(Paths).Assembly.GetManifestResourceStream("setup-linux.sh")!)
         using (var reader = new StreamReader(stream))
             await File.WriteAllTextAsync(script, (await reader.ReadToEndAsync()).Replace("\r\n", "\n"));
         try

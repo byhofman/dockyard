@@ -119,7 +119,7 @@ static class MachineApps
     // one is stopped to be replaced: the engine keeps running, and the new one takes it on.
     static void InstallHost(Action<string> log, int keepPid)
     {
-        using var embedded = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("dockyard-host.exe");
+        using var embedded = typeof(Paths).Assembly.GetManifestResourceStream("dockyard-host.exe");
         if (embedded is null) return;
         foreach (var p in Process.GetProcessesByName(Paths.HostProcess)) Kill(p, keepPid);
         var incoming = Paths.HostExe + ".new";

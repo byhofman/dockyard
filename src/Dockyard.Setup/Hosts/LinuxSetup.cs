@@ -42,7 +42,7 @@ sealed class LinuxSetup(LinuxRoot root, LinuxComponents components, ToolComponen
                 log($"{tool.Title} was not installed ({e.Message}); running the wizard again retries it");
             }
         }
-        if (request.TrustHttps) await Https.Enable(host, log, request.Silent);
+        if (request.TrustHttps) await Https.Enable(host, Settings.Load(), log, request.Silent);
         await root.TryRun("gnome-extensions", "enable", "appindicatorsupport@rgcjonas.gmail.com");
         if ((await root.TryRun("docker", "context", "show"))?.Output.Trim() is { Length: > 0 } current && current != "default")
         {
@@ -55,7 +55,7 @@ sealed class LinuxSetup(LinuxRoot root, LinuxComponents components, ToolComponen
     {
         if (File.Exists(AutostartFile)) File.Delete(AutostartFile);
         await CredentialStore.Forget(Paths.CredentialStoreMarker, LinuxLayout.CredentialHelper, log);
-        await Https.Disable(host, log, silent);
+        await Https.Disable(host, Settings.Load(), log, silent);
         await UninstallWithConfig(log);
         if (Directory.Exists(LinuxLayout.HomeDir)) Directory.Delete(LinuxLayout.HomeDir, recursive: true);
         if (new FileInfo(LinuxLayout.HomeLink).LinkTarget is not null) File.Delete(LinuxLayout.HomeLink);

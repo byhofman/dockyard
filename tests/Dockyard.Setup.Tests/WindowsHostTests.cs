@@ -2,7 +2,7 @@ using System.Diagnostics;
 using Dockyard.Core;
 using Dockyard.Hosts;
 
-namespace Dockyard.Tests;
+namespace Dockyard.Setup.Tests;
 
 sealed class FakeRunner : ICommandRunner
 {

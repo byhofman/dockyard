@@ -3,6 +3,8 @@ using Dockyard.Core;
 using Dockyard.Hosts;
 using Dockyard.ViewModels;
 
+using Dockyard.Setup.Tests;
+
 namespace Dockyard.Tests;
 
 public sealed class ComponentRowTests
@@ -64,7 +66,7 @@ public sealed class ComponentRowTests
     {
         using var settings = new TempSettings();
         var host = new RowsHost { LatestFailure = new HttpRequestException("limited", null, status) };
-        var vm = new MainViewModel(host, setupMode: true, userSettings: settings.Settings);
+        var vm = new MainViewModel(Facade.For(host, settings), setupMode: true);
         await vm.LoadSetup();
 
         Assert.Equal(UpdateState.CouldNotCheck, vm.Dashboard.State);
@@ -77,7 +79,7 @@ public sealed class ComponentRowTests
     {
         using var settings = new TempSettings();
         var host = new RowsHost { LatestFailure = new HttpRequestException("gone", null, HttpStatusCode.InternalServerError) };
-        var vm = new MainViewModel(host, setupMode: true, userSettings: settings.Settings);
+        var vm = new MainViewModel(Facade.For(host, settings), setupMode: true);
         await vm.LoadSetup();
 
         Assert.Equal(UpdateState.Error, vm.Dashboard.State);
@@ -88,7 +90,7 @@ public sealed class ComponentRowTests
     {
         using var settings = new TempSettings();
         var host = new RowsHost();
-        var vm = new MainViewModel(host, setupMode: true, userSettings: settings.Settings);
+        var vm = new MainViewModel(Facade.For(host, settings), setupMode: true);
         await vm.LoadSetup();
 
         Assert.Equal("1.0.0", vm.Dashboard.Installed);
@@ -110,7 +112,7 @@ public sealed class ComponentRowTests
         using var mine = new TempSettings();
         var userFile = Paths.SettingsFile;
         var userBefore = File.Exists(userFile) ? File.ReadAllText(userFile) : null;
-        var vm = new MainViewModel(new RowsHost(), setupMode: true, userSettings: mine.Settings);
+        var vm = new MainViewModel(Facade.For(new RowsHost(), mine), setupMode: true);
         await vm.LoadSetup();
 
         await vm.Components.First(c => c.Id == "Compose").RemoveCommand!.ExecuteAsync();
@@ -124,7 +126,7 @@ public sealed class ComponentRowTests
     {
         using var settings = new TempSettings();
         var host = new RowsHost();
-        var vm = new MainViewModel(host, setupMode: true, userSettings: settings.Settings);
+        var vm = new MainViewModel(Facade.For(host, settings), setupMode: true);
         await vm.LoadSetup();
         var app = vm.Components.First(c => c.Id == "App");
         var compose = vm.Components.First(c => c.Id == "Compose");

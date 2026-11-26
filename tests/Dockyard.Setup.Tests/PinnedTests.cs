@@ -4,7 +4,7 @@ using System.Text;
 using Dockyard.Core;
 using Dockyard.Hosts;
 
-namespace Dockyard.Tests;
+namespace Dockyard.Setup.Tests;
 
 [Collection(nameof(SharedHttp))]
 public sealed class PinnedTests : IDisposable

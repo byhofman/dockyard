@@ -221,7 +221,7 @@ sealed class WindowsHost : IEngineHost
         }
         await FindWingetPlugins(log);
         if (hadDistro) await UpdateLinuxEngineIfNewer(log);
-        if (request.TrustHttps) await Https.Enable(this, log, request.Silent);
+        if (request.TrustHttps) await Https.Enable(this, Settings.Load(), log, request.Silent);
         return reboot;
     }
 

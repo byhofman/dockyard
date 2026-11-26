@@ -1,8 +1,10 @@
 using Dockyard.Hosts;
+using Dockyard.Setup;
 
 namespace Dockyard.ViewModels;
 
-sealed class ComponentViewModel(ComponentInfo info) : Observable
+// Flag: its name for the command line, which an optional component has.
+sealed class ComponentViewModel(ComponentRow row, string? flag) : Observable
 {
     string installed = "–";
     string latest = "–";
@@ -12,9 +14,10 @@ sealed class ComponentViewModel(ComponentInfo info) : Observable
     bool include = true;
     Release? latestRelease;
 
-    public ComponentInfo Info { get; } = info;
-    public string Id => Info.Id;
-    public string Title => Info.Title;
+    public ComponentRow Row { get; } = row;
+    public string? Flag { get; } = flag;
+    public string Id => Row.Id;
+    public string Title => Row.Title;
     public required Command UpdateCommand { get; init; }
     public Command? AddCommand { get; init; }
     public Command? RemoveCommand { get; init; }
@@ -51,16 +54,16 @@ sealed class ComponentViewModel(ComponentInfo info) : Observable
     public bool IsPresent { get => isPresent; set { if (Set(ref isPresent, value)) Raise(nameof(CanAdd), nameof(CanRemove)); } }
     // The first install's choice for this row.
     public bool Include { get => include; set => Set(ref include, value); }
-    public bool IsOptional => Info.IsOptional;
-    public bool IsDockyard => Id is nameof(Core.Component.App) or Core.ComponentRules.DashboardId;
+    public bool IsOptional => Flag is not null;
+    public bool IsDockyard => Row.Group == "Dockyard";
     public bool IsApp => Id is nameof(Core.Component.App);
-    public bool IsKubernetes => Core.Tools.Standalone.Any(t => t.Id == Id);
+    public bool IsKubernetes => Row.Group == "Kubernetes";
     public string AddId => "Add-" + Id;
     public string RemoveId => "Remove-" + Id;
     public string UpdateId => "Update-" + Id;
-    public string Note => Info.RequiredBecause is { } reason ? "Required: " + reason : Info.Note ?? "";
+    public string Note => Row.RequiredBecause is { } reason ? "Required: " + reason : Row.Needs ?? "";
     public bool HasNote => Note.Length > 0;
-    public string IncludeText => $"{Title}" + (Info.Note is { } note ? $". {note}" : "");
+    public string IncludeText => $"{Title}" + (Row.Needs is { } note ? $". {note}" : "");
 
     public bool IsAvailable => State == UpdateState.Available;
     public bool IsUpToDate => State is UpdateState.UpToDate or UpdateState.OptionalInstalled;

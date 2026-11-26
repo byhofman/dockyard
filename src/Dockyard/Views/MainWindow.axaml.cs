@@ -55,7 +55,7 @@ public partial class MainWindow : Window
     async void OpenEngineSettings(Hosts.EngineInfo engine)
     {
         if (ViewModel is not { } vm) return;
-        var settings = new EngineSettingsViewModel(vm.Host, engine, vm.Note);
+        var settings = new EngineSettingsViewModel(vm.Setup, engine, vm.Note);
         var window = new EngineSettingsWindow { DataContext = settings };
         window.Show(this);
         try { await settings.Load(); }

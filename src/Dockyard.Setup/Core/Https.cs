@@ -7,7 +7,7 @@ namespace Dockyard.Core;
 // Trusted HTTPS on or off. Off is the default and everything else works without it, over plain HTTP.
 static class Https
 {
-    public static async Task Enable(IEngineHost host, Action<string> log, bool silent)
+    public static async Task Enable(IEngineHost host, Settings settings, Action<string> log, bool silent)
     {
         PemPair ca;
         try
@@ -21,17 +21,15 @@ static class Https
         }
         if (!await host.TrustCa(log, LocalCa.CertificateFile(host.CaDirectory), silent))
             log("The certificate was not added to this computer's trust store, so browsers warn about HTTPS until it is. Plain HTTP works as before.");
-        var settings = Settings.Load();
         settings.HttpsEnabled = true;
         settings.Save();
         await Push(host, ca, log);
     }
 
-    public static async Task Disable(IEngineHost host, Action<string> log, bool silent)
+    public static async Task Disable(IEngineHost host, Settings settings, Action<string> log, bool silent)
     {
         await host.UntrustCa(log, LocalCa.CertificateFile(host.CaDirectory), silent);
         await LocalCa.Remove(host.CaDirectory, host.CaKeys);
-        var settings = Settings.Load();
         settings.HttpsEnabled = false;
         settings.Save();
     }

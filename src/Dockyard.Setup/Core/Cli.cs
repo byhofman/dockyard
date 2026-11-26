@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using Dockyard.Hosts;
+using Dockyard.Setup;
 using Dockyard.Shared;
 
 namespace Dockyard.Core;
@@ -36,7 +36,7 @@ static class Cli
         // The file is read here: the tray runs as the same user, but stdin is this process's.
         args = InlineFile(args);
         if (LocalPipe.RunInTray(args, Console.WriteLine) is { } code) return code;
-        return Execute(HostFactory.Create(), args, Console.WriteLine, Console.Error.WriteLine).GetAwaiter().GetResult();
+        return Execute(DockyardSetup.ForThisMachine(), args, Console.WriteLine, Console.Error.WriteLine).GetAwaiter().GetResult();
     }
 
     const string InlinePrefix = "inline:";
@@ -51,21 +51,21 @@ static class Cli
         return list;
     }
 
-    public static async Task<int> Execute(IEngineHost host, IReadOnlyList<string> args, Action<string> log, Action<string> error)
+    public static async Task<int> Execute(DockyardSetup setup, IReadOnlyList<string> args, Action<string> log, Action<string> error)
     {
         try
         {
             return args switch
             {
-                { Count: >= 2 } when args[0] == "config" => await Config(host, args[1], args.Skip(2).ToList(), log, error),
-                { Count: >= 2 } when args[0] == "engine" => await Engines(host, args[1], args.Skip(2).ToList(), log),
-                { Count: 3 } when args[0] == "https" && args[1] == "cluster-issuer" => await ClusterIssuer(host, args[2], log),
-                { Count: 2 } when args[0] == "https" => await HttpsCommand(host, args[1], log),
-                { Count: >= 1 } when args[0] == "update" => await Update(host, args.Contains("--check"), log, error),
+                { Count: >= 2 } when args[0] == "config" => await Config(setup, args[1], args.Skip(2).ToList(), log, error),
+                { Count: >= 2 } when args[0] == "engine" => await Engines(setup, args[1], args.Skip(2).ToList(), log),
+                { Count: 3 } when args[0] == "https" && args[1] == "cluster-issuer" => await ClusterIssuer(setup, args[2], log),
+                { Count: 2 } when args[0] == "https" => await HttpsCommand(setup, args[1], log),
+                { Count: >= 1 } when args[0] == "update" => await Update(setup, args.Contains("--check"), log, error),
                 _ => throw new UsageException($"Unknown command: {string.Join(' ', args)}"),
             };
         }
-        catch (UsageException e)
+        catch (Exception e) when (e is UsageException or ArgumentException)
         {
             error(e.Message);
             error(Usage);
@@ -78,6 +78,8 @@ static class Cli
         }
     }
 
+    static IProgress<SetupProgress> Progress(Action<string> log) => new ReportTo(p => log(p.Line));
+
     internal static string? Option(IReadOnlyList<string> args, string name)
     {
         var at = args.ToList().IndexOf(name);
@@ -85,10 +87,10 @@ static class Cli
         return at + 1 < args.Count ? args[at + 1] : throw new UsageException($"{name} needs a value");
     }
 
-    static string Engine(IEngineHost host, IReadOnlyList<string> args)
+    static string Engine(DockyardSetup setup, IReadOnlyList<string> args)
     {
-        var engine = Option(args, "--engine") ?? host.ActiveEngine();
-        return host.Engines.Any(e => e.Id == engine) ? engine : throw new UsageException($"No engine {engine} here. Engines: {string.Join(", ", host.Engines.Select(e => e.Id))}");
+        var engine = Option(args, "--engine") ?? setup.ActiveEngine();
+        return setup.Engines.Any(e => e.Id == engine) ? engine : throw new UsageException($"No engine {engine} here. Engines: {string.Join(", ", setup.Engines.Select(e => e.Id))}");
     }
 
     internal static string Content(IReadOnlyList<string> args)
@@ -99,50 +101,45 @@ static class Cli
             : File.ReadAllText(file);
     }
 
-    static async Task<int> Config(IEngineHost host, string verb, IReadOnlyList<string> args, Action<string> log, Action<string> error)
+    static async Task<int> Config(DockyardSetup setup, string verb, IReadOnlyList<string> args, Action<string> log, Action<string> error)
     {
-        var engine = Engine(host, args);
+        var key = SettingDefinitions.EngineFilePrefix + Engine(setup, args);
         switch (verb)
         {
             case "show":
-                log(await host.ReadEngineSettings(engine) ?? throw new InvalidOperationException($"The {engine} engine's settings are not Dockyard's to show"));
+                log(setup.GetSetting(key));
                 return 0;
             case "validate":
             {
                 var json = Content(args);
-                if (await host.ValidateEngineSettings(engine, json) is { } problem) { error(problem); return 1; }
-                foreach (var key in EngineSettings.Overridden(engine, json)) log($"{key}: Dockyard sets this one itself, so yours is replaced");
+                if (await setup.CheckSetting(key, json) is { } problem) { error(problem); return 1; }
+                foreach (var overridden in EngineSettings.Overridden(key[SettingDefinitions.EngineFilePrefix.Length..], json)) log($"{overridden}: Dockyard sets this one itself, so yours is replaced");
                 log("The engine accepts these settings");
                 return 0;
             }
             case "apply":
-            {
-                var json = Content(args);
-                if (await host.ValidateEngineSettings(engine, json) is { } problem) { error(problem); return 1; }
-                foreach (var key in EngineSettings.Overridden(engine, json)) log($"{key}: Dockyard sets this one itself, so yours is replaced");
-                await host.ApplyEngineSettings(log, engine, json);
+                await setup.SetSetting(key, Content(args), Progress(log));
                 return 0;
-            }
             default: throw new UsageException($"Unknown config command: {verb}");
         }
     }
 
-    static async Task<int> Engines(IEngineHost host, string verb, IReadOnlyList<string> args, Action<string> log)
+    static async Task<int> Engines(DockyardSetup setup, string verb, IReadOnlyList<string> args, Action<string> log)
     {
         if (verb == "ls")
         {
-            var active = host.ActiveEngine();
-            foreach (var e in host.Engines)
-                log($"{(e.Id == active ? "*" : " ")} {e.Id}\t{e.Title}\t{(await host.IsRunning(e.Id) || await Answers(e.Endpoint) ? "running" : "stopped")}");
+            var active = setup.ActiveEngine();
+            foreach (var e in setup.Engines)
+                log($"{(e.Id == active ? "*" : " ")} {e.Id}\t{e.Title}\t{(await setup.IsRunning(e.Id) || await Answers(e.Endpoint) ? "running" : "stopped")}");
             return 0;
         }
-        var engine = args.FirstOrDefault() is { } id && host.Engines.Any(e => e.Id == id)
-            ? id : throw new UsageException($"An engine is needed: {string.Join(", ", host.Engines.Select(e => e.Id))}");
+        var engine = args.FirstOrDefault() is { } id && setup.Engines.Any(e => e.Id == id)
+            ? id : throw new UsageException($"An engine is needed: {string.Join(", ", setup.Engines.Select(e => e.Id))}");
         switch (verb)
         {
-            case "start": await host.Start(engine); log($"{engine} runs"); break;
-            case "stop": await host.Stop(engine); log($"{engine} is stopped"); break;
-            case "use": await host.UseContext(engine); log($"docker uses {engine}"); break;
+            case "start": await setup.StartEngine(engine); log($"{engine} runs"); break;
+            case "stop": await setup.StopEngine(engine); log($"{engine} is stopped"); break;
+            case "use": await setup.UseEngine(engine); log($"docker uses {engine}"); break;
             default: throw new UsageException($"Unknown engine command: {verb}");
         }
         return 0;
@@ -161,56 +158,33 @@ static class Cli
         catch (Exception e) when (e is HttpRequestException or IOException or OperationCanceledException or TimeoutException or Dockyard.Engine.EngineUnavailableException) { return false; }
     }
 
-    static async Task<int> HttpsCommand(IEngineHost host, string state, Action<string> log)
+    static async Task<int> HttpsCommand(DockyardSetup setup, string state, Action<string> log)
     {
-        switch (state)
-        {
-            case "on": await Https.Enable(host, log, silent: false); break;
-            case "off": await Https.Disable(host, log, silent: false); break;
-            default: throw new UsageException("https takes on or off");
-        }
+        if (state is not ("on" or "off")) throw new UsageException("https takes on or off");
+        await setup.SetSetting(SettingDefinitions.TrustedHttps, state, Progress(log));
         return 0;
     }
 
-    // For a kind cluster's cert-manager: its CA certificate and key, then the root, as PEM. Asked for by the dashboard and the
-    // command when they make a cluster with cert-manager; the root's key never leaves this machine.
-    static async Task<int> ClusterIssuer(IEngineHost host, string cluster, Action<string> log)
+    // Asked for by the dashboard and the command when they make a cluster with cert-manager.
+    static async Task<int> ClusterIssuer(DockyardSetup setup, string cluster, Action<string> log)
     {
-        if (!System.Text.RegularExpressions.Regex.IsMatch(cluster, "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"))
-            throw new UsageException($"{cluster} is not a cluster name");
-        if (!Settings.Load().HttpsEnabled || await LocalCa.Load(host.CaDirectory, host.CaKeys) is not { } ca || !LocalCa.IsConstrainedRoot(ca.Certificate))
-            throw new InvalidOperationException("Trusted HTTPS is off, so there is no certificate authority to issue from: dockyard https on");
-        var issued = LocalCa.ClusterIntermediate(ca, cluster, DateTimeOffset.UtcNow);
-        foreach (var line in (issued.Certificate.TrimEnd() + "\n" + issued.Key.TrimEnd() + "\n" + ca.Certificate.TrimEnd()).Split('\n')) log(line);
+        foreach (var line in (await setup.ClusterCa(cluster)).TrimEnd().Split('\n')) log(line);
         return 0;
     }
 
     // Dockyard itself is left to the tray, which has to restart for it.
-    static async Task<int> Update(IEngineHost host, bool checkOnly, Action<string> log, Action<string> error)
+    static async Task<int> Update(DockyardSetup setup, bool checkOnly, Action<string> log, Action<string> error)
     {
-        List<(string Component, Release? Release)> available = [];
-        foreach (var c in host.Components)
+        var checks = await setup.Check(null, skipStoppedEngines: false, CancellationToken.None);
+        foreach (var check in checks)
         {
-            Version? installed;
-            Release? latest;
-            try
-            {
-                installed = await host.Installed(c.Id);
-                latest = installed is null ? null : await host.Latest(c.Id);
-            }
-            catch (HttpRequestException e)
-            {
-                error($"{c.Title}: {e.Message}");
-                continue;
-            }
-            if (installed is null) continue;
-            var newer = latest is not null && latest.Version > installed;
-            log($"{c.Title}\t{installed}\t{(newer ? $"{latest!.Version} available" : "up to date")}");
-            if (newer && c.Id != nameof(Component.App)) available.Add((c.Id, latest));
+            if (check.Error is { } problem) { error($"{check.Row.Title}: {problem}"); continue; }
+            if (check.Row.Installed is not { } installed) continue;
+            log($"{check.Row.Title}\t{installed}\t{(check.Row.CanUpdate ? $"{check.Row.Newest} available" : "up to date")}");
         }
+        var available = checks.Where(c => c.Row.CanUpdate && c.Row.Id != nameof(Component.App)).Select(c => c.Row.Id).ToList();
         if (checkOnly || available.Count == 0) return 0;
-        await host.Update(log, available);
+        await setup.Update(available, Progress(log));
         return 0;
     }
-
 }
