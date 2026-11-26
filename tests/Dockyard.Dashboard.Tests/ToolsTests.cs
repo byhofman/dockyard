@@ -77,6 +77,29 @@ public sealed class ToolsTests
     }
 
     [Fact]
+    public async Task Update_all_takes_Dockyard_itself_along()
+    {
+        var session = HeadlessUnitTestSession.GetOrStartForAssembly(typeof(ToolsTests).Assembly);
+        await session.Dispatch(() =>
+        {
+            var setup = new RecordingSetup
+            {
+                Rows = PrototypeScreens.MacRows(installed: true)
+                    .Select(r => r.Id == "DockyardCli" ? r with { Newest = "0.15.0", CanUpdate = true } : r).ToList(),
+            };
+            var tools = new ToolsViewModel(setup);
+            _ = tools.Load();
+            Dispatcher.UIThread.RunJobs();
+
+            tools.UpdateAllCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Equal(["update DockyardCli,DockerCli,Kind"], setup.Calls);
+            setup.Release();
+        }, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
     public void Download_source_is_set_in_Tools_and_not_in_Settings()
     {
         var setup = new RecordingSetup();

@@ -56,7 +56,7 @@ sealed class MacComponents(ICommandRunner runner)
                 await runner.Check("/usr/bin/ditto", "-x", "-k", zip, downloaded);
                 source = Path.Combine(downloaded, "Dockyard.app", "Contents", "MacOS");
             }
-            await runner.Run("/usr/bin/pkill", "-f", Path.Combine(MacLayout.AppBase, MacLayout.DashboardName));
+            await runner.StopMatching(Path.Combine(MacLayout.AppBase, MacLayout.DashboardName));
             foreach (var old in MacLayout.DashboardFiles(MacLayout.AppBase)) File.Delete(old);
             foreach (var file in MacLayout.DashboardFiles(source))
             {
@@ -76,7 +76,7 @@ sealed class MacComponents(ICommandRunner runner)
 
     public async Task RemoveDashboard(Action<string> log)
     {
-        await runner.Run("/usr/bin/pkill", "-f", Path.Combine(MacLayout.AppBase, MacLayout.DashboardName));
+        await runner.StopMatching(Path.Combine(MacLayout.AppBase, MacLayout.DashboardName));
         foreach (var file in MacLayout.DashboardFiles(MacLayout.AppBase)) File.Delete(file);
         await SealBundle();
         log("Removed the dashboard");

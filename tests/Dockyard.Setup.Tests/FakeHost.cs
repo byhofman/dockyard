@@ -12,6 +12,8 @@ sealed class FakeHost : IEngineHost
     public Exception? FailureOnSetComponent { get; set; }
     public bool IgnoresDashboard { get; set; }
     public string SelfComponent { get; set; } = "DockyardCli";
+    public bool SelfUpdateStopsApps { get; set; } = true;
+    public bool SelfUpdateStops(string app) => SelfUpdateStopsApps;
     public Version Newest { get; set; } = new(1, 0, 0);
     public List<string> Calls { get; } = [];
     public List<InstallRequest> Requests { get; } = [];

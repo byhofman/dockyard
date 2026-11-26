@@ -18,7 +18,8 @@ sealed class RecordingSetup(bool installed = true) : ISetupSource
     public bool IsInstalled => Installed;
     public string SelfId => "DockyardCli";
     public IReadOnlyList<SettingDefinition> SettingDefinitions => global::Dockyard.Setup.SettingDefinitions.All;
-    public IReadOnlyList<ComponentRow> Components() => PrototypeScreens.MacRows(Installed);
+    public IReadOnlyList<ComponentRow>? Rows { get; set; }
+    public IReadOnlyList<ComponentRow> Components() => Rows ?? PrototypeScreens.MacRows(Installed);
     public Task<IReadOnlyList<ComponentRow>> ComponentsAsync(CancellationToken ct) => Task.FromResult(Components());
 
     public string GetSetting(string key) => values.TryGetValue(key, out var v) ? v

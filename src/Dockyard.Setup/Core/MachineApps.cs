@@ -138,25 +138,26 @@ static class MachineApps
     }
 
     // The dockyard command, the component every install has: a console program, so cmd and PowerShell wait for it and get
-    // its output. In a folder of its own, where it is the only dockyard on the PATH. From the given folder, or the CLI's own
-    // release. Without it nothing else can be installed or updated, so a failed download fails the setup.
-    public static async Task InstallCli(Action<string> log, string? sourceDir)
+    // its output. In a folder of its own, where it is the only dockyard on the PATH. Without it nothing else can be
+    // installed or updated, so a failed download fails the setup.
+    public static async Task InstallCli(Action<string> log, string? file)
     {
-        string? downloaded = null;
         var download = Path.Combine(Paths.AppDir, $".download-{Guid.NewGuid():N}");
-        var local = sourceDir is null ? null : Directory.EnumerateFiles(sourceDir).FirstOrDefault(f => Regex.IsMatch(Path.GetFileName(f), Updates.CliAssetPattern));
         try
         {
-            if (local is null)
+            if (file is null)
             {
                 log("Downloading the dockyard command");
-                local = downloaded = await Updates.DownloadComponentAsset(Updates.CliComponent, Updates.CliAssetPattern, download);
+                file = await Updates.DownloadComponentAsset(Updates.CliComponent, Updates.CliAssetPattern, download);
             }
-            Directory.CreateDirectory(Paths.CommandDir);
-            var incoming = Paths.DockyardCliExe + ".new";
-            File.Copy(local, incoming, overwrite: true);
-            InUseFiles.MoveAside(Paths.DockyardCliExe);
-            File.Move(incoming, Paths.DockyardCliExe);
+            if (!string.Equals(Path.GetFullPath(file), Paths.DockyardCliExe, StringComparison.OrdinalIgnoreCase))
+            {
+                Directory.CreateDirectory(Paths.CommandDir);
+                var incoming = Paths.DockyardCliExe + ".new";
+                File.Copy(file, incoming, overwrite: true);
+                InUseFiles.MoveAside(Paths.DockyardCliExe);
+                File.Move(incoming, Paths.DockyardCliExe);
+            }
         }
         finally
         {
@@ -165,6 +166,12 @@ static class MachineApps
         log($"Installed {Paths.DockyardCliExe}");
         AddToMachinePath(Paths.CommandDir);
     }
+
+    // The dockyard command that runs setup is the one installed, as on macOS and Linux: DOCKYARD_VERSION pins it, and a
+    // first install needs no download for it. From the tray or the dashboard, which are not it, the folder --assets names
+    // or else the CLI's latest release.
+    public static string? CliFile(string? runningCli, string? assetsDir) =>
+        runningCli ?? (assetsDir is null ? null : Directory.EnumerateFiles(assetsDir).FirstOrDefault(f => Regex.IsMatch(Path.GetFileName(f), Updates.CliAssetPattern)));
 
     // Dockyard.Dashboard.zip from the given folder, or the one from this release. A download goes to Program Files, which
     // only administrators can write, so nothing can swap it between the check and the extraction.

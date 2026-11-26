@@ -34,7 +34,7 @@ sealed class ToolsViewModel : Observable
     public bool IsEmpty => groups.Count == 0 && !isLoading;
     public bool IsLoading { get => isLoading; private set { if (Set(ref isLoading, value)) Raise(nameof(IsEmpty)); } }
     IEnumerable<ComponentItem> Items => groups.SelectMany(g => g.Items);
-    IReadOnlyList<ComponentItem> Updatable => Items.Where(i => i.Row.CanUpdate && !i.IsSelf).ToList();
+    IReadOnlyList<ComponentItem> Updatable => Items.Where(i => i.Row.CanUpdate).ToList();
     public bool HasUpdates => Updatable.Count > 0;
 
     public string Summary

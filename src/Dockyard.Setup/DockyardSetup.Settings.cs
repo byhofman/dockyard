@@ -44,6 +44,8 @@ public sealed partial class DockyardSetup
     public async Task SetSetting(string key, string value, IProgress<SetupProgress> progress)
     {
         var definition = Definition(key);
+        // Another front end may have changed them since this one started.
+        settings.Reload();
         if (ValueProblem(definition, value) is { } wrong) throw new ArgumentException(wrong);
         if (StateProblem(definition, value) is { } refused) throw new InvalidOperationException(refused);
         var log = Log(progress);

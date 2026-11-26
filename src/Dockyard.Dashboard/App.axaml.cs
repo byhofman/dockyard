@@ -53,6 +53,12 @@ public partial class App : Application
             e.Cancel = true;
             window.Hide();
         };
+        // A dockyard command of its own is replacing or removing the dashboard.
+        setup.ExitRequested += () => Dispatcher.UIThread.Post(() =>
+        {
+            quitting = true;
+            desktop.Shutdown();
+        });
 
         LocalPipe.Serve(LocalPipe.DashboardName, line => Dispatcher.UIThread.Post(() =>
         {

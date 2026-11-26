@@ -98,7 +98,27 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
         log($"Removed {package}");
     }
 
-    public async Task StopDashboard() => await root.TryRun("pkill", "-f", "/dockyard-dashboard$");
+    public Task StopDashboard() => runner.StopMatching("/dockyard-dashboard$");
+
+    // The package or tarball holds the command, the tray and the dashboard, so the running ones go before it is replaced.
+    public async Task StopApps()
+    {
+        await runner.StopMatching("/dockyard-tray$");
+        await StopDashboard();
+    }
+
+    // From the dashboard's own release; the app stays as it is.
+    public async Task UpdateDashboard(Action<string> log)
+    {
+        await StopDashboard();
+        if (LinuxLayout.InstallDir == LinuxLayout.HomeDir)
+        {
+            await InstallFromTarball(log, dashboard: true, tag: null);
+            return;
+        }
+        var os = OsRelease.Parse(await File.ReadAllTextAsync("/etc/os-release"));
+        await InstallPackages(log, os.PackageManager, app: false, dashboard: true, tag: null);
+    }
 
     public async Task SetDashboard(Action<string> log, bool installed)
     {

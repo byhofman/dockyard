@@ -117,10 +117,9 @@ public sealed partial class DockyardSetup : IDisposable
     public async Task<IReadOnlyList<UpdateStatus>> CheckUpdates(CancellationToken ct) =>
         (await Check(null, skipStoppedEngines: false, ct)).Select(c => new UpdateStatus(c.Row, c.Error)).ToList();
 
-    // Dockyard itself has to restart for its update, so it is left to that restart.
     public Task UpdateAvailable(IReadOnlyList<UpdateStatus> checks, IProgress<SetupProgress> progress)
     {
-        var ids = checks.Where(c => c.Row.CanUpdate && c.Row.Id != SelfId).Select(c => c.Row.Id).ToList();
+        var ids = checks.Where(c => c.Row.CanUpdate).Select(c => c.Row.Id).ToList();
         return ids.Count == 0 ? Task.CompletedTask : Update(ids, progress);
     }
 
@@ -208,6 +207,13 @@ public sealed partial class DockyardSetup : IDisposable
     {
         var log = Log(progress);
         progress.Report(new SetupProgress($"{(installed ? "Adding" : "Removing")} {component.Title}", Step: 1, Steps: 1));
+        if (HandsOver(component.Id))
+        {
+            HandOver(log, ["component", installed ? "add" : "remove", component.Flag ?? component.Id, .. removeData ? ["--remove-data"] : Array.Empty<string>()], [component.Id]);
+            return;
+        }
+        // Another front end may have changed them since this one started.
+        settings.Reload();
         if (await host.SetComponent(log, component.Id, installed, removeData))
         {
             ExitRequested?.Invoke();
@@ -236,8 +242,48 @@ public sealed partial class DockyardSetup : IDisposable
             log("Everything is up to date");
             return;
         }
+        // Dockyard itself last: the command that does the rest is what it replaces.
+        items = [.. items.OrderBy(i => i.Component == SelfId)];
         progress.Report(new SetupProgress($"Updating {string.Join(", ", items.Select(i => Find(i.Component).Title))}", Step: 1, Steps: 1));
-        if (await host.Update(log, items)) ExitRequested?.Invoke();
+        var mine = items.Where(i => HandsOver(i.Component)).ToList();
+        var here = items.Except(mine).ToList();
+        if (here.Count > 0 && await host.Update(log, here)) ExitRequested?.Invoke();
+        if (mine.Count > 0) HandOver(log, ["update", .. mine.Select(i => i.Component)], mine.Select(i => i.Component).ToList());
+    }
+
+    // Which of Dockyard's own apps this process is, null for the dockyard command. An app does not change itself or replace
+    // Dockyard: that step would stop or overwrite it halfway, so a dockyard command of its own does it.
+    internal string? Caller { get; init; } = RunningApp();
+    internal Action<IReadOnlyList<string>> HandOff { get; init; } = StartCommand;
+
+    static string? RunningApp() => System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name switch
+    {
+        "Dockyard.Tray" => ComponentRules.TrayId,
+        "Dockyard.Dashboard" => ComponentRules.DashboardId,
+        _ => null,
+    };
+
+    bool HandsOver(string id) => Caller is not null && (id == Caller || id == SelfId);
+
+    void HandOver(Action<string> log, IReadOnlyList<string> args, IReadOnlyList<string> ids)
+    {
+        HandOff(args);
+        var exits = ids.Any(id => id == Caller || id == SelfId && host.SelfUpdateStops(Caller!));
+        log(exits ? $"dockyard {string.Join(' ', args)} finishes this, and this app closes so that it can" : $"dockyard {string.Join(' ', args)} finishes this in the background");
+        if (exits) ExitRequested?.Invoke();
+    }
+
+    // Detached, and on macOS and Linux with its output in a log: the app that started it is gone before it is done.
+    static void StartCommand(IReadOnlyList<string> args)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Shell.Spawn(Paths.DockyardCliExe, [.. args]).Dispose();
+            return;
+        }
+        Directory.CreateDirectory(Paths.SettingsDir);
+        var log = Path.Combine(Paths.SettingsDir, "handed-over.log");
+        Shell.Spawn("/bin/sh", ["-c", $"exec \"$0\" \"$@\" </dev/null >>{Shell.ShQuote(log)} 2>&1", Paths.DockyardCliExe, .. args]).Dispose();
     }
 
     // Clusters
@@ -287,6 +333,7 @@ public sealed partial class DockyardSetup : IDisposable
             return Ok;
         }
 
+        settings.Reload();
         var with = request.With.Select(FlagFor).ToList();
         var without = request.Without.Select(FlagFor).ToList();
         List<string> problems = [.. with.Intersect(without).Select(both => $"{both} is both wanted and not wanted")];
@@ -436,7 +483,5 @@ public sealed partial class DockyardSetup : IDisposable
     internal bool RunsFromInstallLocation => host.RunsFromInstallLocation;
     // Dockyard itself: the row whose update replaces the running program, and whose version is what is installed.
     public string SelfId => host.SelfComponent;
-    internal Task<Version?> InstalledSelfVersion() => host.Installed(host.SelfComponent);
     internal void StartApp() => host.StartApp();
-    internal void Reboot() => host.Reboot();
 }

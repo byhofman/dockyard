@@ -114,6 +114,16 @@ public sealed class MacUpdateTests
         Assert.Contains("mv '/tmp/u/Dockyard.app' '/Users/me/Applications/Dockyard.app'", script);
         Assert.Contains("open '/Users/me/Applications/Dockyard.app'\n", script);
     }
+
+    [Fact]
+    public void Swap_script_stops_the_menu_bar_app_and_the_dashboard_of_the_old_bundle_but_not_the_engine()
+    {
+        var script = MacLayout.SwapScript(4242, "/tmp/u/Dockyard.app", "/Users/me/Applications/Dockyard.app");
+        var stop = script.IndexOf("pkill -f '/Users/me/Applications/Dockyard.app/Contents/MacOS/Dockyard'", StringComparison.Ordinal);
+        Assert.True(stop > script.IndexOf("while kill -0", StringComparison.Ordinal));
+        Assert.True(stop < script.IndexOf("mv ", StringComparison.Ordinal));
+        Assert.DoesNotContain("dockyard-host", script);
+    }
 }
 
 public sealed class MacInstallTests : IDisposable

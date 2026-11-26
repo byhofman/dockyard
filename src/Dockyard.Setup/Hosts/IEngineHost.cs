@@ -28,8 +28,6 @@ interface IEngineHost
     // Finishes an install that had to wait for a reboot.
     Task Resume(Action<string> log) => Task.CompletedTask;
 
-    // Registry mirrors, insecure registries and address pools on an engine Dockyard owns; a Linux host's file is the user's.
-    bool HasEngineConfiguration => false;
     // Puts the settings in place, restarting the engine if it runs: it reads them only when it starts.
     Task ApplyEngineConfiguration(Action<string> log) => Task.CompletedTask;
 
@@ -59,13 +57,14 @@ interface IEngineHost
 
     void StartApp();
     string DoneMessage(bool reboot);
-    void Reboot() { }
 
     // True for the installed copy; false for dockyard setup run from a download.
     bool RunsFromInstallLocation { get; }
 
     // The component that is Dockyard itself for updates and for the installed version: the dockyard command.
     string SelfComponent => nameof(Core.Component.DockyardCli);
+    // Whether updating Dockyard itself stops the tray or the dashboard, as where one bundle or package holds them all.
+    bool SelfUpdateStops(string app) => true;
 
     bool HasDashboard { get; }
     // Where the dashboard is, or would be; null when this host has no fixed place for it.

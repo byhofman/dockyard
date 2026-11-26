@@ -284,6 +284,7 @@ static class MacLayout
     public static string SwapScript(int pid, string newBundle, string bundle) => $"""
         #!/bin/sh
         while kill -0 {pid} 2>/dev/null; do sleep 0.2; done
+        pkill -f {Shell.ShQuote(bundle + "/Contents/MacOS/Dockyard")}
         rm -rf {Shell.ShQuote(bundle + ".old")}
         mv {Shell.ShQuote(bundle)} {Shell.ShQuote(bundle + ".old")} && mv {Shell.ShQuote(newBundle)} {Shell.ShQuote(bundle)} && rm -rf {Shell.ShQuote(bundle + ".old")}
         open {Shell.ShQuote(bundle)}

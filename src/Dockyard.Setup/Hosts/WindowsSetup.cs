@@ -11,6 +11,8 @@ static class WindowsSetup
     // The user's choice is read here and handed on: the administrator step may run under another account's settings.
     static ToolSource Source => Settings.Load().Source;
     static string[] SourceArgs => ["--source", Source.Argument()];
+    // The elevated step may run from the installed copy, so the file to install is named by the process that asks.
+    static string? RunningCli => Updates.RunsAsCli ? Paths.Self : null;
 
     public static async Task<bool> MachineInstall(Action<string> log, bool dashboard, IReadOnlyCollection<string> without)
     {
@@ -21,11 +23,12 @@ static class WindowsSetup
                 .. dashboard ? Array.Empty<string>() : ["--engine-only"],
                 .. without.Count > 0 ? new[] { "--without", string.Join(',', without) } : [],
                 .. SourceArgs,
+                .. RunningCli is { } cli ? new[] { "--cli-file", cli } : [],
             ];
             return await Elevation.Run(log, "--machine-install", extra);
         }
         var (sid, name) = Elevation.CurrentUser;
-        return await MachineSetup.Install(log, sid, name, Environment.ProcessId, engineOnly: !dashboard, without, Source);
+        return await MachineSetup.Install(log, sid, name, Environment.ProcessId, engineOnly: !dashboard, without, Source, RunningCli);
     }
 
     public static async Task MachineUninstall(Action<string> log)

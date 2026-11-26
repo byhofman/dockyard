@@ -19,13 +19,16 @@ sealed class TrayApp : Application
         var native = new NativeTrayMenu();
         tray.Menu = native.Menu;
 
-        var controller = new TrayController(setup, () =>
+        void Exit()
         {
             lifetime.Cancel();
             tray.IsVisible = false;
             setup.Dispose();
             desktop.Shutdown();
-        });
+        }
+        var controller = new TrayController(setup, Exit);
+        // A dockyard command of its own is replacing or removing the tray; the dashboard stays.
+        setup.ExitRequested += () => Dispatcher.UIThread.Post(Exit);
         tray.Clicked += (_, _) => controller.OpenDashboard(null);
         controller.Changed += () =>
         {

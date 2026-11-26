@@ -6,14 +6,15 @@ namespace Dockyard.Core;
 static class MachineSetup
 {
     // Returns true when a reboot is needed.
+    // runningCli: the dockyard command that runs setup, when it is the one asking.
     public static async Task<bool> Install(Action<string> log, string userSid, string userName, int keepPid, bool engineOnly, IReadOnlyCollection<string> without,
-        ToolSource source)
+        ToolSource source, string? runningCli)
     {
         InUseFiles.CleanUp(Paths.DockerDir);
         InUseFiles.CleanUp(Paths.AppDir);
         // First, so that a setup that stops halfway leaves the command that finishes it.
         await MachineApps.AddDefenderExclusions(log);
-        await MachineApps.InstallCli(log, Updates.LocalAssets);
+        await MachineApps.InstallCli(log, MachineApps.CliFile(runningCli, Updates.LocalAssets));
         var withWindows = !without.Contains(nameof(Component.Engine));
         var withLinux = !without.Contains(nameof(Component.LinuxEngine));
         log(Hosts.InstallPhases.Start(Hosts.InstallPhases.WindowsFeatures(withWindows, withLinux)));
@@ -96,8 +97,7 @@ static class MachineSetup
             // Defender's rule goes by path, and an update can bring a file that is not excluded yet.
             case Component.DockyardCli:
                 await MachineApps.AddDefenderExclusions(log);
-                var cli = appFile ?? throw new ArgumentException("--app-file is required for the CLI update");
-                await MachineApps.InstallCli(log, Path.GetDirectoryName(Path.GetFullPath(cli)));
+                await MachineApps.InstallCli(log, appFile ?? throw new ArgumentException("--app-file is required for the CLI update"));
                 break;
             case Component.Tray:
                 await MachineApps.AddDefenderExclusions(log);
@@ -134,7 +134,21 @@ static class MachineSetup
                 try { File.Delete(file); } catch (IOException) { log($"  in use, left behind: {file}"); }
             }
         }
+        // The dockyard command that runs this uninstall cannot delete itself, so a process of its own does once it has exited.
+        if (File.Exists(Paths.DockyardCliExe))
+        {
+            DeleteAfterExit(Paths.DockyardCliExe, [Paths.AppDir]);
+            log($"{Paths.DockyardCliExe} goes once this command has finished");
+        }
         log($"Windows images and containers under {Path.GetDirectoryName(Paths.DaemonConfigDir)} were left in place");
+    }
+
+    static void DeleteAfterExit(string file, IEnumerable<string> dirs)
+    {
+        var quoted = Shell.PsQuote(file);
+        var script = $"for ($i = 0; $i -lt 60 -and (Test-Path -LiteralPath {quoted}); $i++) {{ Remove-Item -LiteralPath {quoted} -Force -ErrorAction SilentlyContinue; if (Test-Path -LiteralPath {quoted}) {{ Start-Sleep 1 }} }}; "
+            + string.Join("; ", dirs.Select(d => $"Remove-Item -LiteralPath {Shell.PsQuote(d)} -Recurse -Force -ErrorAction SilentlyContinue"));
+        Shell.Spawn("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script).Dispose();
     }
 
     // The CLI last: it is what finishes an uninstall that stopped halfway.

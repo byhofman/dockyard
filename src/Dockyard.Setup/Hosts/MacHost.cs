@@ -52,7 +52,6 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
     public Task<bool> TrustCa(Action<string> log, string certificateFile, bool silent) => trust.TrustCa(log, certificateFile, silent);
     public Task UntrustCa(Action<string> log, string certificateFile, bool silent) => trust.UntrustCa(log, certificateFile, silent);
 
-    public bool HasEngineConfiguration => true;
     public string? OwnSocket => MacLayout.DockerSocket;
 
     public Task ApplyEngineConfiguration(Action<string> log) => vm.ApplyEngineConfiguration(log);

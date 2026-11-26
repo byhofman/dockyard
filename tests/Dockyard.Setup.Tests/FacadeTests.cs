@@ -129,26 +129,96 @@ public sealed class FacadeTests : IDisposable
     }
 
     [Fact]
-    public async Task Dockyard_itself_is_the_dockyard_command_on_every_system_and_not_the_tray()
-    {
-        var host = new FakeHost { Installed = true };
-        Assert.Equal("DockyardCli", For(host).SelfId);
-        Assert.Equal(new Version(1, 0, 0), await For(host).InstalledSelfVersion());
-        host.Missing.Add("Tray");
-        Assert.Equal(new Version(1, 0, 0), await For(host).InstalledSelfVersion());
-        host.Missing.Add("DockyardCli");
-        Assert.Null(await For(host).InstalledSelfVersion());
-    }
+    public void Dockyard_itself_is_the_dockyard_command_on_every_system_and_not_the_tray() =>
+        Assert.Equal("DockyardCli", For(new FakeHost { Installed = true }).SelfId);
 
     [Theory]
-    [InlineData("Tray", "update DockyardCli,Dashboard")]
-    [InlineData("DockyardCli", "update Tray,Dashboard")]
-    public async Task An_update_leaves_dockyard_itself_to_its_own_restart(string self, string expected)
+    [InlineData("Tray", "update DockyardCli,Dashboard,Tray")]
+    [InlineData("DockyardCli", "update Tray,Dashboard,DockyardCli")]
+    public async Task An_update_brings_dockyard_itself_too_last(string self, string expected)
     {
         var host = new FakeHost { Installed = true, SelfComponent = self, Newest = new Version(2, 0, 0) };
         var setup = For(host);
         await setup.UpdateAvailable(await setup.CheckUpdates(CancellationToken.None), new ProgressLines());
         Assert.Equal([expected], host.Calls);
+    }
+
+    DockyardSetup FromApp(FakeHost host, string app, List<IReadOnlyList<string>> handedOff) =>
+        new(host, settings.Settings, new ShellProfiles((_, _) => { }, () => [])) { Caller = app, HandOff = handedOff.Add };
+
+    [Fact]
+    public async Task From_the_dashboard_its_own_update_and_dockyard_itself_go_to_a_dockyard_command_of_their_own_and_it_exits()
+    {
+        var host = new FakeHost { Installed = true, Newest = new Version(2, 0, 0) };
+        List<IReadOnlyList<string>> handedOff = [];
+        var setup = FromApp(host, ComponentRules.DashboardId, handedOff);
+        var exits = 0;
+        setup.ExitRequested += () => exits++;
+
+        await setup.Update(["DockyardCli", "Tray", ComponentRules.DashboardId], progress);
+
+        Assert.Equal(["update Tray"], host.Calls);
+        Assert.Equal(["update", ComponentRules.DashboardId, "DockyardCli"], Assert.Single(handedOff));
+        Assert.Equal(1, exits);
+    }
+
+    [Fact]
+    public async Task From_the_tray_removing_the_tray_goes_to_a_dockyard_command_and_the_tray_exits()
+    {
+        var host = new FakeHost { Installed = true };
+        List<IReadOnlyList<string>> handedOff = [];
+        var setup = FromApp(host, "Tray", handedOff);
+        var exits = 0;
+        setup.ExitRequested += () => exits++;
+
+        await setup.Remove("tray", removeData: false, progress);
+
+        Assert.Empty(host.Calls);
+        Assert.Equal(["component", "remove", "tray"], Assert.Single(handedOff));
+        Assert.Equal(1, exits);
+    }
+
+    [Fact]
+    public async Task An_app_whose_update_of_dockyard_itself_leaves_it_running_hands_the_update_over_and_stays()
+    {
+        var host = new FakeHost { Installed = true, SelfUpdateStopsApps = false };
+        List<IReadOnlyList<string>> handedOff = [];
+        var setup = FromApp(host, "Tray", handedOff);
+        var exits = 0;
+        setup.ExitRequested += () => exits++;
+
+        await setup.Update(["DockyardCli"], progress);
+
+        Assert.Equal(["update", "DockyardCli"], Assert.Single(handedOff));
+        Assert.Equal(0, exits);
+    }
+
+    [Fact]
+    public async Task The_dockyard_command_does_every_step_itself()
+    {
+        var host = new FakeHost { Installed = true };
+        List<IReadOnlyList<string>> handedOff = [];
+        var setup = new DockyardSetup(host, settings.Settings, new ShellProfiles((_, _) => { }, () => [])) { Caller = null, HandOff = handedOff.Add };
+
+        await setup.Update(["DockyardCli", ComponentRules.DashboardId], progress);
+        await setup.Remove("tray", removeData: false, progress);
+
+        Assert.Equal(["update Dashboard,DockyardCli", "remove Tray"], host.Calls);
+        Assert.Empty(handedOff);
+    }
+
+    [Fact]
+    public async Task A_removal_keeps_what_another_front_end_removed_since_this_one_started()
+    {
+        var host = new FakeHost { Installed = true, Components = [new("DockyardCli", "Dockyard CLI"), new("Kind", "kind", Flag: "kind"), new("Helm", "Helm", Flag: "helm")] };
+        var dashboard = For(host);
+        var cli = Settings.Load(settings.File);
+        cli.RemovedComponents.Add("Kind");
+        cli.Save();
+
+        await dashboard.Remove("helm", removeData: false, progress);
+
+        Assert.Equal(["Helm", "Kind"], Settings.Load(settings.File).RemovedComponents.Order(StringComparer.Ordinal));
     }
 
     static IReadOnlyList<ComponentInfo> TrayCatalog(bool desktop) =>
@@ -204,6 +274,7 @@ public sealed class FacadeTests : IDisposable
     {
         var host = new FakeHost { Installed = true, Components = TrayCatalog(desktop: false) };
         settings.Settings.RemovedComponents = ["Tray"];
+        settings.Settings.Save();
         await For(host).Setup(new SetupRequest([], [], null, false, false, Silent: true, Resume: false) { Start = false }, progress, CancellationToken.None);
         Assert.False(host.Requests.Single().Tray);
 

@@ -164,7 +164,7 @@ public sealed class SetupCommandTests
     }
 
     [Fact]
-    public void Update_leaves_Dockyard_itself_to_its_restart()
+    public void Update_takes_Dockyard_itself_along_last()
     {
         using var h = new CliHarness(Catalog);
         h.Host.Installed = true;
@@ -173,9 +173,19 @@ public sealed class SetupCommandTests
 
         Assert.Equal(0, h.Run("update"));
 
-        var update = Assert.Single(h.Host.Calls, c => c.StartsWith("update"));
-        Assert.DoesNotContain("Tray", update);
-        Assert.Contains("Kind", update);
+        Assert.Equal("update DockyardCli,Kind,Dashboard,Tray", Assert.Single(h.Host.Calls, c => c.StartsWith("update")));
+    }
+
+    [Fact]
+    public void Update_with_names_updates_only_those()
+    {
+        using var h = new CliHarness(Catalog);
+        h.Host.Installed = true;
+        h.Host.Newest = new Version(2, 0, 0);
+
+        Assert.Equal(0, h.Run("update", "tray", "DockyardCli"));
+
+        Assert.Equal(["update Tray,DockyardCli"], h.Host.Calls);
     }
 
     [Fact]

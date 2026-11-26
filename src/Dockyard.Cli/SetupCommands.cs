@@ -179,6 +179,10 @@ sealed class ComponentRemoveCommand(CliEnvironment env) : AsyncCommand<Component
 
 sealed class UpdateSettings : CommandSettings
 {
+    [CommandArgument(0, "[component]")]
+    [Description("Only these, by the name component ls shows; without one, everything with an update")]
+    public string[] Components { get; init; } = [];
+
     [CommandOption("--check")]
     [Description("Only list what has an update")]
     public bool Check { get; init; }
@@ -189,6 +193,11 @@ sealed class UpdateCommand(CliEnvironment env) : AsyncCommand<UpdateSettings>
     public override async Task<int> ExecuteAsync(CommandContext context, UpdateSettings s, CancellationToken cancellation)
     {
         using var setup = env.Setup();
+        if (s.Components.Length > 0 && !s.Check)
+        {
+            await setup.Update(Names.Split(s.Components), new ProgressRenderer(env.Console, env.Error));
+            return 0;
+        }
         var checks = await setup.CheckUpdates(cancellation);
         foreach (var check in checks)
         {

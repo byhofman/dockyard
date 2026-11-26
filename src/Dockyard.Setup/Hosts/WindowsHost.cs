@@ -152,7 +152,6 @@ sealed class WindowsHost : IEngineHost
     public Task UntrustCa(Action<string> log, string certificateFile, bool silent) => WindowsSetup.UntrustCa(log, certificateFile);
 
     static bool LinuxEngineWanted => !Settings.Load().RemovedComponents.Contains(nameof(Component.LinuxEngine));
-    public bool HasEngineConfiguration => LinuxEngineWanted;
 
     public Task ApplyEngineConfiguration(Action<string> log) => wsl.ApplyEngineConfiguration(log);
 
@@ -199,6 +198,9 @@ sealed class WindowsHost : IEngineHost
     }
 
     public bool RunsFromInstallLocation => Paths.IsInstalledCopy;
+
+    // dockyard.exe is a file of its own here, which the tray and the dashboard only start.
+    public bool SelfUpdateStops(string app) => false;
 
     public bool HasDashboard => Paths.HasDashboard;
     public string? DashboardExe => Paths.DashboardExe;
@@ -294,8 +296,6 @@ sealed class WindowsHost : IEngineHost
     public string DoneMessage(bool reboot) => reboot
         ? "Restart Windows to finish. Dockyard carries on by itself after the restart."
         : "Done. Dockyard runs in the tray.";
-
-    public void Reboot() => Shell.Spawn("shutdown.exe", "/r", "/t", "5", "/d", "p:4:1").Dispose();
 
     public async Task Uninstall(Action<string> log, bool removeData, bool silent)
     {

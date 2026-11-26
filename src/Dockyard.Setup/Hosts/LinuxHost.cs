@@ -147,16 +147,23 @@ sealed class LinuxHost : IEngineHost
         if (components.Any(c => c.Component is "Engine" or "Compose" or "Buildx")) await this.components.UpdateDockerPackages(log);
         foreach (var (component, _) in components)
             if (Tool(component) is { } tool) await tools.Install(log, tool);
-        if (components.FirstOrDefault(c => c.Component is nameof(Component.DockyardCli) or ComponentRules.DashboardId) is { Release: { } app })
+        var (app, dashboard) = AppUpdate(components);
+        if (app is not null)
         {
-            await this.components.StopDashboard();
+            await this.components.StopApps();
             await this.components.InstallApp(log, HasDashboard, app.Tag);
-            // The tray still holds the single-instance lock, so the new one starts just after this process exits.
-            if (File.Exists(LinuxSetup.AutostartFile))
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("/bin/sh", ["-c", $"sleep 2; exec \"{LinuxLayout.InstalledExe}\""]) { UseShellExecute = false })?.Dispose();
+            StartApp();
             return true;
         }
+        if (dashboard is not null) await this.components.UpdateDashboard(log);
         return false;
+    }
+
+    // The command's release brings the dashboard of its version along; the dashboard by itself comes from its own.
+    internal static (Release? App, Release? Dashboard) AppUpdate(IReadOnlyList<(string Component, Release? Release)> components)
+    {
+        var app = components.FirstOrDefault(c => c.Component == nameof(Component.DockyardCli)).Release;
+        return app is not null ? (app, null) : (null, components.FirstOrDefault(c => c.Component == ComponentRules.DashboardId).Release);
     }
 
     public bool RunsFromInstallLocation => LinuxComponents.RunsFromInstallLocation;
