@@ -1,3 +1,5 @@
+using Dockyard.Engine;
+
 namespace Dockyard.Agent;
 
 // One JSON request and one JSON reply per line. Only the app and the dashboard get here: over vsock on macOS, on
@@ -10,4 +12,5 @@ sealed class AgentRequest
     public string? Cert { get; set; }
     public string? Key { get; set; }
     public bool? On { get; set; }
+    public List<ClusterWant>? Wants { get; set; }
 }

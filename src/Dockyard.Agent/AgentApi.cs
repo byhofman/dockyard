@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace Dockyard.Agent;
 
-sealed class AgentApi(DomainTable table, DomainProxy proxy, Services? services = null)
+sealed class AgentApi(DomainTable table, DomainProxy proxy, Services? services = null, ClusterServices? clusters = null)
 {
     public async Task Handle(Stream stream, CancellationToken ct)
     {
@@ -32,6 +32,11 @@ sealed class AgentApi(DomainTable table, DomainProxy proxy, Services? services =
                     proxy.SetCertificate(cert, key);
                     services?.SetCertificate(cert, key);
                     return new AgentReply();
+                case "cluster-wants" when request is { Wants: { } wants } && clusters is not null:
+                    clusters.SetWants(wants);
+                    return new AgentReply();
+                case "cluster-status" when clusters is not null:
+                    return new AgentReply { Clusters = clusters.Status() };
                 default: return new AgentReply { Error = "unknown request" };
             }
         }

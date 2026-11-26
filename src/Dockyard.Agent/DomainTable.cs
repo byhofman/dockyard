@@ -140,6 +140,9 @@ sealed class DomainTable(Func<DockerClient> connect, string choicesFile, Action<
         }
     }
 
+    // On each container event this watch sees, for what else follows the engine's containers.
+    public event Action? ContainersChanged;
+
     public async Task Run(CancellationToken ct)
     {
         while (!ct.IsCancellationRequested)
@@ -149,8 +152,13 @@ sealed class DomainTable(Func<DockerClient> connect, string choicesFile, Action<
                 using var docker = connect();
                 var since = DateTimeOffset.UtcNow.AddSeconds(-1);
                 await Refresh(docker, ct);
+                ContainersChanged?.Invoke();
                 await foreach (var e in docker.EventsAsync(["container"], since, ct))
-                    if (e.Action is "start" or "die" or "destroy" or "rename") await Refresh(docker, ct);
+                    if (e.Action is "start" or "die" or "destroy" or "rename")
+                    {
+                        await Refresh(docker, ct);
+                        ContainersChanged?.Invoke();
+                    }
             }
             catch (Exception e) when (e is not OperationCanceledException)
             {

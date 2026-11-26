@@ -1,7 +1,10 @@
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using Dockyard.Core;
+using Dockyard.Engine;
+using Dockyard.Engine.Transport;
 using Dockyard.Hosts;
+using Dockyard.Kind;
 
 namespace Dockyard.Setup;
 
@@ -35,6 +38,7 @@ public sealed partial class DockyardSetup : IDisposable
         this.settings = settings;
         this.shell = shell ?? ShellProfiles.User;
         Duties = new BackgroundDuties(this, host, settings);
+        ClusterAgent = () => AgentClient.For(DockerEndpoint.Parse(host.Engines[0].Endpoint));
     }
 
     public static DockyardSetup ForThisMachine() => new(HostFactory.Create(), Settings.Load());
@@ -230,6 +234,22 @@ public sealed partial class DockyardSetup : IDisposable
         if (await host.Update(log, items)) ExitRequested?.Invoke();
     }
 
+    // Clusters
+
+    // The Linux engine's agent, which keeps kind's cloud provider, the forwarders and dockyard-nfs running; null for an engine
+    // without one.
+    internal Func<IClusterAgent?> ClusterAgent { get; init; }
+    internal string ClusterFolder { get; init; } = ClusterDefinitions.Folder;
+
+    // Tells the engine's agent what every cluster's definition wants, after each change to one. With no Linux engine
+    // running, as when only the Windows engine is, nothing is told: the agent keeps what it was told last.
+    public async Task PushClusterWants()
+    {
+        if (ClusterAgent() is not { } agent) return;
+        try { await agent.SetClusterWantsAsync(ClusterDefinitions.Wants(ClusterFolder)); }
+        catch (Exception e) when (e is IOException or System.Net.Sockets.SocketException or TimeoutException or InvalidOperationException or OperationCanceledException) { }
+    }
+
     // Setup
 
     // Installs, or brings an install up to date and in line with the request, keeping images and containers. Every outcome is
@@ -312,6 +332,8 @@ public sealed partial class DockyardSetup : IDisposable
             if (await host.Installed(c.Id) is not null) await host.SetComponent(log, c.Id, installed: false, request.RemoveData);
         }
         ApplyShell(log);
+        // The definitions are the user's: a setup run with sudo would tell the agent there are none.
+        if (Environment.UserName != "root") await PushClusterWants();
         // Installing never fails halfway unnoticed: a step that quietly did nothing would otherwise report success.
         if (!reboot && !host.IsInstalled) throw new InvalidOperationException("Setup finished, but Dockyard is not installed");
         if (host.HasDashboard != dashboard)

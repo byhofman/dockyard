@@ -11,4 +11,6 @@ sealed class AgentMessage
     public string? Error { get; set; }
     public List<DomainInfo>? Domains { get; set; }
     public bool Https { get; set; }
+    public List<ClusterWant>? Wants { get; set; }
+    public List<ClusterStatus>? Clusters { get; set; }
 }

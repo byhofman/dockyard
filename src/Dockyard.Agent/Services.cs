@@ -195,11 +195,7 @@ sealed class Services(Func<DockerClient> connect, DomainTable table, string root
             return;
         }
         if (current is not null) await docker.RemoveContainerAsync(current.Id, force: true, ct: ct);
-        if (!(await docker.ListImagesAsync(ct)).Any(i => i.RepoDigests?.Any(d => service.Image.EndsWith(d[d.IndexOf('@')..], StringComparison.Ordinal)) == true))
-        {
-            log($"pulling {service.Image}");
-            await docker.PullImageAsync(service.Image, ct: ct);
-        }
+        await EnsureImage(docker, service.Image, log, ct);
         var body = new JsonObject
         {
             ["Image"] = service.Image,
@@ -215,6 +211,14 @@ sealed class Services(Func<DockerClient> connect, DomainTable table, string root
         var id = (await docker.PostNodeAsync($"containers/create?name={Uri.EscapeDataString(service.Name)}", body, ct))!["Id"]!.GetValue<string>();
         await docker.StartContainerAsync(id, ct);
         log($"{service.Name} runs");
+    }
+
+    // An image pinned by digest is there when any of its tags carries that digest.
+    public static async Task EnsureImage(DockerClient docker, string image, Action<string> log, CancellationToken ct)
+    {
+        if ((await docker.ListImagesAsync(ct)).Any(i => i.RepoDigests?.Any(d => image.EndsWith(d[d.IndexOf('@')..], StringComparison.Ordinal)) == true)) return;
+        log($"pulling {image}");
+        await docker.PullImageAsync(image, ct: ct);
     }
 
     public static IReadOnlyList<DnsView> Views(AgentMode mode, IReadOnlyList<IPAddress> containerUpstreams, IPAddress? vmAddress)

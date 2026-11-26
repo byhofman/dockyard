@@ -70,9 +70,16 @@ sealed class Clusters(Action<string> log)
             : null;
         var image = KindImages.Choose(kubernetes);
         ClusterDefinitions.Save(name, new ClusterDefinition(definition, storage, addons.Select(a => a.Release).ToList(), loadBalancer, ports, image.Version));
+        await PushWants();
         var file = await Actions().Create(name, log, storage: storage, addons: addons, helm: helm, definition: definition, publishNames: loadBalancer, clusterCa: ClusterCa, image: image);
-        if (loadBalancer) await CloudProvider.EnsureRunning(Context.Length > 0 ? Context : "default", log);
         log($"kubectl now uses {KindKubeconfig.Key(name)}, from {file}");
+    }
+
+    // The engine's agent keeps the cloud provider, the forwarder and dockyard-nfs running from the definitions.
+    static async Task PushWants()
+    {
+        using var setup = DockyardSetup.ForThisMachine();
+        await setup.PushClusterWants();
     }
 
     static async Task<string> ClusterCa(string cluster)
@@ -110,9 +117,9 @@ sealed class Clusters(Action<string> log)
         await DeleteWithProxies(actions, name);
         var remade = wanted with { Addons = helm is null ? [] : wanted.Addons };
         ClusterDefinitions.Save(name, remade);
+        await PushWants();
         await actions.Create(name, log, storage: remade.Storage, addons: remade.AddonList, helm: helm, definition: remade.Yaml, publishNames: remade.LoadBalancer,
             clusterCa: ClusterCa, image: KindImages.For(remade.KubernetesVersion));
-        if (remade.LoadBalancer) await CloudProvider.EnsureRunning(Context.Length > 0 ? Context : "default", log);
     }
 
     // A running cluster's add-ons and NFS storage, as the dashboard's Add-ons does; the rest is its nodes' and needs recreate.
@@ -128,6 +135,7 @@ sealed class Clusters(Action<string> log)
         bool? nfs = wantedStorage == saved.Storage ? null : wantedStorage == ClusterStorage.Nfs;
         await Actions().EditAddons(name, saved.AddonList, wanted, helm, ClusterCa, log, nfs);
         ClusterDefinitions.Save(name, saved with { Addons = wanted.Select(a => a.Release).ToList(), Storage = wantedStorage });
+        await PushWants();
         log($"{name} is changed");
     }
 
@@ -142,8 +150,7 @@ sealed class Clusters(Action<string> log)
         await RequireLinuxEngine();
         await DeleteWithProxies(Actions(), name);
         ClusterDefinitions.Remove(name);
-        var left = await List();
-        await NfsStorage.RemoveServerIfUnused(Context, left.Select(c => ClusterDefinitions.Load(c.Name)));
+        await PushWants();
         log($"Deleted {name}");
     }
 

@@ -3,7 +3,7 @@ using Dockyard.Dashboard.Features.Clusters;
 namespace Dockyard.Dashboard.Tests;
 
 // A real two-node cluster with NFS storage on the engine the environment names: pods on both nodes write to one claim
-// of the class "nfs", and the files are in the dockyard-nfs volume.
+// of the class "nfs", and the files are in the dockyard-nfs volume, which the engine's agent runs from the definition.
 public sealed class NfsStorageEngineTests
 {
     [Fact]
@@ -19,6 +19,8 @@ public sealed class NfsStorageEngineTests
         var ns = "dockyard-e2e-" + Guid.NewGuid().ToString("N")[..8];
         try
         {
+            ClusterDefinitions.Save(name, new ClusterDefinition(KindCli.Config(1), ClusterStorage.Nfs, []));
+            await PushWants();
             await actions.Create(name, workers: 1, storage: ClusterStorage.Nfs, helm: helm);
             var helper = SharedStorage.Images((await SharedStorage.Docker(SharedStorage.ImagesArgs(context, controlPlane))).Output)!.Value.Helper;
             var manifest = string.Join("\n---\n",
@@ -43,8 +45,16 @@ public sealed class NfsStorageEngineTests
         {
             try { await actions.Delete(name); } catch (Exception) { }
             await SharedStorage.Docker(["--context", context, "exec", NfsStorage.ContainerName, "rm", "-rf", "/export/" + ns]);
+            ClusterDefinitions.Remove(name);
+            await PushWants();
             Directory.Delete(dir, recursive: true);
         }
+    }
+
+    static async Task PushWants()
+    {
+        using var setup = Dockyard.Setup.DockyardSetup.ForThisMachine();
+        await setup.PushClusterWants();
     }
 
     static string Pod(string pod, string node, string ns, string image) =>
