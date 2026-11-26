@@ -110,6 +110,59 @@ Bind mounts of Windows folders work as you would write them: `docker run -v C:\s
 
 **Linux.** Docker CE with buildx and compose from Docker's repository on Debian, Ubuntu, Fedora, RHEL and their derivatives, or from the distribution on Arch and openSUSE; kubectl from the Kubernetes project's apt or dnf repository and helm from Helm's apt repository or Fedora's own, with kind (and the others where there is neither apt nor dnf) as Dockyard's own copy in `/usr/local/bin`; the Dockyard packages (`dockyard-toolbox`, `dockyard-dashboard` and `dockyard-cli` in `/usr/lib/dockyard`, with `/usr/bin/dockyard`), or a copy in `~/.local/lib/dockyard` on distributions without apt or dnf; the engine started on demand; `dockyard-host.service`, which comes and goes with the engine; docker access for you right away; the tray with its GNOME extension where needed; autostart at login.
 
+## How it fits together
+
+```mermaid
+flowchart LR
+  subgraph Computer["Your computer"]
+    Toolbox["Dockyard Toolbox<br/>installs, updates, settings, tray"]
+    Dashboard["Dashboard"]
+    CLI["dockyard command"]
+    Host["dockyard-host<br/>keeps the engine running,<br/>docker pipe or socket, relays"]
+  end
+  subgraph Engine["Linux engine: WSL distro, macOS VM or the Linux host itself"]
+    Docker["dockerd"]
+    Agent["dockyard-agent"]
+    subgraph Group["Dockyard group"]
+      DNS["dockyard-dns<br/>CoreDNS"]
+      Proxy["dockyard-proxy<br/>Traefik"]
+      Etcd["dockyard-etcd"]
+      CPK["dockyard-cloud-provider-kind"]
+      NFS["dockyard-nfs"]
+    end
+    Yours["Your containers"]
+    subgraph Kind["A kind cluster"]
+      ExtDNS["external-dns"]
+      CM["cert-manager<br/>ClusterIssuer dockyard"]
+      CSI["NFS CSI driver"]
+      Ingress["Ingress controller"]
+    end
+  end
+  Toolbox -- "installs, starts, stops" --> Host
+  Toolbox -- "settings, certificate" --> Agent
+  CLI -- "engine, config, https, update" --> Toolbox
+  Dashboard -- "docker API" --> Host
+  CLI -- "cluster" --> Host
+  Host -- "docker API, relays" --> Docker
+  Docker --> Yours
+  Docker --> Kind
+  Agent -- "watches" --> Docker
+  Agent -- "starts, writes config" --> DNS
+  Agent -- "starts, writes routes" --> Proxy
+  Agent -- "reads published names" --> Etcd
+  ExtDNS -- "publishes Ingress hosts" --> Etcd
+  CSI -- "volumes" --> NFS
+  CPK -- "LoadBalancer addresses" --> Ingress
+  Proxy -- "cluster names" --> Ingress
+  Toolbox -- "cluster CA" --> CM
+```
+
+- **The Toolbox** is the installer and the tray. It installs, updates and removes every component, holds the settings, and does what needs an administrator once: the DNS rule that sends `dockyard.internal` to Dockyard, and trusting Dockyard's certificate authority. It listens on no port and holds no engine: closing it changes nothing that runs.
+- **dockyard-host** is the small OS-native part that has to run while the engine does. On Windows it keeps the WSL distro running, serves the engine's named pipe and relays `127.77.0.1` and published ports into it; on macOS it runs the VM, under a LaunchAgent of its own; on Linux, where the engine is the machine's own Docker, it is a systemd unit next to it.
+- **The dashboard and the `dockyard` command** talk to the engine over the docker API, as any docker client does, and to the Toolbox for what it owns.
+- **The agent**, inside the engine, watches the containers and kind clusters and runs Dockyard's service containers. It writes what they serve; they do the serving.
+- **Everything else is containers too:** kind's cloud provider gives LoadBalancer services an address, `dockyard-nfs` serves NFS storage to the clusters that use it, and in each cluster external-dns, cert-manager and the NFS CSI driver are ordinary pods that talk to Dockyard's containers. The dashboard shows Dockyard's own in the **Dockyard** group.
+- **The Windows engine** (`dockerd.exe`, Windows containers) is a Windows service of its own. It has no container domains and no kind: both are Linux only.
 ## Using it
 
 Dockyard sits in the tray or menu bar. The icon is the Dockyard crane and container: blue when the engine runs, gray when stopped, amber while busy; on Windows a badge shows the active context (`L` or `W`). Click to open the dashboard; right-click for the rest, including **Containers** with start, stop, restart and open for each container:
@@ -189,6 +242,45 @@ Names are served by containers in the Dockyard group, pinned by digest: `dockyar
 
 **HTTPS:** turn it on under **Settings** in the Toolbox, or add `--trust-https` to a silent setup. Dockyard makes a certificate authority of its own on this device, valid only for names under `dockyard.internal`, and your system asks for approval to trust it. Say no and everything keeps working over plain HTTP. Its key stays on this device, readable only by you; turning HTTPS off or uninstalling removes it from the trust store.
 
+### How names and requests get there
+
+Container domains are container native: the names, the proxy and what clusters publish are ordinary containers on the engine, configured by the agent. On Windows a request for a name goes like this; macOS has its own resolver file and relays in dockyard-host, and on Linux the machine reaches the engine directly.
+
+```mermaid
+sequenceDiagram
+  participant B as Browser
+  participant W as Windows DNS
+  participant H as dockyard-host (127.77.0.1)
+  participant D as dockyard-dns
+  participant P as dockyard-proxy
+  participant C as Container or cluster ingress
+  B->>W: web.dockyard.internal?
+  W->>H: asks Dockyard, by the rule for dockyard.internal
+  H->>D: relayed into the engine
+  D-->>B: 127.77.0.1
+  B->>H: http or https to web.dockyard.internal
+  H->>P: relayed into the engine
+  P->>C: by Host header, or TLS passed through by SNI to a cluster
+  C-->>B: the response
+```
+
+Inside the engine, containers use `dockyard-dns` as their DNS server: Dockyard's names resolve to `198.19.250.1`, where ports 80 and 443 lead to `dockyard-proxy`, and every other name goes to your network's DNS as before.
+
+A kind cluster uses Dockyard's containers the same way, for names it publishes, certificates and shared storage:
+
+```mermaid
+flowchart LR
+  Ingress["Ingress in a cluster<br/>host: shop.dockyard.internal"] --> ExtDNS["external-dns<br/>in the cluster"]
+  ExtDNS -- "records under /dockyard/cluster/" --> Etcd["dockyard-etcd"]
+  Etcd --> Agent["dockyard-agent"]
+  Agent -- "zone file" --> DNS["dockyard-dns"]
+  Agent -- "Host and SNI routes to the cluster's ingress" --> Proxy["dockyard-proxy"]
+  CM["cert-manager, ClusterIssuer dockyard"] -. "certificates your computer trusts" .-> Ingress
+  PVC["PersistentVolumeClaim, storage class nfs"] --> CSI["NFS CSI driver<br/>in the cluster"]
+  CSI -- "namespace/claim folder" --> NFS["dockyard-nfs"]
+```
+
+**Container domains** in the Toolbox's settings switches all of this off: `dockyard-proxy` and `dockyard-etcd` go, and `dockyard-dns` stays as the containers' DNS server without Dockyard's names.
 ## Your network
 
 Containers reach your machine as `host.docker.internal`, including services that only listen on its loopback. The engine and its containers use the proxy your system is set to, also one on your machine's own loopback, read each time the engine starts. Name lookups go through your system's DNS at that moment, and traffic leaves through your machine's routes, so VPNs apply to containers as they do to your other apps.
