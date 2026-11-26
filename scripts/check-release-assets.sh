@@ -2,8 +2,11 @@
 # check-release-assets.sh <component> <version> <asset names, whitespace separated>: fails when something the one-liners,
 # the Toolbox or an installed Toolbox that updates itself downloads is missing from a component's release.
 # <component> is toolbox, dashboard, cli or engine; all checks a build of everything (pull requests and main).
+# check-release-assets.sh --list <component> <version>: the names and patterns of what that release carries.
 set -euf
-component="$1"; version="$2"; assets="$3"
+list=0
+if [ "$1" = --list ]; then list=1; shift; fi
+component="$1"; version="$2"; assets="${3:-}"
 
 toolbox() {
   # The dashboard's assets ride along with the Toolbox's release while 0.8.x Toolboxes, which take the dashboard from
@@ -24,6 +27,7 @@ case "$component" in
   all) wanted="$(toolbox "$version") $(dashboard "$version") $(cli "$version") $(engine "$version")" ;;
   *) echo "Unknown component: $component" >&2; exit 2 ;;
 esac
+if [ "$list" -eq 1 ]; then echo "$wanted" | tr ' ' '\n' | sort -u; exit 0; fi
 
 listed=" $(echo "$assets" | tr '\n' ' ') "
 missing=0

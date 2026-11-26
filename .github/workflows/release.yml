@@ -1,11 +1,12 @@
 name: build
 
 # One workflow for every component. Pull requests and main build and test everything; a tag <component>/<version>
-# builds, tests and releases only that component. See docs/design/components-and-releases.md.
+# builds, tests and releases only that component, and a tag v<version> releases all four at that version, in the order
+# the index needs them. See docs/design/components-and-releases.md.
 on:
   push:
     branches: [main]
-    tags: ['toolbox/*', 'dashboard/*', 'cli/*', 'engine/*']
+    tags: ['toolbox/*', 'dashboard/*', 'cli/*', 'engine/*', 'v*']
   pull_request:
 
 # Read only, except for the job that publishes the release.
@@ -29,7 +30,10 @@ jobs:
       - id: plan
         run: |
           component=all; version=0.0.0
-          if [ "$GITHUB_REF_TYPE" = tag ]; then component="${GITHUB_REF_NAME%%/*}"; version="${GITHUB_REF_NAME#*/}"; fi
+          case "$GITHUB_REF_TYPE:$GITHUB_REF_NAME" in
+            tag:v[0-9]*) version="${GITHUB_REF_NAME#v}" ;;
+            tag:*) component="${GITHUB_REF_NAME%%/*}"; version="${GITHUB_REF_NAME#*/}" ;;
+          esac
           echo "component=$component" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           for c in toolbox dashboard cli engine; do
@@ -434,6 +438,16 @@ jobs:
         run: |
           # The wizard's screenshots are for looking at in the run, not for the release.
           rm -f dist/*.png
+          if [ "$COMPONENT" = all ]; then
+            # Each component its own release, with the v tag's message as notes: the engine first, the Toolbox, which
+            # finds the others through components.json, last.
+            git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
+            git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > "$RUNNER_TEMP/notes.md"
+            for component in engine dashboard cli toolbox; do
+              sh scripts/release-component.sh "$component" "$VERSION" "$RUNNER_TEMP/notes.md" dist
+            done
+            exit 0
+          fi
           if [ "$COMPONENT" = toolbox ]; then
             sh scripts/component-assets.sh dashboard dist Dockyard.Dashboard.zip 'dockyard-dashboard_*_amd64.deb' 'dockyard-dashboard-*-1.x86_64.rpm'
           fi
