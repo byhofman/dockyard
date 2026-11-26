@@ -5,6 +5,9 @@
              xmlns:store="using:Dockyard.Dashboard.Store"
              x:Class="Dockyard.Dashboard.Features.Clusters.ClustersView"
              x:DataType="clu:ClustersViewModel">
+  <UserControl.Resources>
+    <clu:ClusterNodes x:Key="ClusterNodes" />
+  </UserControl.Resources>
   <Grid x:Name="Layout" ColumnDefinitions="*,5,380">
     <DockPanel>
       <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="16,12,16,4">
@@ -38,18 +41,25 @@
       <ListBox x:Name="List" Classes="rows" ItemsSource="{Binding Rows}" SelectionMode="Multiple" SelectedItems="{Binding SelectedItems}" Padding="0,4">
         <ListBox.ItemTemplate>
           <DataTemplate DataType="kind:KindCluster">
-            <Grid ColumnDefinitions="Auto,*,120,110,Auto">
-              <CheckBox Classes="pick" IsChecked="{Binding $parent[ListBoxItem].IsSelected}" AutomationProperties.Name="{Binding Name}" />
-              <StackPanel Grid.Column="1">
+            <StackPanel>
+            <Grid ColumnDefinitions="Auto,Auto,*,120,110,Auto">
+              <ToggleButton x:Name="Unfold" Classes="iconbtn" ToolTip.Tip="Its nodes" AutomationProperties.Name="Show the nodes">
+                <Panel>
+                  <PathIcon Data="{StaticResource IconChevronDown}" IsVisible="{Binding #Unfold.IsChecked}" />
+                  <PathIcon Data="{StaticResource IconChevronRight}" IsVisible="{Binding !#Unfold.IsChecked}" />
+                </Panel>
+              </ToggleButton>
+              <CheckBox Grid.Column="1" Classes="pick" IsChecked="{Binding $parent[ListBoxItem].IsSelected}" AutomationProperties.Name="{Binding Name}" />
+              <StackPanel Grid.Column="2">
                 <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                 <TextBlock Classes="muted small mono" Text="{Binding Context}" />
               </StackPanel>
-              <TextBlock Grid.Column="2" Classes="mono muted" Text="{Binding KubernetesVersion}" VerticalAlignment="Center" />
-              <StackPanel Grid.Column="3" VerticalAlignment="Center">
+              <TextBlock Grid.Column="3" Classes="mono muted" Text="{Binding KubernetesVersion}" VerticalAlignment="Center" />
+              <StackPanel Grid.Column="4" VerticalAlignment="Center">
                 <TextBlock Classes="small" Text="{Binding StateText}" TextAlignment="Right" />
                 <TextBlock Classes="muted small" Text="{Binding NodesText}" TextAlignment="Right" />
               </StackPanel>
-              <StackPanel Grid.Column="4" Classes="rowactions" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+              <StackPanel Grid.Column="5" Classes="rowactions" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
                 <Button Classes="iconbtn" ToolTip.Tip="{Binding ToggleText}"
                         Command="{Binding $parent[UserControl].((clu:ClustersViewModel)DataContext).ToggleRowCommand}" CommandParameter="{Binding}">
                   <Panel>
@@ -63,7 +73,23 @@
                 </Button>
               </StackPanel>
             </Grid>
-          </DataTemplate>
+            <ItemsControl IsVisible="{Binding #Unfold.IsChecked}" ItemsSource="{Binding Converter={StaticResource ClusterNodes}}" Margin="56,4,0,4">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="clu:NodeRow">
+                  <Grid ColumnDefinitions="*,120,90,160,Auto" Margin="0,2">
+                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Classes="muted small" Text="{Binding Role}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="2" Classes="muted small" Text="{Binding State}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="3" Classes="muted small mono" Text="{Binding Container.UsageText, FallbackValue=''}" TextAlignment="Right" VerticalAlignment="Center" />
+                    <Button Grid.Column="4" Classes="iconbtn" ToolTip.Tip="Its container: logs, terminal, files" Margin="8,0,0,0"
+                            Command="{Binding $parent[UserControl].((clu:ClustersViewModel)DataContext).OpenNodeCommand}" CommandParameter="{Binding}">
+                      <PathIcon Data="{StaticResource IconOpenExternal}" />
+                    </Button>
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            </StackPanel>          </DataTemplate>
         </ListBox.ItemTemplate>
       </ListBox>
     </DockPanel>
