@@ -102,18 +102,12 @@ static partial class UserSetup
     public static string ResumeCommand(bool dashboard, string? assets) =>
         $"\"{Paths.DockyardCliExe}\" setup --resume{(dashboard ? " --open-dashboard" : "")}{(assets is null ? "" : $" --assets {Shell.Quote(assets)}")}";
 
-    public static string? InstallationType()
-    {
-        using var version = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
-        return version?.GetValue("InstallationType") as string;
-    }
-
     static void SetMirroredNetworking(Action<string> log)
     {
         if (Environment.OSVersion.Version.Build < MirroredNetworkingBuild) return;
         // Seen on Windows Server 2025: in mirrored mode WSL comes up with no network interfaces, and 127.0.0.1:2375 no longer
         // reaches the engine from Windows.
-        if (!Hosts.WindowsHost.IsClientSku(InstallationType())) return;
+        if (!Hosts.WindowsHost.IsClientSku(Hosts.OsInfo.InstallationType())) return;
         var existing = File.Exists(Paths.WslConfigFile) ? File.ReadAllText(Paths.WslConfigFile) : null;
         if (WslConfig.WithMirroredNetworking(existing) is not { } updated) return;
         File.WriteAllText(Paths.WslConfigFile, updated);

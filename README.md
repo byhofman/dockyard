@@ -85,6 +85,21 @@ curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install.sh |
 | `--silent --uninstall` | Remove Dockyard. Images and containers stay. |
 | `--silent --uninstall --remove-data` | Remove Dockyard with its images and containers. |
 
+### Engine only
+
+The engine, the docker CLI and the Dockyard CLI, with no tray and no dashboard. On Windows Server the Linux engine is not part of a new install, so there is no WSL either; `--with linux-engine` adds it.
+
+```pwsh
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/byhofman/dockyard/main/install.ps1))) setup --silent --without tray --without dashboard
+```
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install-mac.sh | sh -s -- setup --silent --without tray --without dashboard
+curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install.sh | sh -s -- setup --silent --without tray --without dashboard
+```
+
+The first sh line is for macOS, the second for Linux.
+
 Without these, a new install gets everything and an existing install keeps what it has.
 
 The exit code is `0` when done, `1` on failure with the reason on stderr, `2` for wrong arguments, and `3010` when Windows has to restart to finish. A silent install still needs administrator rights at some point: on Windows run it elevated to skip the prompt, on Linux run it as root or with passwordless sudo. On macOS it shows no prompt at all: without passwordless sudo it leaves out the `docker` entry on the PATH and Rosetta, says so, and opening the Toolbox later adds them.

@@ -271,8 +271,9 @@ public sealed partial class DockyardSetup : IDisposable
 
         var removedBefore = settings.RemovedComponents.ToList();
         var removed = ComponentRules.Removed(Catalog, removedBefore, with, without);
-        if (!host.IsInstalled && !with.Contains(TrayFlag) && Catalog.Any(c => c.Id == ComponentRules.TrayId && (!c.Default || request.Headless)) && !removed.Contains(ComponentRules.TrayId))
-            removed.Add(ComponentRules.TrayId);
+        if (!host.IsInstalled)
+            foreach (var c in Catalog.Where(c => c.Id != ComponentRules.DashboardId && c.Flag is not null && !with.Contains(c.Flag) && (!c.Default || request.Headless && c.Id == ComponentRules.TrayId)))
+                if (!removed.Contains(c.Id)) removed.Add(c.Id);
         settings.RemovedComponents = removed;
         settings.Source = request.Source ?? settings.Source;
         if (request.KubectlShell) settings.KubectlShell = true;
