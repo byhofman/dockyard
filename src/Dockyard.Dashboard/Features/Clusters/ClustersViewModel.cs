@@ -188,6 +188,13 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
             plans.Add((cluster, forwards, taken));
         }
         var wanted = HasKind && all.Any(c => c.IsRunning && WantsLoadBalancer(c.Name));
+        // dockyard-nfs runs while a running cluster stores on it: removed, stopped or broken, it is started again.
+        var nfsWanted = HasKind && all.Any(c => c.IsRunning && DefinitionFor(c.Name)?.Storage == ClusterStorage.Nfs);
+        if (nfsWanted && !syncing && Session.Containers.Items.All(i => i.Name != NfsStorage.ContainerName || !i.IsRunning))
+        {
+            try { await NfsStorage.EnsureServer(context, line => Shell.Activity.Note(line, ActivityKind.Info)); }
+            catch (InvalidOperationException ex) { Shell.Activity.Note(ex.Message, ActivityKind.Error); }
+        }
         var plan = $"{wanted};" + string.Join(';', plans.Select(p => $"{p.Cluster.Name}:{p.Cluster.IsRunning}:{LoadBalancers.Describe(p.Forwards)}"));
         if (plan == appliedPlan) return;
         syncing = true;
