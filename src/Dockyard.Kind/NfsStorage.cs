@@ -31,7 +31,7 @@ static class NfsStorage
     public static string[] RunArgs(string context) =>
     [
         "--context", context, "run", "-d", "--name", ContainerName, "--restart", "unless-stopped", "--network", "kind",
-        "--privileged", "--label", $"{ServiceLabel}=nfs", "-v", $"{VolumeName}:/export", Image, "sh", "-c", Script,
+        "--privileged", "--label", $"{ServiceLabel}=nfs", "-v", $"{VolumeName}:/export", Image, "sh", "-c", Script.Replace("\r\n", "\n"),
     ];
 
     public static string StorageClass => $$"""
