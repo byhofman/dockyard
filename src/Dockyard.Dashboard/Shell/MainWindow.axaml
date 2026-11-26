@@ -338,8 +338,27 @@
       <Border Classes="dialog" DataContext="{Binding Dialog}" x:DataType="shell:Dialog"
               HorizontalAlignment="Center" VerticalAlignment="Center" Width="{Binding Width}" Margin="16"
               Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="10" Padding="20,18">
-        <StackPanel Spacing="12">
-          <TextBlock Classes="title" Text="{Binding Title}" TextWrapping="Wrap" />
+        <!-- The title and the buttons stay in view; what lies between scrolls when the window is shorter than the dialog. -->
+        <DockPanel LastChildFill="True">
+          <TextBlock DockPanel.Dock="Top" Classes="title" Text="{Binding Title}" TextWrapping="Wrap" Margin="0,0,0,12" />
+          <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,16,0,0">
+            <Button Content="Hide" Command="{Binding HideCommand}" IsVisible="{Binding IsWorking}"
+                    ToolTip.Tip="Close this; it goes on, and says how it ended" />
+            <Button Content="Cancel" Command="{Binding CancelCommand}" IsVisible="{Binding IsIdle}" IsCancel="True" />
+            <Button Classes="primary" Content="{Binding ConfirmText}" Command="{Binding ConfirmCommand}" IsDefault="True" IsVisible="{Binding IsPrimary}" />
+            <Button Classes="dangerfill" Content="{Binding ConfirmText}" Command="{Binding ConfirmCommand}" IsVisible="{Binding IsDanger}" />
+          </StackPanel>
+          <Border DockPanel.Dock="Bottom" Background="{DynamicResource BadBg}" CornerRadius="6" Padding="10,8" Margin="0,12,0,0" IsVisible="{Binding HasError}">
+            <ScrollViewer MaxHeight="160">
+              <SelectableTextBlock Text="{Binding Error}" TextWrapping="Wrap" />
+            </ScrollViewer>
+          </Border>
+          <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="0,12,0,0" IsVisible="{Binding HasProgress}">
+            <ProgressBar IsIndeterminate="{Binding IsIndeterminate}" Value="{Binding Percent}" Maximum="100" />
+            <TextBlock Classes="muted small" Text="{Binding Progress}" TextWrapping="Wrap" />
+          </StackPanel>
+          <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+          <StackPanel Spacing="12" Margin="0,0,12,0">
           <TextBlock Text="{Binding Message}" TextWrapping="Wrap" IsVisible="{Binding HasMessage}" />
           <ItemsControl ItemsSource="{Binding Fields}" IsEnabled="{Binding IsIdle}">
             <ItemsControl.ItemsPanel>
@@ -366,23 +385,9 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
           <CheckBox Content="{Binding OptionText}" IsChecked="{Binding Option}" IsVisible="{Binding HasOption}" IsEnabled="{Binding IsIdle}" />
-          <StackPanel Spacing="6" IsVisible="{Binding HasProgress}">
-            <ProgressBar IsIndeterminate="{Binding IsIndeterminate}" Value="{Binding Percent}" Maximum="100" />
-            <TextBlock Classes="muted small" Text="{Binding Progress}" TextWrapping="Wrap" />
           </StackPanel>
-          <Border Background="{DynamicResource BadBg}" CornerRadius="6" Padding="10,8" IsVisible="{Binding HasError}">
-            <ScrollViewer MaxHeight="160">
-              <SelectableTextBlock Text="{Binding Error}" TextWrapping="Wrap" />
-            </ScrollViewer>
-          </Border>
-          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,4,0,0">
-            <Button Content="Hide" Command="{Binding HideCommand}" IsVisible="{Binding IsWorking}"
-                    ToolTip.Tip="Close this; it goes on, and says how it ended" />
-            <Button Content="Cancel" Command="{Binding CancelCommand}" IsVisible="{Binding IsIdle}" IsCancel="True" />
-            <Button Classes="primary" Content="{Binding ConfirmText}" Command="{Binding ConfirmCommand}" IsDefault="True" IsVisible="{Binding IsPrimary}" />
-            <Button Classes="dangerfill" Content="{Binding ConfirmText}" Command="{Binding ConfirmCommand}" IsVisible="{Binding IsDanger}" />
-          </StackPanel>
-        </StackPanel>
+          </ScrollViewer>
+        </DockPanel>
       </Border>
     </Panel>
   </Panel>
