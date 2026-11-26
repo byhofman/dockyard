@@ -63,7 +63,7 @@ Still open: declared domains outside `dockyard.internal` (step 4's approval per 
 1. **dockyard-host, Windows first.** A `dockyard-host` executable (a component of its own, released as `host/<semver>`)
    takes over the relays, the pipes and the keep-alive from the Toolbox; the Toolbox talks to it over a local pipe to start
    and stop engines. Started at logon by dockyard-host's own entry, not by the Toolbox. Then the same for macOS and Linux.
-2. **`dockyard-dns` and `dockyard-proxy`.** CoreDNS answering `*.dockyard.internal` (`.dockyard.test` is gone in 0.9.0, without an alias), Traefik with a file provider the agent writes from the running containers (name, detected port, HTTPS when on;
+2. **`dockyard-dns` and `dockyard-proxy`.** CoreDNS answering `*.dockyard.internal`, Traefik with a file provider the agent writes from the running containers (name, detected port, HTTPS when on;
    a container's own `traefik.*` labels win). dockyard-host's DNS rule points at `dockyard-dns`, its relay at
    `dockyard-proxy`. Images are published as `byhofman/dockyard-*` on Docker Hub from `services/<semver>` tags when one of
    ours is needed; upstream images pinned by digest otherwise.

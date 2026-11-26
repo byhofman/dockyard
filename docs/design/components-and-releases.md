@@ -42,15 +42,9 @@ shares. So one release with the fixed tag `index` carries a single asset, `compo
   for the index, so two releases never overwrite each other's entry.
 - `requires` names the lowest version of another component this one works with. The Toolbox offers an update only when its
   requirements are met, and says which component to update first otherwise.
-- Without an index (an old release, or a network that blocks the download) the Toolbox falls back to `releases/latest`.
-
-## Staying compatible with what is installed
-
+- Without an index (a network that blocks the download) the Toolbox says so; `--assets` installs without it.
 - The Toolbox's release is the one marked latest; the other components publish with `--latest=false`. So
-  `releases/latest` stays the Toolbox's, which is what installed 0.8.x Toolboxes and the one-liners look at.
-- A 0.8.x Toolbox updates its dashboard from the same release as itself. Until no 0.8.x is left, the Toolbox's release also
-  carries the dashboard assets of the version `components.json` names at that moment.
-- The one-liners take the latest release's Toolbox and accept both `v*` and `toolbox/*` tags.
+  `releases/latest` stays the Toolbox's, which is what the one-liners look at. They accept only `toolbox/*` tags.
 
 ## The CLI
 
@@ -89,5 +83,5 @@ that stopped halfway carries on. Use a `v` tag when everything changed together,
   well. Downloading them on their own there needs the app bundle and the packages split, which is its own piece of work.
   On Windows the CLI and the dashboard come from their own releases.
 - Releasing for the first time: `engine/…` first (the Toolbox's macOS app and its end-to-end tests take the latest
-  engine), then `dashboard/…` and `cli/…`, then `toolbox/…`, which carries the dashboard's assets for 0.8.x.
+  engine), then `dashboard/…` and `cli/…`, then `toolbox/…`.
 - The services move into containers in the next step (proxy, DNS), see `docs/design/dockyard-services.md`.
