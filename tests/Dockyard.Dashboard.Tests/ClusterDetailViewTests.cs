@@ -37,4 +37,20 @@ public sealed class ClusterDetailViewTests
         Assert.Equal(ClusterDetail.LogsTab, tab);
         Assert.IsType<ClusterDetail>(context);
     }
+
+    [Fact]
+    public async Task The_detail_gives_the_copy_buttons_the_clipboard()
+    {
+        var session = HeadlessUnitTestSession.GetOrStartForAssembly(typeof(ClusterDetailViewTests).Assembly);
+        var copy = await session.Dispatch(() =>
+        {
+            var shell = new ShellViewModel();
+            var cluster = new KindCluster("dev", [new KindNode("dev-control-plane", "control-plane", "running")], "v1.33.1", 6443);
+            using var detail = new ClusterDetail(shell.Clusters, cluster, shell.Containers, () => { });
+            _ = new ClusterDetailView { DataContext = detail };
+            return shell.Clusters.CopyText;
+        }, CancellationToken.None);
+
+        Assert.NotNull(copy);
+    }
 }

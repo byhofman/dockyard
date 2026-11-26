@@ -287,6 +287,7 @@ Containers reach your machine as `host.docker.internal`, including services that
 
 ## Known limits
 
+- On Windows some features are the Linux engine's alone, and their settings say "(Linux engine only)": container domains and trusted HTTPS for them, kind clusters with everything under them (add-ons, load balancers, shared and NFS storage), and the build history, which comes from BuildKit. With the `win` context active they are off for Windows containers; switch to `linux` to use them.
 - Firefox keeps its own trust store on macOS and Windows, so it warns about HTTPS on container domains unless its enterprise roots setting is on.
 - Container domains need systemd-resolved on Linux; other setups have no place to route one name space, and the Toolbox says so. Reaching them on macOS may ask once for Local Network access for your browser, since the name points at the VM.
 - A proxy auto-config (PAC) file is not followed: it can choose a different proxy per address, and the engine takes one fixed proxy. Set a fixed proxy in your system's settings if pulls fail behind one.

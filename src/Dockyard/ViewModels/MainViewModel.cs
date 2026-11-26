@@ -238,6 +238,11 @@ sealed class MainViewModel : Observable
         Avalonia.Threading.DispatcherTimer.RunOnce(() => { if (Highlighted == marked) Highlighted = null; }, TimeSpan.FromSeconds(6));
     }
 
+    // On Windows a setting can be the Linux engine's alone; it says so on its label, where it is seen before it is turned on.
+    static string LinuxEngineOnly(string label) => OperatingSystem.IsWindows() ? $"{label} (Linux engine only)" : label;
+    public static string DomainsLabel { get; } = LinuxEngineOnly("Container domains");
+    public static string HttpsLabel { get; } = LinuxEngineOnly("Trusted HTTPS for container domains");
+
     public bool ContainerDomains
     {
         get => settings.ContainerDomains;

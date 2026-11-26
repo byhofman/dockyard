@@ -7,27 +7,48 @@ namespace Dockyard.Dashboard.Tests;
 public sealed class ClusterAddonTests
 {
     [Fact]
-    public void An_addon_goes_in_with_helm_at_its_pinned_version_through_kind_s_own_kubeconfig_and_none_of_the_user_s_repositories()
+    public void An_addon_goes_in_from_its_cached_chart_through_kind_s_own_kubeconfig()
     {
-        var args = ClusterAddons.InstallArgs(ClusterAddons.MetricsServer, "/tmp/kind/config", "dev", "/tmp/kind/helm");
+        var args = ClusterAddons.InstallArgs(ClusterAddons.MetricsServer, "/charts/metrics-server-3.14.0.tgz", "/tmp/kind/config", "dev");
 
         Assert.Equal(
         [
-            "upgrade", "--install", "metrics-server", "metrics-server", "--repo", "https://kubernetes-sigs.github.io/metrics-server/", "--version", "3.14.0",
+            "upgrade", "--install", "metrics-server", "/charts/metrics-server-3.14.0.tgz",
             "--namespace", "kube-system", "--create-namespace", "--kubeconfig", "/tmp/kind/config", "--kube-context", "kind-dev",
-            "--repository-config", Path.Combine("/tmp/kind/helm", "repositories.yaml"), "--repository-cache", Path.Combine("/tmp/kind/helm", "cache"),
             "--set", "args[0]=--kubelet-insecure-tls",
+        ], args);
+        Assert.DoesNotContain("--repo", args);
+    }
+
+    [Fact]
+    public void A_chart_is_pulled_at_its_pinned_version_with_none_of_the_user_s_repositories()
+    {
+        var args = ClusterAddons.PullArgs(ClusterAddons.Traefik, "/into", "/tmp/kind/helm");
+
+        Assert.Equal(
+        [
+            "pull", "traefik", "--repo", "https://traefik.github.io/charts", "--version", "43.0.0", "--destination", "/into",
+            "--repository-config", Path.Combine("/tmp/kind/helm", "repositories.yaml"), "--repository-cache", Path.Combine("/tmp/kind/helm", "cache"),
         ], args);
     }
 
     [Fact]
-    public void Traefik_gets_its_own_namespace_and_its_chart_s_defaults()
+    public async Task A_cached_chart_is_used_without_running_helm()
     {
-        var args = ClusterAddons.InstallArgs(ClusterAddons.Traefik, "config", "dev", "helm");
+        var cache = Directory.CreateTempSubdirectory("dockyard-charts-test-").FullName;
+        try
+        {
+            var file = ClusterAddons.ChartFile(ClusterAddons.Traefik, cache);
+            await File.WriteAllTextAsync(file, "chart");
+            var lines = new List<string>();
 
-        Assert.Equal(["upgrade", "--install", "traefik", "traefik", "--repo", "https://traefik.github.io/charts"], args[..6]);
-        Assert.Contains("traefik", args.SkipWhile(a => a != "--namespace").Skip(1).Take(1));
-        Assert.DoesNotContain("--set", args);
+            var found = await ClusterAddons.Fetch("/no/such/helm", ClusterAddons.Traefik, cache, lines.Add, cache);
+
+            Assert.Equal(file, found);
+            Assert.Empty(lines);
+            Assert.Equal(Path.Combine(cache, "traefik-43.0.0.tgz"), file);
+        }
+        finally { Directory.Delete(cache, recursive: true); }
     }
 
     [Fact]

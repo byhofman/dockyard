@@ -2,6 +2,18 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-26: The dashboard stays up on an error nothing caught, and writes it down
+
+DOK-52 ("frequent crashes on Windows", the dashboard only). Every button ran through an `async void` with nothing around it, and the dashboard had no handler for unhandled errors, so one escaping exception ended the process and left no trace. Commands now catch what they throw; an error on the UI thread that nothing caught is written to `%LOCALAPPDATA%\Dockyard\logs\dashboard-errors.log` (`~/.local/share` on Linux, `~/Library/Application Support` on macOS) and shown as an error toast, and the dashboard keeps running. That is safe here because the dashboard only reads from and asks the engine: there is no half-written state that ending the process would protect. Errors on other threads cannot be stopped from ending it, but they are written down first. The pipe thread that receives "show" and "quit" caught only `IOException`; on Windows a pipe name another process still holds throws `UnauthorizedAccessException`, which ended the dashboard, so it now waits and tries again on any failure. Without a crash report from the owner's machine this fixes the classes of crash the code had, not one confirmed crash: the log is there for the next one.
+
+## 2026-11-26: Helm charts are pulled once into a lasting cache and installed from the file
+
+DOK-54. Each add-on ran `helm upgrade --install --repo` against a temporary repository cache, so every create or edit downloaded each repository's whole `index.yaml` again (several megabytes for some), one chart after another, and helm prints nothing until it is done. Charts are pinned by version, so a downloaded chart never changes: `helm pull` puts it in `<app data>/Dockyard/charts/<chart>-<version>.tgz`, pulled into a folder of its own and moved in whole so a CLI and a dashboard fetching at once never see half a file, and the install reads the file. A create downloads every missing chart at once while `kind create` makes the nodes; a failed download there is retried by the install, which then says why. Each install's line says which of how many it is.
+
+## 2026-11-26: A cluster's logs read each node's TTY setting
+
+DOK-51. kind starts its nodes with a TTY, so Docker sends their logs as one raw stream rather than multiplexed by stream. The cluster's Logs tab and its side-by-side button assumed multiplexed, so nothing parsed and the error was swallowed. Each node is inspected first, as a single container's logs and Compose already did, and a log reader that fails now says so in the pane instead of staying empty.
+
 ## 2026-11-24: On macOS the trust setting goes where a person can approve it
 
 DOK-20, owner 2026-11-24 ("you can make it fit right?"). As the 2026-11-13 entry found, changing a trust setting waits for an approval dialog, even as root and without a screen. So `UntrustCa` now knows whether it runs silent. From the window and the wizard, the administrator's setting (`security remove-trusted-cert -d`) and the user's (`remove-trusted-cert`) go before the certificate, each only when `dump-trust-settings` lists the CA, so nothing asks where there is nothing to remove, and each within two minutes. If one stays because nobody approved, nothing else is removed and the error says it can be tried again. A silent uninstall or `--trust-https` replacement leaves the setting, as before, and its log says so: it names a certificate and key that are gone. The silent macOS end-to-end run covers that path; the asking path is covered by unit tests, since it needs a person.

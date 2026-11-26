@@ -13,13 +13,17 @@ sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
         try
         {
             var own = Path.Combine(scratch.FullName, "config");
+            // The charts download while kind makes the nodes, which takes a minute or more anyway.
+            var charts = (addons ?? []).Concat(storage == ClusterStorage.Nfs ? [NfsStorage.Driver] : []).ToList();
+            var prefetch = helm is not null && charts.Count > 0 ? ClusterAddons.Prefetch(helm, charts, Path.Combine(scratch.FullName, "helm"), onLine) : Task.CompletedTask;
             string? config = null;
             if (definition is not null || workers > 0 || storage == ClusterStorage.HostFolder)
             {
                 config = Path.Combine(scratch.FullName, "cluster.yaml");
                 await File.WriteAllTextAsync(config, definition ?? KindCli.Config(workers, storage == ClusterStorage.HostFolder));
             }
-            Check(await KindCli.Run(kind, dockerContext, KindCli.Create(name, own, config), onLine));
+            try { Check(await KindCli.Run(kind, dockerContext, KindCli.Create(name, own, config), onLine)); }
+            finally { await prefetch; }
             if (storage == ClusterStorage.HostFolder) await SharedStorage.Install(dockerContext.Length > 0 ? dockerContext : "default", name, onLine);
             if (storage == ClusterStorage.Nfs) await NfsStorage.Install(dockerContext.Length > 0 ? dockerContext : "default", name, own, helm, Path.Combine(scratch.FullName, "helm"), onLine);
             var text = await File.ReadAllTextAsync(own);
@@ -29,8 +33,9 @@ sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
                 try { await ExternalDns.Install(dockerContext.Length > 0 ? dockerContext : "default", name, onLine); }
                 catch (InvalidOperationException e) { onLine?.Invoke($"{e.Message}. The cluster works; its Ingress hosts under {name}.{ExternalDns.Zone} still resolve."); }
             }
-            foreach (var addon in addons ?? [])
-                await ClusterAddons.Install(helm ?? throw new InvalidOperationException("Helm is not installed."), addon, own, name, Path.Combine(scratch.FullName, "helm"), onLine);
+            var list = addons ?? [];
+            for (var i = 0; i < list.Count; i++)
+                await ClusterAddons.Install(helm ?? throw new InvalidOperationException("Helm is not installed."), list[i], own, name, Path.Combine(scratch.FullName, "helm"), onLine, $"{i + 1} of {list.Count}");
             if (addons?.Contains(VictoriaMetrics.Addon) == true) await VictoriaMetrics.Alias(dockerContext.Length > 0 ? dockerContext : "default", name, onLine);
             if (addons?.Contains(Headlamp.Addon) == true)
             {
@@ -58,6 +63,8 @@ sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
             var own = Path.Combine(scratch.FullName, "config");
             await File.WriteAllTextAsync(own, await Kubeconfig(name));
             var context = dockerContext.Length > 0 ? dockerContext : "default";
+            var added = ClusterAddons.All.Where(a => wanted.Contains(a) && !current.Contains(a)).ToList();
+            await ClusterAddons.Prefetch(helm, added.Concat(nfs == true ? [NfsStorage.Driver] : []), Path.Combine(scratch.FullName, "helm"), onLine);
             foreach (var addon in ClusterAddons.All.Reverse().Where(a => current.Contains(a) && !wanted.Contains(a)))
                 await ClusterAddons.Uninstall(helm, addon, own, name, onLine);
             // NFS is a driver and a storage class, so it comes and goes on a running cluster; claims on it stay, and the
@@ -70,9 +77,8 @@ sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
                 await SharedStorage.KindDefault(context, name, isDefault: true);
             }
             if (nfs == true) await NfsStorage.Install(context, name, own, helm, Path.Combine(scratch.FullName, "helm"), onLine);
-            var added = ClusterAddons.All.Where(a => wanted.Contains(a) && !current.Contains(a)).ToList();
-            foreach (var addon in added)
-                await ClusterAddons.Install(helm, addon, own, name, Path.Combine(scratch.FullName, "helm"), onLine);
+            for (var i = 0; i < added.Count; i++)
+                await ClusterAddons.Install(helm, added[i], own, name, Path.Combine(scratch.FullName, "helm"), onLine, $"{i + 1} of {added.Count}");
             if (added.Contains(VictoriaMetrics.Addon)) await VictoriaMetrics.Alias(context, name, onLine);
             if (added.Contains(CertManager.Addon) && clusterCa is not null)
                 await CertManager.AddIssuer(context, name, await clusterCa(name), onLine);

@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Dockyard.Dashboard.Features.Containers;
 using Dockyard.Dashboard.Shell;
+using Dockyard.Engine;
 using Dockyard.Kind;
 
 namespace Dockyard.Dashboard.Features.Clusters;
@@ -23,10 +24,11 @@ sealed class ClusterDetail : Observable, IDisposable
         this.owner = owner;
         this.close = close;
         clusters.PropertyChanged += Closed;
-        OpenLogsCommand = new Command(() =>
+        OpenLogsCommand = new Command(async () =>
         {
-            owner.OpenLogsSideBySide(cluster.Nodes.Select(n => (n.Name, new LogSource(n.Name, false, null))).ToList());
-            return Task.CompletedTask;
+            if (owner.Session.Client is not { } client) return;
+            var sources = await Sources(client);
+            owner.OpenLogsSideBySide(sources.Select(s => (s.Id, s with { Prefix = null })).ToList());
         });
     }
 
@@ -41,12 +43,34 @@ sealed class ClusterDetail : Observable, IDisposable
         set
         {
             if (!Set(ref selectedTab, value)) return;
-            if (value == LogsTab && owner.Session.Client is { } client) Logs.Start(client, Sources());
+            if (value == LogsTab) _ = StartLogs();
             else Logs.Dispose();
         }
     }
 
-    List<LogSource> Sources() => cluster.Nodes.Select(n => new LogSource(n.Name, false, n.Name.StartsWith(cluster.Name + "-") ? n.Name[(cluster.Name.Length + 1)..] : n.Name)).ToList();
+    async Task StartLogs()
+    {
+        if (owner.Session.Client is not { } client) return;
+        var sources = await Sources(client);
+        if (SelectedTab == LogsTab) Logs.Start(client, sources);
+    }
+
+    // kind starts its nodes with a TTY, so their log stream is raw rather than multiplexed; read as multiplexed it
+    // shows nothing. Each node says which it is.
+    async Task<List<LogSource>> Sources(DockerClient client)
+    {
+        var sources = new List<LogSource>();
+        foreach (var node in cluster.Nodes)
+        {
+            bool tty;
+            try { tty = (await client.InspectContainerAsync(node.Name)).Config.Tty; }
+            catch (Exception ex) when (ex is DockerException or EngineUnavailableException or IOException) { tty = true; }
+            sources.Add(new LogSource(node.Name, tty, PrefixOf(cluster.Name, node.Name)));
+        }
+        return sources;
+    }
+
+    public static string PrefixOf(string cluster, string node) => node.StartsWith(cluster + "-") ? node[(cluster.Length + 1)..] : node;
 
     void Closed(object? sender, PropertyChangedEventArgs e)
     {

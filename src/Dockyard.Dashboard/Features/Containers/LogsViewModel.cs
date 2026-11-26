@@ -65,8 +65,11 @@ sealed class LogsViewModel : Observable, IDisposable
                 lock (incoming) incoming.Add(entry);
             }
         }
-        catch (Exception)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+        catch (Exception ex)
         {
+            var where = source.Prefix is null ? "" : $"{source.Prefix} | ";
+            lock (incoming) incoming.Add(new LogLine(LogStream.Stderr, null, $"{where}Dockyard stopped reading these logs: {ex.Message}"));
         }
     }
 
