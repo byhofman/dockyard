@@ -248,11 +248,6 @@ install_agent() {
   install -d /usr/local/lib/dockyard
   install -m 0755 "$agent" /usr/local/lib/dockyard/dockyard-agent
   has_systemd || return 0
-  # The unit was called dockyard-agent before 0.9.0.
-  if [ -f /etc/systemd/system/dockyard-agent.service ]; then
-    systemctl disable --now dockyard-agent.service >/dev/null 2>&1 || true
-    rm -f /etc/systemd/system/dockyard-agent.service
-  fi
   cat > /etc/systemd/system/dockyard-host.service <<'EOF'
 [Unit]
 Description=dockyard-host: host.docker.internal, and the DNS and proxy containers for container names
@@ -445,9 +440,9 @@ case "$action" in
   install) install_packages; configure; grant_socket_access; install_tray_host; install_libsecret; install_agent; route_domains; keep_dns; apply_daemon_json ;;
   uninstall)
     untrust_ca
-    if has_systemd; then systemctl disable --now dockyard-host.service dockyard-agent.service >/dev/null 2>&1 || true; fi
+    if has_systemd; then systemctl disable --now dockyard-host.service >/dev/null 2>&1 || true; fi
     remove_network
-    rm -f /etc/systemd/system/dockyard-host.service /etc/systemd/system/dockyard-agent.service
+    rm -f /etc/systemd/system/dockyard-host.service
     if [ -f /etc/systemd/resolved.conf.d/dockyard.conf ]; then
       rm -f /etc/systemd/resolved.conf.d/dockyard.conf
       systemctl restart systemd-resolved 2>/dev/null || true

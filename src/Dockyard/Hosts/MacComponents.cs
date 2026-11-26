@@ -19,13 +19,8 @@ sealed class MacComponents(ICommandRunner runner)
         _ => null,
     };
 
-    // Asking the old binary would open its window, since it has no --version: it came with the app's version.
-    async Task<Version?> InstalledDashboardVersion()
-    {
-        var current = Path.Combine(MacLayout.AppBase, MacLayout.DashboardNames[0]);
-        if (File.Exists(current)) return Updates.ParseVersion((await runner.Run(current, "--version")).Output);
-        return HasDashboard ? InstalledAppVersion() : null;
-    }
+    async Task<Version?> InstalledDashboardVersion() =>
+        HasDashboard ? Updates.ParseVersion((await runner.Run(Path.Combine(MacLayout.AppBase, MacLayout.DashboardName), "--version")).Output) : null;
 
     // The wizard runs from a download and can be newer than what is installed.
     static Version? InstalledAppVersion()
@@ -59,7 +54,7 @@ sealed class MacComponents(ICommandRunner runner)
                 await runner.Check("/usr/bin/ditto", "-x", "-k", zip, downloaded);
                 source = Path.Combine(downloaded, "Dockyard.app", "Contents", "MacOS");
             }
-            await runner.Run("/usr/bin/pkill", "-f", Path.Combine(MacLayout.AppBase, "Dockyard[. ]Dashboard"));
+            await runner.Run("/usr/bin/pkill", "-f", Path.Combine(MacLayout.AppBase, MacLayout.DashboardName));
             foreach (var old in MacLayout.DashboardFiles(MacLayout.AppBase)) File.Delete(old);
             foreach (var file in MacLayout.DashboardFiles(source))
             {
@@ -79,7 +74,7 @@ sealed class MacComponents(ICommandRunner runner)
 
     public async Task RemoveDashboard(Action<string> log)
     {
-        await runner.Run("/usr/bin/pkill", "-f", Path.Combine(MacLayout.AppBase, "Dockyard[. ]Dashboard"));
+        await runner.Run("/usr/bin/pkill", "-f", Path.Combine(MacLayout.AppBase, MacLayout.DashboardName));
         foreach (var file in MacLayout.DashboardFiles(MacLayout.AppBase)) File.Delete(file);
         await SealBundle();
         log("Removed the dashboard");

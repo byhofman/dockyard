@@ -69,12 +69,9 @@ if [ "$rc" -eq 2 ]; then ok "exit 2"; else fail "--typo exits $rc"; fi
 check "and nothing was installed" missing "$app"
 
 echo "== first install, no dashboard"
-# Homebrew installs for the whole Mac, outside this throwaway home, so Dockyard keeps its own copies here. As a setting
-# and not --no-package-manager: the one-liner may run a release from before it.
+# Homebrew installs for the whole Mac, outside this throwaway home, so Dockyard keeps its own copies here.
 unset XDG_CONFIG_HOME
-mkdir -p "$home/.config/Dockyard"
-printf '{"UsePackageManager": false}\n' > "$home/.config/Dockyard/settings.json"
-if [ -n "${ONELINER:-}" ]; then run --silent --no-dashboard --no-start; else run --silent --no-dashboard --no-start --no-package-manager; fi
+run --silent --no-dashboard --no-start --no-package-manager
 check "app in place" test -x "$macos/Dockyard"
 check "the VM helper too" test -x "$macos/dockyard-host"
 check "no dashboard" missing "$macos/Dockyard Dashboard"
