@@ -6,4 +6,6 @@ public sealed record ComponentRow(string Id, string Title, string Group, string?
 {
     // Removing it can take images and containers along, as for an engine.
     public bool HasData { get; init; }
+    // Picked when a setup screen opens: what a new install has without being asked, or on an existing install what is there.
+    public bool Default { get; init; }
 }

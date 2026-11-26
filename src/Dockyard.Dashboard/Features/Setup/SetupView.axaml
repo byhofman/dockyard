@@ -83,7 +83,7 @@
                   <DataTemplate DataType="setup:SettingItem">
                     <dctl:SettingRow Classes="cardrow" Title="{Binding Definition.Title}" Description="{Binding Definition.Description}"
                                      IsLinuxEngineOnly="{Binding ShowsLinuxEngineOnly}" NeedsAdmin="{Binding Definition.NeedsAdmin}">
-                      <dctl:SettingEditor Kind="{Binding Definition.Kind}" Choices="{Binding Definition.Choices}" Value="{Binding Value}"
+                      <dctl:SettingEditor Kind="{Binding Definition.Kind}" Choices="{Binding Definition.Choices}" ChoiceTitles="{Binding Definition.ChoiceTitles}" Value="{Binding Value}"
                                           Label="{Binding Definition.Title}" />
                     </dctl:SettingRow>
                   </DataTemplate>

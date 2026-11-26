@@ -90,12 +90,15 @@ sealed class ToolsViewModel : Observable
             p => source.Update(items.Select(i => i.Row.Id).ToList(), p));
     }
 
-    Task ChangeSource(SettingItem item, string value) => Act([], $"Moving the tools to {value}", "", async p =>
+    Task ChangeSource(SettingItem item, string value) => Act([], $"Moving the tools to {Shown(item.Definition, value)}", "", async p =>
     {
-        item.Status = $"Moving docker, kind, kubectl and helm to {value}…";
+        item.Status = $"Moving docker, kind, kubectl and helm to {Shown(item.Definition, value)}…";
         try { await source.SetSetting(item.Definition.Key, value, p); }
         finally { item.Status = null; }
     });
+
+    static string Shown(SettingDefinition definition, string value) =>
+        definition is { Choices: { } choices, ChoiceTitles: { } titles } && choices.ToList().IndexOf(value) is var at and >= 0 ? titles[at] : value;
 
     Task AskRemove(ComponentItem item)
     {

@@ -26,7 +26,8 @@ sealed class FakeHost : IEngineHost
     public bool HasDashboard => Dashboard;
     // The certificate authority goes in a folder of the test's own, never the user's.
     public string CaDirectory { get; } = Path.Combine(Path.GetTempPath(), "dockyard-tests-ca-" + Guid.NewGuid().ToString("N"));
-    public Task<bool> TrustCa(Action<string> log, string certificateFile, bool silent) => Task.FromResult(true);
+    public Exception? TrustFailure { get; set; }
+    public Task<bool> TrustCa(Action<string> log, string certificateFile, bool silent) => TrustFailure is { } failure ? Task.FromException<bool>(failure) : Task.FromResult(true);
 
     public Func<string, Task<bool>>? Running { get; set; }
     public Task<bool> IsRunning(string engine) => Running?.Invoke(engine) ?? Task.FromResult(false);

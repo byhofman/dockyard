@@ -168,7 +168,7 @@ install_packages() {
     pacman) pacman -Sy --noconfirm --needed docker docker-buildx docker-compose ;;
     zypper) zypper --non-interactive install docker docker-buildx docker-compose ;;
     *)
-      echo "Dockyard does not know how to install Docker on '${ID:-unknown}'. Install it with your distribution's package manager and run the wizard again." >&2
+      echo "Dockyard does not know how to install Docker on '${ID:-unknown}'. Install it with your distribution's package manager and run dockyard setup again." >&2
       exit 4
       ;;
   esac

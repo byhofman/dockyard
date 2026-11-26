@@ -5,7 +5,7 @@ namespace Dockyard.Cli.Tests;
 public sealed class SettingsCommandTests
 {
     [Fact]
-    public void Settings_ls_lists_every_definition_and_marks_Linux_engine_only()
+    public void Settings_ls_lists_every_definition_and_marks_Linux_engine_only_where_there_is_another_engine()
     {
         using var h = new CliHarness();
 
@@ -13,7 +13,7 @@ public sealed class SettingsCommandTests
 
         foreach (var definition in h.Setup.SettingDefinitions) Assert.Contains(definition.Key, h.Output);
         var lines = h.Output.Split('\n');
-        Assert.Contains("Linux engine only", Assert.Single(lines, l => l.Contains(SettingDefinitions.ContainerDomains)));
+        Assert.Equal(OperatingSystem.IsWindows(), Assert.Single(lines, l => l.Contains(SettingDefinitions.ContainerDomains)).Contains("Linux engine only"));
         Assert.DoesNotContain("Linux engine only", Assert.Single(lines, l => l.Contains(SettingDefinitions.StartEngineAtLogon)));
     }
 

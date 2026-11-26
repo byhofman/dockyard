@@ -66,6 +66,11 @@ public sealed class ControlsTests
             Assert.Equal("Homebrew", ((ComboBox)choice.Content!).SelectedItem);
             ((ComboBox)choice.Content!).SelectedItem = "Dockyard";
             Assert.Equal("Dockyard", choice.Value);
+
+            var titled = Shown(new SettingEditor { Kind = SettingKind.Choice, Choices = ["package-manager", "dockyard"], ChoiceTitles = ["Homebrew", "Dockyard"], Value = "package-manager" });
+            Assert.Equal("Homebrew", ((ComboBox)titled.Content!).SelectedItem);
+            ((ComboBox)titled.Content!).SelectedItem = "Dockyard";
+            Assert.Equal("dockyard", titled.Value);
         }, TestContext.Current.CancellationToken);
     }
 }

@@ -55,7 +55,7 @@ sealed class WindowsHost : IEngineHost
         Tools.Kubectl.Component,
         Tools.Helm.Component,
         new(nameof(Component.Tray), Updates.Title(Component.Tray), Flag: "tray", Note: "Optional. Keeps the engines in the notification area and starts at logon.", Default: desktop),
-        new(nameof(Component.Dashboard), Updates.Title(Component.Dashboard), Flag: "dashboard", Note: "Optional. Opens from the tray.", Default: desktop),
+        new(nameof(Component.Dashboard), Updates.Title(Component.Dashboard), Flag: "dashboard", Note: "Optional. The only Dockyard window: containers, clusters, and Setup, Tools and Settings.", Default: desktop),
     ];
 
     public bool IsInstalled => IsInstalledWhere(File.Exists);
@@ -295,7 +295,7 @@ sealed class WindowsHost : IEngineHost
 
     public string DoneMessage(bool reboot) => reboot
         ? "Restart Windows to finish. Dockyard carries on by itself after the restart."
-        : "Done. Dockyard runs in the tray.";
+        : File.Exists(Paths.AppExe) ? "Done. Dockyard runs in the tray." : "Done. Dockyard and the docker command are ready.";
 
     public async Task Uninstall(Action<string> log, bool removeData, bool silent)
     {
@@ -315,7 +315,7 @@ sealed class WindowsHost : IEngineHost
         }
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
         {
-            log($"The Linux engine was left as it is ({ex.Message}); Updates in the tray window can try again");
+            log($"The Linux engine was left as it is ({ex.Message}); dockyard update, or Update in the dashboard's Tools, tries again");
         }
     }
 

@@ -177,4 +177,27 @@ public sealed class WindowsHostTests
     [InlineData(null, false)]
     public void Server_and_Server_Core_are_servers(string? installationType, bool server) =>
         Assert.Equal(server, OsInfo.IsServerSku(installationType));
+
+    [Fact]
+    public void Testcontainers_is_pinned_to_the_Linux_engine_only_where_there_is_one()
+    {
+        var dir = Directory.CreateTempSubdirectory("dockyard-tc-").FullName;
+        try
+        {
+            var file = Path.Combine(dir, ".testcontainers.properties");
+            UserSetup.PinTestcontainers(_ => { }, file, withLinux: false);
+            Assert.False(File.Exists(file));
+
+            UserSetup.PinTestcontainers(_ => { }, file, withLinux: true);
+            Assert.Equal($"docker.host={Paths.LinuxHost}\n", File.ReadAllText(file));
+
+            UserSetup.PinTestcontainers(_ => { }, file, withLinux: false);
+            Assert.False(File.Exists(file));
+
+            File.WriteAllText(file, "docker.host=tcp://elsewhere:2375\n");
+            UserSetup.PinTestcontainers(_ => { }, file, withLinux: false);
+            Assert.True(File.Exists(file));
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
 }

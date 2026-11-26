@@ -21,12 +21,7 @@ public sealed record SetupRequest(IReadOnlyList<string> With, IReadOnlyList<stri
     public static SetupRequest FromSettings(IReadOnlyList<string> with, IReadOnlyList<string> without, IReadOnlyDictionary<string, string> values) => new(
         with,
         without,
-        values.GetValueOrDefault(SettingDefinitions.Source) switch
-        {
-            null => null,
-            SettingDefinitions.DockyardSource => ToolSource.Dockyard,
-            _ => ToolSource.PackageManager,
-        },
+        ToolSourceArgument.Parse(values.GetValueOrDefault(SettingDefinitions.Source)),
         TrustHttps: values.GetValueOrDefault(SettingDefinitions.TrustedHttps) == SettingDefinitions.On,
         KubectlShell: values.GetValueOrDefault(SettingDefinitions.KubectlShell) == SettingDefinitions.On,
         Silent: false,

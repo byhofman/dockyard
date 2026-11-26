@@ -27,8 +27,7 @@ static partial class UserSetup
         SetMirroredNetworking(log);
         if (File.Exists(Paths.CredentialHelper)) await CredentialStore.Adopt(log, "wincred", Paths.CredentialHelper, Paths.CredentialStoreMarker);
 
-        File.WriteAllText(Path.Combine(Paths.UserProfile, ".testcontainers.properties"), $"docker.host={Paths.LinuxHost}\n");
-        log("Testcontainers pinned to the Linux engine");
+        PinTestcontainers(log, TestcontainersFile, withLinux);
 
         var tray = without?.Contains(nameof(Component.Tray)) != true;
         using (var key = Registry.CurrentUser.CreateSubKey(RunKey))
@@ -37,6 +36,20 @@ static partial class UserSetup
             if (!tray) key.DeleteValue(Paths.AppName, throwOnMissingValue: false);
         }
         if (tray) log($"{Paths.AppName} autostarts at logon");
+    }
+
+    static string TestcontainersFile => Path.Combine(Paths.UserProfile, ".testcontainers.properties");
+    static string TestcontainersPin => $"docker.host={Paths.LinuxHost}";
+
+    // Without the Linux engine a pin of Dockyard's own goes, and one the user wrote stays.
+    internal static void PinTestcontainers(Action<string> log, string file, bool withLinux)
+    {
+        if (withLinux)
+        {
+            File.WriteAllText(file, TestcontainersPin + "\n");
+            log("Testcontainers pinned to the Linux engine");
+        }
+        else if (File.Exists(file) && File.ReadAllText(file).Trim() == TestcontainersPin) File.Delete(file);
     }
 
     // The tray's entry exists only with the tray; the host keeps the Linux engine running whether it is there or not.
@@ -91,7 +104,7 @@ static partial class UserSetup
         return HostProxySettings.WithoutPorts(proxy, unreachable);
     }
 
-    // The CLI finishes the setup after the restart, and opens the dashboard when that was chosen.
+    // The CLI finishes the setup after the restart, and opens the dashboard at Tools when that was chosen.
     public static void ResumeAfterReboot(bool dashboard, Action<string> log)
     {
         using var key = Registry.CurrentUser.CreateSubKey(RunOnceKey);
@@ -132,8 +145,7 @@ static partial class UserSetup
             await Shell.Run(Paths.DockerCli, "context", "rm", "-f", "linux", "win");
             log("Removed docker contexts");
         }
-        var tc = Path.Combine(Paths.UserProfile, ".testcontainers.properties");
-        if (File.Exists(tc) && File.ReadAllText(tc).Trim() is var line && line == $"docker.host={Paths.LinuxHost}") File.Delete(tc);
+        PinTestcontainers(log, TestcontainersFile, withLinux: false);
 
         if (File.Exists(Paths.WslConfigFile) && WslConfig.WithoutDockyardLine(File.ReadAllText(Paths.WslConfigFile)) is { } restored)
             File.WriteAllText(Paths.WslConfigFile, restored);

@@ -37,4 +37,29 @@ public sealed class ElevationTests
         var refused = await Assert.ThrowsAsync<InvalidOperationException>(() => setup.Add("compose", new ProgressLines()));
         Assert.Equal("Administrator approval was declined", refused.Message);
     }
+
+    [Fact]
+    public async Task Trusting_the_certificate_throws_when_its_approval_is_declined_and_says_false_for_any_other_failure()
+    {
+        var declined = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            WindowsSetup.Trusting(() => throw Elevation.Explain(new Win32Exception(1223, "The operation was canceled by the user"))));
+        Assert.Equal("Administrator approval was declined", declined.Message);
+
+        Assert.False(await WindowsSetup.Trusting(() => throw new System.Security.Cryptography.CryptographicException("bad")));
+        Assert.True(await WindowsSetup.Trusting(() => Task.CompletedTask));
+    }
+
+    [Fact]
+    public async Task A_declined_trust_leaves_trusted_HTTPS_off_and_says_why()
+    {
+        var host = new FakeHost { Installed = true, TrustFailure = Elevation.Explain(new Win32Exception(1223, "The operation was canceled by the user")) };
+        using var settings = new TempSettings();
+        var setup = Facade.For(host, settings);
+
+        var refused = await Assert.ThrowsAsync<InvalidOperationException>(() => setup.SetSetting(SettingDefinitions.TrustedHttps, SettingDefinitions.On, new ProgressLines()));
+
+        Assert.Equal("Administrator approval was declined", refused.Message);
+        Assert.Equal(SettingDefinitions.Off, setup.GetSetting(SettingDefinitions.TrustedHttps));
+        Directory.Delete(host.CaDirectory, recursive: true);
+    }
 }

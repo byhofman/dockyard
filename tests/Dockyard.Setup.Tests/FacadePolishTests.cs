@@ -90,7 +90,7 @@ public sealed class FacadePolishTests : IDisposable
     {
         var values = new Dictionary<string, string>
         {
-            [SettingDefinitions.Source] = SettingDefinitions.DockyardSource,
+            [SettingDefinitions.Source] = "dockyard",
             [SettingDefinitions.TrustedHttps] = SettingDefinitions.On,
             [SettingDefinitions.KubectlShell] = SettingDefinitions.Off,
         };
@@ -103,7 +103,7 @@ public sealed class FacadePolishTests : IDisposable
         Assert.False(request.Silent);
         Assert.False(request.Resume);
 
-        values[SettingDefinitions.Source] = "Homebrew";
+        values[SettingDefinitions.Source] = "package-manager";
         values[SettingDefinitions.KubectlShell] = SettingDefinitions.On;
         var other = SetupRequest.FromSettings([], [], values);
         Assert.Equal(ToolSource.PackageManager, other.Source);

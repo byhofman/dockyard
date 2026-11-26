@@ -35,7 +35,7 @@
       <Border Classes="card" Padding="16,10">
         <dctl:SettingRow DataContext="{Binding SourceSetting}" x:DataType="setup:SettingItem" Title="{Binding Definition.Title}"
                          Description="{Binding Definition.Description}" Status="{Binding Status}" Error="{Binding Error}">
-          <dctl:SettingEditor Kind="{Binding Definition.Kind}" Choices="{Binding Definition.Choices}" Value="{Binding Value}"
+          <dctl:SettingEditor Kind="{Binding Definition.Kind}" Choices="{Binding Definition.Choices}" ChoiceTitles="{Binding Definition.ChoiceTitles}" Value="{Binding Value}"
                               Label="{Binding Definition.Title}" IsEnabled="{Binding !$parent[UserControl].((setup:ToolsViewModel)DataContext).IsBusy}" />
         </dctl:SettingRow>
       </Border>

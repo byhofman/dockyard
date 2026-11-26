@@ -29,7 +29,7 @@ sealed class SettingsListCommand(CliEnvironment env) : Command
             table.AddRow(
                 Markup.Escape(definition.Key),
                 Markup.Escape(definition.Kind == SettingKind.EngineFile ? "daemon.json" : setup.GetSetting(definition.Key)),
-                Markup.Escape(definition.LinuxEngineOnly ? $"{definition.Title} (Linux engine only)" : definition.Title));
+                Markup.Escape(SettingDefinitions.ShowsLinuxEngineOnly(definition) ? $"{definition.Title} (Linux engine only)" : definition.Title));
         env.Console.Write(table);
         return 0;
     }

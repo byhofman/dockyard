@@ -45,6 +45,22 @@ public sealed class FacadeTests : IDisposable
     }
 
     [Fact]
+    public async Task The_source_setting_takes_the_same_two_words_as_the_flag_and_shows_its_own()
+    {
+        var setup = For(new FakeHost { Installed = true });
+        var source = setup.SettingDefinitions.Single(d => d.Key == SettingDefinitions.Source);
+        Assert.Equal(["package-manager", "dockyard"], source.Choices);
+        Assert.Equal([SettingDefinitions.PackageManager, SettingDefinitions.DockyardSource], source.ChoiceTitles);
+        Assert.Equal("package-manager", setup.GetSetting(SettingDefinitions.Source));
+
+        await setup.SetSetting(SettingDefinitions.Source, "dockyard", progress);
+
+        Assert.Equal("dockyard", setup.GetSetting(SettingDefinitions.Source));
+        Assert.Equal(ToolSource.Dockyard, Settings.Load(settings.File).Source);
+        await Assert.ThrowsAsync<ArgumentException>(() => setup.SetSetting(SettingDefinitions.Source, "winget", progress));
+    }
+
+    [Fact]
     public void Every_definition_says_what_it_is()
     {
         var keys = For(new FakeHost()).SettingDefinitions.Select(d => d.Key).ToList();
@@ -219,6 +235,19 @@ public sealed class FacadeTests : IDisposable
         await dashboard.Remove("helm", removeData: false, progress);
 
         Assert.Equal(["Helm", "Kind"], Settings.Load(settings.File).RemovedComponents.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void A_row_says_whether_a_setup_screen_starts_with_it_picked()
+    {
+        var host = new FakeHost { Components = TrayCatalog(desktop: false) };
+        Assert.Equal([true, false, false], For(host).Components().Select(r => r.Default));
+
+        host.Installed = true;
+        host.Dashboard = true;
+        settings.Settings.RemovedComponents = ["Tray"];
+        settings.Settings.Save();
+        Assert.Equal([true, false, true], For(host).Components().Select(r => r.Default));
     }
 
     static IReadOnlyList<ComponentInfo> TrayCatalog(bool desktop) =>

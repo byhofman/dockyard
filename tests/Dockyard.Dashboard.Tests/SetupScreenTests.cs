@@ -9,6 +9,16 @@ namespace Dockyard.Dashboard.Tests;
 public sealed class SetupScreenTests
 {
     [Fact]
+    public void The_setup_screen_starts_with_only_what_a_new_install_has_by_default()
+    {
+        var rows = PrototypeScreens.MacRows(installed: false).Select(r => r.Id == "Kind" ? r with { Default = false } : r).ToList();
+        var setup = new SetupViewModel(new RecordingSetup(installed: false) { Rows = rows });
+        var items = setup.Groups.SelectMany(g => g.Items).ToList();
+        Assert.False(items.Single(i => i.Row.Id == "Kind").IsPicked);
+        Assert.True(items.Single(i => i.Row.Id == "Helm").IsPicked);
+    }
+
+    [Fact]
     public async Task Setup_shows_until_Dockyard_is_installed_and_then_the_sections()
     {
         var session = HeadlessUnitTestSession.GetOrStartForAssembly(typeof(SetupScreenTests).Assembly);

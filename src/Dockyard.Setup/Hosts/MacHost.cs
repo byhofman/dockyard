@@ -125,7 +125,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         else Shell.Spawn(MacLayout.InstalledExe).Dispose();
     }
 
-    public string DoneMessage(bool reboot) => "Done. Dockyard runs in the menu bar.";
+    public string DoneMessage(bool reboot) => File.Exists(MacLayout.LaunchAgent) ? "Done. Dockyard runs in the menu bar." : "Done. Dockyard and the docker command are ready.";
 
     public Task Uninstall(Action<string> log, bool removeData, bool silent) => Setup.Uninstall(log, removeData, silent, this);
 

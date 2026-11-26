@@ -115,8 +115,10 @@ static partial class Elevation
         }
     }
 
+    public const string Declined = "Administrator approval was declined";
+
     internal static InvalidOperationException Explain(Win32Exception ex) => ex.NativeErrorCode == 1223
-        ? new InvalidOperationException("Administrator approval was declined")
+        ? new InvalidOperationException(Declined)
         : new InvalidOperationException($"Could not ask for administrator rights ({ex.Message}). In a session without a desktop, run this from an elevated shell.");
 
     // The installed CLI is the worker; the first install runs from the download, before there is an installed CLI.

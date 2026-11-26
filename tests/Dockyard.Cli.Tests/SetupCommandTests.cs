@@ -67,7 +67,7 @@ public sealed class SetupCommandTests
     }
 
     [Fact]
-    public void Setup_on_a_desktop_with_the_dashboard_chosen_opens_its_setup_screen()
+    public void Setup_on_a_desktop_with_the_dashboard_chosen_opens_it_at_tools_once_done()
     {
         using var h = new CliHarness(Catalog) { HasTerminal = true, HasDesktop = true };
         h.Keys.Press(ConsoleKey.Enter, '\r');
@@ -75,7 +75,20 @@ public sealed class SetupCommandTests
         Assert.Equal(0, h.Run("setup"));
 
         Assert.True(Assert.Single(h.Host.Requests).Dashboard);
-        Assert.Equal(["setup"], h.Launcher.Sections);
+        Assert.Equal(["tools"], h.Launcher.Sections);
+    }
+
+    [Fact]
+    public void Setup_in_a_terminal_starts_with_only_what_a_new_install_has_by_default()
+    {
+        using var h = new CliHarness([new("DockyardCli", "Dockyard CLI"), new("LinuxEngine", "Linux engine", Flag: "linux-engine", Default: false), new("Kind", "kind", Flag: "kind")]);
+        h.Keys.Press(ConsoleKey.Enter, '\r');
+
+        Assert.Equal(0, h.Run("setup"));
+
+        var request = Assert.Single(h.Host.Requests);
+        Assert.Contains("LinuxEngine", request.Without);
+        Assert.DoesNotContain("Kind", request.Without);
     }
 
     [Fact]
@@ -127,7 +140,7 @@ public sealed class SetupCommandTests
             Assert.Equal(0, h.Run("setup", "--resume", "--open-dashboard", "--assets", assets));
 
             Assert.Contains("resume", h.Host.Calls);
-            Assert.Equal(["setup"], h.Launcher.Sections);
+            Assert.Equal(["tools"], h.Launcher.Sections);
             Assert.Equal(assets, DockyardSetup.LocalAssets);
         }
         finally

@@ -59,7 +59,7 @@ sealed class SetupSettings : CommandSettings
     public bool Resume { get; init; }
 
     [CommandOption("--open-dashboard")]
-    [Description("Open the dashboard's setup screen when done")]
+    [Description("Open the dashboard at Tools when done")]
     public bool OpenDashboard { get; init; }
 
     public override ValidationResult Validate()
@@ -97,7 +97,7 @@ sealed class SetupCommand(CliEnvironment env) : AsyncCommand<SetupSettings>
         };
         var code = await setup.Setup(request, new ProgressRenderer(env.Console, env.Error), cancellation);
         if (code == DockyardSetup.Ok && (s.OpenDashboard || asks && env.HasDesktop && setup.HasDashboard))
-            env.Dashboard.Open(setup.DashboardExe, "setup");
+            env.Dashboard.Open(setup.DashboardExe, "tools");
         return code;
     }
 
@@ -117,7 +117,7 @@ sealed class SetupCommand(CliEnvironment env) : AsyncCommand<SetupSettings>
         foreach (var row in offered)
         {
             var item = prompt.AddChoice(row);
-            if (setup.IsInstalled ? !row.CanAdd : true) item.Select();
+            if (row.Default) item.Select();
         }
         var chosen = env.Console.Prompt(prompt).Select(c => c.Flag!).ToList();
         return (chosen, offered.Select(c => c.Flag!).Where(f => !chosen.Contains(f)).ToList());

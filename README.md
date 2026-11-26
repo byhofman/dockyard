@@ -6,7 +6,7 @@ Docker without Docker Desktop, on Windows, macOS and Linux. The engines start on
 
 ## Install
 
-Run one line. It downloads the `dockyard` command and runs `dockyard setup`, which asks in the terminal which optional components you want and sets up everything, including what Docker needs from your system. When you choose the dashboard, setup opens its **Setup** screen to show the steps. A silent install is there for scripts ([Without a window](#without-a-window)), but it is never the default.
+Run one line. It downloads the `dockyard` command and runs `dockyard setup`, which asks in the terminal which optional components you want and sets up everything, including what Docker needs from your system. When you choose the dashboard, setup opens it at **Tools** once it is done, with every component and its version. A silent install is there for scripts ([Without a window](#without-a-window)), but it is never the default.
 
 **Windows 11**, in PowerShell:
 

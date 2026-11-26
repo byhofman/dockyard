@@ -62,7 +62,8 @@ public static class SettingDefinitions
                 SettingKind.EngineFile, null, LinuxEngineOnly: false, NeedsAdmin: engine.Id == EngineSettings.Windows, EngineGroup));
         all.Add(new(KubectlShell, "Set up kubectl in my shell", KubectlShellDescription, SettingKind.Toggle, null, LinuxEngineOnly: false, NeedsAdmin: false, ShellGroup));
         all.Add(new(Source, "Download source", "Where docker, kind, kubectl and helm come from. Changing it moves them at once.",
-            SettingKind.Choice, [PackageManager, DockyardSource], LinuxEngineOnly: false, NeedsAdmin: false, ToolsGroup));
+            SettingKind.Choice, [ToolSource.PackageManager.Argument(), ToolSource.Dockyard.Argument()], LinuxEngineOnly: false, NeedsAdmin: false, ToolsGroup,
+            ChoiceTitles: [PackageManager, DockyardSource]));
         return all;
     }
 

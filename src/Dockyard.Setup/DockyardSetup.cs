@@ -177,7 +177,7 @@ public sealed partial class DockyardSetup : IDisposable
         // Dockyard itself goes by Uninstall, which takes everything else along.
         CanRemove: host.IsInstalled && c.IsOptional && present && c.Id != SelfId && WhyNotRemovable(c.Id) is null,
         CanUpdate: installed is not null && latest is not null && latest.Version > installed)
-    { HasData = c.IsEngine };
+    { HasData = c.IsEngine, Default = host.IsInstalled ? present : c.Default };
 
     string? WhyNotRemovable(string id) =>
         ComponentRules.WhyNotRemovable(Catalog, id, Catalog.Where(c => IsPresent(c.Id)).Select(c => c.Id).ToHashSet());

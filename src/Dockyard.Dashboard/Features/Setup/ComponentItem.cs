@@ -6,7 +6,7 @@ namespace Dockyard.Dashboard.Features.Setup;
 // A facade row as a screen shows it: picked for the setup or not, and busy while something runs on it.
 sealed class ComponentItem(ComponentRow row, bool isSelf) : Observable
 {
-    bool isPicked = true;
+    bool isPicked = row.Default || row.RequiredBecause is not null;
     string? busyText;
 
     public ComponentRow Row { get; } = row;

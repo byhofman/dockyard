@@ -106,17 +106,25 @@ static class WindowsSetup
 
     // The machine's store: the current user's would show its own dialog from an elevated process nobody is watching, and
     // setup's administrator approval is the prompt that explains itself.
-    public static async Task<bool> TrustCa(Action<string> log, string certificateFile)
+    public static Task<bool> TrustCa(Action<string> log, string certificateFile) => Trusting(async () =>
+    {
+        var pem = await File.ReadAllTextAsync(certificateFile);
+        if (Elevation.IsElevated) MachineTrust.TrustCa(log, pem);
+        // The certificate itself and not its path: approval can come from another administrator's account, which
+        // cannot read this user's owner-only folder.
+        else await Elevation.Run(log, "--machine-trust-ca", MachineTrust.EncodeCertificate(pem));
+    });
+
+    // A declined approval is the person's answer, which the setting shows and stays off for; any other failure leaves
+    // HTTPS on with a certificate browsers warn about.
+    internal static async Task<bool> Trusting(Func<Task> trust)
     {
         try
         {
-            var pem = await File.ReadAllTextAsync(certificateFile);
-            if (Elevation.IsElevated) MachineTrust.TrustCa(log, pem);
-            // The certificate itself and not its path: approval can come from another administrator's account, which
-            // cannot read this user's owner-only folder.
-            else await Elevation.Run(log, "--machine-trust-ca", MachineTrust.EncodeCertificate(pem));
+            await trust();
             return true;
         }
+        catch (InvalidOperationException e) when (e.Message == Elevation.Declined) { throw; }
         catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or System.Security.Cryptography.CryptographicException)
         {
             return false;

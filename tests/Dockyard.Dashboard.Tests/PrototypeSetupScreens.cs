@@ -22,7 +22,7 @@ public sealed partial class PrototypeScreens
         ComponentRow Row(string id, string title, string group, string? at, string? newest, string source, string? required, string? needs, string? flag, bool canRemove = false) =>
             new(id, title, group, installed ? at : null, installed ? newest : null, source, required, needs, flag,
                 CanAdd: installed && at is null && flag is not null, CanRemove: installed && canRemove && at is not null,
-                CanUpdate: installed && at is not null && newest is not null && at != newest);
+                CanUpdate: installed && at is not null && newest is not null && at != newest) { Default = !installed || at is not null };
         return
         [
             Row("DockyardCli", "Dockyard", "Dockyard", "0.14.2", "0.14.2", own, "it installs and updates everything else here. Uninstall removes it.", null, null),
@@ -49,7 +49,7 @@ public sealed partial class PrototypeScreens
             [global::Dockyard.Setup.SettingDefinitions.TrustedHttps] = global::Dockyard.Setup.SettingDefinitions.Off,
             [global::Dockyard.Setup.SettingDefinitions.StartEngineAtLogon] = global::Dockyard.Setup.SettingDefinitions.On,
             [global::Dockyard.Setup.SettingDefinitions.KubectlShell] = global::Dockyard.Setup.SettingDefinitions.On,
-            [global::Dockyard.Setup.SettingDefinitions.Source] = "Homebrew",
+            [global::Dockyard.Setup.SettingDefinitions.Source] = "package-manager",
         };
 
         public IReadOnlyList<SetupProgress> Lines { get; init; } = [];

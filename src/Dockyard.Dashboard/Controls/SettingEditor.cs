@@ -16,6 +16,7 @@ sealed class SettingEditor : ContentControl
     public static readonly StyledProperty<string?> ValueProperty =
         AvaloniaProperty.Register<SettingEditor, string?>(nameof(Value), defaultBindingMode: BindingMode.TwoWay);
     public static readonly StyledProperty<IReadOnlyList<string>?> ChoicesProperty = AvaloniaProperty.Register<SettingEditor, IReadOnlyList<string>?>(nameof(Choices));
+    public static readonly StyledProperty<IReadOnlyList<string>?> ChoiceTitlesProperty = AvaloniaProperty.Register<SettingEditor, IReadOnlyList<string>?>(nameof(ChoiceTitles));
     public static readonly StyledProperty<string?> LabelProperty = AvaloniaProperty.Register<SettingEditor, string?>(nameof(Label));
     public static readonly StyledProperty<string?> EditTextProperty = AvaloniaProperty.Register<SettingEditor, string?>(nameof(EditText), "Edit…");
     public static readonly StyledProperty<ICommand?> EditCommandProperty = AvaloniaProperty.Register<SettingEditor, ICommand?>(nameof(EditCommand));
@@ -23,6 +24,8 @@ sealed class SettingEditor : ContentControl
     public SettingKind Kind { get => GetValue(KindProperty); set => SetValue(KindProperty, value); }
     public string? Value { get => GetValue(ValueProperty); set => SetValue(ValueProperty, value); }
     public IReadOnlyList<string>? Choices { get => GetValue(ChoicesProperty); set => SetValue(ChoicesProperty, value); }
+    // What the list shows for each of Choices, when that is not the value itself.
+    public IReadOnlyList<string>? ChoiceTitles { get => GetValue(ChoiceTitlesProperty); set => SetValue(ChoiceTitlesProperty, value); }
     // What a screen reader calls the editor: the setting's title.
     public string? Label { get => GetValue(LabelProperty); set => SetValue(LabelProperty, value); }
     public string? EditText { get => GetValue(EditTextProperty); set => SetValue(EditTextProperty, value); }
@@ -41,7 +44,7 @@ sealed class SettingEditor : ContentControl
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == KindProperty || change.Property == ChoicesProperty || change.Property == EditTextProperty) Build();
+        if (change.Property == KindProperty || change.Property == ChoicesProperty || change.Property == ChoiceTitlesProperty || change.Property == EditTextProperty) Build();
         else if (change.Property == ValueProperty) ShowValue();
         else if (change.Property == LabelProperty && Content is Control c) Avalonia.Automation.AutomationProperties.SetName(c, Label);
     }
@@ -69,8 +72,8 @@ sealed class SettingEditor : ContentControl
 
     ComboBox Choice()
     {
-        var box = new ComboBox { ItemsSource = Choices, MinWidth = 160 };
-        box.SelectionChanged += (_, _) => { if (box.SelectedItem is string s) Take(s); };
+        var box = new ComboBox { ItemsSource = ChoiceTitles ?? Choices, MinWidth = 160 };
+        box.SelectionChanged += (_, _) => { if (Choices is { } choices && box.SelectedIndex >= 0 && box.SelectedIndex < choices.Count) Take(choices[box.SelectedIndex]); };
         return box;
     }
 
@@ -106,10 +109,17 @@ sealed class SettingEditor : ContentControl
             switch (Content)
             {
                 case ToggleSwitch toggle: toggle.IsChecked = Value == SettingDefinitions.On; break;
-                case ComboBox box: box.SelectedItem = Value; break;
+                case ComboBox box: box.SelectedIndex = Choices is { } choices && Value is not null ? IndexOf(choices, Value) : -1; break;
                 case TextBox box: box.Text = Value; break;
             }
         }
         finally { showing = false; }
+    }
+
+    static int IndexOf(IReadOnlyList<string> choices, string value)
+    {
+        for (var i = 0; i < choices.Count; i++)
+            if (string.Equals(choices[i], value, StringComparison.OrdinalIgnoreCase)) return i;
+        return -1;
     }
 }
