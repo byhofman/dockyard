@@ -328,6 +328,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         var metrics = DialogField.Check($"metrics-server {ClusterAddons.MetricsServer.Version}: kubectl top and pod autoscaling", isChecked: from?.Addons.Contains(ClusterAddons.MetricsServer.Release) ?? true);
         var traefik = DialogField.Check($"Traefik {ClusterAddons.Traefik.Version}: an ingress controller, reachable through the load balancer", isChecked: from?.Addons.Contains(ClusterAddons.Traefik.Release) ?? false);
         var certManager = DialogField.Check($"cert-manager {CertManager.Addon.Version}: certificates for <host>.<name>.dockyard.internal from the ClusterIssuer dockyard, trusted on this computer when trusted HTTPS is on", isChecked: from?.Addons.Contains(CertManager.Addon.Release) ?? false);
+        var victoria = DialogField.Check($"VictoriaMetrics {VictoriaMetrics.Addon.Version}: metrics history for Headlamp's charts, light on memory", isChecked: from?.Addons.Contains(VictoriaMetrics.Addon.Release) ?? false);
         var headlamp = DialogField.Check($"Headlamp {Headlamp.Addon.Version}: the Kubernetes UI at dashboard.<name>.dockyard.internal, with Traefik", isChecked: from?.Addons.Contains(Headlamp.Addon.Release) ?? false);
         headlamp.Changed += () => { if (headlamp.IsChecked) traefik.IsChecked = true; };
         string? generated = from is null ? KindCli.Config(0) : null;
@@ -338,7 +339,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         List<DialogField> fields =
         [
             name, .. from is null ? [workers] : Array.Empty<DialogField>(), storage, balancer, ports,
-            .. helm is null ? Array.Empty<DialogField>() : [metrics, traefik, certManager, headlamp], definition,
+            .. helm is null ? Array.Empty<DialogField>() : [metrics, traefik, certManager, victoria, headlamp], definition,
         ];
         void Regenerate()
         {
@@ -349,16 +350,17 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         workers.Changed += Regenerate;
         storage.Changed += Regenerate;
         Shell.Open(new Dialog(fromName is null ? "Create a kind cluster" : $"Duplicate {fromName}", message, "Create",
-            d => Create(d, name.Value, new ClusterDefinition(definition.Text, StorageOf(storage.Value), Addons(metrics, traefik, certManager, headlamp, helm).Select(a => a.Release).ToList(),
+            d => Create(d, name.Value, new ClusterDefinition(definition.Text, StorageOf(storage.Value), Addons(metrics, traefik, certManager, victoria, headlamp, helm).Select(a => a.Release).ToList(),
                 balancer.IsChecked, ClusterDefinitions.ParsePorts(ports.Text) ?? ClusterDefinition.DefaultPorts), helm),
             fields: fields,
             canConfirm: _ => KindClusters.IsValidName(name.Value) && all.All(c => c.Name != name.Value) && definition.Problem is null && (!balancer.IsChecked || ports.Problem is null)));
     }
 
-    static List<ClusterAddon> Addons(DialogField metrics, DialogField traefik, DialogField certManager, DialogField headlamp, string? helm) => helm is null ? [] :
+    static List<ClusterAddon> Addons(DialogField metrics, DialogField traefik, DialogField certManager, DialogField victoria, DialogField headlamp, string? helm) => helm is null ? [] :
         [
             .. metrics.IsChecked ? [ClusterAddons.MetricsServer] : Array.Empty<ClusterAddon>(), .. traefik.IsChecked ? [ClusterAddons.Traefik] : Array.Empty<ClusterAddon>(),
             .. certManager.IsChecked ? [CertManager.Addon] : Array.Empty<ClusterAddon>(),
+            .. victoria.IsChecked ? [VictoriaMetrics.Addon] : Array.Empty<ClusterAddon>(),
             .. headlamp.IsChecked ? [Headlamp.Addon] : Array.Empty<ClusterAddon>(),
         ];
 
@@ -453,6 +455,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         var metrics = DialogField.Check($"metrics-server {ClusterAddons.MetricsServer.Version}: kubectl top and pod autoscaling", Has(ClusterAddons.MetricsServer));
         var traefik = DialogField.Check($"Traefik {ClusterAddons.Traefik.Version}: an ingress controller, reachable through the load balancer", Has(ClusterAddons.Traefik));
         var certManager = DialogField.Check($"cert-manager {CertManager.Addon.Version}: certificates from the ClusterIssuer dockyard", Has(CertManager.Addon));
+        var victoria = DialogField.Check($"VictoriaMetrics {VictoriaMetrics.Addon.Version}: metrics history for Headlamp's charts, light on memory", Has(VictoriaMetrics.Addon));
         var headlamp = DialogField.Check($"Headlamp {Headlamp.Addon.Version}: the Kubernetes UI at {Headlamp.Host(cluster.Name)}, with Traefik", Has(Headlamp.Addon));
         headlamp.Changed += () => { if (headlamp.IsChecked) traefik.IsChecked = true; };
         var storage = new DialogField("Storage that every node can use at once", choices: StorageChoices)
@@ -466,7 +469,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
             "Add-ons and NFS change on the running cluster. A change to or from the shared host folder makes it Recreate: the cluster is deleted, with everything in it, and made again with these choices. Workers and the kind config change under Definition.", "Apply",
             d => RunKind(d, async (actions, onLine) =>
             {
-                var wanted = Addons(metrics, traefik, certManager, headlamp, helm);
+                var wanted = Addons(metrics, traefik, certManager, victoria, headlamp, helm);
                 var chosen = StorageOf(storage.Value);
                 if (NeedsRecreate())
                 {
@@ -484,7 +487,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
                 await actions.EditAddons(cluster.Name, current.AddonList, wanted, helm, c => CertManager.FromToolbox(Dashboard.Shell.TrayClient.TrayExe, c), onLine, nfs);
                 ClusterDefinitions.Save(cluster.Name, current with { Addons = wanted.Select(a => a.Release).ToList(), Storage = chosen });
                 Shell.ShowInfo($"{cluster.Name} has the add-ons and storage as chosen");
-            }), fields: [metrics, traefik, certManager, headlamp, storage]);
+            }), fields: [metrics, traefik, certManager, victoria, headlamp, storage]);
         storage.Changed += () =>
         {
             var recreate = NeedsRecreate();

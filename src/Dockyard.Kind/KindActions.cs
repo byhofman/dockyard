@@ -31,6 +31,7 @@ sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
             }
             foreach (var addon in addons ?? [])
                 await ClusterAddons.Install(helm ?? throw new InvalidOperationException("Helm is not installed."), addon, own, name, Path.Combine(scratch.FullName, "helm"), onLine);
+            if (addons?.Contains(VictoriaMetrics.Addon) == true) await VictoriaMetrics.Alias(dockerContext.Length > 0 ? dockerContext : "default", name, onLine);
             if (addons?.Contains(Headlamp.Addon) == true)
             {
                 try { await Headlamp.Expose(dockerContext.Length > 0 ? dockerContext : "default", name, tls: addons.Contains(CertManager.Addon), onLine); }
@@ -66,11 +67,13 @@ sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
                 await ClusterAddons.Uninstall(helm, NfsStorage.Driver, own, name, onLine);
                 await SharedStorage.Docker(["--context", context, "exec", name + "-control-plane", "kubectl", "--kubeconfig", SharedStorage.AdminConfig,
                     "delete", "storageclass", NfsStorage.ClassName, "--ignore-not-found"]);
+                await SharedStorage.KindDefault(context, name, isDefault: true);
             }
             if (nfs == true) await NfsStorage.Install(context, name, own, helm, Path.Combine(scratch.FullName, "helm"), onLine);
             var added = ClusterAddons.All.Where(a => wanted.Contains(a) && !current.Contains(a)).ToList();
             foreach (var addon in added)
                 await ClusterAddons.Install(helm, addon, own, name, Path.Combine(scratch.FullName, "helm"), onLine);
+            if (added.Contains(VictoriaMetrics.Addon)) await VictoriaMetrics.Alias(context, name, onLine);
             if (added.Contains(CertManager.Addon) && clusterCa is not null)
                 await CertManager.AddIssuer(context, name, await clusterCa(name), onLine);
             if (wanted.Contains(Headlamp.Addon) && (added.Contains(Headlamp.Addon) || added.Contains(CertManager.Addon)))
