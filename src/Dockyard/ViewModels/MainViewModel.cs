@@ -276,6 +276,9 @@ sealed class MainViewModel : Observable
     public async Task StartTray()
     {
         host.StartTrayServices();
+        // Setup often runs from Downloads, where Controlled Folder Access keeps it out of Documents and so out of the
+        // PowerShell profile; the installed Toolbox may be allowed there, and writes only what is missing.
+        ShellSetup.Apply(settings, Log);
         _ = Https.KeepCertificateCurrent(host, trayLifetime.Token);
         await RefreshState();
         if (settings.StartActiveAtLogon)
