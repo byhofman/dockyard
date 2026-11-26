@@ -107,8 +107,8 @@ public partial class App : Application
                 ShowWindow();
                 break;
             case TrayCommandKind.Highlight:
-                vm.Highlight(command.Engine!);
                 ShowWindow();
+                vm.Highlight(command.Engine!);
                 break;
             case TrayCommandKind.Start: _ = vm.StartEngine(command.Engine!); break;
             case TrayCommandKind.Switch: _ = SwitchAndReport(command.Engine!); break;

@@ -37,7 +37,7 @@ sealed record SetupOptions
         """;
 
     static readonly string[] WindowArguments = ["--setup", "--tray", "--settings"];
-    static readonly string[] WindowArgumentsWithValue = ["--start", "--switch"];
+    static readonly string[] WindowArgumentsWithValue = ["--start", "--switch", "--highlight"];
 
     public bool Silent { get; init; }
     public SetupAction Action { get; init; }

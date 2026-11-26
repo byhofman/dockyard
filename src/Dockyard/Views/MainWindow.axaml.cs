@@ -33,7 +33,17 @@ public partial class MainWindow : Window
         if (e.PropertyName is nameof(MainViewModel.LogText) or nameof(MainViewModel.ShowLog))
             Avalonia.Threading.Dispatcher.UIThread.Post(() => LogScroll.ScrollToEnd(), Avalonia.Threading.DispatcherPriority.Background);
         if (e.PropertyName == nameof(MainViewModel.Highlighted) && ViewModel is { Highlighted: { } setting })
-            Avalonia.Threading.Dispatcher.UIThread.Post(() => (setting == "https" ? HttpsSetting : DomainsSetting).BringIntoView(), Avalonia.Threading.DispatcherPriority.Background);
+            ScrollTo(setting == "https" ? HttpsSetting : DomainsSetting);
+    }
+
+    // After the window is shown and laid out, which a window opened for this has not been yet; again a moment later, once
+    // the sections above have their final height.
+    async void ScrollTo(Control target)
+    {
+        await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => { }, Avalonia.Threading.DispatcherPriority.Loaded);
+        target.BringIntoView();
+        await Task.Delay(300);
+        target.BringIntoView();
     }
 
     async void CopyLog(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

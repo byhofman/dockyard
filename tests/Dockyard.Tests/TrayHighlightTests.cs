@@ -17,9 +17,14 @@ public class TrayHighlightTests
     }
 
     [Fact]
+    public void The_toolbox_takes_highlight_on_its_command_line() =>
+        Dockyard.Core.SetupOptions.Parse(["--tray", "--highlight", "proxy"]);
+
+    [Fact]
     public void Only_known_settings_are_highlighted()
     {
         Assert.Null(TrayCommand.Parse("highlight anything"));
         Assert.Equal(TrayCommandKind.Show, TrayCommand.FromArgs(["--tray", "--highlight", "anything"]).Kind);
     }
 }
+
