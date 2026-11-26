@@ -5,6 +5,20 @@ IDs are permanent: never renumber or reuse one.
 
 ## Next
 
+- [ ] DOK-49 Bug chase and robustness: sweep the app for bugs and harden where it breaks (failed operations recovering, state going stale), starting with DOK-50 to DOK-52 (owner 2026-11-26, next)
+- [ ] DOK-50 Copy kubeconfig does not work (owner 2026-11-26, next)
+- [ ] DOK-51 The log pane on the clusters level shows nothing (owner 2026-11-26, next)
+- [ ] DOK-52 Frequent crashes on Windows (owner 2026-11-26, next)
+- [ ] DOK-53 Performance: find where the app can be made faster, alongside DOK-46, starting with DOK-54 (owner 2026-11-26, next)
+- [ ] DOK-54 Installing Helm charts when managing a cluster's add-ons is really slow and shows no progress (owner 2026-11-26, next)
+- [ ] DOK-55 Refactoring pass: deduplicate code and logic, make the code more maintainable, fix code smells (owner 2026-11-26, next)
+- [ ] DOK-56 Usability audit with the byhofman skill (owner 2026-11-26, next)
+- [ ] DOK-57 Be upfront about settings that only work on Linux, in the interface and the docs (owner 2026-11-26, next)
+- [ ] DOK-58 Container domains on Windows through the Windows service, without external DNS and without other Linux dependencies (owner 2026-11-26, next)
+- [ ] DOK-59 The Dockyard CLI is the core component and a package manager: every component's download source is always a package manager and Dockyard is one of them; for a bare minimum you install and maintain the container environment on a laptop, and possibly a server, with the Dockyard CLI alone; it is listed as the core component and owns the install (owner 2026-11-26, next)
+- [ ] DOK-60 Discuss whether the Toolbox stays, or is integrated into the dashboard (owner 2026-11-26, next)
+- [ ] DOK-61 Upgrade the Kubernetes version of an existing kind cluster: work out how, and support it (owner 2026-11-26, next)
+
 ## Images and volumes
 
 - [x] DOK-36 Browse an image's files: a read-only tree with folder sizes, small text files shown, any file saved to the computer (owner 2026-11-17, v1; numbered DOK-30 at first, which "Report an issue" already had)
@@ -70,3 +84,11 @@ IDs are permanent: never renumber or reuse one.
 - [x] DOK-28 Creating a kind cluster adds its context, cluster and user to the host's ~/.kube/config (or $KUBECONFIG) automatically, reachable from the host, and deleting the cluster removes exactly those entries again, leaving the rest and a sane current-context; today this is the manual "Use context" button (kind export kubeconfig) (owner 2026-11-14, v1)
 - [x] DOK-29 Monitoring (owner 2026-11-14, v1): the download page and the release downloads are watched for being up, with an alert; no telemetry from the app itself — gitops#185: page, `releases/latest`, three assets, `SHA256SUMS` and the three installers probed every two minutes, `DockyardDownloadDown` in Grafana
 - [ ] DOK-30 "Report an issue" in the app (help menu and the CLI's help) opens a new GitHub issue on byhofman/dockyard, with an issue template that asks for the version, OS and steps, and the app's version and OS filled in; the README says the same (owner 2026-11-15: "for dockyard and vaultbar people should just raise a github issue"; v1)
+- [ ] DOK-62 A cluster's storage tab shows what was provisioned through the NFS provider (owner 2026-11-26)
+- [ ] DOK-63 Install kubectx (owner 2026-11-26)
+- [ ] DOK-64 Open a new shell on a context without changing the current context in ~/.kube/config: a temporary kubeconfig holding only that context, used in that shell session only and wiped when the shell closes (owner 2026-11-26)
+- [ ] DOK-65 Security scanning of images with open source tooling (owner 2026-11-26)
+- [ ] DOK-66 Other package managers, such as krew (owner 2026-11-26)
+- [ ] DOK-67 More common container tools, as long as they do not compete (no Podman, no Docker Desktop) (owner 2026-11-26)
+- [ ] DOK-68 Connect hardware to containers (owner 2026-11-26)
+- [ ] DOK-69 Choose the shell to install kubectl autocompletion and the like into; on Windows that can also be a WSL shell (owner 2026-11-26)
