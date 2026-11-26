@@ -27,7 +27,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         UseContextCommand = new Command(UseContext, () => !IsBusy && HasKind && !NeedsLinuxEngine && Selected is { IsRunning: true });
         DuplicateCommand = new Command(() => { if (Selected is { } c) AskDuplicate(c); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine && Selected is not null);
         RecreateCommand = new Command(() => { if (Selected is { } c) AskRecreate(c); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine && Selected is not null);
-        ToggleCommand = new Command(() => Selected is { } c ? Toggle(c) : Task.CompletedTask, () => !IsBusy && Selected is not null);
+        ToggleCommand = new Command(() => Selected is { } c ? Toggle(c) : Task.CompletedTask, () => !IsBusy && !NeedsLinuxEngine && Selected is not null);
         ToggleRowCommand = new Command<KindCluster>(c => IsBusy ? Task.CompletedTask : Toggle(c));
         LoadBalancerCommand = new Command(() => { if (Selected is { } c) AskLoadBalancer(c); return Task.CompletedTask; }, () => HasKind && !NeedsLinuxEngine && Selected is not null);
         OpenUrlCommand = new Command<PublishedPort>(p =>
@@ -40,7 +40,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         OpenSharedFolderCommand = new Command(() =>
         {
             if (SharedFolder is { } folder)
-                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{folder}\"") { UseShellExecute = false })?.Dispose(); }
+                try { Features.Files.FileManager.Open(folder); }
                 catch (Exception ex) { Shell.ShowError($"Could not open {folder}: {ex.Message}"); }
             return Task.CompletedTask;
         });
@@ -106,7 +106,11 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     public string SharedStorageText => HasSharedStorage
         ? $"Storage class \"{SharedStorage.ClassName}\": ReadWriteMany, so pods on every node use a claim at once. A claim's files are in {SharedStorage.HostPath}/<namespace>/<name> on the engine, the same for every cluster made with shared storage, and stay when the claim is deleted."
         : "Made without shared storage, so only the node-local \"standard\" class. Shared storage can only be chosen when a cluster is created.";
-    public string? SharedFolder => HasSharedStorage && Session.ContextName == "linux" ? SharedStorage.WindowsFolder(OperatingSystem.IsWindows()) : null;
+    // On Windows through WSL's share, on a Linux host where it is; on macOS it is inside the VM, with nothing to open.
+    public string? SharedFolder => !HasSharedStorage ? null
+        : OperatingSystem.IsWindows() ? (Session.ContextName == "linux" ? SharedStorage.WindowsFolder(true) : null)
+        : OperatingSystem.IsLinux() ? SharedStorage.HostPath
+        : null;
     public bool HasSharedFolder => SharedFolder is not null;
 
     protected override object Key(KindCluster row) => row.Name;
