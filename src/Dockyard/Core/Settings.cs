@@ -14,6 +14,8 @@ sealed class Settings
     public string? InsecureRegistries { get; set; }
     public string? AddressPools { get; set; }
     public bool HttpsEnabled { get; set; }
+    // Names under dockyard.internal, the proxy and the names clusters publish; off leaves containers' DNS as it is.
+    public bool ContainerDomains { get; set; } = true;
     // Tools from winget, Homebrew or apt/dnf where there is one; otherwise Dockyard's own pinned copies.
     public bool UsePackageManager { get; set; } = true;
     // k, completion, $do and $now in the shell's profile.
@@ -56,6 +58,7 @@ sealed class Settings
         InsecureRegistries = current.InsecureRegistries;
         AddressPools = current.AddressPools;
         HttpsEnabled = current.HttpsEnabled;
+        ContainerDomains = current.ContainerDomains;
         UsePackageManager = current.UsePackageManager;
         KubectlShell = current.KubectlShell;
         loaded = current.loaded;

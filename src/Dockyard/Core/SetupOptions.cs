@@ -22,7 +22,8 @@ sealed record SetupOptions
                              Keep Dockyard's own pinned copies of docker, kind, kubectl and helm instead of installing them
                              with winget, Homebrew or apt/dnf. --package-manager goes back. Either is remembered.
           --kubectl-shell    Set up kubectl in your shell: k, completion, $do (--dry-run=client -o yaml) and $now (--force
-                             --grace-period 0), in a marked block in its profile. --no-kubectl-shell takes it out. Remembered.
+                             --grace-period 0), @do and @now in PowerShell, in a marked block in its profile.
+                             --no-kubectl-shell takes it out. Remembered.
           --image <file>     Windows: the Linux engine image to import instead of downloading it.
           --assets <folder>  Take Dockyard's own release files from this folder instead of downloading them, for an
                              install without internet or a build before its release. They are not checked.

@@ -7,6 +7,7 @@ sealed class AgentMessage
     public int? Port { get; set; }
     public string? Cert { get; set; }
     public string? Key { get; set; }
+    public bool? On { get; set; }
     public string? Error { get; set; }
     public List<DomainInfo>? Domains { get; set; }
     public bool Https { get; set; }

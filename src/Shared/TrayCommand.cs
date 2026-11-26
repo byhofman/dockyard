@@ -7,6 +7,8 @@ namespace Dockyard.Shared;
 readonly record struct TrayCommand(TrayCommandKind Kind, string? Engine = null, string? Assets = null, string? Reply = null, IReadOnlyList<string>? Args = null)
 {
     public static readonly string[] Engines = ["linux", "win"];
+    // The Toolbox settings the dashboard can point at: container domains, trusted HTTPS, or both for the proxy.
+    public static readonly string[] Highlights = ["domains", "https", "proxy"];
 
     public override string ToString() =>
         Kind == TrayCommandKind.Run ? $"run {Reply} {Convert.ToBase64String(Encoding.UTF8.GetBytes(string.Join('\n', Args ?? [])))}"
@@ -24,6 +26,7 @@ readonly record struct TrayCommand(TrayCommandKind Kind, string? Engine = null, 
             ["settings"] => new TrayCommand(TrayCommandKind.Settings),
             ["start", var e] when Engines.Contains(e) => new TrayCommand(TrayCommandKind.Start, e),
             ["switch", var e] when Engines.Contains(e) => new TrayCommand(TrayCommandKind.Switch, e),
+            ["highlight", var h] when Highlights.Contains(h) => new TrayCommand(TrayCommandKind.Highlight, h),
             ["run", var reply, var args] when LocalPipe.IsReplyName(reply) && Decode(args) is { } decoded =>
                 new TrayCommand(TrayCommandKind.Run, Reply: reply, Args: decoded),
             _ => null,
@@ -42,6 +45,7 @@ readonly record struct TrayCommand(TrayCommandKind Kind, string? Engine = null, 
         if (args.Contains("--settings")) return new TrayCommand(TrayCommandKind.Settings);
         if (Opt("--start") is { } s && Engines.Contains(s)) return new TrayCommand(TrayCommandKind.Start, s);
         if (Opt("--switch") is { } w && Engines.Contains(w)) return new TrayCommand(TrayCommandKind.Switch, w);
+        if (Opt("--highlight") is { } h && Highlights.Contains(h)) return new TrayCommand(TrayCommandKind.Highlight, h);
         return new TrayCommand(TrayCommandKind.Show);
     }
 }

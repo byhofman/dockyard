@@ -32,6 +32,8 @@ public partial class MainWindow : Window
     {
         if (e.PropertyName is nameof(MainViewModel.LogText) or nameof(MainViewModel.ShowLog))
             Avalonia.Threading.Dispatcher.UIThread.Post(() => LogScroll.ScrollToEnd(), Avalonia.Threading.DispatcherPriority.Background);
+        if (e.PropertyName == nameof(MainViewModel.Highlighted) && ViewModel is { Highlighted: { } setting })
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => (setting == "https" ? HttpsSetting : DomainsSetting).BringIntoView(), Avalonia.Threading.DispatcherPriority.Background);
     }
 
     async void CopyLog(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

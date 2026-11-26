@@ -7,6 +7,10 @@
         Icon="avares://Dockyard/Assets/dockyard.ico"
         Width="860" Height="700" MinWidth="720" MinHeight="520"
         WindowStartupLocation="CenterScreen">
+  <Window.Styles>
+    <Style Selector="Border.setting"><Setter Property="Grid.ColumnSpan" Value="2" /><Setter Property="Margin" Value="-8,0" /><Setter Property="CornerRadius" Value="6" /></Style>
+    <Style Selector="Border.setting.highlight"><Setter Property="Background" Value="{DynamicResource AccentBg}" /><Setter Property="BorderBrush" Value="{DynamicResource Accent}" /><Setter Property="BorderThickness" Value="1" /></Style>
+  </Window.Styles>
 
   <Window.Resources>
     <DataTemplate x:Key="ComponentRow" x:DataType="vm:ComponentViewModel">
@@ -140,7 +144,7 @@
                           ToolTip.Tip="A package manager updates them with everything else. Direct download: Dockyard keeps its own copies, at the versions it was tested with, and updates them itself." />
               </StackPanel>
               <CheckBox IsChecked="{Binding KubectlShell}" ToolTip.Tip="{x:Static vm:MainViewModel.ShellProfilesText}">
-                <TextBlock Text="Set up kubectl in my shell: k, completion, $do for --dry-run=client -o yaml and $now for --force --grace-period 0" TextWrapping="Wrap" />
+                <TextBlock Text="{x:Static vm:MainViewModel.ShellSetupLabel}" TextWrapping="Wrap" />
               </CheckBox>
               <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="{Binding RequiredSummary}" />
               <Button Classes="primary" Content="Install" Command="{Binding InstallCommand}" HorizontalAlignment="Right" />
@@ -245,8 +249,13 @@
         <StackPanel Spacing="10" IsVisible="{Binding ShowManage}">
           <TextBlock Classes="h2" Text="SETTINGS" />
           <Border Classes="card">
-            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto">
-              <ToggleSwitch Grid.Row="3" IsChecked="{Binding HttpsSwitch}"
+            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+              <Border Grid.Row="3" x:Name="DomainsSetting" Classes="setting" Classes.highlight="{Binding HighlightDomains}" />
+              <ToggleSwitch Grid.Row="3" IsChecked="{Binding ContainerDomains}"
+                            ToolTip.Tip="Every running container answers at http://name.dockyard.internal without a published port, a kind cluster's ingress at host.cluster.dockyard.internal, and names a cluster publishes resolve everywhere. Served by dockyard-proxy and dockyard-etcd, which go when this is off; containers keep their DNS."
+                            OnContent="Container domains" OffContent="Container domains" />
+              <Border Grid.Row="4" x:Name="HttpsSetting" Classes="setting" Classes.highlight="{Binding HighlightHttps}" />
+              <ToggleSwitch Grid.Row="4" IsChecked="{Binding HttpsSwitch}" IsEnabled="{Binding ContainerDomains}"
                             ToolTip.Tip="Every running container answers at http://name.dockyard.internal without a published port. Trusted HTTPS adds a certificate authority of Dockyard's own, made on this computer and valid only for names under dockyard.internal; your system asks to trust it. Off takes it out of the trust store again."
                             OnContent="Trusted HTTPS for container domains" OffContent="Trusted HTTPS for container domains" />
               <ToggleSwitch IsChecked="{Binding StopOtherOnSwitch}" IsVisible="{Binding HasEngineSwitch}"

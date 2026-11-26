@@ -65,6 +65,21 @@ static class Https
         }
     }
 
+    // Container domains on or off, told to the engine's agent, which keeps it.
+    public static async Task SetNames(IEngineHost host, bool on, Action<string> log)
+    {
+        if (AgentClient.For(DockerEndpoint.Parse(host.Engines[0].Endpoint)) is not { } agent) return;
+        try
+        {
+            await agent.SetNamesAsync(on);
+            log(on ? "Container domains are on: names under dockyard.internal and the proxy" : "Container domains are off: dockyard-proxy and dockyard-etcd go, containers keep their DNS");
+        }
+        catch (Exception e) when (e is IOException or System.Net.Sockets.SocketException)
+        {
+            log("Container domains change once the engine runs");
+        }
+    }
+
     // The agent keeps its certificate in memory only, so it has none after each engine start, and one lasts 90 days.
     public static async Task KeepCertificateCurrent(IEngineHost host, CancellationToken ct)
     {
@@ -78,6 +93,8 @@ static class Https
             try
             {
                 await agent.DomainsAsync(ct);
+                // An agent that just started may have missed a change made while it was gone.
+                if (!reachable) await agent.SetNamesAsync(Settings.Load().ContainerDomains, ct);
                 // Only when a certificate is due: the key can be in the OS's store, which is not for asking every 10 seconds.
                 if ((!reachable || DateTime.UtcNow - given > TimeSpan.FromDays(1)) && await LocalCa.Load(host.CaDirectory, host.CaKeys) is { } ca)
                 {

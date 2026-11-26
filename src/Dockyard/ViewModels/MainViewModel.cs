@@ -224,6 +224,35 @@ sealed class MainViewModel : Observable
         }
     }
 
+    // A setting the dashboard pointed at, marked for a few seconds; the window scrolls to it.
+    string? highlighted;
+    public string? Highlighted { get => highlighted; private set { if (Set(ref highlighted, value)) Raise(nameof(HighlightDomains), nameof(HighlightHttps)); } }
+    public bool HighlightDomains => highlighted is "domains" or "proxy";
+    public bool HighlightHttps => highlighted is "https" or "proxy";
+
+    public void Highlight(string setting)
+    {
+        Highlighted = setting;
+        var marked = setting;
+        Avalonia.Threading.DispatcherTimer.RunOnce(() => { if (Highlighted == marked) Highlighted = null; }, TimeSpan.FromSeconds(6));
+    }
+
+    public bool ContainerDomains
+    {
+        get => settings.ContainerDomains;
+        set
+        {
+            if (settings.ContainerDomains == value) return;
+            settings.ContainerDomains = value;
+            if (IsInstalled)
+            {
+                settings.Save();
+                _ = Https.SetNames(host, value, Log);
+            }
+            Raise(nameof(ContainerDomains));
+        }
+    }
+
     public bool KubectlShell
     {
         get => settings.KubectlShell;
@@ -249,7 +278,7 @@ sealed class MainViewModel : Observable
         var missing = ShellSetup.Missing().ToList();
         if (missing.Count == 0)
         {
-            Log("kubectl is set up in your shell: open a new terminal for k, completion, $do and $now");
+            Log($"kubectl is set up in your shell: open a new terminal for k, completion, {ShellSetup.DoAndNowHere}");
             return;
         }
         Log($"kubectl could not be set up in {string.Join(" and ", missing)}, so the setting is off again");
@@ -258,8 +287,11 @@ sealed class MainViewModel : Observable
         Raise(nameof(KubectlShell));
     }
 
+    public static string ShellSetupLabel =>
+        $"Set up kubectl in my shell: k, completion, {(OperatingSystem.IsWindows() ? "@do" : "$do")} for --dry-run=client -o yaml and {(OperatingSystem.IsWindows() ? "@now" : "$now")} for --force --grace-period 0";
+
     public static string ShellProfilesText =>
-        "A marked block with k, completion, $do and $now, which Dockyard takes out again when this is off; in " +
+        $"A marked block with k, completion, {ShellSetup.DoAndNowHere}, which Dockyard takes out again when this is off; in " +
         (OperatingSystem.IsWindows() ? "your PowerShell 7 and Windows PowerShell profiles, and Git Bash's .bashrc when you have one"
             : OperatingSystem.IsMacOS() ? "your .zshrc" : "your .bashrc, and .zshrc when you have one");
 

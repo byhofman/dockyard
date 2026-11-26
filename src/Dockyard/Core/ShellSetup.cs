@@ -9,6 +9,10 @@ static class ShellSetup
 
     public enum Kind { Bash, Zsh, PowerShell }
 
+    // How each shell uses them: PowerShell splats the array (kubectl run web --image nginx @do), bash and zsh expand it.
+    public static string DoAndNow(Kind kind) => kind == Kind.PowerShell ? "@do and @now" : "$do and $now";
+    public static string DoAndNowHere => DoAndNow(OperatingSystem.IsWindows() ? Kind.PowerShell : Kind.Bash);
+
     public static string Block(Kind kind) => string.Join('\n', kind switch
     {
         Kind.Bash =>
@@ -144,7 +148,7 @@ static class ShellSetup
             if (updated is null || updated == existing) continue;
             Directory.CreateDirectory(Path.GetDirectoryName(file)!);
             File.WriteAllText(file, updated);
-            log(enabled ? $"kubectl set up in {file}: k, completion, $do and $now" : $"Took Dockyard's kubectl setup out of {file}");
+            log(enabled ? $"kubectl set up in {file}: k, completion, {DoAndNow(kind)}" : $"Took Dockyard's kubectl setup out of {file}");
         }
     }
 }

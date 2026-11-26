@@ -31,7 +31,7 @@ sealed class WslEngineHost(Action<string> log) : IDisposable
                 "start" => await Start(),
                 "stop" => await Stop(),
                 "domains on" => StartDomains(),
-                "domains off" => StopDomains(),
+                "domains off" => StopDomains(forget: true),
                 _ => $"error unknown request {request}",
             };
         }
@@ -104,16 +104,27 @@ sealed class WslEngineHost(Action<string> log) : IDisposable
         return HostPipe.Ok;
     }
 
+    // Kept on disk: a dockyard-host started again (an update, a crash, the next logon) relays at once, without waiting for
+    // the Toolbox to say so again, which it may have said to the one that was replaced.
+    public static readonly string DomainsMarker = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Dockyard", "domains.on");
+
     string StartDomains()
     {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(DomainsMarker)!);
+            File.WriteAllText(DomainsMarker, "");
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { log($"Cannot keep container domains on: {e.Message}"); }
         if (domains is not null) return HostPipe.Ok;
         domains = new DomainRelay(log);
         domains.Start();
         return HostPipe.Ok;
     }
 
-    string StopDomains()
+    string StopDomains(bool forget = false)
     {
+        if (forget) File.Delete(DomainsMarker);
         domains?.Dispose();
         domains = null;
         return HostPipe.Ok;

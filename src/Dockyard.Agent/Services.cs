@@ -39,17 +39,33 @@ sealed class Services(Func<DockerClient> connect, DomainTable table, string root
         "--initial-cluster", $"dockyard=http://127.0.0.1:{GuestAddresses.EtcdPeerPort}",
     ];
 
-    IEnumerable<ServiceContainer> Containers() =>
-    [
-        new("dockyard-dns", DnsImage, ["-conf", $"{ServiceConfig.ConfigDir}/Corefile"], [$"{DnsDir}:{ServiceConfig.ConfigDir}:ro"]),
-        new("dockyard-proxy", ProxyImage, [$"--configFile={ServiceConfig.ConfigDir}/traefik.yml"], [$"{ProxyDir}:{ServiceConfig.ConfigDir}:ro"]),
-    ];
+    ServiceContainer Dns => new("dockyard-dns", DnsImage, ["-conf", $"{ServiceConfig.ConfigDir}/Corefile"], [$"{DnsDir}:{ServiceConfig.ConfigDir}:ro"]);
+    ServiceContainer Proxy => new("dockyard-proxy", ProxyImage, [$"--configFile={ServiceConfig.ConfigDir}/traefik.yml"], [$"{ProxyDir}:{ServiceConfig.ConfigDir}:ro"]);
+
+    // dockyard-dns always: it is every container's DNS server, also for names outside Dockyard's. The proxy only while
+    // container domains are on.
+    IEnumerable<ServiceContainer> Containers() => table.Enabled ? [Dns, Proxy] : [Dns];
+
+    volatile bool recheck;
+
+    // Container domains switched on or off: the proxy and etcd come or go at the next round, not 30 seconds later.
+    public void NamesChanged() => recheck = true;
 
     // Only clusters' published names depend on it, so it failing leaves DNS and the proxy as they are.
     static readonly ServiceContainer Etcd = new("dockyard-etcd", EtcdImage, EtcdCommand, ["dockyard-etcd:/var/lib/etcd"]);
 
     async Task EnsureEtcd(DockerClient docker, CancellationToken ct)
     {
+        if (!table.Enabled)
+        {
+            foreach (var name in new[] { Proxy.Name, Etcd.Name })
+                if ((await docker.ListContainersAsync(all: true, ct)).FirstOrDefault(c => c.Names?.Contains("/" + name) == true) is { } gone)
+                {
+                    await docker.RemoveContainerAsync(gone.Id, force: true, ct: ct);
+                    log($"{name} removed: container domains are off");
+                }
+            return;
+        }
         try { await Ensure(docker, Etcd, ct); }
         catch (Exception e) when (e is not OperationCanceledException) { log($"dockyard-etcd: {e.Message}; names published by clusters are not answered"); }
     }
@@ -115,7 +131,8 @@ sealed class Services(Func<DockerClient> connect, DomainTable table, string root
                     catch (Exception e) when (e is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested) { }
                 }
                 WriteConfig();
-                if (DateTime.UtcNow - lastCheck < TimeSpan.FromSeconds(30)) continue;
+                if (!recheck && DateTime.UtcNow - lastCheck < TimeSpan.FromSeconds(30)) continue;
+                recheck = false;
                 lastCheck = DateTime.UtcNow;
                 using var docker = connect();
                 foreach (var container in Containers()) await Ensure(docker, container, ct);

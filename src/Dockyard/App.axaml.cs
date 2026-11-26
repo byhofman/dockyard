@@ -106,6 +106,10 @@ public partial class App : Application
                 }
                 ShowWindow();
                 break;
+            case TrayCommandKind.Highlight:
+                vm.Highlight(command.Engine!);
+                ShowWindow();
+                break;
             case TrayCommandKind.Start: _ = vm.StartEngine(command.Engine!); break;
             case TrayCommandKind.Switch: _ = SwitchAndReport(command.Engine!); break;
             case TrayCommandKind.Run: _ = Task.Run(() => RunAndReply(command.Reply!, command.Args!)); break;

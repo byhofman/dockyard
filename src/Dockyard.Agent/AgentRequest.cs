@@ -9,4 +9,5 @@ sealed class AgentRequest
     public int? Port { get; set; }
     public string? Cert { get; set; }
     public string? Key { get; set; }
+    public bool? On { get; set; }
 }

@@ -48,4 +48,8 @@ public sealed class AgentClient(DockerEndpoint endpoint)
 
     public Task SetCertificateAsync(string certPem, string keyPem, CancellationToken ct = default) =>
         Ask(new AgentMessage { Op = "tls", Cert = certPem, Key = keyPem }, ct);
+
+    // Container domains on or off: names under dockyard.internal, the proxy and what clusters publish.
+    public Task SetNamesAsync(bool on, CancellationToken ct = default) =>
+        Ask(new AgentMessage { Op = "names", On = on }, ct);
 }

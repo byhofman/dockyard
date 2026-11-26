@@ -17,7 +17,7 @@ static class Program
         using var stop = new CancellationTokenSource();
         Log("Started");
         await host.Attach();
-        if (args.Contains("--domains")) await host.Handle("domains on");
+        if (args.Contains("--domains") || File.Exists(WslEngineHost.DomainsMarker)) await host.Handle("domains on");
         try { await HostPipe.Serve(host.Handle, stop.Token); }
         catch (OperationCanceledException) { }
         return 0;
