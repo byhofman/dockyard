@@ -18,7 +18,7 @@ public sealed class SectionSwitchingTests
         { "Images", typeof(ImagesView) },
         { "Volumes", typeof(VolumesView) },
         { "Networks", typeof(NetworksView) },
-        { "Clusters", typeof(ClustersView) },
+        { "Kubernetes", typeof(ClustersView) },
         { "Disk", typeof(DiskView) },
         { "Containers", typeof(ContainersView) },
     };

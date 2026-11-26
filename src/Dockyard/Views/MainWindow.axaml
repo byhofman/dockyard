@@ -215,9 +215,9 @@
           <Grid ColumnDefinitions="*,Auto">
             <TextBlock Classes="h2" Text="COMPONENTS" VerticalAlignment="Bottom" />
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-              <Button Content="Check for updates" Command="{Binding CheckUpdatesCommand}" />
               <ComboBox ItemsSource="{x:Static vm:MainViewModel.ToolSources}" SelectedIndex="{Binding ToolSource}" MinWidth="160"
-                        ToolTip.Tip="Where docker, kind, kubectl and helm come from. Applies the next time one is added or updated." AutomationProperties.Name="Download source" />
+                        ToolTip.Tip="Where docker, kind, kubectl and helm come from; changing it moves them at once." AutomationProperties.Name="Download source" />
+              <Button Content="Check for updates" Command="{Binding CheckUpdatesCommand}" />
               <Button Classes="primary" Content="Update all" Command="{Binding UpdateAllCommand}" />
             </StackPanel>
           </Grid>

@@ -46,7 +46,7 @@ sealed class ContainersViewModel : Observable, ISearchable
         ToggleClusterCommand = new Command<ClusterRow>(k => { Store.ToggleProject(k.Key); return Task.CompletedTask; });
         ToggleSystemCommand = new Command<SystemRow>(_ => { Store.ToggleProject(SystemRow.Key); return Task.CompletedTask; });
         ClusterStartStopCommand = new Command<ClusterRow>(k => shell.Clusters?.StartOrStop(k.Cluster) ?? Task.CompletedTask);
-        OpenClusterCommand = new Command<ClusterRow>(k => { shell.Reveal("Clusters", k.Cluster); return Task.CompletedTask; });
+        OpenClusterCommand = new Command<ClusterRow>(k => { shell.Reveal("Kubernetes", k.Cluster); return Task.CompletedTask; });
 
         StartPickedCommand = new Command(() => StartOrStopPicked(stop: false), () => PickedContainers.Any(c => !c.IsRunning) || PickedClusters.Any(c => !c.IsRunning));
         StopPickedCommand = new Command(() => StartOrStopPicked(stop: true), () => PickedContainers.Any(c => c.IsRunning) || PickedClusters.Any(c => c.Nodes.Any(n => n.IsRunning)));
@@ -121,7 +121,7 @@ sealed class ContainersViewModel : Observable, ISearchable
         var service = item.Labels.GetValueOrDefault(SystemRow.ServiceLabel);
         string? setting = service switch { "dns" or "etcd" => "domains", "proxy" => "proxy", _ => null };
         if (setting is not null && TrayClient.Send(new Shared.TrayCommand(Shared.TrayCommandKind.Highlight, setting))) return;
-        if (service is "cloud-provider-kind" or "nfs") shell.ShowSection("Clusters");
+        if (service is "cloud-provider-kind" or "nfs") shell.ShowSection("Kubernetes");
         shell.ShowInfo(SystemHint(item));
     }
 
@@ -130,7 +130,7 @@ sealed class ContainersViewModel : Observable, ISearchable
         "dns" => $"{item.Name} is the DNS server of every container: it answers names under dockyard.internal and passes the rest to your network's DNS. It always runs with the engine. To stop the names, turn off Container domains in the Dockyard Toolbox's settings.",
         "proxy" => $"{item.Name} serves http and https://<name>.dockyard.internal and the ingress of kind clusters. Turn off Container domains in the Dockyard Toolbox's settings to remove it, or only Trusted HTTPS to keep plain http.",
         "etcd" => $"{item.Name} holds the names kind clusters publish with external-dns. Turn off Container domains in the Dockyard Toolbox's settings to remove it.",
-        "cloud-provider-kind" => $"{item.Name} gives LoadBalancer services in kind clusters an address. It goes when no running cluster has its load balancer on: switch that off per cluster under Clusters.",
+        "cloud-provider-kind" => $"{item.Name} gives LoadBalancer services in kind clusters an address. It goes when no running cluster has its load balancer on: switch that off per cluster under Kubernetes.",
         "nfs" => $"{item.Name} serves NFS storage to the kind clusters that use it, and goes when the last of them is deleted.",
         _ => $"{item.Name} is one of Dockyard's own containers, which Dockyard starts and removes itself.",
     };

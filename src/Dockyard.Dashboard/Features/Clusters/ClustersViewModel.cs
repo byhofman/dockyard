@@ -23,9 +23,23 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         CreateCommand = new Command(() => { AskCreate(); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine);
         DeleteCommand = new Command(() => { AskDelete(Picked); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine && SelectionCount > 0);
         DeleteRowCommand = new Command<KindCluster>(c => { AskDelete([c]); return Task.CompletedTask; });
-        // A node's container, found among the engine's; unfolding a cluster has its nodes sampled for CPU and memory.
-        ClusterNodes.Container = name => Session.Containers.Items.FirstOrDefault(i => i.Name == name) is { } item
-            ? WithUsage(item) : null;
+        ClusterNodes.Unfolded = c => unfolded.Contains(c.Name);
+        ClusterNodes.Rows = NodeRowsOf;
+        ToggleNodesCommand = new Command<KindCluster>(c =>
+        {
+            if (!unfolded.Remove(c.Name)) unfolded.Add(c.Name);
+            // A new instance makes the row bind again, chevron and nodes alike.
+            if (Rows.IndexOf(c) is var i and >= 0) Rows[i] = c with { };
+            // Asking every cluster every 10 seconds only while one is unfolded.
+            if (readinessTimer is null)
+            {
+                readinessTimer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
+                readinessTimer.Tick += async (_, _) => { foreach (var r in Rows.Where(r => r.IsRunning && unfolded.Contains(r.Name)).ToList()) await CheckReadiness(r); };
+            }
+            readinessTimer.IsEnabled = unfolded.Count > 0;
+            return c.IsRunning && unfolded.Contains(c.Name) ? CheckReadiness(c) : Task.CompletedTask;
+        });
+
         OpenNodeCommand = new Command<NodeRow>(n =>
         {
             if (n.Container is { } item) Shell.Reveal("Containers", item);
@@ -81,10 +95,32 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     public Command EditCommand { get; }
     public Command<NodeRow> OpenNodeCommand { get; }
 
-    Store.ContainerItem WithUsage(Store.ContainerItem item)
+    public Command<KindCluster> ToggleNodesCommand { get; }
+    readonly HashSet<string> unfolded = [];
+    readonly Dictionary<string, List<NodeRow>> nodeRows = [];
+    // Made on the first unfold, on the UI thread: a timer made with the view model would claim a dispatcher too early.
+    Avalonia.Threading.DispatcherTimer? readinessTimer;
+
+    // Kept per cluster, so readiness and the containers' usage carry over when the row binds again; the dashboard samples
+    // CPU and memory only for containers in view, so these are put in view.
+    IReadOnlyList<NodeRow> NodeRowsOf(KindCluster cluster)
     {
-        Shell.Containers?.SetVisible(item.Id, true);
-        return item;
+        if (nodeRows.TryGetValue(cluster.Name, out var rows) && rows.Select(r => r.Node).SequenceEqual(cluster.Nodes)) return rows;
+        rows = cluster.Nodes.Select(n =>
+        {
+            var item = Session.Containers.Items.FirstOrDefault(i => i.Name == n.Name);
+            if (item is not null) Shell.Containers?.SetVisible(item.Id, true);
+            return new NodeRow(n, item);
+        }).ToList();
+        nodeRows[cluster.Name] = rows;
+        return rows;
+    }
+
+    async Task CheckReadiness(KindCluster cluster)
+    {
+        if (kind is not { } exe) return;
+        var ready = await new KindActions(exe, Session.ContextName, kubeconfig).NodeReadiness(cluster.Name);
+        foreach (var row in NodeRowsOf(cluster)) row.Ready = ready.TryGetValue(row.Name, out var r) ? r : false;
     }
     public Command OpenHeadlampCommand { get; }
 
