@@ -180,6 +180,11 @@ sealed class ContainersViewModel : Observable, ISearchable
         if (Session.Client is { } client) shell.Logs.Open(key, title, client, sources);
     }
 
+    public void OpenLogsSideBySide(IReadOnlyList<(string Title, LogSource Source)> containers)
+    {
+        if (Session.Client is { } client) shell.Logs.OpenSideBySide(client, containers);
+    }
+
     public string? Busy { get => busy; private set { if (Set(ref busy, value)) Raise(nameof(IsBusy)); } }
     public bool IsBusy => busy is not null;
 
@@ -294,6 +299,7 @@ sealed class ContainersViewModel : Observable, ISearchable
         {
             case ContainerItem item when Detail is ContainerDetailViewModel d && d.Item == item:
             case ProjectRow p when Detail is ComposeDetailViewModel cd && cd.Project.Name == p.Name:
+            case ClusterRow k when Detail is Features.Clusters.ClusterDetail kd && kd.Name == k.Name:
                 return;
         }
         detail?.Dispose();

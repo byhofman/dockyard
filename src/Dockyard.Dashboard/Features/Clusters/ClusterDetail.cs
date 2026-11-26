@@ -23,10 +23,15 @@ sealed class ClusterDetail : Observable, IDisposable
         this.owner = owner;
         this.close = close;
         clusters.PropertyChanged += Closed;
-        OpenLogsCommand = new Command(() => { owner.OpenLogs("kind:" + cluster.Name, cluster.Name, Sources()); return Task.CompletedTask; });
+        OpenLogsCommand = new Command(() =>
+        {
+            owner.OpenLogsSideBySide(cluster.Nodes.Select(n => (n.Name, new LogSource(n.Name, false, null))).ToList());
+            return Task.CompletedTask;
+        });
     }
 
     public ClustersViewModel Clusters { get; }
+    public string Name => cluster.Name;
     public LogsViewModel Logs { get; } = new();
     public Command OpenLogsCommand { get; }
 

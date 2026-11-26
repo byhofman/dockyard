@@ -124,7 +124,7 @@
             </ListBox.ItemTemplate>
           </ListBox>
           <Button Classes="iconbtn" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,6,18,0" Command="{Binding OpenLogsCommand}"
-                  ToolTip.Tip="Open in the log panel, next to other logs" AutomationProperties.Name="Open in the log panel">
+                  ToolTip.Tip="Open each container's logs in the log panel, side by side" AutomationProperties.Name="Open in the log panel">
             <PathIcon Data="{StaticResource IconExpand}" />
           </Button>
         </Panel>

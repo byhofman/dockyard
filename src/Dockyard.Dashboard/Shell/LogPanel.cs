@@ -121,6 +121,16 @@ sealed class LogPanel : Observable
         activity.IsOpen = true;
     }
 
+    // A group's containers, a tab each, side by side and by themselves.
+    public void OpenSideBySide(DockerClient client, IReadOnlyList<(string Title, LogSource Source)> containers)
+    {
+        if (containers.Count == 0) return;
+        foreach (var (title, source) in containers) Open(source.Id, title, client, [source]);
+        var keys = containers.Select(c => c.Source.Id).ToHashSet();
+        foreach (var tab in Tabs) tab.IsShown = keys.Contains(tab.Key);
+        SideBySide = containers.Count > 1;
+    }
+
     public void Close(LogTab tab)
     {
         if (!tab.CanClose || !Tabs.Remove(tab)) return;
