@@ -20,13 +20,12 @@ public sealed class LinuxHostTests
     }
 
     [Theory]
-    [InlineData("dockyard-tray-linux-x64", true)]
-    [InlineData("dockyard-tray-windows-x64.exe", false)]
-    [InlineData("Dockyard-linux-x64", false)]
-    [InlineData("Dockyard.exe", false)]
+    [InlineData("dockyard_1.2.3_amd64.deb", true)]
+    [InlineData("dockyard-dashboard_1.2.3_amd64.deb", false)]
+    [InlineData("dockyard-linux-x64", false)]
     [InlineData("Dockyard-0.3.0-linux-x64.tar.gz", false)]
-    public void Update_check_looks_for_the_linux_binary(string asset, bool matches) =>
-        Assert.Equal(matches, System.Text.RegularExpressions.Regex.IsMatch(asset, LinuxLayout.AppAsset));
+    public void Update_check_looks_for_the_package_with_the_command_and_the_tray(string asset, bool matches) =>
+        Assert.Equal(matches, System.Text.RegularExpressions.Regex.IsMatch(asset, LinuxLayout.AppPackage("apt")));
 
     [Fact]
     public void Autostart_entry_runs_the_tray()

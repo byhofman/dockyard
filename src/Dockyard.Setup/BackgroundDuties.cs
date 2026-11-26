@@ -30,8 +30,6 @@ public sealed class BackgroundDuties
 
     // After every check of its own: the rows that have an update, empty when there are none.
     public event Action<IReadOnlyList<ComponentRow>>? UpdatesFound;
-    // The same check in full, for the Toolbox's rows until it goes.
-    internal event Action<IReadOnlyList<DockyardSetup.ComponentCheck>>? Checks;
 
     public bool CheckIsDue => DateTime.UtcNow - lastCheck > Times.CheckEvery;
 
@@ -97,7 +95,6 @@ public sealed class BackgroundDuties
                 if (CheckIsDue)
                 {
                     var checks = await setup.Check(null, skipStoppedEngines: true, ct);
-                    Checks?.Invoke(checks);
                     UpdatesFound?.Invoke(checks.Where(c => c.Row.CanUpdate).Select(c => c.Row).ToList());
                 }
             }

@@ -28,22 +28,22 @@ public sealed class UpdatesTests : IDisposable
 
     sealed class FakeGitHub : HttpMessageHandler
     {
-        public Dictionary<string, HttpResponseMessage> Routes { get; } = [];
+        public Dictionary<string, Func<HttpResponseMessage>> Routes { get; } = [];
         public List<string> Requested { get; } = [];
         public HttpStatusCode? Refuse { get; set; }
 
-        public void Serve(string url, string body) => Routes[url] = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) };
+        public void Serve(string url, string body) => Routes[url] = () => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) };
 
         // HttpClient reports where redirects ended up through the response's request.
         public void Redirect(string url, string target) =>
-            Routes[url] = new HttpResponseMessage(HttpStatusCode.OK) { RequestMessage = new HttpRequestMessage(HttpMethod.Head, target) };
+            Routes[url] = () => new HttpResponseMessage(HttpStatusCode.OK) { RequestMessage = new HttpRequestMessage(HttpMethod.Head, target) };
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var url = request.RequestUri!.ToString();
             Requested.Add(url);
             if (Refuse is { } status) return Task.FromResult(new HttpResponseMessage(status));
-            return Task.FromResult(Routes.TryGetValue(url, out var response) ? response : new HttpResponseMessage(HttpStatusCode.NotFound));
+            return Task.FromResult(Routes.TryGetValue(url, out var response) ? response() : new HttpResponseMessage(HttpStatusCode.NotFound));
         }
     }
 
@@ -56,16 +56,19 @@ public sealed class UpdatesTests : IDisposable
     }
 
     [Fact]
-    public async Task The_latest_release_comes_from_the_redirect_and_its_checksums_without_the_api()
+    public async Task A_component_s_latest_release_comes_from_the_index_and_its_checksums_without_the_api()
     {
-        github.Redirect($"{Base}/latest", $"{Base}/tag/toolbox/1.2.3");
-        ServeRelease("toolbox/1.2.3", "dockyard-tray-linux-x64", "app");
+        github.Serve($"{Base}/download/index/components.json", """{ "cli": { "version": "1.2.3", "tag": "cli/1.2.3" }, "tray": { "version": "1.1.0", "tag": "tray/1.1.0" } }""");
+        ServeRelease("cli/1.2.3", "dockyard_1.2.3_amd64.deb", "app");
+        ServeRelease("tray/1.1.0", "dockyard-tray-windows-x64.exe", "tray");
 
-        var release = await Updates.LatestApp(LinuxLayout.AppAsset);
+        var release = await Updates.LatestComponentAsset(Updates.CliComponent, LinuxLayout.AppPackage("apt"));
+        var tray = await Updates.LatestComponentAsset(Updates.TrayComponent, Updates.WindowsAppAsset);
 
         Assert.Equal(new Version(1, 2, 3), release!.Version);
-        Assert.Equal("toolbox/1.2.3", release.Tag);
-        Assert.Equal($"{Base}/download/toolbox/1.2.3/dockyard-tray-linux-x64", release.DownloadUrl);
+        Assert.Equal("cli/1.2.3", release.Tag);
+        Assert.Equal($"{Base}/download/cli/1.2.3/dockyard_1.2.3_amd64.deb", release.DownloadUrl);
+        Assert.Equal("tray/1.1.0", tray!.Tag);
         Assert.DoesNotContain(github.Requested, url => url.Contains("api.github.com"));
     }
 
@@ -73,7 +76,6 @@ public sealed class UpdatesTests : IDisposable
     [InlineData("dockyard-tray-windows-x64.exe", true)]
     [InlineData("dockyard-tray-linux-x64", false)]
     [InlineData("dockyard-windows-x64.exe", false)]
-    [InlineData("Dockyard.exe", false)]
     public void The_Windows_tray_is_found_by_its_own_asset_name(string asset, bool matches) =>
         Assert.Equal(matches, System.Text.RegularExpressions.Regex.IsMatch(asset, Updates.WindowsAppAsset));
 
@@ -82,15 +84,15 @@ public sealed class UpdatesTests : IDisposable
     {
         github.Redirect($"{Base}/latest", Base);
 
-        Assert.Null(await Updates.LatestApp(LinuxLayout.AppAsset));
+        Assert.Null(await Updates.LatestTag(Paths.Repo));
     }
 
     [Fact]
     public async Task A_download_finds_the_asset_by_pattern_and_verifies_it()
     {
-        ServeRelease("toolbox/1.2.3", "dockyard-linux-1.2.3-x86_64.tar.gz", "image");
+        ServeRelease("cli/1.2.3", "dockyard-linux-1.2.3-x86_64.tar.gz", "image");
 
-        var file = await Updates.DownloadReleaseAsset(Updates.ImageAsset, dir, isPattern: true, tag: "toolbox/1.2.3");
+        var file = await Updates.DownloadReleaseAsset(Updates.ImageAsset, dir, isPattern: true, tag: "cli/1.2.3");
 
         Assert.Equal("image", File.ReadAllText(file));
         Assert.DoesNotContain(github.Requested, url => url.Contains("api.github.com"));
@@ -99,9 +101,9 @@ public sealed class UpdatesTests : IDisposable
     [Fact]
     public async Task A_download_that_does_not_match_its_checksum_is_removed()
     {
-        ServeRelease("toolbox/1.2.3", "Dockyard.exe", "tampered", sums: $"{Sum("original")}  Dockyard.exe\n");
+        ServeRelease("cli/1.2.3", "dockyard-windows-x64.exe", "tampered", sums: $"{Sum("original")}  dockyard-windows-x64.exe\n");
 
-        var e = await Assert.ThrowsAsync<InvalidOperationException>(() => Updates.DownloadReleaseAsset("Dockyard.exe", dir, tag: "toolbox/1.2.3"));
+        var e = await Assert.ThrowsAsync<InvalidOperationException>(() => Updates.DownloadReleaseAsset("dockyard-windows-x64.exe", dir, tag: "cli/1.2.3"));
 
         Assert.Contains("Checksum mismatch", e.Message);
         Assert.Empty(Directory.GetFiles(dir));
@@ -110,11 +112,11 @@ public sealed class UpdatesTests : IDisposable
     [Fact]
     public async Task An_asset_the_checksums_do_not_list_is_named_in_the_error()
     {
-        ServeRelease("toolbox/1.2.3", "Dockyard.exe", "app");
+        ServeRelease("cli/1.2.3", "dockyard-windows-x64.exe", "app");
 
-        var e = await Assert.ThrowsAsync<InvalidOperationException>(() => Updates.DownloadReleaseAsset("other.zip", dir, tag: "toolbox/1.2.3"));
+        var e = await Assert.ThrowsAsync<InvalidOperationException>(() => Updates.DownloadReleaseAsset("other.zip", dir, tag: "cli/1.2.3"));
 
-        Assert.Equal("Release toolbox/1.2.3 has no other.zip", e.Message);
+        Assert.Equal("Release cli/1.2.3 has no other.zip", e.Message);
     }
 
     [Theory]
@@ -124,7 +126,7 @@ public sealed class UpdatesTests : IDisposable
     {
         github.Refuse = status;
 
-        var e = await Assert.ThrowsAsync<HttpRequestException>(() => Updates.LatestApp(LinuxLayout.AppAsset));
+        var e = await Assert.ThrowsAsync<HttpRequestException>(() => Updates.LatestTag(Paths.Repo));
 
         Assert.True(Updates.IsRateLimited(e));
         Assert.Contains("github.com is refusing or limiting requests", e.Message);
@@ -134,10 +136,10 @@ public sealed class UpdatesTests : IDisposable
     [Fact]
     public async Task Any_other_failure_names_what_could_not_be_fetched()
     {
-        var e = await Assert.ThrowsAsync<HttpRequestException>(() => Updates.DownloadReleaseAsset("Dockyard.exe", dir, tag: "toolbox/9.9.9"));
+        var e = await Assert.ThrowsAsync<HttpRequestException>(() => Updates.DownloadReleaseAsset("dockyard-windows-x64.exe", dir, tag: "cli/9.9.9"));
 
         Assert.False(Updates.IsRateLimited(e));
-        Assert.Equal($"Could not get {Base}/download/toolbox/9.9.9/SHA256SUMS: github.com answered 404 (NotFound).", e.Message);
+        Assert.Equal($"Could not get {Base}/download/cli/9.9.9/SHA256SUMS: github.com answered 404 (NotFound).", e.Message);
     }
 
     [Fact]

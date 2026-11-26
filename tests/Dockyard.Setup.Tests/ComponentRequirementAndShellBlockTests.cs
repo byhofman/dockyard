@@ -1,14 +1,14 @@
 using Dockyard.Core;
 
-namespace Dockyard.Tests;
+namespace Dockyard.Setup.Tests;
 
 public class ComponentRequirementTests
 {
-    static Updates.ComponentEntry Needing(string? toolbox) =>
-        new("dashboard/0.10.0", new Version(0, 10, 0), toolbox is null ? new Dictionary<string, Version>() : new() { ["toolbox"] = Version.Parse(toolbox) });
+    static Updates.ComponentEntry Needing(string? cli) =>
+        new("dashboard/0.10.0", new Version(0, 10, 0), cli is null ? new Dictionary<string, Version>() : new() { ["cli"] = Version.Parse(cli) });
 
     [Fact]
-    public void A_component_needing_a_newer_toolbox_waits_for_it()
+    public void A_component_needing_a_newer_dockyard_command_waits_for_it()
     {
         Assert.False(Updates.RequirementsMet(Needing("0.10.0"), new Version(0, 9, 0)));
         Assert.True(Updates.RequirementsMet(Needing("0.10.0"), new Version(0, 10, 0)));

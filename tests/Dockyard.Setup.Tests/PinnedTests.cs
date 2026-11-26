@@ -127,8 +127,6 @@ public sealed class PinnedTests : IDisposable
     {
         var tool = Tools.Standalone.Single(t => t.Flag == flag);
         Assert.Contains(flag, ComponentRules.KnownFlags);
-        Assert.Contains(flag, SetupOptions.Usage);
-        Assert.Equal([flag], SetupOptions.Parse(["--silent", "--with", flag]).With);
 #pragma warning disable CA1416 // Only the catalogs, which are plain data on any system.
         var mac = MacHost.Catalog.Single(c => c.Id == tool.Id);
         Assert.Equal(flag, mac.Flag);

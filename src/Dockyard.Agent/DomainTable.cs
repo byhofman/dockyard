@@ -19,7 +19,7 @@ sealed class DomainTable(Func<DockerClient> connect, string choicesFile, Action<
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException) { return []; }
     }
 
-    // Container domains switched off in the Toolbox: no names, no routes, no cluster ingress; kept in a file next to the
+    // Container domains switched off in Settings: no names, no routes, no cluster ingress; kept in a file next to the
     // port choices, so a restarted agent stays off.
     string OffMarker => Path.Combine(Path.GetDirectoryName(choicesFile)!, "names-off");
 

@@ -3,7 +3,7 @@ using System.Runtime.Versioning;
 using Dockyard.Core;
 using Dockyard.Hosts;
 
-namespace Dockyard.Tests;
+namespace Dockyard.Setup.Tests;
 
 /// <summary>DOK-20: where a person can approve it, turning HTTPS off and uninstalling take macOS's trust setting for the CA too.</summary>
 [SupportedOSPlatform("macos")]

@@ -69,7 +69,6 @@ public sealed class FacadeWiringTests
             Assert.Equal("Tools", shell.CurrentSection.Title);
             shell.SettingsCommand.Execute(null);
             Assert.Equal("Settings", shell.CurrentSection.Title);
-            Assert.DoesNotContain("Toolbox", ToolCheck.Missing(docker: false, compose: false, buildx: false));
             Assert.Contains("in Tools", ToolCheck.Missing(docker: true, compose: false, buildx: true));
 
             // kind is a missing tool too: its hint names Tools, and its link opens it.

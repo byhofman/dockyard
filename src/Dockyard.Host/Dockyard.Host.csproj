@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!-- dockyard-host: what of Dockyard has to run on Windows itself, without a window and listening only where Windows
-       cannot reach the engine otherwise. The Toolbox installs it and starts nothing of this itself. -->
+       cannot reach the engine otherwise. dockyard setup installs it and starts nothing of this itself. -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
@@ -27,15 +27,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="Dockyard.Tests" />
   </ItemGroup>
 
   <ItemGroup>
     <Compile Include="..\Shared\WslPaths.cs" LinkBase="Shared" />
     <Compile Include="..\Shared\HostPipe.cs" LinkBase="Shared" />
     <Compile Include="..\Shared\LocalPipe.cs" LinkBase="Shared" />
-    <Compile Include="..\Shared\TrayCommand.cs" LinkBase="Shared" />
-    <Compile Include="..\Shared\TrayCommandKind.cs" LinkBase="Shared" />
     <Compile Include="..\Dockyard.Setup\Core\WslEngineRelay.cs" LinkBase="Relays" />
     <Compile Include="..\Dockyard.Setup\Core\AcceptLoop.cs" LinkBase="Relays" />
     <Compile Include="..\Dockyard.Setup\Core\WslEngineGate.cs" LinkBase="Relays" />

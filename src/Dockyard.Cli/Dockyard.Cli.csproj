@@ -33,8 +33,6 @@
 
   <ItemGroup>
     <Compile Include="..\Shared\LocalPipe.cs" LinkBase="Shared" />
-    <Compile Include="..\Shared\TrayCommand.cs" LinkBase="Shared" />
-    <Compile Include="..\Shared\TrayCommandKind.cs" LinkBase="Shared" />
   </ItemGroup>
 
   <ItemGroup>

@@ -250,11 +250,11 @@ public sealed class MacInstallTests : IDisposable
     }
 
     [Fact]
-    public void Dashboard_files_are_the_dashboard_and_its_libraries_only()
+    public void Dashboard_files_leave_the_libraries_the_tray_links()
     {
         var dir = Directory.CreateTempSubdirectory().FullName;
         foreach (var name in new[] { "Dockyard", "dockyard-host", "Dockyard Dashboard", "libSkiaSharp.dylib" }) File.WriteAllText(Path.Combine(dir, name), "");
-        Assert.Equal(["Dockyard Dashboard", "libSkiaSharp.dylib"], MacLayout.DashboardFiles(dir).Select(Path.GetFileName).Order());
+        Assert.Equal(["Dockyard Dashboard"], MacLayout.DashboardFiles(dir).Select(Path.GetFileName));
         Directory.Delete(dir, recursive: true);
         Assert.Empty(MacLayout.DashboardFiles(dir));
     }
@@ -263,7 +263,7 @@ public sealed class MacInstallTests : IDisposable
     public void Self_update_downloads_the_offered_release_not_the_running_one()
     {
         Assert.Equal("v2.0.0", Updates.ReleaseTag("1.0.0", "v2.0.0"));
-        Assert.Equal("toolbox/1.0.0", Updates.ReleaseTag("1.0.0", null));
+        Assert.Equal("cli/1.0.0", Updates.ReleaseTag("1.0.0", null));
         Assert.Null(Updates.ReleaseTag("0.0.0", null));
     }
 

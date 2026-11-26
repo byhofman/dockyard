@@ -11,10 +11,10 @@ public class SettingsTests
         using var temp = new TempSettings();
         temp.Settings.Save();
         var setup = Settings.Load(temp.File);
-        var toolbox = Settings.Load(temp.File);
+        var other = Settings.Load(temp.File);
 
-        toolbox.KubectlShell = true;
-        toolbox.Save();
+        other.KubectlShell = true;
+        other.Save();
         setup.Source = ToolSource.Dockyard;
         setup.Save();
 

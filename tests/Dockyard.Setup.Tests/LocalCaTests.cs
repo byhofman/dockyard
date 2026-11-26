@@ -1,7 +1,7 @@
 using System.Security.Cryptography.X509Certificates;
 using Dockyard.Core;
 
-namespace Dockyard.Tests;
+namespace Dockyard.Setup.Tests;
 
 public sealed class LocalCaTests : IDisposable
 {

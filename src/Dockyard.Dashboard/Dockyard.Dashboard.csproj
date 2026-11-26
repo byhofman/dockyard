@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">$(NETCoreSdkRuntimeIdentifier)</RuntimeIdentifier>
     <ApplicationManifest Condition="$(RuntimeIdentifier.StartsWith('win'))">app.manifest</ApplicationManifest>
-    <ApplicationIcon>..\Dockyard\Assets\dockyard.ico</ApplicationIcon>
+    <ApplicationIcon>..\Shared\Assets\dockyard.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <PublishAot>true</PublishAot>
@@ -28,8 +28,8 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Dockyard.Dashboard.Tests" />
     <Compile Include="..\Shared\*.cs" LinkBase="Shared" />
-    <AvaloniaResource Include="..\Dockyard\Assets\dockyard.ico" Link="Assets\dockyard.ico" />
-    <AvaloniaResource Include="..\Dockyard\Assets\dockyard.png" Link="Assets\dockyard.png" />
+    <AvaloniaResource Include="..\Shared\Assets\dockyard.ico" Link="Assets\dockyard.ico" />
+    <AvaloniaResource Include="..\Shared\Assets\dockyard.png" Link="Assets\dockyard.png" />
   </ItemGroup>
 
   <ItemGroup>

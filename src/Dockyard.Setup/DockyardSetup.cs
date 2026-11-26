@@ -435,6 +435,4 @@ public sealed partial class DockyardSetup : IDisposable
     internal Task<Version?> InstalledSelfVersion() => host.Installed(host.SelfComponent);
     internal void StartApp() => host.StartApp();
     internal void Reboot() => host.Reboot();
-    internal Task<bool> ShowInstalledWindow(TimeSpan wait) => TrayLink.ShowSettings(host, wait);
-    internal Task<int> RunCommand(IReadOnlyList<string> args, Action<string> log, Action<string> error) => Cli.Execute(this, args, log, error);
 }

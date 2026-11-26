@@ -20,10 +20,8 @@
     <EmbeddedResource Condition="'$(GuestBundle)' != ''" Include="$(GuestBundle)" LogicalName="guest.tar.gz" />
     <EmbeddedResource Condition="'$(HostExe)' != ''" Include="$(HostExe)" LogicalName="dockyard-host.exe" />
     <Compile Include="..\Shared\*.cs" Exclude="..\Shared\CodeEditor.cs;..\Shared\CodeColorizer.cs;..\Shared\DisplayGate.cs" LinkBase="Shared" />
-    <InternalsVisibleTo Include="Dockyard" />
     <InternalsVisibleTo Include="Dockyard.Tray" />
     <InternalsVisibleTo Include="Dockyard.Tray.Tests" />
-    <InternalsVisibleTo Include="Dockyard.Tests" />
     <InternalsVisibleTo Include="Dockyard.Setup.Tests" />
     <InternalsVisibleTo Include="Dockyard.Cli.Tests" />
   </ItemGroup>

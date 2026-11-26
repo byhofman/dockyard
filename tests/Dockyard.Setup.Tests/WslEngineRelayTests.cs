@@ -3,7 +3,7 @@ using System.Net.Sockets;
 using System.Text;
 using Dockyard.Core;
 
-namespace Dockyard.Tests;
+namespace Dockyard.Setup.Tests;
 
 public sealed class WslEngineRelayTests : IDisposable
 {

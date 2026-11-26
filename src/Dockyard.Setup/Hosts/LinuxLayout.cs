@@ -22,9 +22,9 @@ static class LinuxLayout
         packageManager == "dnf" ? @"^dockyard-[\d.]+-1\.x86_64\.rpm$" : @"^dockyard_[\d.]+_amd64\.deb$";
     public const string Tarball = @"^Dockyard-[\d.]+-linux-x64\.tar\.gz$";
     public const string CredentialHelper = "/usr/local/bin/docker-credential-secretservice";
-    public const string AppAsset = @"^dockyard-tray-linux-x64$";
 
-    public static readonly string[] DashboardFiles = [DashboardName, "libSkiaSharp.so", "libHarfBuzzSharp.so"];
+    // Only the dashboard's own file: the tray links the same Skia and HarfBuzz libraries, so they stay.
+    public static readonly string[] DashboardFiles = [DashboardName];
 
     public static bool HasDisplay(string? display, string? waylandDisplay) =>
         !string.IsNullOrEmpty(display) || !string.IsNullOrEmpty(waylandDisplay);

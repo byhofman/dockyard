@@ -1,4 +1,4 @@
-namespace Dockyard.Tests;
+namespace Dockyard.Tray.Tests;
 
 public sealed class DisplayGateTests
 {

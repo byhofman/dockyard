@@ -36,8 +36,8 @@ sealed class MacComponents(ICommandRunner runner)
             await File.ReadAllTextAsync(Path.Combine(MacLayout.Assets, "dockyard-release"))) is { } bundled
             ? new Release(bundled, bundled.ToString(), null) : null,
         // One bundle holds the command and the tray, so the update is the command's.
-        nameof(Component.DockyardCli) => await Updates.LatestApp(MacLayout.ZipAsset(!HasDashboard)),
-        ComponentRules.DashboardId => await Updates.LatestApp(MacLayout.ZipAsset(engineOnly: false)),
+        nameof(Component.DockyardCli) => await Updates.LatestComponentAsset(Updates.CliComponent, MacLayout.ZipAsset(!HasDashboard)),
+        ComponentRules.DashboardId => await Updates.LatestComponentAsset(Updates.CliComponent, MacLayout.ZipAsset(engineOnly: false)),
         _ => null,
     };
 

@@ -143,11 +143,11 @@ public sealed class FacadeTests : IDisposable
     [Theory]
     [InlineData("Tray", "update DockyardCli,Dashboard")]
     [InlineData("DockyardCli", "update Tray,Dashboard")]
-    public async Task The_update_command_leaves_dockyard_itself_to_its_own_restart(string self, string expected)
+    public async Task An_update_leaves_dockyard_itself_to_its_own_restart(string self, string expected)
     {
         var host = new FakeHost { Installed = true, SelfComponent = self, Newest = new Version(2, 0, 0) };
-        var lines = new List<string>();
-        Assert.Equal(0, await For(host).RunCommand(["update"], lines.Add, lines.Add));
+        var setup = For(host);
+        await setup.UpdateAvailable(await setup.CheckUpdates(CancellationToken.None), new ProgressLines());
         Assert.Equal([expected], host.Calls);
     }
 

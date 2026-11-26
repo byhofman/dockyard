@@ -59,7 +59,7 @@ static partial class Updates
         Component.Compose => WindowsCompose,
         Component.Buildx => WindowsBuildx,
         Component.LinuxEngine => LinuxDocker,
-        Component.Tray => await LatestApp(WindowsAppAsset),
+        Component.Tray => await LatestComponentAsset(TrayComponent, WindowsAppAsset),
         Component.Kind or Component.Kubectl or Component.Helm => Tools.Pinned(Tools.Find(c.ToString())!),
         _ => null,
     };
@@ -132,15 +132,6 @@ static partial class Updates
         return File.Exists(path) ? ParseVersion((await Shell.Run(path, args)).Output) : null;
     }
 
-    public static async Task<Release?> LatestApp(string assetPattern)
-    {
-        if (await LatestTag(Paths.Repo) is not { } tag || ParseVersion(tag) is not { } version) return null;
-        if (await GetTextIfFound(AssetUrl(Paths.Repo, tag, "SHA256SUMS")) is not { } sums) return null;
-        return Checksums.Names(sums).FirstOrDefault(n => Regex.IsMatch(n, assetPattern)) is { } asset
-            ? new Release(version, tag, AssetUrl(Paths.Repo, tag, asset))
-            : null;
-    }
-
     public static async Task<string> DownloadTray(Release release)
     {
         var dir = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
@@ -154,7 +145,7 @@ static partial class Updates
     // names each one's latest. See docs/design/components-and-releases.md.
     public const string DashboardZipPattern = @"^Dockyard\.Dashboard\.zip$";
     public const string CliAssetPattern = @"^dockyard-windows-x64\.exe$";
-    public const string ToolboxComponent = "toolbox";
+    public const string TrayComponent = "tray";
     public const string DashboardComponent = "dashboard";
     public const string CliComponent = "cli";
     public const string EngineComponent = "engine";
@@ -189,10 +180,10 @@ static partial class Updates
     static async Task<Dictionary<string, ComponentEntry>> Index() =>
         await GetTextIfFound(AssetUrl(Paths.Repo, "index", "components.json")) is { } json ? ParseIndex(json) : [];
 
-    // A component that needs a newer Toolbox waits for the Toolbox's own update, which comes first. A development build
-    // (0.0.0) is taken as meeting every requirement.
-    internal static bool RequirementsMet(ComponentEntry entry, Version? toolbox) =>
-        !entry.Requires.TryGetValue(ToolboxComponent, out var needed) || toolbox is null || toolbox == new Version(0, 0, 0) || toolbox >= needed;
+    // A component that needs a newer dockyard command waits for the command's own update, which comes first: the command
+    // installs everything else. A development build (0.0.0) is taken as meeting every requirement.
+    internal static bool RequirementsMet(ComponentEntry entry, Version? cli) =>
+        !entry.Requires.TryGetValue(CliComponent, out var needed) || cli is null || cli == new Version(0, 0, 0) || cli >= needed;
 
     // A component's latest release, or null when the index does not name it.
     internal static async Task<ComponentEntry?> LatestComponent(string component) =>
@@ -223,9 +214,10 @@ static partial class Updates
         return await DownloadReleaseAsset(assetPattern, targetDir, isPattern: true, tag: entry.Tag);
     }
 
-    // From the given release; without one, the release of this build, or the latest for development builds.
+    // From the given release; without one, the CLI's release of this build, or the latest for development builds. The CLI's
+    // release also carries the macOS app and the Linux packages and tarball.
     internal static string? ReleaseTag(string appVersion, string? tag) =>
-        tag ?? (appVersion == "0.0.0" ? null : ComponentTag(ToolboxComponent, appVersion));
+        tag ?? (appVersion == "0.0.0" ? null : ComponentTag(CliComponent, appVersion));
 
     // --assets: Dockyard's own files from a folder the user named, for offline installs and for testing a build before its
     // release. Never the installer's own folder by itself: that is usually Downloads, where any web page can leave a file.

@@ -219,7 +219,7 @@ sealed class WindowsHost : IEngineHost
             {
                 log("Downloading the Dockyard tray");
                 downloaded = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
-                exe = await Updates.ReleaseAssetOrLocal(Updates.WindowsAppAsset, downloaded, tag: null);
+                exe = await Updates.DownloadComponentAsset(Updates.TrayComponent, Updates.WindowsAppAsset, downloaded);
             }
             // First: a declined approval then leaves everything as it was.
             await WindowsSetup.MachineComponent(log, nameof(Component.Tray), installed, exe);

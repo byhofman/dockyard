@@ -4,7 +4,7 @@ namespace Dockyard.Dashboard.Tests;
 
 public sealed class CertManagerTests
 {
-    const string Toolbox = """
+    const string ClusterCa = """
         -----BEGIN CERTIFICATE-----
         AAAA
         -----END CERTIFICATE-----
@@ -17,9 +17,9 @@ public sealed class CertManagerTests
         """;
 
     [Fact]
-    public void The_toolbox_output_is_the_chain_and_the_key()
+    public void The_cluster_ca_is_the_chain_and_the_key()
     {
-        var (chain, key) = CertManager.Parse(Toolbox)!.Value;
+        var (chain, key) = CertManager.Parse(ClusterCa)!.Value;
 
         Assert.StartsWith("-----BEGIN CERTIFICATE-----\nAAAA", chain);
         Assert.Contains("CCCC", chain);
@@ -31,7 +31,7 @@ public sealed class CertManagerTests
     [Fact]
     public void The_issuer_takes_the_chain_from_a_tls_secret()
     {
-        var (chain, key) = CertManager.Parse(Toolbox)!.Value;
+        var (chain, key) = CertManager.Parse(ClusterCa)!.Value;
         var manifest = CertManager.IssuerManifest(chain, key).Replace("\r\n", "\n");
 
         Assert.Contains("kind: ClusterIssuer\nmetadata:\n  name: dockyard\nspec:\n  ca:\n    secretName: dockyard-cluster-ca", manifest);

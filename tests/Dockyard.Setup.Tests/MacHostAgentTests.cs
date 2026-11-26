@@ -1,7 +1,7 @@
 using Dockyard.Hosts;
 using Xunit;
 
-namespace Dockyard.Tests;
+namespace Dockyard.Setup.Tests;
 
 public class MacHostAgentTests
 {

@@ -64,7 +64,7 @@ static class MacLayout
         : Path.Combine(AppBase, "vm");
     public static string LaunchAgent => Path.Combine(Home, "Library", "LaunchAgents", LaunchAgentLabel + ".plist");
 
-    // dockyard-host runs the VM under launchd, so the engine does not depend on the Toolbox being open. It is started on
+    // dockyard-host runs the VM under launchd, so the engine does not depend on the tray or the dashboard being open. It is started on
     // demand, or at login when the active engine starts then, and launchd restarts it only when it failed: a stop exits 0.
     public const string HostLabel = "com.byhofman.dockyard.host";
     public static string HostAgent => Path.Combine(Home, "Library", "LaunchAgents", HostLabel + ".plist");
@@ -217,9 +217,10 @@ static class MacLayout
 
     public static string ZipAsset(bool engineOnly) => engineOnly ? @"^Dockyard-[\d.]+-macos-engine-only\.zip$" : @"^Dockyard-[\d.]+-macos\.zip$";
 
-    // Everything of the dashboard in the bundle: the tray links none of the dylibs, the engine-only edition leaves them out too.
+    // Only the dashboard's own file: the bundle's executable is the tray, which links the same Avalonia and Skia dylibs, so
+    // they ship in the engine-only edition too and stay when the dashboard goes.
     public static IEnumerable<string> DashboardFiles(string macosDir) =>
-        !Directory.Exists(macosDir) ? [] : Directory.GetFiles(macosDir).Where(f => Path.GetFileName(f) == DashboardName || f.EndsWith(".dylib", StringComparison.Ordinal));
+        !Directory.Exists(macosDir) ? [] : Directory.GetFiles(macosDir).Where(f => Path.GetFileName(f) == DashboardName);
 
     public const string DashboardName = "Dockyard Dashboard";
     public static bool HasDashboardIn(string macosDir) => File.Exists(Path.Combine(macosDir, DashboardName));

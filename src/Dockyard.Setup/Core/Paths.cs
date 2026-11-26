@@ -32,8 +32,8 @@ static class Paths
     public const string DashboardZipName = "Dockyard.Dashboard.zip";
     public static readonly string DaemonConfigDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "docker", "config");
     public static readonly string UserProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-    // Where install.ps1 puts the installer, and asks Defender to allow when it blocks it.
-    public static readonly string OneLinerExe = Path.Combine(UserProfile, "Downloads", "Dockyard.exe");
+    // Where install.ps1 puts the dockyard command, and asks Defender to allow when it blocks it.
+    public static readonly string OneLinerExe = Path.Combine(UserProfile, "Downloads", "dockyard-windows-x64.exe");
     public static readonly string SettingsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Dockyard");
     public static readonly string SettingsFile = Path.Combine(SettingsDir, "settings.json");
 

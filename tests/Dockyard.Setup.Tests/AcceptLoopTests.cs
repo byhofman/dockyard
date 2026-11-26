@@ -1,6 +1,6 @@
 using Dockyard.Core;
 
-namespace Dockyard.Tests;
+namespace Dockyard.Setup.Tests;
 
 public sealed class AcceptLoopTests
 {

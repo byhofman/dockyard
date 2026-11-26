@@ -3,14 +3,14 @@ using System.Text.RegularExpressions;
 namespace Dockyard.Dashboard.Tests;
 
 // The logo's colours carry the interface's accent, every text token keeps WCAG AA in both themes, and colours live only in
-// the two apps' theme tokens, so a new logo colour or a stray literal cannot leave the interface behind.
+// the dashboard's theme tokens, so a new logo colour or a stray literal cannot leave the interface behind.
 public sealed partial class BrandingTests
 {
-    static readonly string[] Apps = ["src/Dockyard/App.axaml", "src/Dockyard.Dashboard/App.axaml"];
+    static readonly string[] Apps = ["src/Dockyard.Dashboard/App.axaml"];
 
     public static TheoryData<string, string> AppsAndThemes => new()
     {
-        { Apps[0], "Light" }, { Apps[0], "Dark" }, { Apps[1], "Light" }, { Apps[1], "Dark" },
+        { Apps[0], "Light" }, { Apps[0], "Dark" },
     };
 
     static string Root([System.Runtime.CompilerServices.CallerFilePath] string here = "")
@@ -40,7 +40,6 @@ public sealed partial class BrandingTests
     }
 
     [Theory]
-    [InlineData("src/Dockyard/App.axaml")]
     [InlineData("src/Dockyard.Dashboard/App.axaml")]
     public void The_accent_is_the_logo_s_blue(string app)
     {
@@ -51,7 +50,6 @@ public sealed partial class BrandingTests
     }
 
     [Theory]
-    [InlineData("src/Dockyard/App.axaml")]
     [InlineData("src/Dockyard.Dashboard/App.axaml")]
     public void Links_brand_and_selection_take_the_logo_s_colours(string app)
     {
@@ -64,7 +62,6 @@ public sealed partial class BrandingTests
     }
 
     [Theory]
-    [InlineData("src/Dockyard/App.axaml")]
     [InlineData("src/Dockyard.Dashboard/App.axaml")]
     public void Both_themes_follow_the_system_and_define_the_same_tokens(string app)
     {

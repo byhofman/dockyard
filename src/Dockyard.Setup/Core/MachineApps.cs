@@ -98,7 +98,7 @@ static class MachineApps
 
     public static IEnumerable<string> WingetToolFiles => Tools.All.SelectMany(Hosts.Winget.MachineFiles);
 
-    // dockyard-tray from the file given, or from the folder --assets names or the release.
+    // dockyard-tray from the file given, or from the folder --assets names or the tray's own release.
     public static async Task InstallTray(Action<string> log, string? file = null)
     {
         Directory.CreateDirectory(Paths.AppDir);
@@ -106,7 +106,7 @@ static class MachineApps
         try
         {
             if (file is null) log("Downloading the Dockyard tray");
-            file ??= await Updates.ReleaseAssetOrLocal(Updates.WindowsAppAsset, download, tag: null);
+            file ??= await Updates.DownloadComponentAsset(Updates.TrayComponent, Updates.WindowsAppAsset, download);
             if (string.Equals(Path.GetFullPath(file), Paths.AppExe, StringComparison.OrdinalIgnoreCase)) return;
             ReplaceAppExe(file);
             log($"Installed {Paths.AppExe}");
@@ -124,7 +124,7 @@ static class MachineApps
         log($"Removed {Paths.AppExe}");
     }
 
-    // dockyard-host, which keeps the Linux engine running and reachable from Windows; the Toolbox carries it. A running
+    // dockyard-host, which keeps the Linux engine running and reachable from Windows; the dockyard command carries it. A running
     // one is stopped to be replaced: the engine keeps running, and the new one takes it on.
     public static void InstallHost(Action<string> log, int keepPid)
     {

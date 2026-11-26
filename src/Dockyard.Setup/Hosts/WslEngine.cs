@@ -5,8 +5,8 @@ using Dockyard.Shared;
 
 namespace Dockyard.Hosts;
 
-// The Linux engine in the WSL distro. The Toolbox sets it up; dockyard-host keeps it running and carries Windows'
-// traffic to it, so the engine stays up and reachable whether the Toolbox runs or not.
+// The Linux engine in the WSL distro. Setup puts it in place; dockyard-host keeps it running and carries Windows'
+// traffic to it, so the engine stays up and reachable whether the tray or the dashboard runs or not.
 [SupportedOSPlatform("windows")]
 sealed class WslEngine(WslDistro distro)
 {
@@ -21,7 +21,7 @@ sealed class WslEngine(WslDistro distro)
     {
         if (await RelayToEngine()) return;
         await UserSetup.ApplyGuest(distro, _ => { });
-        if (!await EnsureHost()) throw new InvalidOperationException($"{Paths.HostExe} is not installed or does not start; run the Dockyard Toolbox's setup again");
+        if (!await EnsureHost()) throw new InvalidOperationException($"{Paths.HostExe} is not installed or does not start; run dockyard setup again");
         var answer = await HostPipe.Ask("start", TimeSpan.FromSeconds(120));
         if (answer != HostPipe.Ok) throw new InvalidOperationException(answer is null ? "dockyard-host did not answer" : answer.StartsWith("error ", StringComparison.Ordinal) ? answer[6..] : answer);
     }

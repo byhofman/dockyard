@@ -2,7 +2,7 @@ using System.Text.RegularExpressions;
 
 namespace Dockyard.Kind;
 
-// cert-manager with a ClusterIssuer called dockyard: a CA from the Toolbox that can only sign for <cluster>.dockyard.internal,
+// cert-manager with a ClusterIssuer called dockyard: a CA from Dockyard.Setup that can only sign for <cluster>.dockyard.internal,
 // below Dockyard's root, which this computer already trusts. An Ingress with cert-manager.io/cluster-issuer: dockyard then
 // gets a certificate browsers accept, and Dockyard's proxy passes its TLS through untouched.
 static partial class CertManager
@@ -16,7 +16,7 @@ static partial class CertManager
     [GeneratedRegex(@"-----BEGIN (?<kind>[A-Z ]+)-----[\s\S]+?-----END \k<kind>-----")]
     private static partial Regex PemBlock();
 
-    // What `dockyard-toolbox https cluster-issuer <cluster>` prints: the cluster's CA, its key, the root.
+    // What DockyardSetup.ClusterCa returns: the cluster's CA, its key, the root.
     public static (string Chain, string Key)? Parse(string pem)
     {
         var blocks = PemBlock().Matches(pem.Replace("\r\n", "\n")).Select(m => (Kind: m.Groups["kind"].Value, Text: m.Value)).ToList();

@@ -94,7 +94,7 @@ sealed class MacVm(ICommandRunner runner, Func<bool>? ping = null, Func<bool>? h
         if (restart) await Start();
     }
 
-    // The engine belongs to dockyard-host under launchd and outlives the Toolbox; only a helper this process started
+    // The engine belongs to dockyard-host under launchd and outlives the process that started it; only a helper this process started
     // itself, when launchd would not, goes with it.
     public void ReleaseResources()
     {

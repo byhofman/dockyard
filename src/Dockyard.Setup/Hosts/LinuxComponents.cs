@@ -45,7 +45,7 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
         "Compose" => Updates.LinuxCompose,
         "Buildx" => Updates.LinuxBuildx,
         // One package holds the command and the tray, so the update is the command's.
-        nameof(Component.DockyardCli) => await Updates.LatestApp(LinuxLayout.AppAsset),
+        nameof(Component.DockyardCli) => await Updates.LatestComponentAsset(Updates.CliComponent, LinuxLayout.AppPackage("apt")),
         ComponentRules.DashboardId => await Updates.LatestComponentAsset(Updates.DashboardComponent, LinuxLayout.DashboardPackage("apt")),
         _ => null,
     };

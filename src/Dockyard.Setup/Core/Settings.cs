@@ -33,7 +33,7 @@ sealed class Settings
         return settings;
     }
 
-    // Writes only what changed since this copy was loaded, over what is on disk now: the Toolbox, a setup run and the
+    // Writes only what changed since this copy was loaded, over what is on disk now: the dashboard, a setup run and the
     // wizard each hold a copy, and a whole stale copy would undo what another one saved meanwhile.
     public void Save()
     {

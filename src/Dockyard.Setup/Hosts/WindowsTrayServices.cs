@@ -4,7 +4,7 @@ using Dockyard.Shared;
 namespace Dockyard.Hosts;
 
 // What has to run on Windows itself (the engine's pipes, published ports on loopback, the relay for container domains)
-// runs in dockyard-host: the Toolbox only asks for it.
+// runs in dockyard-host: Dockyard.Setup only asks for it.
 [SupportedOSPlatform("windows")]
 sealed class WindowsTrayServices
 {
@@ -14,7 +14,7 @@ sealed class WindowsTrayServices
     {
         if (Started) return;
         Started = true;
-        // An engine that runs already, for example from before the Toolbox started, is attached by dockyard-host.
+        // An engine that runs already, for example from before this process started, is attached by dockyard-host.
         if (linuxEngineWanted) _ = Task.Run(relayToEngine);
         if (linuxEngineWanted) StartDomainRelay();
     }
