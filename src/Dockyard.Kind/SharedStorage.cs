@@ -12,7 +12,7 @@ static partial class SharedStorage
     public const string NodePath = "/var/dockyard-shared";
     public const string ClassName = "shared";
     const string WslDistro = "dockyard";
-    const string AdminConfig = "/etc/kubernetes/admin.conf";
+    internal const string AdminConfig = "/etc/kubernetes/admin.conf";
 
     public static string NodeMounts => $"  extraMounts:\n  - hostPath: {HostPath}\n    containerPath: {NodePath}\n";
 

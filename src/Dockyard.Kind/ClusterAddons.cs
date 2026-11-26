@@ -15,7 +15,7 @@ static class ClusterAddons
     public static readonly ClusterAddon MetricsServer =
         new("metrics-server", "metrics-server", "metrics-server", "https://kubernetes-sigs.github.io/metrics-server/", "3.14.0", "kube-system", ["args[0]=--kubelet-insecure-tls"]);
 
-    public static readonly IReadOnlyList<ClusterAddon> All = [MetricsServer, Traefik, CertManager.Addon];
+    public static readonly IReadOnlyList<ClusterAddon> All = [MetricsServer, Traefik, CertManager.Addon, Headlamp.Addon];
 
     // kind's own kubeconfig, never the user's: its context for the cluster is kind-<name>. Helm gets repositories of its
     // own in scratch: with --repo it still reads the user's list, and fails on a repository there whose cache is gone.
@@ -26,6 +26,18 @@ static class ClusterAddons
         "--repository-config", Path.Combine(scratch, "repositories.yaml"), "--repository-cache", Path.Combine(scratch, "cache"),
         .. addon.Values.SelectMany(v => new[] { "--set", v }),
     ];
+
+    public static async Task Uninstall(string helm, ClusterAddon addon, string kubeconfig, string cluster, Action<string>? onLine)
+    {
+        onLine?.Invoke($"Removing {addon.Title}");
+        var psi = new ProcessStartInfo(helm) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        foreach (var a in new[] { "uninstall", addon.Release, "--namespace", addon.Namespace, "--kubeconfig", kubeconfig, "--kube-context", KindKubeconfig.Key(cluster), "--ignore-not-found" })
+            psi.ArgumentList.Add(a);
+        using var process = Process.Start(psi) ?? throw new InvalidOperationException("Could not start helm");
+        var error = await process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        if (process.ExitCode != 0) throw new InvalidOperationException($"{addon.Title} was not removed: {error.Trim()}");
+    }
 
     public static async Task Install(string helm, ClusterAddon addon, string kubeconfig, string cluster, string scratch, Action<string>? onLine)
     {

@@ -26,6 +26,9 @@ static class CliApp
                     .WithExample("cluster", "create", "dev", "--workers", "2", "--addons", "metrics-server,traefik", "--storage", "nfs");
                 b.AddCommand<ClusterRecreateCommand>("recreate").WithDescription("Deletes it, with everything in it, and makes it again from its definition or the one given.");
                 b.AddCommand<ClusterDeleteCommand>("delete").WithDescription("Deletes it and takes its context out of your kubeconfig.");
+        b.AddCommand<ClusterEditCommand>("edit").WithDescription("Changes the add-ons and NFS storage of a running cluster; the rest needs recreate.")
+            .WithExample("cluster", "edit", "dev", "--addons", "metrics-server,traefik,headlamp", "--storage", "nfs");
+        b.AddCommand<ClusterDashboardTokenCommand>("dashboard-token").WithDescription("Prints a token to sign in to Headlamp, valid for a day.");
                 b.AddCommand<ClusterUseCommand>("use").WithDescription("Makes its context the current one.");
                 b.AddCommand<ClusterKubeconfigCommand>("kubeconfig").WithDescription("Prints its kubeconfig.");
                 b.AddCommand<ClusterDefinitionCommand>("definition").WithDescription("Prints the kind config it was made from.");
@@ -77,7 +80,7 @@ sealed class CreateSettings : CommandSettings
     public int Workers { get; init; }
 
     [CommandOption("--addons <names>")]
-    [Description("metrics-server, traefik, cert-manager (with Helm), comma separated")]
+    [Description("metrics-server, traefik, cert-manager, headlamp (with Helm), comma separated")]
     public string? Addons { get; init; }
 
     [CommandOption("--storage <kind>")]
@@ -155,6 +158,39 @@ sealed class ClusterDeleteCommand : AsyncCommand<NameSettings>
     public override async Task<int> ExecuteAsync(CommandContext context, NameSettings s, CancellationToken cancellation)
     {
         await new Clusters(Console.WriteLine).Delete(s.Name);
+        return 0;
+    }
+}
+
+sealed class EditSettings : CommandSettings
+{
+    [CommandArgument(0, "<name>")]
+    [Description("The cluster: lower case letters, digits, . and -")]
+    public string Name { get; init; } = "";
+
+    [CommandOption("--addons <names>")]
+    [Description("All the add-ons it should have, comma separated: metrics-server, traefik, cert-manager, headlamp; none for none")]
+    public string? Addons { get; init; }
+
+    [CommandOption("--storage <kind>")]
+    [Description("none or nfs; the host folder needs recreate")]
+    public string? Storage { get; init; }
+}
+
+sealed class ClusterEditCommand : AsyncCommand<EditSettings>
+{
+    public override async Task<int> ExecuteAsync(CommandContext context, EditSettings s, CancellationToken cancellation)
+    {
+        await new Clusters(Console.WriteLine).Edit(s.Name, s.Addons == "none" ? "" : s.Addons, s.Storage);
+        return 0;
+    }
+}
+
+sealed class ClusterDashboardTokenCommand : AsyncCommand<NameSettings>
+{
+    public override async Task<int> ExecuteAsync(CommandContext context, NameSettings s, CancellationToken cancellation)
+    {
+        await new Clusters(Console.WriteLine).DashboardToken(s.Name);
         return 0;
     }
 }

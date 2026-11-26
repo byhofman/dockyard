@@ -23,6 +23,15 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         CreateCommand = new Command(() => { AskCreate(); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine);
         DeleteCommand = new Command(() => { AskDelete(Picked); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine && SelectionCount > 0);
         DeleteRowCommand = new Command<KindCluster>(c => { AskDelete([c]); return Task.CompletedTask; });
+        EditCommand = new Command(() => { if (Selected is { } c) AskEdit(c); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine && Selected is { IsRunning: true });
+        OpenHeadlampCommand = new Command(() =>
+        {
+            if (HeadlampUrl is { } url)
+                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true })?.Dispose(); }
+                catch (Exception ex) { Shell.ShowError($"Could not open {url}: {ex.Message}"); }
+            return Task.CompletedTask;
+        }, () => !NeedsLinuxEngine && Selected is { IsRunning: true } && HasHeadlamp);
+        CopyHeadlampTokenCommand = new Command(CopyHeadlampToken, () => HasKind && !NeedsLinuxEngine && Selected is { IsRunning: true });
         CopyKubeconfigCommand = new Command(CopyKubeconfig, () => HasKind && !NeedsLinuxEngine && Selected is { IsRunning: true });
         UseContextCommand = new Command(UseContext, () => !IsBusy && HasKind && !NeedsLinuxEngine && Selected is { IsRunning: true });
         DuplicateCommand = new Command(() => { if (Selected is { } c) AskDuplicate(c); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine && Selected is not null);
@@ -60,6 +69,14 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     public Command<KindCluster> DeleteRowCommand { get; }
     public Command CopyKubeconfigCommand { get; }
     public Command UseContextCommand { get; }
+    public Command CopyHeadlampTokenCommand { get; }
+    public Command EditCommand { get; }
+    public Command OpenHeadlampCommand { get; }
+
+    // Headlamp's address for the selected cluster, as its definition has it: https with cert-manager's certificate.
+    public string? HeadlampUrl => Selected is { } c && ClusterDefinitions.Load(c.Name) is { } d && d.Addons.Contains(Headlamp.Addon.Release)
+        ? $"{(d.Addons.Contains(CertManager.Addon.Release) ? "https" : "http")}://{Headlamp.Host(c.Name)}" : null;
+    public bool HasHeadlamp => HeadlampUrl is not null;
     public Command DuplicateCommand { get; }
     public Command RecreateCommand { get; }
     public Command ToggleCommand { get; }
@@ -242,6 +259,10 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         DeleteCommand.Refresh();
         CopyKubeconfigCommand.Refresh();
         UseContextCommand.Refresh();
+        EditCommand.Refresh();
+        CopyHeadlampTokenCommand.Refresh();
+        OpenHeadlampCommand.Refresh();
+        Raise(nameof(HeadlampUrl), nameof(HasHeadlamp));
         DuplicateCommand.Refresh();
         RecreateCommand.Refresh();
         LoadBalancerCommand.Refresh();
@@ -307,6 +328,8 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         var metrics = DialogField.Check($"metrics-server {ClusterAddons.MetricsServer.Version}: kubectl top and pod autoscaling", isChecked: from?.Addons.Contains(ClusterAddons.MetricsServer.Release) ?? true);
         var traefik = DialogField.Check($"Traefik {ClusterAddons.Traefik.Version}: an ingress controller, reachable through the load balancer", isChecked: from?.Addons.Contains(ClusterAddons.Traefik.Release) ?? false);
         var certManager = DialogField.Check($"cert-manager {CertManager.Addon.Version}: certificates for <host>.<name>.dockyard.internal from the ClusterIssuer dockyard, trusted on this computer when trusted HTTPS is on", isChecked: from?.Addons.Contains(CertManager.Addon.Release) ?? false);
+        var headlamp = DialogField.Check($"Headlamp {Headlamp.Addon.Version}: the Kubernetes UI at dashboard.<name>.dockyard.internal, with Traefik", isChecked: from?.Addons.Contains(Headlamp.Addon.Release) ?? false);
+        headlamp.Changed += () => { if (headlamp.IsChecked) traefik.IsChecked = true; };
         string? generated = from is null ? KindCli.Config(0) : null;
         var definition = DialogField.Code("Definition: kind's cluster config, from the choices above until you change it", from?.Yaml ?? generated!, Shared.CodeLanguage.Yaml, ClusterDefinitions.Problem);
         var message = (fromName is null ? "Each node is a container on the Linux engine. The first cluster pulls kind's node image, which takes a few minutes. " : $"From {fromName}'s definition. ")
@@ -315,7 +338,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         List<DialogField> fields =
         [
             name, .. from is null ? [workers] : Array.Empty<DialogField>(), storage, balancer, ports,
-            .. helm is null ? Array.Empty<DialogField>() : [metrics, traefik, certManager], definition,
+            .. helm is null ? Array.Empty<DialogField>() : [metrics, traefik, certManager, headlamp], definition,
         ];
         void Regenerate()
         {
@@ -326,16 +349,17 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         workers.Changed += Regenerate;
         storage.Changed += Regenerate;
         Shell.Open(new Dialog(fromName is null ? "Create a kind cluster" : $"Duplicate {fromName}", message, "Create",
-            d => Create(d, name.Value, new ClusterDefinition(definition.Text, StorageOf(storage.Value), Addons(metrics, traefik, certManager, helm).Select(a => a.Release).ToList(),
+            d => Create(d, name.Value, new ClusterDefinition(definition.Text, StorageOf(storage.Value), Addons(metrics, traefik, certManager, headlamp, helm).Select(a => a.Release).ToList(),
                 balancer.IsChecked, ClusterDefinitions.ParsePorts(ports.Text) ?? ClusterDefinition.DefaultPorts), helm),
             fields: fields,
             canConfirm: _ => KindClusters.IsValidName(name.Value) && all.All(c => c.Name != name.Value) && definition.Problem is null && (!balancer.IsChecked || ports.Problem is null)));
     }
 
-    static List<ClusterAddon> Addons(DialogField metrics, DialogField traefik, DialogField certManager, string? helm) => helm is null ? [] :
+    static List<ClusterAddon> Addons(DialogField metrics, DialogField traefik, DialogField certManager, DialogField headlamp, string? helm) => helm is null ? [] :
         [
             .. metrics.IsChecked ? [ClusterAddons.MetricsServer] : Array.Empty<ClusterAddon>(), .. traefik.IsChecked ? [ClusterAddons.Traefik] : Array.Empty<ClusterAddon>(),
             .. certManager.IsChecked ? [CertManager.Addon] : Array.Empty<ClusterAddon>(),
+            .. headlamp.IsChecked ? [Headlamp.Addon] : Array.Empty<ClusterAddon>(),
         ];
 
     Task Create(Dialog dialog, string name, ClusterDefinition definition, string? helm) => RunKind(dialog, async (actions, onLine) =>
@@ -413,6 +437,72 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
             }));
         }
         finally { await Reload(); }
+    }
+
+    // What can change on a running cluster: its add-ons, through Helm. Storage and the kind config are the nodes' own and
+    // need Recreate.
+    void AskEdit(KindCluster cluster)
+    {
+        if (CliLocator.Locate("helm") is not { } helm)
+        {
+            Shell.ShowError("The add-ons go in with Helm, which is not installed. Add it in the Dockyard Toolbox.");
+            return;
+        }
+        var current = DefinitionOf(cluster);
+        bool Has(ClusterAddon a) => current.Addons.Contains(a.Release);
+        var metrics = DialogField.Check($"metrics-server {ClusterAddons.MetricsServer.Version}: kubectl top and pod autoscaling", Has(ClusterAddons.MetricsServer));
+        var traefik = DialogField.Check($"Traefik {ClusterAddons.Traefik.Version}: an ingress controller, reachable through the load balancer", Has(ClusterAddons.Traefik));
+        var certManager = DialogField.Check($"cert-manager {CertManager.Addon.Version}: certificates from the ClusterIssuer dockyard", Has(CertManager.Addon));
+        var headlamp = DialogField.Check($"Headlamp {Headlamp.Addon.Version}: the Kubernetes UI at {Headlamp.Host(cluster.Name)}, with Traefik", Has(Headlamp.Addon));
+        headlamp.Changed += () => { if (headlamp.IsChecked) traefik.IsChecked = true; };
+        var storage = new DialogField("Storage that every node can use at once", choices: StorageChoices)
+        {
+            Choice = StorageChoices[current.Storage switch { ClusterStorage.HostFolder => 1, ClusterStorage.Nfs => 2, _ => 0 }],
+        };
+        // The host folder is mounted on each node when kind makes it: choosing it, or leaving it, makes the cluster anew.
+        bool NeedsRecreate() => (StorageOf(storage.Value) == ClusterStorage.HostFolder) != (current.Storage == ClusterStorage.HostFolder);
+        Dialog? dialog = null;
+        dialog = new Dialog($"{cluster.Name}: add-ons and storage",
+            "Add-ons and NFS change on the running cluster. A change to or from the shared host folder makes it Recreate: the cluster is deleted, with everything in it, and made again with these choices. Workers and the kind config change under Definition.", "Apply",
+            d => RunKind(d, async (actions, onLine) =>
+            {
+                var wanted = Addons(metrics, traefik, certManager, headlamp, helm);
+                var chosen = StorageOf(storage.Value);
+                if (NeedsRecreate())
+                {
+                    d.Report($"Deleting {cluster.Name}");
+                    await actions.Delete(cluster.Name, onLine);
+                    await RemoveProxies(cluster.Name);
+                    var remade = current with { Yaml = KindCli.WithSharedStorage(current.Yaml, chosen == ClusterStorage.HostFolder), Storage = chosen, Addons = wanted.Select(a => a.Release).ToList() };
+                    ClusterDefinitions.Save(cluster.Name, remade);
+                    await actions.Create(cluster.Name, onLine, storage: remade.Storage, addons: remade.AddonList, helm: helm, definition: remade.Yaml,
+                        publishNames: remade.LoadBalancer, clusterCa: c => CertManager.FromToolbox(Dashboard.Shell.TrayClient.TrayExe, c));
+                    Shell.ShowInfo($"{cluster.Name} is made again with the add-ons and storage as chosen");
+                    return;
+                }
+                bool? nfs = chosen == current.Storage ? null : chosen == ClusterStorage.Nfs;
+                await actions.EditAddons(cluster.Name, current.AddonList, wanted, helm, c => CertManager.FromToolbox(Dashboard.Shell.TrayClient.TrayExe, c), onLine, nfs);
+                ClusterDefinitions.Save(cluster.Name, current with { Addons = wanted.Select(a => a.Release).ToList(), Storage = chosen });
+                Shell.ShowInfo($"{cluster.Name} has the add-ons and storage as chosen");
+            }), fields: [metrics, traefik, certManager, headlamp, storage]);
+        storage.Changed += () =>
+        {
+            var recreate = NeedsRecreate();
+            dialog.ConfirmText = recreate ? "Recreate" : "Apply";
+            dialog.IsDanger = recreate;
+        };
+        Shell.Open(dialog);
+    }
+
+    async Task CopyHeadlampToken()
+    {
+        if (Selected is not { } c || CopyText is not { } copy) return;
+        try
+        {
+            await copy(await Headlamp.Token(Session.ContextName.Length > 0 ? Session.ContextName : "default", c.Name));
+            Shell.ShowInfo($"An admin token for {c.Name} is on the clipboard, valid for a day; sign in to Headlamp with it");
+        }
+        catch (Exception ex) { Shell.ShowError(ex.Message); }
     }
 
     async Task CopyKubeconfig()

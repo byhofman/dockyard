@@ -31,12 +31,50 @@ sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
             }
             foreach (var addon in addons ?? [])
                 await ClusterAddons.Install(helm ?? throw new InvalidOperationException("Helm is not installed."), addon, own, name, Path.Combine(scratch.FullName, "helm"), onLine);
+            if (addons?.Contains(Headlamp.Addon) == true)
+            {
+                try { await Headlamp.Expose(dockerContext.Length > 0 ? dockerContext : "default", name, tls: addons.Contains(CertManager.Addon), onLine); }
+                catch (InvalidOperationException e) { onLine?.Invoke(e.Message); }
+            }
             if (addons?.Contains(CertManager.Addon) == true && clusterCa is not null)
             {
                 try { await CertManager.AddIssuer(dockerContext.Length > 0 ? dockerContext : "default", name, await clusterCa(name), onLine); }
                 catch (InvalidOperationException e) { onLine?.Invoke($"cert-manager runs, without the {CertManager.IssuerName} ClusterIssuer: {e.Message}"); }
             }
             return file;
+        }
+        finally { scratch.Delete(recursive: true); }
+    }
+
+    // A running cluster's add-ons changed: removed in reverse order, so nothing goes before what uses it, then added as at
+    // creation, Headlamp's address and cert-manager's issuer with them.
+    public async Task EditAddons(string name, IReadOnlyList<ClusterAddon> current, IReadOnlyList<ClusterAddon> wanted, string helm,
+        Func<string, Task<string>>? clusterCa, Action<string>? onLine, bool? nfs = null)
+    {
+        var scratch = Directory.CreateTempSubdirectory("dockyard-kind-");
+        try
+        {
+            var own = Path.Combine(scratch.FullName, "config");
+            await File.WriteAllTextAsync(own, await Kubeconfig(name));
+            var context = dockerContext.Length > 0 ? dockerContext : "default";
+            foreach (var addon in ClusterAddons.All.Reverse().Where(a => current.Contains(a) && !wanted.Contains(a)))
+                await ClusterAddons.Uninstall(helm, addon, own, name, onLine);
+            // NFS is a driver and a storage class, so it comes and goes on a running cluster; claims on it stay, and the
+            // dockyard-nfs server keeps the files.
+            if (nfs == false)
+            {
+                await ClusterAddons.Uninstall(helm, NfsStorage.Driver, own, name, onLine);
+                await SharedStorage.Docker(["--context", context, "exec", name + "-control-plane", "kubectl", "--kubeconfig", SharedStorage.AdminConfig,
+                    "delete", "storageclass", NfsStorage.ClassName, "--ignore-not-found"]);
+            }
+            if (nfs == true) await NfsStorage.Install(context, name, own, helm, Path.Combine(scratch.FullName, "helm"), onLine);
+            var added = ClusterAddons.All.Where(a => wanted.Contains(a) && !current.Contains(a)).ToList();
+            foreach (var addon in added)
+                await ClusterAddons.Install(helm, addon, own, name, Path.Combine(scratch.FullName, "helm"), onLine);
+            if (added.Contains(CertManager.Addon) && clusterCa is not null)
+                await CertManager.AddIssuer(context, name, await clusterCa(name), onLine);
+            if (wanted.Contains(Headlamp.Addon) && (added.Contains(Headlamp.Addon) || added.Contains(CertManager.Addon)))
+                await Headlamp.Expose(context, name, tls: wanted.Contains(CertManager.Addon), onLine);
         }
         finally { scratch.Delete(recursive: true); }
     }

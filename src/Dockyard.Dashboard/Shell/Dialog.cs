@@ -97,8 +97,8 @@ sealed class Dialog : Observable
     {
         Title = title;
         Message = message;
-        ConfirmText = confirmText;
-        IsDanger = danger;
+        this.confirmText = confirmText;
+        isDanger = danger;
         Fields = fields ?? [];
         OptionText = optionText;
         this.action = action;
@@ -112,8 +112,11 @@ sealed class Dialog : Observable
     public string Title { get; }
     public string Message { get; }
     public bool HasMessage => Message.Length > 0;
-    public string ConfirmText { get; }
-    public bool IsDanger { get; }
+    // A dialog can turn into another action as its fields change, such as Apply into Recreate.
+    string confirmText;
+    bool isDanger;
+    public string ConfirmText { get => confirmText; set { confirmText = value; Raise(nameof(ConfirmText)); } }
+    public bool IsDanger { get => isDanger; set { isDanger = value; Raise(nameof(IsDanger), nameof(IsPrimary)); } }
     public bool IsPrimary => !IsDanger;
     public IReadOnlyList<DialogField> Fields { get; }
     public double Width => Fields.Any(f => f.IsCode) ? 720 : 460;
