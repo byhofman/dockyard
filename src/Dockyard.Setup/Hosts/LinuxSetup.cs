@@ -44,7 +44,7 @@ sealed class LinuxSetup(LinuxRoot root, LinuxComponents components, ToolComponen
         if (request.TrustHttps)
         {
             log(InstallPhases.Start(InstallPhases.TrustedHttps));
-            await Https.Enable(host, Settings.Load(), log, request.Silent);
+            await Https.EnableInSetup(host, Settings.Load(), log, request.Silent);
         }
         await root.TryRun("gnome-extensions", "enable", "appindicatorsupport@rgcjonas.gmail.com");
         if ((await root.TryRun("docker", "context", "show"))?.Output.Trim() is { Length: > 0 } current && current != "default")

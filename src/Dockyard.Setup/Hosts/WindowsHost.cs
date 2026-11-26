@@ -262,7 +262,7 @@ sealed class WindowsHost : IEngineHost
         if (request.TrustHttps)
         {
             log(InstallPhases.Start(InstallPhases.TrustedHttps));
-            await Https.Enable(this, Settings.Load(), log, request.Silent);
+            await Https.EnableInSetup(this, Settings.Load(), log, request.Silent);
         }
         return reboot;
     }

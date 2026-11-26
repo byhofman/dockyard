@@ -383,7 +383,8 @@ public sealed partial class DockyardSetup : IDisposable
         // A host's phase marker moves the steps on; one it did not plan, or one it entered already, is only a line.
         void InstallLog(string line)
         {
-            if (Hosts.InstallPhases.Read(line) is not { } phase) log(line);
+            if (Hosts.InstallPhases.ReadWarning(line) is { } warning) progress.Report(new SetupProgress(warning, SetupProgressKind.Warning));
+            else if (Hosts.InstallPhases.Read(line) is not { } phase) log(line);
             else if (plan.IndexOf(phase, step - 1) is var at and >= 0 && at < phases.Count)
             {
                 if (at + 1 == step) return;

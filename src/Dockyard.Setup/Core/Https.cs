@@ -10,8 +10,10 @@ static class Https
     public static async Task Enable(IEngineHost host, Settings settings, Action<string> log, bool silent)
     {
         PemPair ca;
+        bool made;
         try
         {
+            made = await LocalCa.Load(host.CaDirectory, host.CaKeys) is null;
             ca = await LocalCa.LoadOrCreate(host.CaDirectory, host.CaKeys);
         }
         catch (InvalidOperationException e)
@@ -19,11 +21,35 @@ static class Https
             log($"HTTPS was not turned on: {e.Message} Plain HTTP works as before.");
             return;
         }
-        if (!await host.TrustCa(log, LocalCa.CertificateFile(host.CaDirectory), silent))
+        bool trusted;
+        try
+        {
+            trusted = await host.TrustCa(log, LocalCa.CertificateFile(host.CaDirectory), silent);
+        }
+        catch
+        {
+            // HTTPS stays off, so a certificate authority made for it would only be left lying around.
+            if (made) await LocalCa.Remove(host.CaDirectory, host.CaKeys);
+            throw;
+        }
+        if (!trusted)
             log("The certificate was not added to this computer's trust store, so browsers warn about HTTPS until it is. Plain HTTP works as before.");
         settings.HttpsEnabled = true;
         settings.Save();
         await Push(host, ca, log);
+    }
+
+    // Setup's own: a declined approval is the person's answer, so setup carries on with trusted HTTPS off and says so.
+    public static async Task EnableInSetup(IEngineHost host, Settings settings, Action<string> log, bool silent)
+    {
+        try
+        {
+            await Enable(host, settings, log, silent);
+        }
+        catch (InvalidOperationException e) when (e.Message == Elevation.Declined)
+        {
+            log(InstallPhases.Warning($"Trusted HTTPS stays off: {e.Message}. Plain HTTP works as before; turn it on in Settings any time."));
+        }
     }
 
     public static async Task Disable(IEngineHost host, Settings settings, Action<string> log, bool silent)

@@ -26,6 +26,11 @@ static class InstallPhases
 
     public static string? Read(string line) => line.StartsWith(Marker, StringComparison.Ordinal) ? line[Marker.Length..] : null;
 
+    // A line the facade reports as a warning: something setup left out and carried on without.
+    const string WarningMarker = "[dockyard-warning] ";
+    public static string Warning(string line) => WarningMarker + line;
+    public static string? ReadWarning(string line) => line.StartsWith(WarningMarker, StringComparison.Ordinal) ? line[WarningMarker.Length..] : null;
+
     static bool HasKubernetesTools(IReadOnlyCollection<string> without) => Tools.Standalone.Any(t => !without.Contains(t.Id));
 
     public static string WindowsFeatures(bool windowsEngine, bool linuxEngine) =>

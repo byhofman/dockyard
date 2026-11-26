@@ -48,7 +48,7 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
         if (request.TrustHttps)
         {
             log(InstallPhases.Start(InstallPhases.TrustedHttps));
-            await Https.Enable(host, Settings.Load(), log, request.Silent);
+            await Https.EnableInSetup(host, Settings.Load(), log, request.Silent);
         }
     }
 

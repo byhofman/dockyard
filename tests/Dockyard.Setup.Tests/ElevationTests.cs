@@ -60,6 +60,6 @@ public sealed class ElevationTests
 
         Assert.Equal("Administrator approval was declined", refused.Message);
         Assert.Equal(SettingDefinitions.Off, setup.GetSetting(SettingDefinitions.TrustedHttps));
-        Directory.Delete(host.CaDirectory, recursive: true);
+        Assert.False(File.Exists(LocalCa.CertificateFile(host.CaDirectory)));
     }
 }

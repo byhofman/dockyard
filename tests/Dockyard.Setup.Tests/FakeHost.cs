@@ -62,8 +62,11 @@ sealed class FakeHost : IEngineHost
     public IReadOnlyList<string>? Phases { get; init; }
     public IReadOnlyList<string> InstallPlan(InstallRequest request) => Phases ?? ["Installing Dockyard"];
 
+    public IReadOnlyList<string> InstallLines { get; init; } = [];
+
     public Task<bool> Install(Action<string> log, InstallRequest request)
     {
+        foreach (var line in InstallLines) log(line);
         foreach (var phase in Phases ?? [])
         {
             log(InstallPhases.Start(phase));
