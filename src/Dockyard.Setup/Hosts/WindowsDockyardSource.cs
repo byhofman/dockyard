@@ -11,7 +11,7 @@ sealed class WindowsDockyardSource : IDockyardSource
 
     public Release? Pinned(CliTool tool) => tool.Id switch
     {
-        nameof(Component.Cli) => Updates.WindowsDocker,
+        nameof(Component.DockerCli) => Updates.WindowsDocker,
         nameof(Component.Compose) => Updates.WindowsCompose,
         nameof(Component.Buildx) => Updates.WindowsBuildx,
         _ => Tools.Pinned(tool),

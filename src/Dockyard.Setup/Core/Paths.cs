@@ -18,6 +18,11 @@ static class Paths
     public const string HostProcess = "dockyard-host";
     public static readonly string HostExe = Path.Combine(AppDir, HostProcess + ".exe");
     public static readonly string AppExe = Path.Combine(AppDir, AppProcess + ".exe");
+    public static readonly string CommandDir = Path.Combine(AppDir, "bin");
+    // The dockyard command, the one component every install has: it installs and updates the rest.
+    public static string DockyardCliExe => OperatingSystem.IsWindows() ? Path.Combine(CommandDir, "dockyard.exe")
+        : OperatingSystem.IsMacOS() ? Hosts.MacLayout.CliLink
+        : "/usr/bin/dockyard";
     public const string DashboardProcess = "dockyard-dashboard";
     public static readonly string DashboardExe = Path.Combine(AppDir, DashboardProcess + ".exe");
     public static bool HasDashboard => File.Exists(DashboardExe);

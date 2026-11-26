@@ -56,7 +56,7 @@ sealed class ComponentViewModel(ComponentRow row, string? flag) : Observable
     public bool Include { get => include; set => Set(ref include, value); }
     public bool IsOptional => Flag is not null;
     public bool IsDockyard => Row.Group == "Dockyard";
-    public bool IsApp => Id is nameof(Core.Component.App);
+    public bool IsApp => Id is nameof(Core.Component.Tray);
     public bool IsKubernetes => Row.Group == "Kubernetes";
     public string AddId => "Add-" + Id;
     public string RemoveId => "Remove-" + Id;

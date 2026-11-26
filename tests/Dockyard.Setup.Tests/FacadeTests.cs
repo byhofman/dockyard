@@ -73,7 +73,7 @@ public sealed class FacadeTests : IDisposable
         var host = new FakeHost
         {
             Installed = true,
-            Components = [new("App", "Dockyard"), new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard"), new("Compose", "Docker Compose", Flag: "compose"), new("Buildx", "Docker Buildx", Flag: "buildx")],
+            Components = [new("DockyardCli", "Dockyard CLI"), new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard"), new("Compose", "Docker Compose", Flag: "compose"), new("Buildx", "Docker Buildx", Flag: "buildx")],
         };
         host.Missing.Add("Compose");
         settings.Settings.RemovedComponents = ["Compose"];
@@ -90,8 +90,8 @@ public sealed class FacadeTests : IDisposable
     [Fact]
     public async Task Removing_what_is_required_is_refused_with_the_reason_and_changes_nothing()
     {
-        var host = new FakeHost { Installed = true, Components = [new("App", "Dockyard", RequiredBecause: "it runs everything"), new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard")] };
-        var refused = await Assert.ThrowsAsync<InvalidOperationException>(() => For(host).Remove("App", removeData: false, progress));
+        var host = new FakeHost { Installed = true, Components = [new("DockyardCli", "Dockyard CLI", RequiredBecause: "it runs everything"), new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard")] };
+        var refused = await Assert.ThrowsAsync<InvalidOperationException>(() => For(host).Remove("DockyardCli", removeData: false, progress));
         Assert.Contains("it runs everything", refused.Message);
         Assert.Empty(host.Calls);
     }
@@ -99,7 +99,7 @@ public sealed class FacadeTests : IDisposable
     [Fact]
     public async Task A_component_is_found_by_its_id_or_its_flag_and_its_removal_is_remembered()
     {
-        var host = new FakeHost { Installed = true, Components = [new("App", "Dockyard"), new("Compose", "Docker Compose", Flag: "compose")] };
+        var host = new FakeHost { Installed = true, Components = [new("DockyardCli", "Dockyard CLI"), new("Compose", "Docker Compose", Flag: "compose")] };
         var setup = For(host);
         await setup.Remove("compose", removeData: false, progress);
         Assert.Equal(["Compose"], Settings.Load(settings.File).RemovedComponents);
@@ -113,10 +113,10 @@ public sealed class FacadeTests : IDisposable
     [Fact]
     public async Task The_rows_carry_the_installed_and_newest_versions_and_what_can_change()
     {
-        var host = new FakeHost { Installed = true, Dashboard = true, Components = [new("App", "Dockyard", RequiredBecause: "it runs everything"), new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard", Note: "Optional.")] };
+        var host = new FakeHost { Installed = true, Dashboard = true, Components = [new("DockyardCli", "Dockyard CLI", RequiredBecause: "it runs everything"), new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard", Note: "Optional.")] };
         var rows = await For(host).ComponentsAsync(CancellationToken.None);
 
-        var app = rows.Single(r => r.Id == "App");
+        var app = rows.Single(r => r.Id == "DockyardCli");
         Assert.Equal(("Dockyard", "1.0.0", "1.0.0", "it runs everything"), (app.Group, app.Installed, app.Newest, app.RequiredBecause));
         Assert.False(app.CanRemove);
         Assert.False(app.CanUpdate);
@@ -124,6 +124,57 @@ public sealed class FacadeTests : IDisposable
         Assert.True(dashboard.CanRemove);
         Assert.False(dashboard.CanAdd);
         Assert.Equal("Optional.", dashboard.Needs);
+        Assert.Equal("dashboard", dashboard.Flag);
+        Assert.Null(app.Flag);
+    }
+
+    static IReadOnlyList<ComponentInfo> TrayCatalog(bool desktop) =>
+        [new("DockyardCli", "Dockyard CLI", RequiredBecause: "it installs everything"), new("Tray", "Dockyard tray", Flag: "tray", Default: desktop), new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard", Default: desktop)];
+
+    [Fact]
+    public async Task A_new_install_on_a_server_leaves_out_the_tray_and_the_dashboard_unless_asked()
+    {
+        var host = new FakeHost { Components = TrayCatalog(desktop: false) };
+        Assert.Equal(DockyardSetup.Ok, await For(host).Setup(new SetupRequest([], [], null, false, false, Silent: true, Resume: false) { Start = false }, progress, CancellationToken.None));
+        Assert.False(host.Requests.Single().Tray);
+        Assert.False(host.Requests.Single().Dashboard);
+        Assert.Contains("Tray", settings.Settings.RemovedComponents);
+
+        var asked = new FakeHost { Components = TrayCatalog(desktop: false) };
+        settings.Settings.RemovedComponents = [];
+        Assert.Equal(DockyardSetup.Ok, await For(asked).Setup(new SetupRequest(["tray", "dashboard"], [], null, false, false, Silent: true, Resume: false) { Start = false }, progress, CancellationToken.None));
+        Assert.True(asked.Requests.Single().Tray);
+        Assert.True(asked.Requests.Single().Dashboard);
+        Assert.DoesNotContain("Tray", settings.Settings.RemovedComponents);
+    }
+
+    [Fact]
+    public async Task A_new_install_on_a_desktop_has_the_tray_and_the_dashboard_unless_declined()
+    {
+        var host = new FakeHost { Components = TrayCatalog(desktop: true) };
+        await For(host).Setup(new SetupRequest([], [], null, false, false, Silent: true, Resume: false) { Start = false }, progress, CancellationToken.None);
+        Assert.True(host.Requests.Single().Tray);
+        Assert.True(host.Requests.Single().Dashboard);
+
+        var declined = new FakeHost { Components = TrayCatalog(desktop: true) };
+        await For(declined).Setup(new SetupRequest([], ["tray"], null, false, false, Silent: true, Resume: false) { Start = false }, progress, CancellationToken.None);
+        Assert.False(declined.Requests.Single().Tray);
+    }
+
+    [Fact]
+    public async Task A_rerun_keeps_the_tray_as_it_is_and_the_tray_is_added_and_removed_like_any_optional_component()
+    {
+        var host = new FakeHost { Installed = true, Components = TrayCatalog(desktop: false) };
+        settings.Settings.RemovedComponents = ["Tray"];
+        await For(host).Setup(new SetupRequest([], [], null, false, false, Silent: true, Resume: false) { Start = false }, progress, CancellationToken.None);
+        Assert.False(host.Requests.Single().Tray);
+
+        var setup = For(host);
+        await setup.Add("tray", progress);
+        Assert.DoesNotContain("Tray", settings.Settings.RemovedComponents);
+        await setup.Remove("tray", removeData: false, progress);
+        Assert.Equal(["Tray"], Settings.Load(settings.File).RemovedComponents);
+        Assert.Equal(["add Tray", "remove Tray"], host.Calls.Skip(1));
     }
 
     [Fact]

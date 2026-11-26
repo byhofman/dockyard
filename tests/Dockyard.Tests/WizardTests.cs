@@ -50,7 +50,7 @@ public sealed class WizardTests
     public async Task Setup_over_an_install_starts_from_what_it_has_and_adds_or_removes_what_is_changed()
     {
         using var settings = new TempSettings();
-        var host = new FakeHost { Installed = true, Dashboard = true, Components = [new("App", "Dockyard"), new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard"), new("Compose", "Compose", Flag: "compose")] };
+        var host = new FakeHost { Installed = true, Dashboard = true, Components = [new("DockyardCli", "Dockyard CLI"), new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard"), new("Compose", "Compose", Flag: "compose")] };
         var vm = new MainViewModel(Facade.For(host, settings), setupMode: true, openInTray: () => Task.FromResult(true));
         await vm.LoadSetup();
         var compose = vm.OptionalChoices.Single(c => c.Id == "Compose");
@@ -158,19 +158,19 @@ public sealed class WizardTests
     public void The_tray_offers_the_update_with_its_version_and_Dockyard_first()
     {
         Assert.Null(UpdateOffers.Text([]));
-        Assert.Equal("Update Dockyard to 0.7.1", UpdateOffers.Text([("App", "Dockyard", "0.7.1")]));
-        Assert.Equal("Update Dockyard to 0.7.1 and 1 more", UpdateOffers.Text([("Kind", "kind", "0.34.0"), ("App", "Dockyard", "0.7.1")]));
+        Assert.Equal("Update Dockyard to 0.7.1", UpdateOffers.Text([("Tray", "Dockyard tray", "0.7.1")]));
+        Assert.Equal("Update Dockyard to 0.7.1 and 1 more", UpdateOffers.Text([("Kind", "kind", "0.34.0"), ("Tray", "Dockyard tray", "0.7.1")]));
         Assert.Equal("Update kind to 0.34.0", UpdateOffers.Text([("Kind", "kind", "0.34.0")]));
-        Assert.Equal("Install 2 updates", UpdateOffers.Text([("Kind", "kind", "0.34.0"), ("Cli", "Docker CLI", "30.0.0")]));
+        Assert.Equal("Install 2 updates", UpdateOffers.Text([("Kind", "kind", "0.34.0"), ("DockerCli", "Docker CLI", "30.0.0")]));
     }
 
     [Fact]
     public void Release_notes_are_linked_for_Dockyards_own_parts()
     {
         var release = new Hosts.Release(new Version(0, 7, 1), "v0.7.1", null);
-        Assert.Equal("https://github.com/byhofman/dockyard/releases/tag/v0.7.1", UpdateOffers.NotesUrl("App", release));
+        Assert.Equal("https://github.com/byhofman/dockyard/releases/tag/v0.7.1", UpdateOffers.NotesUrl("Tray", release));
         Assert.NotNull(UpdateOffers.NotesUrl("Dashboard", release));
         Assert.Null(UpdateOffers.NotesUrl("Kind", release));
-        Assert.Null(UpdateOffers.NotesUrl("App", null));
+        Assert.Null(UpdateOffers.NotesUrl("Tray", null));
     }
 }

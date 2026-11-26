@@ -22,12 +22,12 @@ static partial class Updates
     public static string Title(Component c) => c switch
     {
         Component.Engine => "Docker Engine (Windows)",
-        Component.Cli => "Docker CLI",
+        Component.DockerCli => "Docker CLI",
         Component.Dashboard => "Dashboard",
         Component.Compose => "Docker Compose",
         Component.Buildx => "Docker Buildx",
         Component.LinuxEngine => "Docker Engine (Linux, WSL)",
-        Component.App => "Dockyard",
+        Component.Tray => "Dockyard",
         Component.Kind => Tools.Kind.Title,
         Component.Kubectl => Tools.Kubectl.Title,
         Component.Helm => Tools.Helm.Title,
@@ -37,26 +37,28 @@ static partial class Updates
     [SupportedOSPlatform("windows")]
     public static async Task<Version?> Installed(Component c) => c switch
     {
+        Component.DockyardCli => File.Exists(Paths.DockyardCliExe) ? ParseVersion(System.Diagnostics.FileVersionInfo.GetVersionInfo(Paths.DockyardCliExe).ProductVersion) : null,
         Component.Engine => File.Exists(Paths.DockerdExe) ? ParseVersion(await Shell.Check(Paths.DockerdExe, "--version")) : null,
-        Component.Cli => File.Exists(Paths.DockerExe) ? ParseVersion((await Shell.Run(Paths.DockerExe, "--version")).Output) : null,
+        Component.DockerCli => File.Exists(Paths.DockerExe) ? ParseVersion((await Shell.Run(Paths.DockerExe, "--version")).Output) : null,
         Component.Dashboard => File.Exists(Paths.DashboardExe) ? ParseVersion(System.Diagnostics.FileVersionInfo.GetVersionInfo(Paths.DashboardExe).ProductVersion) : null,
         Component.Compose => await PluginVersion("docker-compose.exe", "version", "--short"),
         Component.Buildx => await PluginVersion("docker-buildx.exe", "version"),
         Component.Kind or Component.Kubectl or Component.Helm => await OwnToolVersion(Tools.Find(c.ToString())!),
         Component.LinuxEngine => Settings.Load().RemovedComponents.Contains(nameof(Component.LinuxEngine)) ? null : await new WslDistro(ProcessRunner.Instance).DockerVersion(),
         // The wizard runs from elsewhere and can be newer than what is installed, so not this process's own version.
-        Component.App => File.Exists(Paths.AppExe) ? ParseVersion(System.Diagnostics.FileVersionInfo.GetVersionInfo(Paths.AppExe).ProductVersion) : null,
+        Component.Tray => File.Exists(Paths.AppExe) ? ParseVersion(System.Diagnostics.FileVersionInfo.GetVersionInfo(Paths.AppExe).ProductVersion) : null,
         _ => null,
     };
 
     public static async Task<Release?> Latest(Component c) => c switch
     {
-        Component.Engine or Component.Cli => WindowsDocker,
+        Component.DockyardCli => await LatestComponentAsset(CliComponent, CliAssetPattern),
+        Component.Engine or Component.DockerCli => WindowsDocker,
         Component.Dashboard => await LatestComponentAsset(DashboardComponent, @"^Dockyard\.Dashboard\.zip$"),
         Component.Compose => WindowsCompose,
         Component.Buildx => WindowsBuildx,
         Component.LinuxEngine => LinuxDocker,
-        Component.App => await LatestApp(WindowsAppAsset),
+        Component.Tray => await LatestApp(WindowsAppAsset),
         Component.Kind or Component.Kubectl or Component.Helm => Tools.Pinned(Tools.Find(c.ToString())!),
         _ => null,
     };
@@ -138,14 +140,11 @@ static partial class Updates
             : null;
     }
 
-    public static async Task<string> DownloadApp(Release release)
+    public static async Task<string> DownloadTray(Release release)
     {
         var dir = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
         Directory.CreateDirectory(dir);
-        var exe = await DownloadReleaseAsset(Path.GetFileName(new Uri(release.DownloadUrl!).LocalPath), dir, tag: release.Tag);
-        if (Paths.HasDashboard) await DownloadComponentAsset(DashboardComponent, DashboardZipPattern, dir);
-        await DownloadComponentAsset(CliComponent, CliAssetPattern, dir);
-        return exe;
+        return await DownloadReleaseAsset(Path.GetFileName(new Uri(release.DownloadUrl!).LocalPath), dir, tag: release.Tag);
     }
 
     public static Task<string> DownloadImage(string targetDir) => DownloadComponentAsset(EngineComponent, ImageAsset, targetDir);

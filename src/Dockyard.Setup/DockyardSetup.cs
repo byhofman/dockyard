@@ -121,12 +121,13 @@ public sealed partial class DockyardSetup : IDisposable
     ComponentRow Row(ComponentInfo c, bool present, Version? installed, Release? latest, string? source) => new(
         c.Id,
         c.Title,
-        c.Id is nameof(Component.App) or ComponentRules.DashboardId ? "Dockyard" : Tools.Standalone.Any(t => t.Id == c.Id) ? "Kubernetes" : "Docker",
+        c.Id is nameof(Component.DockyardCli) or ComponentRules.TrayId or ComponentRules.DashboardId ? "Dockyard" : Tools.Standalone.Any(t => t.Id == c.Id) ? "Kubernetes" : "Docker",
         installed?.ToString(),
         latest?.Version.ToString(),
         source ?? (Tools.Find(c.Id) is not null && settings.Source == ToolSource.PackageManager ? global::Dockyard.Setup.SettingDefinitions.PackageManager : global::Dockyard.Setup.SettingDefinitions.DockyardSource),
         c.RequiredBecause,
         c.Note,
+        c.Flag,
         CanAdd: host.IsInstalled && c.IsOptional && !present,
         CanRemove: host.IsInstalled && c.IsOptional && present && WhyNotRemovable(c.Id) is null,
         CanUpdate: installed is not null && latest is not null && latest.Version > installed);
@@ -232,6 +233,8 @@ public sealed partial class DockyardSetup : IDisposable
 
         var removedBefore = settings.RemovedComponents.ToList();
         var removed = ComponentRules.Removed(Catalog, removedBefore, with, without);
+        if (!host.IsInstalled && !with.Contains(TrayFlag) && Catalog.Any(c => c.Id == ComponentRules.TrayId && !c.Default) && !removed.Contains(ComponentRules.TrayId))
+            removed.Add(ComponentRules.TrayId);
         settings.RemovedComponents = removed;
         settings.Source = request.Source ?? settings.Source;
         if (request.KubectlShell) settings.KubectlShell = true;
@@ -239,7 +242,7 @@ public sealed partial class DockyardSetup : IDisposable
         settings.Save();
 
         bool? dashboardAsked = with.Contains(DashboardFlag) ? true : without.Contains(DashboardFlag) ? false : null;
-        var dashboard = DashboardChoice.Resolve(dashboardAsked, host.IsInstalled, host.HasDashboard);
+        var dashboard = DashboardChoice.Resolve(dashboardAsked, host.IsInstalled, host.HasDashboard, Catalog.FirstOrDefault(c => c.Id == ComponentRules.DashboardId)?.Default ?? true);
         List<ComponentInfo> adds = [];
         List<ComponentInfo> removes = [];
         // A new install leaves out what it is asked to by itself; an existing one adds and removes after bringing the rest up to date.
@@ -254,7 +257,7 @@ public sealed partial class DockyardSetup : IDisposable
         var step = 1;
 
         progress.Report(new SetupProgress("Installing Dockyard", Step: step, Steps: steps));
-        var reboot = await host.Install(log, new InstallRequest(dashboard, request.Image, request.Silent, request.TrustHttps) { Without = removed });
+        var reboot = await host.Install(log, new InstallRequest(dashboard, request.Image, request.Silent, request.TrustHttps) { Without = removed, Tray = !removed.Contains(ComponentRules.TrayId) });
         // Setup turns trusted HTTPS on through the file.
         settings.Reload();
         ct.ThrowIfCancellationRequested();
@@ -280,10 +283,11 @@ public sealed partial class DockyardSetup : IDisposable
     }
 
     const string DashboardFlag = "dashboard";
+    const string TrayFlag = "tray";
 
-    // The dashboard goes with the install itself rather than as a component of its own.
+    // The dashboard and the tray go with the install itself rather than as components of their own.
     IEnumerable<ComponentInfo> Changed(IEnumerable<string> flags) =>
-        flags.Where(f => f != DashboardFlag).Select(f => ComponentRules.ByFlag(Catalog, f)).OfType<ComponentInfo>();
+        flags.Where(f => f is not (DashboardFlag or TrayFlag)).Select(f => ComponentRules.ByFlag(Catalog, f)).OfType<ComponentInfo>();
 
     string FlagFor(string name) =>
         Catalog.FirstOrDefault(c => c.Flag is not null && string.Equals(c.Id, name, StringComparison.OrdinalIgnoreCase))?.Flag ?? name;

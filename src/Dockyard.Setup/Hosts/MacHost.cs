@@ -21,14 +21,15 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
 
     public static IReadOnlyList<ComponentInfo> Catalog { get; } =
     [
+        new(nameof(Component.DockyardCli), Updates.Title(Component.DockyardCli), RequiredBecause: "it installs and updates everything else here. Uninstall removes it.", RequiredFlag: "dockyard-cli"),
         new("LinuxEngine", "Docker Engine (Linux VM)", RequiredBecause: "it runs your containers, and it is the only engine here. Uninstall removes it.", RequiredFlag: "linux-engine"),
-        new("Cli", "Docker CLI", RequiredBecause: "the engine, Compose and Buildx are used through it.", RequiredFlag: "cli"),
+        new(nameof(Component.DockerCli), "Docker CLI", RequiredBecause: "the engine, Compose and Buildx are used through it.", RequiredFlag: "docker-cli"),
         new("Compose", "Docker Compose", Flag: "compose", Note: "Needs the Docker CLI. The dashboard's Compose actions use it."),
         new("Buildx", "Docker Buildx", Flag: "buildx", Note: "Needs the Docker CLI. docker build uses it."),
         Core.Tools.Kind.Component,
         Core.Tools.Kubectl.Component,
         Core.Tools.Helm.Component,
-        new("App", "Dockyard", RequiredBecause: "it is what runs everything here. Uninstall removes it."),
+        new(ComponentRules.TrayId, "Dockyard menu bar app", Flag: "tray", Note: "Optional. Keeps the engine in the menu bar and starts at login."),
         new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard", Note: "Optional. Opens from the menu bar."),
     ];
 
@@ -73,7 +74,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
             {
                 case ComponentRules.DashboardId when release is not null: await parts.AddDashboard(log, release.Tag); break;
                 case "LinuxEngine": await vm.Update(log); break;
-                case "App":
+                case nameof(Component.DockyardCli):
                     await parts.SelfUpdate(log, engineOnly: !HasDashboard, release?.Tag);
                     return true;
             }
@@ -96,6 +97,12 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
     public async Task<bool> SetComponent(Action<string> log, string component, bool installed, bool removeData = false)
     {
         if (component == ComponentRules.DashboardId) return await SetDashboard(log, installed);
+        if (component == ComponentRules.TrayId)
+        {
+            if (installed) await MacSetup.AddLoginItem(log);
+            else MacSetup.RemoveLoginItem(log);
+            return false;
+        }
         if (Core.Tools.Find(component) is not { } tool) throw new InvalidOperationException($"{component} cannot be changed here");
         var tools = Tools;
         if (!installed) await tools.Remove(log, tool);
@@ -111,6 +118,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
 
     public void StartApp()
     {
+        if (!File.Exists(MacLayout.LaunchAgent)) return;
         if (MacLayout.Bundle(MacLayout.AppBase + Path.DirectorySeparatorChar) is { } bundle) Shell.Spawn("/usr/bin/open", bundle, "--args", "--tray").Dispose();
         else Shell.Spawn(MacLayout.InstalledExe, "--tray").Dispose();
     }

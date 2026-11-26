@@ -182,7 +182,7 @@ static class Cli
             if (check.Row.Installed is not { } installed) continue;
             log($"{check.Row.Title}\t{installed}\t{(check.Row.CanUpdate ? $"{check.Row.Newest} available" : "up to date")}");
         }
-        var available = checks.Where(c => c.Row.CanUpdate && c.Row.Id != nameof(Component.App)).Select(c => c.Row.Id).ToList();
+        var available = checks.Where(c => c.Row.CanUpdate && c.Row.Id != nameof(Component.Tray)).Select(c => c.Row.Id).ToList();
         if (checkOnly || available.Count == 0) return 0;
         await setup.Update(available, Progress(log));
         return 0;

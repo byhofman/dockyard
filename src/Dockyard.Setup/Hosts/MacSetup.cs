@@ -22,7 +22,6 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
             else await tools.Ensure(log, tool);
         }
         await FindBrewPlugins(log, tools);
-        LinkCommand();
 
         await AdministratorSteps(log, request.Silent);
         await InstallCredentialHelper(log);
@@ -41,9 +40,22 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
 
         if (request.TrustHttps) await Https.Enable(host, Settings.Load(), log, request.Silent);
 
+        if (request.Tray) await AddLoginItem(log);
+        else RemoveLoginItem(log);
+    }
+
+    public static async Task AddLoginItem(Action<string> log)
+    {
         Directory.CreateDirectory(Path.GetDirectoryName(MacLayout.LaunchAgent)!);
         await File.WriteAllTextAsync(MacLayout.LaunchAgent, MacLayout.LaunchAgentPlist(MacLayout.InstalledExe));
         log($"{Paths.AppName} starts at login ({MacLayout.LaunchAgent})");
+    }
+
+    public static void RemoveLoginItem(Action<string> log)
+    {
+        if (!File.Exists(MacLayout.LaunchAgent)) return;
+        File.Delete(MacLayout.LaunchAgent);
+        log($"{Paths.AppName} no longer starts at login");
     }
 
     public async Task Uninstall(Action<string> log, bool removeData, bool silent, IEngineHost host)
@@ -65,16 +77,6 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
         await CredentialStore.Forget(MacLayout.CredentialStoreMarker, MacLayout.CredentialHelper, log);
         await EngineConfig.ApplyClientProxy("unix://" + MacLayout.DockerSocket, null);
         UnlinkUserSocket();
-        List<string> steps = [];
-        if (await PathEntryIs(MacLayout.SharedBinDir)) steps.Add(MacLayout.RemovePathsEntry);
-        if (File.Exists(MacLayout.DomainResolver)) steps.Add($"rm -f {MacLayout.DomainResolver}");
-        if (File.Exists(MacLayout.SocketDaemon) || SystemSocketUse() == MacLayout.SocketUse.Ours) steps.Add(MacLayout.RemoveSocketDaemon(MacLayout.DockerSocket));
-        if (steps.Count > 0)
-        {
-            var script = string.Join(" ; ", steps);
-            if ((await runner.Run("sudo", "-n", "/bin/sh", "-c", script)).ExitCode != 0)
-                await runner.Run("/usr/bin/osascript", MacLayout.AdminShell(script));
-        }
         if (Directory.Exists(MacLayout.BinDir)) Directory.Delete(MacLayout.BinDir, recursive: true);
         foreach (var plugin in new[] { "docker-compose", "docker-buildx" })
             MacComponents.RemovePlugin(plugin);
@@ -89,6 +91,18 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
             log("Removed your images and containers");
         }
         else log($"Your images and containers were kept in {Path.Combine(MacLayout.DataDir, "data.img")}");
+        var steps = MacLayout.AdministratorUninstall(
+            pathEntry: await PathEntryIs(MacLayout.SharedBinDir),
+            resolver: File.Exists(MacLayout.DomainResolver),
+            socketDaemon: File.Exists(MacLayout.SocketDaemon) || SystemSocketUse() == MacLayout.SocketUse.Ours,
+            cliLink: new FileInfo(MacLayout.CliLink).LinkTarget is not null,
+            MacLayout.DockerSocket);
+        if (steps.Count > 0)
+        {
+            var script = string.Join(" ; ", steps);
+            if ((await runner.Run("sudo", "-n", "/bin/sh", "-c", script)).ExitCode != 0)
+                await runner.Run("/usr/bin/osascript", MacLayout.AdminShell(script));
+        }
     }
 
     // Copies the wizard's bundle to where the app belongs, from a download, a disk image or a translocated copy.
@@ -152,6 +166,11 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
             steps.Add(MacLayout.InstallSocketDaemon(plist));
             what.Add($"making {MacLayout.SystemSocket} point at Dockyard");
         }
+        if (new FileInfo(MacLayout.CliLink).LinkTarget != MacLayout.InstalledExe)
+        {
+            steps.Add(MacLayout.InstallCliLink(MacLayout.InstalledExe));
+            what.Add($"adding the dockyard command to {MacLayout.CliLink}");
+        }
         if (!File.Exists(MacLayout.DomainResolver))
         {
             steps.Add(MacLayout.InstallDomainResolver);
@@ -211,16 +230,6 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
         if (new FileInfo(MacLayout.UserSocketLink).LinkTarget == MacLayout.DockerSocket) File.Delete(MacLayout.UserSocketLink);
         if (File.Exists(MacLayout.TestcontainersFile) && File.ReadAllText(MacLayout.TestcontainersFile).Trim() == MacLayout.TestcontainersLine)
             File.Delete(MacLayout.TestcontainersFile);
-    }
-
-    // The dockyard command, through the same wrapper on the PATH as the tools: a link to the app in this user's bin folder.
-    static void LinkCommand()
-    {
-        var link = Path.Combine(MacLayout.BinDir, "dockyard");
-        Directory.CreateDirectory(MacLayout.BinDir);
-        if (new FileInfo(link).LinkTarget == MacLayout.InstalledExe) return;
-        File.Delete(link);
-        File.CreateSymbolicLink(link, MacLayout.InstalledExe);
     }
 
     public static async Task FindBrewPlugins(Action<string> log, ToolComponents tools)

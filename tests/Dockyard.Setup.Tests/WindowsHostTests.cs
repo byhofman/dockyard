@@ -104,4 +104,32 @@ public sealed class WindowsHostTests
         Assert.Equal("wsl.exe -d dockyard -u root -- wslpath -a C:/Temp/x/docker.tgz", runner.Commands[0]);
         Assert.Equal("wsl.exe -d dockyard -u root -- /usr/local/sbin/dockyard-update /mnt/c/Temp/x/docker.tgz /mnt/c/Temp/x/plugins", runner.Commands[2]);
     }
+
+    [Fact]
+    public void Without_the_tray_no_logon_entry_is_written()
+    {
+        Assert.Equal([Paths.AppName, "Dockyard Host"], UserSetup.LogonEntries(tray: true, host: true).Select(e => e.Name));
+        Assert.Equal($"\"{Paths.AppExe}\"", UserSetup.LogonEntries(tray: true, host: false).Single().Command);
+        Assert.Equal(["Dockyard Host"], UserSetup.LogonEntries(tray: false, host: true).Select(e => e.Name));
+        Assert.Empty(UserSetup.LogonEntries(tray: false, host: false));
+    }
+
+    [Fact]
+    public void A_restart_resumes_with_the_CLI_and_opens_the_dashboard_only_when_chosen()
+    {
+        var cli = $"\"{Paths.DockyardCliExe}\"";
+        Assert.Equal($"{cli} setup --resume", UserSetup.ResumeCommand(dashboard: false, assets: null));
+        Assert.Equal($"{cli} setup --resume --open-dashboard", UserSetup.ResumeCommand(dashboard: true, assets: null));
+        Assert.Equal($"{cli} setup --resume --open-dashboard --assets \"D:\\my files\"", UserSetup.ResumeCommand(dashboard: true, assets: @"D:\my files"));
+    }
+
+    [Fact]
+    public void Uninstall_removes_the_CLI_last()
+    {
+        string[] files = [Paths.DockyardCliExe, Paths.AppExe, Paths.HostExe, Paths.DashboardExe, Path.Combine(Paths.AppDir, "bin", "other.dll")];
+        var order = MachineSetup.RemovalOrder(files).ToList();
+        Assert.Equal(Paths.DockyardCliExe, order[^1]);
+        Assert.Equal(files.Length, order.Count);
+        Assert.Equal(files.Where(f => f != Paths.DockyardCliExe), order.Take(files.Length - 1));
+    }
 }

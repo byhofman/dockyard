@@ -44,4 +44,17 @@ public sealed class LinuxHostTests
         Assert.Contains("subject.isInGroup(\"docker\")", script);
         Assert.Contains("systemctl enable --now docker.socket", script);
     }
+
+    [Fact]
+    public void Uninstall_removes_the_CLI_last()
+    {
+        using var stream = typeof(LinuxHost).Assembly.GetManifestResourceStream("setup-linux.sh");
+        var script = new StreamReader(stream!).ReadToEnd();
+        var uninstall = script[script.IndexOf("  uninstall)", StringComparison.Ordinal)..];
+        var packages = uninstall[uninstall.IndexOf("case \"$family\" in", StringComparison.Ordinal)..];
+        Assert.Contains("dockyard-dashboard dockyard", packages);
+        Assert.DoesNotContain("rm -", packages);
+        Assert.DoesNotContain("systemctl", packages);
+        Assert.Contains("rm -rf /usr/local/lib/dockyard", uninstall[..uninstall.IndexOf("case \"$family\" in", StringComparison.Ordinal)]);
+    }
 }

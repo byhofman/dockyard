@@ -30,11 +30,29 @@ static partial class UserSetup
         File.WriteAllText(Path.Combine(Paths.UserProfile, ".testcontainers.properties"), $"docker.host={Paths.LinuxHost}\n");
         log("Testcontainers pinned to the Linux engine");
 
+        var tray = without?.Contains(nameof(Component.Tray)) != true;
         using (var key = Registry.CurrentUser.CreateSubKey(RunKey))
-            key.SetValue(Paths.AppName, $"\"{Paths.AppExe}\"");
-        using (var key = Registry.CurrentUser.CreateSubKey(RunKey))
-            if (File.Exists(Paths.HostExe)) key.SetValue(HostRunValue, $"\"{Paths.HostExe}\"");
-        log($"{Paths.AppName} autostarts at logon");
+        {
+            foreach (var (name, command) in LogonEntries(tray, host: File.Exists(Paths.HostExe))) key.SetValue(name, command);
+            if (!tray) key.DeleteValue(Paths.AppName, throwOnMissingValue: false);
+        }
+        if (tray) log($"{Paths.AppName} autostarts at logon");
+    }
+
+    // The tray's entry exists only with the tray; the host keeps the Linux engine running whether it is there or not.
+    public static IReadOnlyList<(string Name, string Command)> LogonEntries(bool tray, bool host)
+    {
+        List<(string, string)> entries = [];
+        if (tray) entries.Add((Paths.AppName, $"\"{Paths.AppExe}\""));
+        if (host) entries.Add((HostRunValue, $"\"{Paths.HostExe}\""));
+        return entries;
+    }
+
+    public static void SetTrayLogon(bool installed)
+    {
+        using var key = Registry.CurrentUser.CreateSubKey(RunKey);
+        if (installed) key.SetValue(Paths.AppName, $"\"{Paths.AppExe}\"");
+        else key.DeleteValue(Paths.AppName, throwOnMissingValue: false);
     }
 
     public static async Task ApplyGuest(WslDistro distro, Action<string> log)
@@ -73,13 +91,21 @@ static partial class UserSetup
         return HostProxySettings.WithoutPorts(proxy, unreachable);
     }
 
-    // Silent setups log to a file: after a restart there is no console to report to.
-    public static void ResumeAfterReboot(bool silent, Action<string> log)
+    // The CLI finishes the setup after the restart, and opens the dashboard when that was chosen.
+    public static void ResumeAfterReboot(bool dashboard, Action<string> log)
     {
         using var key = Registry.CurrentUser.CreateSubKey(RunOnceKey);
-        var assets = Updates.LocalAssets is { } dir ? $" --assets {Shell.Quote(dir)}" : "";
-        key.SetValue(Paths.AppName, $"\"{Paths.AppExe}\" {(silent ? "--silent" : "--setup")} --resume{assets}");
+        key.SetValue(Paths.AppName, ResumeCommand(dashboard, Updates.LocalAssets));
         log("Setup carries on by itself after the restart");
+    }
+
+    public static string ResumeCommand(bool dashboard, string? assets) =>
+        $"\"{Paths.DockyardCliExe}\" setup --resume{(dashboard ? " --open-dashboard" : "")}{(assets is null ? "" : $" --assets {Shell.Quote(assets)}")}";
+
+    public static string? InstallationType()
+    {
+        using var version = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
+        return version?.GetValue("InstallationType") as string;
     }
 
     static void SetMirroredNetworking(Action<string> log)
@@ -87,8 +113,7 @@ static partial class UserSetup
         if (Environment.OSVersion.Version.Build < MirroredNetworkingBuild) return;
         // Seen on Windows Server 2025: in mirrored mode WSL comes up with no network interfaces, and 127.0.0.1:2375 no longer
         // reaches the engine from Windows.
-        using (var version = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion"))
-            if (version?.GetValue("InstallationType") as string != "Client") return;
+        if (!Hosts.WindowsHost.IsClientSku(InstallationType())) return;
         var existing = File.Exists(Paths.WslConfigFile) ? File.ReadAllText(Paths.WslConfigFile) : null;
         if (WslConfig.WithMirroredNetworking(existing) is not { } updated) return;
         File.WriteAllText(Paths.WslConfigFile, updated);

@@ -32,7 +32,7 @@ public sealed class MacHostTests
 
         Assert.EndsWith("echo /usr/local/dockyard/bin > /etc/paths.d/dockyard && chmod 644 /etc/paths.d/dockyard", script);
         Assert.Contains("chown root:wheel /usr/local/dockyard /usr/local/dockyard/bin", script);
-        foreach (var command in new[] { "docker", "kind", "docker-credential-osxkeychain", "dockyard" })
+        foreach (var command in new[] { "docker", "kind", "docker-credential-osxkeychain" })
             Assert.Contains($"> /usr/local/dockyard/bin/{command} && chmod 755 /usr/local/dockyard/bin/{command}", script);
     }
 
@@ -361,5 +361,24 @@ public sealed class MacInstallTests : IDisposable
     {
         public override Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken) =>
             throw new IOException("connection lost");
+    }
+
+    [Fact]
+    public void Uninstall_removes_the_CLI_last()
+    {
+        var all = MacLayout.AdministratorUninstall(pathEntry: true, resolver: true, socketDaemon: true, cliLink: true, MacLayout.DockerSocket);
+        Assert.Equal(4, all.Count);
+        Assert.Equal(MacLayout.RemoveCliLink, all[^1]);
+        Assert.Equal([MacLayout.RemovePathsEntry], MacLayout.AdministratorUninstall(pathEntry: true, resolver: false, socketDaemon: false, cliLink: false, MacLayout.DockerSocket));
+        Assert.Equal([MacLayout.RemoveCliLink], MacLayout.AdministratorUninstall(pathEntry: false, resolver: false, socketDaemon: false, cliLink: true, MacLayout.DockerSocket));
+    }
+
+    [Fact]
+    public void The_CLI_is_linked_into_usr_local_bin_and_the_link_is_taken_back_only_when_it_is_ours()
+    {
+        Assert.Equal("/usr/local/bin/dockyard", MacLayout.CliLink);
+        Assert.Contains("ln -sfn '/Applications/Dockyard.app/Contents/MacOS/Dockyard' /usr/local/bin/dockyard", MacLayout.InstallCliLink("/Applications/Dockyard.app/Contents/MacOS/Dockyard"));
+        Assert.Contains("readlink /usr/local/bin/dockyard", MacLayout.RemoveCliLink);
+        Assert.DoesNotContain("dockyard", MacLayout.SharedCommands);
     }
 }

@@ -14,7 +14,8 @@ sealed class MacComponents(ICommandRunner runner)
     public async Task<Version?> Installed(string component) => component switch
     {
         "LinuxEngine" => File.Exists(MacLayout.RootRelease) ? MacLayout.DockerVersion(await File.ReadAllTextAsync(MacLayout.RootRelease)) : null,
-        "App" => InstalledAppVersion(),
+        nameof(Component.DockyardCli) => InstalledAppVersion(),
+        ComponentRules.TrayId => File.Exists(MacLayout.LaunchAgent) ? InstalledAppVersion() : null,
         ComponentRules.DashboardId => await InstalledDashboardVersion(),
         _ => null,
     };
@@ -34,7 +35,8 @@ sealed class MacComponents(ICommandRunner runner)
         "LinuxEngine" => File.Exists(Path.Combine(MacLayout.Assets, "dockyard-release")) && MacLayout.DockerVersion(
             await File.ReadAllTextAsync(Path.Combine(MacLayout.Assets, "dockyard-release"))) is { } bundled
             ? new Release(bundled, bundled.ToString(), null) : null,
-        "App" => await Updates.LatestApp(MacLayout.ZipAsset(!HasDashboard)),
+        // One bundle holds the command and the tray, so the update is the command's.
+        nameof(Component.DockyardCli) => await Updates.LatestApp(MacLayout.ZipAsset(!HasDashboard)),
         ComponentRules.DashboardId => await Updates.LatestApp(MacLayout.ZipAsset(engineOnly: false)),
         _ => null,
     };

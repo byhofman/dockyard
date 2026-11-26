@@ -19,7 +19,7 @@ sealed class MacDockyardSource(ICommandRunner runner, MacComponents parts) : IDo
 
     public Release? Pinned(CliTool tool) => tool.Id switch
     {
-        nameof(Component.Cli) => MacLayout.Cli,
+        nameof(Component.DockerCli) => MacLayout.Cli,
         nameof(Component.Compose) => MacLayout.Compose,
         nameof(Component.Buildx) => MacLayout.Buildx,
         _ => Tools.Pinned(tool),

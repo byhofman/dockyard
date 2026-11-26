@@ -36,9 +36,15 @@ sealed class WindowsHost : IEngineHost
 
     public IReadOnlyList<ComponentInfo> Components => Catalog;
 
-    public static IReadOnlyList<ComponentInfo> Catalog { get; } =
+    public static IReadOnlyList<ComponentInfo> Catalog { get; } = CatalogFor(desktop: !OperatingSystem.IsWindows() || IsClientSku(UserSetup.InstallationType()));
+
+    // A Server edition has no desktop to run the tray or open the dashboard in, so a new install leaves them out unless asked.
+    public static bool IsClientSku(string? installationType) => installationType == "Client";
+
+    public static IReadOnlyList<ComponentInfo> CatalogFor(bool desktop) =>
     [
-        new(nameof(Component.Cli), Updates.Title(Component.Cli), RequiredBecause: "both engines, Compose and Buildx are used through it.", RequiredFlag: "cli"),
+        new(nameof(Component.DockyardCli), Updates.Title(Component.DockyardCli), RequiredBecause: "it installs and updates everything else here, and the tray and the dashboard use it. Uninstall removes it.", RequiredFlag: "dockyard-cli"),
+        new(nameof(Component.DockerCli), Updates.Title(Component.DockerCli), RequiredBecause: "both engines, Compose and Buildx are used through it.", RequiredFlag: "docker-cli"),
         new(nameof(Component.Engine), Updates.Title(Component.Engine), Flag: "windows-engine", Note: "Windows containers. Its images stay when you remove it. One engine has to stay.", IsEngine: true),
         new(nameof(Component.LinuxEngine), Updates.Title(Component.LinuxEngine), CheckNeedsEngine: Linux, Flag: "linux-engine", Note: "Linux containers. Its images stay when you remove it. One engine has to stay.", IsEngine: true),
         new(nameof(Component.Compose), Updates.Title(Component.Compose), Flag: "compose", Note: "Needs the Docker CLI. The dashboard's Compose actions use it."),
@@ -46,11 +52,11 @@ sealed class WindowsHost : IEngineHost
         Tools.Kind.Component with { Note = "Local Kubernetes clusters in containers. Needs the Linux engine; the dashboard's Kubernetes section uses it." },
         Tools.Kubectl.Component,
         Tools.Helm.Component,
-        new(nameof(Component.App), Updates.Title(Component.App), RequiredBecause: "it is what runs everything here. Uninstall removes it."),
-        new(nameof(Component.Dashboard), Updates.Title(Component.Dashboard), Flag: "dashboard", Note: "Optional. Opens from the tray."),
+        new(nameof(Component.Tray), Updates.Title(Component.Tray), Flag: "tray", Note: "Optional. Keeps the engines in the notification area and starts at logon.", Default: desktop),
+        new(nameof(Component.Dashboard), Updates.Title(Component.Dashboard), Flag: "dashboard", Note: "Optional. Opens from the tray.", Default: desktop),
     ];
 
-    public bool IsInstalled => File.Exists(Paths.AppExe);
+    public bool IsInstalled => File.Exists(Paths.DockyardCliExe);
     public ICaKeyStore CaKeys => new DpapiCaKey(((IEngineHost)this).CaDirectory);
 
     public Task<bool> IsRunning(string engine) => Task.Run(() => engine == Linux ? wsl.IsRunning() : WindowsServiceEngine.IsRunning());
@@ -91,14 +97,17 @@ sealed class WindowsHost : IEngineHost
         if (parsed.FirstOrDefault(c => c.Component == Component.LinuxEngine) is { Release: { } linux })
             await wsl.Update(log, linux);
 
+        if (parsed.FirstOrDefault(c => c.Component == Component.DockyardCli) is { Release: { } cli })
+            await WindowsSetup.UpdateCli(log, cli);
+
         if (parsed.FirstOrDefault(c => c.Component == Component.Dashboard) is { Release: { } dashboard })
             await WindowsSetup.UpdateDashboard(log, dashboard);
 
-        if (parsed.FirstOrDefault(c => c.Component == Component.App) is { Release: { } app })
+        if (parsed.FirstOrDefault(c => c.Component == Component.Tray) is { Release: { } app })
         {
-            log($"Downloading Dockyard {app.Tag}");
-            var exe = await Updates.DownloadApp(app);
-            Elevation.StartDetached("--machine-update", nameof(Component.App), "--app-file", exe);
+            log($"Downloading the Dockyard tray {app.Tag}");
+            var exe = await Updates.DownloadTray(app);
+            Elevation.StartDetached("--machine-update", nameof(Component.Tray), "--app-file", exe);
             log("Restarting Dockyard");
             return true;
         }
@@ -111,6 +120,8 @@ sealed class WindowsHost : IEngineHost
         {
             case nameof(Component.Dashboard):
                 return await SetDashboard(log, installed);
+            case nameof(Component.Tray):
+                return await SetTray(log, installed);
             case nameof(Component.LinuxEngine):
                 // First: a declined approval then leaves everything as it was.
                 await WindowsSetup.MachineComponent(log, component, installed);
@@ -200,6 +211,31 @@ sealed class WindowsHost : IEngineHost
         return false;
     }
 
+    // The tray's own executable is the Toolbox's: this process's when it is that, else the release's.
+    async Task<bool> SetTray(Action<string> log, bool installed)
+    {
+        string? downloaded = null;
+        try
+        {
+            string? exe = null;
+            if (installed && !Paths.IsInstalledCopy)
+            {
+                log("Downloading the Dockyard tray");
+                downloaded = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
+                exe = await Updates.ReleaseAssetOrLocal(Updates.WindowsAppAsset, downloaded, tag: null);
+            }
+            // First: a declined approval then leaves everything as it was.
+            await WindowsSetup.MachineComponent(log, nameof(Component.Tray), installed, exe);
+            UserSetup.SetTrayLogon(installed);
+            if (installed) StartApp();
+            return false;
+        }
+        finally
+        {
+            if (downloaded is not null && Directory.Exists(downloaded)) Directory.Delete(downloaded, recursive: true);
+        }
+    }
+
     public async Task<bool> Install(Action<string> log, InstallRequest request)
     {
         foreach (var tool in Tools.All.Where(t => !request.Without.Contains(t.Id))) await RemoveUserCopy(log, tool);
@@ -216,7 +252,7 @@ sealed class WindowsHost : IEngineHost
         {
             // WSL does not work until the restart its install asked for, and the rest of setup needs WSL.
             log($"The Linux engine has to wait for the restart ({ex.Message})");
-            UserSetup.ResumeAfterReboot(request.Silent, log);
+            UserSetup.ResumeAfterReboot(request.Dashboard, log);
             return true;
         }
         await FindWingetPlugins(log);
@@ -243,10 +279,13 @@ sealed class WindowsHost : IEngineHost
     public async Task Resume(Action<string> log)
     {
         log("Finishing the setup after the restart");
-        await UserSetup.Install(log);
+        await UserSetup.Install(log, without: Settings.Load().RemovedComponents);
     }
 
-    public void StartApp() => Shell.StartUnelevated(Paths.AppExe);
+    public void StartApp()
+    {
+        if (File.Exists(Paths.AppExe)) Shell.StartUnelevated(Paths.AppExe);
+    }
 
     public string DoneMessage(bool reboot) => reboot
         ? "Restart Windows to finish. Dockyard carries on by itself after the restart."

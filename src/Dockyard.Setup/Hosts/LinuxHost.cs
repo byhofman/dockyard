@@ -35,16 +35,20 @@ sealed class LinuxHost : IEngineHost
 
     public IReadOnlyList<ComponentInfo> Components => Catalog;
 
-    public static IReadOnlyList<ComponentInfo> Catalog { get; } =
+    public static IReadOnlyList<ComponentInfo> Catalog { get; } = CatalogFor(desktop: LinuxLayout.HasDisplay(Environment.GetEnvironmentVariable("DISPLAY"), Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")));
+
+    // The tray and the dashboard need a display: on a server a new install leaves them out unless asked.
+    public static IReadOnlyList<ComponentInfo> CatalogFor(bool desktop) =>
     [
+        new(nameof(Component.DockyardCli), Updates.Title(Component.DockyardCli), RequiredBecause: "it installs and updates everything else here. Uninstall removes it.", RequiredFlag: "dockyard-cli"),
         new("Engine", "Docker Engine & CLI", RequiredBecause: "it is what Dockyard starts and stops. It stays yours to remove with your package manager, also after uninstalling Dockyard.", RequiredFlag: "linux-engine"),
         new("Compose", "Docker Compose", Flag: "compose", Note: "Needs Docker. The dashboard's Compose actions use it."),
         new("Buildx", "Docker Buildx", Flag: "buildx", Note: "Needs Docker. docker build uses it."),
         Core.Tools.Kind.Component,
         Core.Tools.Kubectl.Component,
         Core.Tools.Helm.Component,
-        new("App", "Dockyard", RequiredBecause: "it is what runs everything here. Uninstall removes it."),
-        new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard", Note: "Optional. Its package is versioned with Dockyard, so updating it updates both."),
+        new(ComponentRules.TrayId, "Dockyard tray", Flag: "tray", Note: "Optional. Keeps the engine in the system tray and starts at login.", Default: desktop),
+        new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard", Note: "Optional. Its package is versioned with Dockyard, so updating it updates both.", Default: desktop),
     ];
 
     // The polkit rules folder is closed to normal users, so setup leaves a marker they can see.
@@ -122,6 +126,11 @@ sealed class LinuxHost : IEngineHost
     public async Task<bool> SetComponent(Action<string> log, string component, bool installed, bool removeData = false)
     {
         if (component == ComponentRules.DashboardId) return await SetDashboard(log, installed);
+        if (component == ComponentRules.TrayId)
+        {
+            await setup.SetTray(log, installed);
+            return false;
+        }
         if (Tool(component) is { } tool)
         {
             if (installed) await tools.Install(log, tool);
@@ -138,12 +147,13 @@ sealed class LinuxHost : IEngineHost
         if (components.Any(c => c.Component is "Engine" or "Compose" or "Buildx")) await this.components.UpdateDockerPackages(log);
         foreach (var (component, _) in components)
             if (Tool(component) is { } tool) await tools.Install(log, tool);
-        if (components.FirstOrDefault(c => c.Component is "App" or ComponentRules.DashboardId) is { Release: { } app })
+        if (components.FirstOrDefault(c => c.Component is nameof(Component.DockyardCli) or ComponentRules.DashboardId) is { Release: { } app })
         {
             await this.components.StopDashboard();
             await this.components.InstallApp(log, HasDashboard, app.Tag);
             // The tray still holds the single-instance lock, so the new one starts just after this process exits.
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("/bin/sh", ["-c", $"sleep 2; exec \"{LinuxLayout.InstalledExe}\" --tray"]) { UseShellExecute = false })?.Dispose();
+            if (File.Exists(LinuxSetup.AutostartFile))
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("/bin/sh", ["-c", $"sleep 2; exec \"{LinuxLayout.InstalledExe}\" --tray"]) { UseShellExecute = false })?.Dispose();
             return true;
         }
         return false;
@@ -167,6 +177,7 @@ sealed class LinuxHost : IEngineHost
 
     public void StartApp()
     {
+        if (!File.Exists(LinuxSetup.AutostartFile)) return;
         if (!LinuxLayout.HasDisplay(Environment.GetEnvironmentVariable("DISPLAY"), Environment.GetEnvironmentVariable("WAYLAND_DISPLAY"))) return;
         Shell.Spawn(LinuxLayout.InstalledExe, "--tray").Dispose();
     }

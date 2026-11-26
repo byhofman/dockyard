@@ -6,9 +6,10 @@ namespace Dockyard.Core;
 static class ComponentRules
 {
     public const string DashboardId = "Dashboard";
+    public const string TrayId = "Tray";
 
     // Every name --with and --without accept on any system. Whether it exists on this one is a host's catalog's business.
-    public static readonly string[] KnownFlags = ["dashboard", "compose", "buildx", "kind", "kubectl", "helm", "linux-engine", "windows-engine"];
+    public static readonly string[] KnownFlags = ["dashboard", "tray", "compose", "buildx", "kind", "kubectl", "helm", "linux-engine", "windows-engine"];
 
     public static ComponentInfo? ByFlag(IEnumerable<ComponentInfo> catalog, string flag) => catalog.FirstOrDefault(c => c.Flag == flag);
 

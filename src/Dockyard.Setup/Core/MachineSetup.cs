@@ -10,10 +10,12 @@ static class MachineSetup
         ToolSource source)
     {
         InUseFiles.CleanUp(Paths.DockerDir);
+        // First, so that a setup that stops halfway leaves the command that finishes it.
+        await MachineApps.AddDefenderExclusions(log);
+        await MachineApps.InstallCli(log, Updates.LocalAssets);
         var withWindows = !without.Contains(nameof(Component.Engine));
         var reboot = withWindows && await MachineEngine.EnableContainersFeature(log);
         if (!without.Contains(nameof(Component.LinuxEngine))) reboot |= await InstallWsl(log);
-        await MachineApps.AddDefenderExclusions(log);
         if (withWindows) await MachineEngine.Update(log, onlyIfNewer: true);
         else await MachineEngine.Remove(log);
         MachineApps.AddToMachinePath(Paths.DockerDir);
@@ -22,8 +24,20 @@ static class MachineSetup
         if (without.Contains(nameof(Component.LinuxEngine))) await UnrouteDomains();
         else await RouteDomains(log);
         if (withWindows) await MachineEngine.Configure(log, userSid, userName);
-        await MachineApps.InstallApp(log, Paths.Self, keepPid, engineOnly, Updates.LocalAssets);
+        await InstallApps(log, keepPid, tray: !without.Contains(nameof(Component.Tray)), dashboard: !engineOnly);
         return reboot;
+    }
+
+    static async Task InstallApps(Action<string> log, int keepPid, bool tray, bool dashboard)
+    {
+        MachineApps.StopApps(keepPid);
+        Directory.CreateDirectory(Paths.AppDir);
+        MachineApps.InstallHost(log, keepPid);
+        if (tray) MachineApps.InstallTray(log, Paths.Self);
+        else MachineApps.RemoveTray(log);
+        if (dashboard) await MachineApps.InstallDashboard(log, Updates.LocalAssets);
+        else if (Paths.HasDashboard) MachineApps.RemoveDashboard(log);
+        else log("The dashboard is not installed");
     }
 
     // A tool left out loses only Dockyard's copy: winget's may be the user's. One that will not install is no reason to
@@ -57,12 +71,18 @@ static class MachineSetup
         switch (component)
         {
             case Component.Engine: await MachineEngine.Update(log, onlyIfNewer: false); break;
-            case Component.App:
-                // Defender's rule goes by path, and an update can bring a file that is not excluded yet.
+            // Defender's rule goes by path, and an update can bring a file that is not excluded yet.
+            case Component.DockyardCli:
                 await MachineApps.AddDefenderExclusions(log);
-                // Next to the new exe in the folder the tray downloaded and checked both into.
-                var exe = appFile ?? throw new ArgumentException("--app-file is required for the app update");
-                await MachineApps.InstallApp(log, exe, keepPid, engineOnly: !Paths.HasDashboard, Path.GetDirectoryName(Path.GetFullPath(exe)));
+                var cli = appFile ?? throw new ArgumentException("--app-file is required for the CLI update");
+                await MachineApps.InstallCli(log, Path.GetDirectoryName(Path.GetFullPath(cli)));
+                break;
+            case Component.Tray:
+                await MachineApps.AddDefenderExclusions(log);
+                var exe = appFile ?? throw new ArgumentException("--app-file is required for the tray update");
+                MachineApps.StopApps(keepPid);
+                MachineApps.InstallHost(log, keepPid);
+                MachineApps.InstallTray(log, exe);
                 Shell.StartUnelevated(Paths.AppExe);
                 break;
             default: throw new ArgumentException($"{component} is not a machine component");
@@ -81,13 +101,13 @@ static class MachineSetup
             $"Remove-MpPreference -AttackSurfaceReductionOnlyExclusions {string.Join(',', MachineApps.EverExcludedFromAsr.Select(Shell.PsQuote))}");
         await Shell.Run("net.exe", "localgroup", "docker-users", "/delete");
         MachineApps.RemoveFromMachinePath(Paths.DockerDir);
-        MachineApps.RemoveFromMachinePath(MachineApps.CommandDir);
+        MachineApps.RemoveFromMachinePath(Paths.CommandDir);
 
         foreach (var dir in new[] { Paths.DockerDir, Paths.AppDir })
         {
             if (!Directory.Exists(dir)) continue;
             log($"Removing {dir}");
-            foreach (var file in Directory.GetFiles(dir, "*", SearchOption.AllDirectories))
+            foreach (var file in RemovalOrder(Directory.GetFiles(dir, "*", SearchOption.AllDirectories)))
             {
                 if (string.Equals(file, Paths.Self, StringComparison.OrdinalIgnoreCase)) continue;
                 try { File.Delete(file); } catch (IOException) { log($"  in use, left behind: {file}"); }
@@ -96,7 +116,11 @@ static class MachineSetup
         log($"Windows images and containers under {Path.GetDirectoryName(Paths.DaemonConfigDir)} were left in place");
     }
 
-    public static async Task SetComponent(Action<string> log, Component component, bool installed, string userSid, string userName, ToolSource source)
+    // The CLI last: it is what finishes an uninstall that stopped halfway.
+    public static IEnumerable<string> RemovalOrder(IEnumerable<string> files) =>
+        files.OrderBy(f => string.Equals(f, Paths.DockyardCliExe, StringComparison.OrdinalIgnoreCase));
+
+    public static async Task SetComponent(Action<string> log, Component component, bool installed, string userSid, string userName, ToolSource source, string? appFile = null, int keepPid = 0)
     {
         if (Tools.Find(component.ToString()) is { } tool)
         {
@@ -117,6 +141,11 @@ static class MachineSetup
                 if (await MachineEngine.EnableContainersFeature(log)) log("Windows has to restart before the Windows engine can run");
                 await MachineEngine.Update(log, onlyIfNewer: true);
                 await MachineEngine.Configure(log, userSid, userName);
+                break;
+            case Component.Tray:
+                MachineApps.StopApps(keepPid);
+                if (installed) MachineApps.InstallTray(log, appFile ?? Paths.Self);
+                else MachineApps.RemoveTray(log);
                 break;
             default: throw new ArgumentException($"{component} cannot be changed here");
         }

@@ -103,21 +103,28 @@ static partial class Elevation
         string[] args = [mode, .. extra, .. assets, "--user-sid", sid, "--user-name", name, "--log", logFile, "--keep-pid", keepPid.ToString()];
         try
         {
-            return Process.Start(new ProcessStartInfo(Paths.Self, string.Join(' ', args.Select(Shell.Quote)))
+            return Process.Start(new ProcessStartInfo(WorkerExe(File.Exists), string.Join(' ', args.Select(Shell.Quote)))
             {
                 UseShellExecute = true,
                 Verb = "runas",
             })!;
         }
-        catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
-        {
-            throw new InvalidOperationException("Administrator approval was declined");
-        }
         catch (Win32Exception ex)
         {
-            throw new InvalidOperationException($"Could not ask for administrator rights ({ex.Message}). In a session without a desktop, run this from an elevated shell.");
+            throw Explain(ex);
         }
     }
+
+    internal static InvalidOperationException Explain(Win32Exception ex) => ex.NativeErrorCode == 1223
+        ? new InvalidOperationException("Administrator approval was declined")
+        : new InvalidOperationException($"Could not ask for administrator rights ({ex.Message}). In a session without a desktop, run this from an elevated shell.");
+
+    // The installed CLI is the worker. Until it answers the --machine-* arguments itself, only the Toolbox does, so a
+    // Toolbox process keeps starting itself; the first install runs from the download, before there is an installed CLI.
+    internal static string WorkerExe(Func<string, bool> exists, bool? isToolbox = null) =>
+        exists(Paths.DockyardCliExe) && !(isToolbox ?? IsToolbox) ? Paths.DockyardCliExe : Paths.Self;
+
+    static bool IsToolbox => System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name == "Dockyard";
 
     public static int Worker(string[] args)
     {
@@ -153,7 +160,7 @@ static partial class Elevation
             if (Opt("--machine-component") is { } component)
             {
                 var change = args.SkipWhile(a => a != "--machine-component").Skip(2).First();
-                MachineSetup.SetComponent(Log, Enum.Parse<Component>(component), change == "add", Arg("--user-sid"), Arg("--user-name"), ElevatedSource()).GetAwaiter().GetResult();
+                MachineSetup.SetComponent(Log, Enum.Parse<Component>(component), change == "add", Arg("--user-sid"), Arg("--user-name"), ElevatedSource(), Opt("--app-file"), keepPid).GetAwaiter().GetResult();
                 return 0;
             }
             if (Opt("--machine-dashboard") == "update")

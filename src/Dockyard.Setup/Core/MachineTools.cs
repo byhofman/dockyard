@@ -13,7 +13,7 @@ static class MachineTools
 
         public Release? Pinned(CliTool tool) => tool.Id switch
         {
-            nameof(Component.Cli) => Updates.WindowsDocker,
+            nameof(Component.DockerCli) => Updates.WindowsDocker,
             nameof(Component.Compose) => Updates.WindowsCompose,
             nameof(Component.Buildx) => Updates.WindowsBuildx,
             _ => Tools.Pinned(tool),
@@ -23,7 +23,7 @@ static class MachineTools
         {
             switch (tool.Id)
             {
-                case nameof(Component.Cli): await MachineEngine.UpdateCli(log, onlyIfNewer: false); break;
+                case nameof(Component.DockerCli): await MachineEngine.UpdateCli(log, onlyIfNewer: false); break;
                 case nameof(Component.Compose) or nameof(Component.Buildx): await MachineApps.UpdatePlugin(log, Enum.Parse<Component>(tool.Id)); break;
                 default: await MachineApps.InstallTool(log, tool); break;
             }
@@ -33,7 +33,7 @@ static class MachineTools
         {
             switch (tool.Id)
             {
-                case nameof(Component.Cli): MachineEngine.RemoveCli(log); break;
+                case nameof(Component.DockerCli): MachineEngine.RemoveCli(log); break;
                 case nameof(Component.Compose) or nameof(Component.Buildx): MachineApps.RemovePlugin(log, Enum.Parse<Component>(tool.Id)); break;
                 default: MachineApps.RemoveTool(log, tool); break;
             }

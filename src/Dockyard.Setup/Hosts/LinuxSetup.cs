@@ -24,11 +24,7 @@ sealed class LinuxSetup(LinuxRoot root, LinuxComponents components, ToolComponen
         await InstallWithAgent(log);
         if (Environment.UserName == "root")
             log("Running as root: the tray autostart is set up the first time you run setup as your own user");
-        else
-        {
-            await WriteAutostart();
-            log($"{Paths.AppName} autostarts at login ({AutostartFile})");
-        }
+        else await SetTray(log, request.Tray);
         await SetUpCredentialStore(log);
         foreach (var tool in Core.Tools.Standalone)
         {
@@ -51,16 +47,31 @@ sealed class LinuxSetup(LinuxRoot root, LinuxComponents components, ToolComponen
         }
     }
 
+    public async Task SetTray(Action<string> log, bool installed)
+    {
+        if (installed)
+        {
+            await WriteAutostart();
+            log($"{Paths.AppName} autostarts at login ({AutostartFile})");
+        }
+        else if (File.Exists(AutostartFile))
+        {
+            File.Delete(AutostartFile);
+            log($"{Paths.AppName} no longer autostarts at login");
+        }
+    }
+
     public async Task Uninstall(Action<string> log, bool removeData, bool silent, IEngineHost host)
     {
         if (File.Exists(AutostartFile)) File.Delete(AutostartFile);
         await CredentialStore.Forget(Paths.CredentialStoreMarker, LinuxLayout.CredentialHelper, log);
         await Https.Disable(host, Settings.Load(), log, silent);
+        if (Directory.Exists(Paths.SettingsDir)) Directory.Delete(Paths.SettingsDir, recursive: true);
+        if (removeData) log("Images and containers belong to the system's Docker and were kept; docker system prune removes them");
+        // The CLI last, as a package in the script or as the tarball's folder: it is what finishes an uninstall that stopped halfway.
         await UninstallWithConfig(log);
         if (Directory.Exists(LinuxLayout.HomeDir)) Directory.Delete(LinuxLayout.HomeDir, recursive: true);
         if (new FileInfo(LinuxLayout.HomeLink).LinkTarget is not null) File.Delete(LinuxLayout.HomeLink);
-        if (Directory.Exists(Paths.SettingsDir)) Directory.Delete(Paths.SettingsDir, recursive: true);
-        if (removeData) log("Images and containers belong to the system's Docker and were kept; docker system prune removes them");
     }
 
     // The setup script runs as root but has no JSON tools, so the merged file is prepared here and handed to it.

@@ -12,7 +12,7 @@ sealed record SetupOptions
           --silent           No window: install, or update what is installed. Progress goes to the console.
           --with <names>     Add these components, comma separated, also on an existing install.
           --without <names>  Leave these out, or remove them from an existing install. Images stay unless --remove-data is given.
-                             Names: dashboard, compose, buildx, kind, kubectl, helm, linux-engine (Windows), windows-engine (Windows).
+                             Names: dashboard, tray, compose, buildx, kind, kubectl, helm, linux-engine (Windows), windows-engine (Windows).
                              Without either: a new install gets everything, an existing install keeps what it has.
           --dashboard        The same as --with dashboard.
           --no-dashboard     The same as --without dashboard.

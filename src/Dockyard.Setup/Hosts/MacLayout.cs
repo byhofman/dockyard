@@ -179,7 +179,13 @@ static class MacLayout
     // /etc/paths.d is read by every account's shells, root's too, and ~/.dockyard/bin is this user's to change. So the PATH
     // gets a folder only root can write, with a small script per command that runs this user's copy for this user alone.
     public const string SharedBinDir = "/usr/local/dockyard/bin";
-    public static readonly string[] SharedCommands = ["docker", "kind", "kubectl", "helm", "docker-credential-osxkeychain", "dockyard"];
+    public static readonly string[] SharedCommands = ["docker", "kind", "kubectl", "helm", "docker-credential-osxkeychain"];
+
+    // The dockyard command: a link to the app's executable where every account's PATH already looks. A link of another app
+    // is left alone when taking it back.
+    public const string CliLink = "/usr/local/bin/dockyard";
+    public static string InstallCliLink(string exe) => $"mkdir -p /usr/local/bin && ln -sfn {Shell.ShQuote(exe)} {CliLink}";
+    public static string RemoveCliLink => $"case \"$(readlink {CliLink})\" in */Dockyard.app/Contents/MacOS/Dockyard) rm -f {CliLink} ;; esac";
 
     // brewBin: where Homebrew's copy is, for when the tool came from there and this user has no copy of Dockyard's.
     public static string Wrapper(string uid, string binDir, string command, string? brewBin = null) =>
@@ -194,6 +200,17 @@ static class MacLayout
 
     public static bool WrappersAreCurrent(string uid, string binDir, string? brewBin, string sharedBinDir = SharedBinDir) =>
         SharedCommands.All(c => File.Exists(Path.Combine(sharedBinDir, c)) && File.ReadAllText(Path.Combine(sharedBinDir, c)) == Wrapper(uid, binDir, c, brewBin));
+
+    // The CLI comes last: it is what finishes an uninstall that stopped halfway.
+    public static List<string> AdministratorUninstall(bool pathEntry, bool resolver, bool socketDaemon, bool cliLink, string ourSocket)
+    {
+        List<string> steps = [];
+        if (pathEntry) steps.Add(RemovePathsEntry);
+        if (resolver) steps.Add($"rm -f {DomainResolver}");
+        if (socketDaemon) steps.Add(RemoveSocketDaemon(ourSocket));
+        if (cliLink) steps.Add(RemoveCliLink);
+        return steps;
+    }
 
     public const string RemovePathsEntry = "rm -f /etc/paths.d/dockyard; rm -rf /usr/local/dockyard";
 

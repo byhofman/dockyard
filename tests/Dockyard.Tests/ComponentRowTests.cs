@@ -11,7 +11,7 @@ public sealed class ComponentRowTests
 {
     sealed class RowsHost : IEngineHost
     {
-        public Dictionary<string, Version?> Versions { get; } = new() { ["App"] = new(1, 0, 0), ["Compose"] = new(2, 0, 0), [ComponentRules.DashboardId] = new(1, 0, 0) };
+        public Dictionary<string, Version?> Versions { get; } = new() { ["DockyardCli"] = new(1, 0, 0), ["Compose"] = new(2, 0, 0), [ComponentRules.DashboardId] = new(1, 0, 0) };
         public Version Newest { get; set; } = new(1, 1, 0);
         public List<string> Updated { get; } = [];
         public List<string> Changed { get; } = [];
@@ -19,7 +19,7 @@ public sealed class ComponentRowTests
         public IReadOnlyList<EngineInfo> Engines { get; } = [new("linux", "Linux", "Linux containers", "", "ctx", "unix:///x")];
         public IReadOnlyList<ComponentInfo> Components { get; } =
         [
-            new("App", "Dockyard", RequiredBecause: "it runs everything"),
+            new("DockyardCli", "Dockyard CLI", RequiredBecause: "it runs everything"),
             new("Compose", "Compose", Flag: "compose", Note: "Needs the CLI"),
             new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard"),
         ];
@@ -128,7 +128,7 @@ public sealed class ComponentRowTests
         var host = new RowsHost();
         var vm = new MainViewModel(Facade.For(host, settings), setupMode: true);
         await vm.LoadSetup();
-        var app = vm.Components.First(c => c.Id == "App");
+        var app = vm.Components.First(c => c.Id == "DockyardCli");
         var compose = vm.Components.First(c => c.Id == "Compose");
 
         Assert.Equal("Required: it runs everything", app.Note);

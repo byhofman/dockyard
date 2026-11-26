@@ -2,6 +2,7 @@ namespace Dockyard.Core;
 
 static class DashboardChoice
 {
-    public static bool Resolve(bool? requested, bool isInstalled, bool hasDashboard) =>
-        requested ?? (!isInstalled || hasDashboard);
+    // A new install has what its catalog defaults to; an existing one keeps what it has.
+    public static bool Resolve(bool? requested, bool isInstalled, bool hasDashboard, bool defaultOn = true) =>
+        requested ?? (isInstalled ? hasDashboard : defaultOn);
 }

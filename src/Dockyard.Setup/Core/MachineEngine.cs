@@ -62,7 +62,7 @@ static class MachineEngine
     public static async Task UpdateCli(Action<string> log, bool onlyIfNewer)
     {
         var latest = Updates.WindowsDocker;
-        var current = await Updates.Installed(Component.Cli);
+        var current = await Updates.Installed(Component.DockerCli);
         if (onlyIfNewer && current >= latest.Version) return;
         log($"Installing the Docker CLI {latest.Version}");
         ExtractDockerZip(await DownloadDockerZip(latest), archive =>

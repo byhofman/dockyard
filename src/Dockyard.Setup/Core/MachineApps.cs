@@ -75,7 +75,7 @@ static class MachineApps
     // Only files in Program Files, which only administrators can write: an exclusion goes by path and exempts whatever is
     // there from every ASR rule. The one-liner asks for its own download path when Defender blocks it, so uninstall takes
     // that back too.
-    static IEnumerable<string> ExcludedFromAsr => new[] { Paths.AppExe, Paths.DashboardExe, Paths.HostExe, CommandExe };
+    static IEnumerable<string> ExcludedFromAsr => new[] { Paths.AppExe, Paths.DashboardExe, Paths.HostExe, Paths.DockyardCliExe };
     public static IEnumerable<string> EverExcludedFromAsr => ExcludedFromAsr.Append(Paths.OneLinerExe).Concat(WingetToolFiles);
 
     // Defender's prevalence/age rule (event 1121) blocks every new build, and an exclusion goes by path because a hash changes with each build.
@@ -98,26 +98,25 @@ static class MachineApps
 
     public static IEnumerable<string> WingetToolFiles => Tools.All.SelectMany(Hosts.Winget.MachineFiles);
 
-    public static async Task InstallApp(Action<string> log, string source, int keepPid, bool engineOnly, string? dashboardDir)
+    // The tray is the Toolbox's executable until the tray is a program of its own.
+    public static void InstallTray(Action<string> log, string source)
     {
-        var isInstalledCopy = string.Equals(Path.GetFullPath(source), Paths.AppExe, StringComparison.OrdinalIgnoreCase);
-        StopApps(keepPid);
         Directory.CreateDirectory(Paths.AppDir);
-        if (!isInstalledCopy)
-        {
-            ReplaceAppExe(source);
-            log($"Installed {Paths.AppExe}");
-        }
-        InstallHost(log, keepPid);
-        if (!engineOnly) await InstallDashboard(log, dashboardDir);
-        else if (Paths.HasDashboard) RemoveDashboard(log);
-        else log("The dashboard is not installed");
-        await InstallCommand(log, dashboardDir);
+        if (string.Equals(Path.GetFullPath(source), Paths.AppExe, StringComparison.OrdinalIgnoreCase)) return;
+        ReplaceAppExe(source);
+        log($"Installed {Paths.AppExe}");
+    }
+
+    public static void RemoveTray(Action<string> log)
+    {
+        if (!File.Exists(Paths.AppExe)) return;
+        InUseFiles.MoveAside(Paths.AppExe);
+        log($"Removed {Paths.AppExe}");
     }
 
     // dockyard-host, which keeps the Linux engine running and reachable from Windows; the Toolbox carries it. A running
     // one is stopped to be replaced: the engine keeps running, and the new one takes it on.
-    static void InstallHost(Action<string> log, int keepPid)
+    public static void InstallHost(Action<string> log, int keepPid)
     {
         using var embedded = typeof(Paths).Assembly.GetManifestResourceStream("dockyard-host.exe");
         if (embedded is null) return;
@@ -129,40 +128,33 @@ static class MachineApps
         log($"Installed {Paths.HostExe}");
     }
 
-    // The dockyard command, its own component: a console program, so cmd and PowerShell wait for it and get its output.
-    // In a folder of its own, where it is the only dockyard on the PATH.
-    public static string CommandDir => Path.Combine(Paths.AppDir, "bin");
-    public static string CommandExe => Path.Combine(CommandDir, "dockyard.exe");
-
-    // From the given folder, or the CLI's own release. Without it Dockyard works, so a failed download is said, not fatal.
-    public static async Task InstallCommand(Action<string> log, string? sourceDir)
+    // The dockyard command, the component every install has: a console program, so cmd and PowerShell wait for it and get
+    // its output. In a folder of its own, where it is the only dockyard on the PATH. From the given folder, or the CLI's own
+    // release. Without it nothing else can be installed or updated, so a failed download fails the setup.
+    public static async Task InstallCli(Action<string> log, string? sourceDir)
     {
-        string? local;
         string? downloaded = null;
         var download = Path.Combine(Paths.AppDir, $".download-{Guid.NewGuid():N}");
+        var local = sourceDir is null ? null : Directory.EnumerateFiles(sourceDir).FirstOrDefault(f => Regex.IsMatch(Path.GetFileName(f), Updates.CliAssetPattern));
         try
         {
-            local = sourceDir is null ? null : Directory.EnumerateFiles(sourceDir).FirstOrDefault(f => Regex.IsMatch(Path.GetFileName(f), Updates.CliAssetPattern));
             if (local is null)
             {
                 log("Downloading the dockyard command");
                 local = downloaded = await Updates.DownloadComponentAsset(Updates.CliComponent, Updates.CliAssetPattern, download);
             }
+            Directory.CreateDirectory(Paths.CommandDir);
+            var incoming = Paths.DockyardCliExe + ".new";
+            File.Copy(local, incoming, overwrite: true);
+            InUseFiles.MoveAside(Paths.DockyardCliExe);
+            File.Move(incoming, Paths.DockyardCliExe);
         }
-        catch (Exception e) when (e is HttpRequestException or InvalidOperationException or IOException or TaskCanceledException or UnauthorizedAccessException)
+        finally
         {
-            log($"The dockyard command was not installed: {e.Message}");
             if (Directory.Exists(download)) Directory.Delete(download, recursive: true);
-            return;
         }
-        Directory.CreateDirectory(CommandDir);
-        var incoming = CommandExe + ".new";
-        File.Copy(local, incoming, overwrite: true);
-        if (downloaded is not null) Directory.Delete(Path.GetDirectoryName(downloaded)!, recursive: true);
-        InUseFiles.MoveAside(CommandExe);
-        File.Move(incoming, CommandExe);
-        log($"Installed {CommandExe}");
-        AddToMachinePath(CommandDir);
+        log($"Installed {Paths.DockyardCliExe}");
+        AddToMachinePath(Paths.CommandDir);
     }
 
     // A running exe cannot be overwritten but can be renamed, and the worker doing this may be running from that very

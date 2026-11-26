@@ -20,7 +20,8 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
         "Engine" => Updates.ParseVersion((await runner.Run("dockerd", "--version")).Output),
         "Compose" => Updates.ParseVersion((await runner.Run("docker", "compose", "version", "--short")).Output),
         "Buildx" => Updates.ParseVersion((await runner.Run("docker", "buildx", "version")).Output),
-        "App" => await InstalledAppVersion(),
+        nameof(Component.DockyardCli) => await InstalledAppVersion(),
+        ComponentRules.TrayId => File.Exists(LinuxSetup.AutostartFile) ? await InstalledAppVersion() : null,
         ComponentRules.DashboardId => await InstalledDashboardVersion(),
         _ => null,
     };
@@ -43,7 +44,8 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
         "Engine" => Updates.LinuxDocker,
         "Compose" => Updates.LinuxCompose,
         "Buildx" => Updates.LinuxBuildx,
-        "App" => await Updates.LatestApp(LinuxLayout.AppAsset),
+        // One package holds the command and the tray, so the update is the command's.
+        nameof(Component.DockyardCli) => await Updates.LatestApp(LinuxLayout.AppAsset),
         ComponentRules.DashboardId => await Updates.LatestComponentAsset(Updates.DashboardComponent, LinuxLayout.DashboardPackage("apt")),
         _ => null,
     };

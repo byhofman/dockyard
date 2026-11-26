@@ -12,7 +12,7 @@ sealed record CliTool(string Id, string Title, string Command, string[] VersionA
 
 static class Tools
 {
-    public static readonly CliTool Docker = new(nameof(Core.Component.Cli), "Docker CLI", "docker", ["--version"], "Docker.DockerCLI", "docker");
+    public static readonly CliTool Docker = new(nameof(Core.Component.DockerCli), "Docker CLI", "docker", ["--version"], "Docker.DockerCLI", "docker");
     public static readonly CliTool Compose = new(nameof(Core.Component.Compose), "Docker Compose", "docker-compose", ["version", "--short"], "Docker.DockerCompose", "docker-compose", "compose");
     public static readonly CliTool Buildx = new(nameof(Core.Component.Buildx), "Docker Buildx", "docker-buildx", ["version"], "Docker.Buildx", "docker-buildx", "buildx");
     public static readonly CliTool Kind = new(nameof(Core.Component.Kind), "kind (Kubernetes in Docker)", "kind", ["version"], "Kubernetes.kind", "kind", "kind",

@@ -9,11 +9,13 @@ sealed class FakeHost : IEngineHost
     public bool Dashboard { get; set; }
     public bool RebootNeeded { get; set; }
     public Exception? Failure { get; set; }
+    public Exception? FailureOnSetComponent { get; set; }
     public bool IgnoresDashboard { get; set; }
     public List<string> Calls { get; } = [];
+    public List<InstallRequest> Requests { get; } = [];
 
     public IReadOnlyList<EngineInfo> Engines { get; } = [new("linux", "Linux", "Linux containers", "", "ctx", "unix:///x")];
-    public IReadOnlyList<ComponentInfo> Components { get; init; } = [new("App", "Dockyard"), new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard")];
+    public IReadOnlyList<ComponentInfo> Components { get; init; } = [new("DockyardCli", "Dockyard CLI"), new("Tray", "Dockyard tray", Flag: "tray"), new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard")];
     public HashSet<string> Missing { get; } = [];
     public bool IsInstalled => Installed;
     public bool RunsFromInstallLocation => false;
@@ -33,6 +35,7 @@ sealed class FakeHost : IEngineHost
     public Task<bool> SetComponent(Action<string> log, string component, bool installed, bool removeData = false)
     {
         if (component == ComponentRules.DashboardId) return SetDashboard(log, installed);
+        if (FailureOnSetComponent is not null) throw FailureOnSetComponent;
         Calls.Add($"{(installed ? "add" : "remove")} {component}");
         if (installed) Missing.Remove(component); else Missing.Add(component);
         return Task.FromResult(false);
@@ -43,6 +46,7 @@ sealed class FakeHost : IEngineHost
     public Task<bool> Install(Action<string> log, InstallRequest request)
     {
         Calls.Add($"install dashboard={request.Dashboard} silent={request.Silent}");
+        Requests.Add(request);
         if (Failure is not null) throw Failure;
         Installed = true;
         if (!IgnoresDashboard) Dashboard = request.Dashboard;

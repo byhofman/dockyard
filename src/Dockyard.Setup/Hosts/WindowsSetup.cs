@@ -34,14 +34,31 @@ static class WindowsSetup
         else await Elevation.Run(log, "--machine-uninstall");
     }
 
-    public static async Task MachineComponent(Action<string> log, string component, bool installed)
+    // appFile: the tray's executable to put in place, where it is not this process's own.
+    public static async Task MachineComponent(Action<string> log, string component, bool installed, string? appFile = null)
     {
         if (Elevation.IsElevated)
         {
             var (sid, name) = Elevation.CurrentUser;
-            await MachineSetup.SetComponent(log, Enum.Parse<Component>(component), installed, sid, name, Source);
+            await MachineSetup.SetComponent(log, Enum.Parse<Component>(component), installed, sid, name, Source, appFile, Environment.ProcessId);
         }
-        else await Elevation.Run(log, "--machine-component", [component, installed ? "add" : "remove", .. SourceArgs]);
+        else await Elevation.Run(log, "--machine-component", [component, installed ? "add" : "remove", .. appFile is null ? Array.Empty<string>() : ["--app-file", appFile], .. SourceArgs]);
+    }
+
+    public static async Task UpdateCli(Action<string> log, Release release)
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
+        try
+        {
+            log($"Downloading the dockyard command {release.Tag}");
+            var cli = await Updates.DownloadReleaseAsset(Updates.CliAssetPattern, dir, isPattern: true, tag: release.Tag);
+            if (Elevation.IsElevated) await MachineSetup.Update(log, Component.DockyardCli, cli, Environment.ProcessId, Source);
+            else await Elevation.Run(log, "--machine-update", Component.DockyardCli.ToString(), "--app-file", cli);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+        }
     }
 
     public static Task MachineUpdate(Action<string> log, IReadOnlyCollection<Component> components) =>
