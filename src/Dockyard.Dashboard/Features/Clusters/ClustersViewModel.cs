@@ -59,7 +59,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         session.Containers.RowsChanged += () => _ = Reload();
         session.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName is nameof(EngineSession.ContextName) or nameof(EngineSession.State)) Raise(nameof(NeedsLinuxEngine), nameof(Hint));
+            if (e.PropertyName is nameof(EngineSession.ContextName) or nameof(EngineSession.State)) Raise(nameof(NeedsLinuxEngine), nameof(MissingKind), nameof(Hint), nameof(HasHint));
         };
         PropertyChanged += (_, e) => { if (e.PropertyName == nameof(IsBusy)) RefreshCommands(); };
     }
@@ -134,8 +134,9 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         : "";
 
     public bool HasHint => Hint.Length > 0;
-    // Above the containers, with Tools as its link, as the banner for a missing docker tool has.
-    public bool MissingKind => !HasKind;
+    // Above the containers, with Tools as its link, as the banner for a missing docker tool has. Not on the Windows
+    // engine, where kind cannot run whether it is installed or not.
+    public bool MissingKind => !HasKind && !NeedsLinuxEngine;
     public string? HintLink => HasKind ? null : "Tools";
     public Command HintCommand => Shell.OpenToolsCommand;
     public string KubectlHint => Selected is { } c ? $"kubectl --context {c.Context} get nodes" : "";

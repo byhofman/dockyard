@@ -80,6 +80,27 @@ public sealed class FacadeWiringTests
             shell.ShowSection("Images");
             shell.Clusters.HintCommand.Execute(null);
             Assert.Equal("Tools", shell.CurrentSection.Title);
+
+            // On the Windows engine kind cannot run at all, so there is nothing to install; a switch back brings the hint.
+            const System.Reflection.BindingFlags any = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public;
+            var windowsClient = new DockerClient(Dockyard.Engine.Transport.DockerEndpoint.Parse("npipe:////./pipe/docker_engine"));
+            typeof(DockerClient).GetProperty(nameof(DockerClient.OsType))!.SetValue(windowsClient, "windows");
+            var linuxClient = new DockerClient(Dockyard.Engine.Transport.DockerEndpoint.Parse("unix:///nonexistent.sock"));
+            var client = typeof(Dockyard.Dashboard.Store.EngineSession).GetField("client", any)!;
+            var context = typeof(Dockyard.Dashboard.Store.EngineSession).GetProperty(nameof(Dockyard.Dashboard.Store.EngineSession.ContextName))!;
+            var raised = new List<string?>();
+            shell.Clusters.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+            client.SetValue(shell.Session, windowsClient);
+            context.SetValue(shell.Session, "win");
+            Assert.False(shell.Clusters.MissingKind);
+            Assert.Contains(nameof(ClustersViewModel.MissingKind), raised);
+
+            raised.Clear();
+            client.SetValue(shell.Session, linuxClient);
+            context.SetValue(shell.Session, "linux");
+            Assert.True(shell.Clusters.MissingKind);
+            Assert.Contains(nameof(ClustersViewModel.MissingKind), raised);
         }, TestContext.Current.CancellationToken);
     }
 
