@@ -111,6 +111,8 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         return false;
     }
 
+    public IReadOnlyList<string> InstallPlan(InstallRequest request) => InstallPhases.Mac(request.TrustHttps);
+
     public async Task<bool> Install(Action<string> log, InstallRequest request)
     {
         await Setup.Install(log, request, this);

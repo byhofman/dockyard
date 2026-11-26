@@ -87,29 +87,35 @@ public sealed partial class PrototypeScreens
     static SetupProgress Info(string line) => new(line);
     static SetupProgress Cmd(string line) => new(line, SetupProgressKind.Command);
 
-    // A new Mac: the facade installs Dockyard as one step, which the host reports line by line.
-    static readonly SetupProgress[] FirstRun =
+    // A Mac's install as the facade reports it: MacHost's phases, then each change, then starting up.
+    static readonly string[] MacPhases = ["Dockyard", "docker and the Kubernetes tools", "Administrator step", "The Linux VM"];
+
+    static SetupProgress[] MacInstall(string[] plan) =>
     [
-        new("Installing Dockyard", Step: 1, Steps: 1) { Plan = ["Installing Dockyard"] },
+        new(plan[0], Step: 1, Steps: plan.Length) { Plan = plan },
+        Info("Installed /Users/me/Applications/Dockyard.app"),
+        new(plan[1], Step: 2, Steps: plan.Length),
         Info("The tools come from Homebrew"),
         Cmd("brew install docker docker-compose docker-buildx kind kubectl"),
         Info("Installed /opt/homebrew/bin/docker (28.5.1)"),
+        new(plan[2], Step: 3, Steps: plan.Length),
+        Info("Administrator step: adding docker, kind, kubectl and helm to the PATH through /usr/local/bin"),
+        new(plan[3], Step: 4, Steps: plan.Length),
         Info("Downloading the Linux engine image (212 MB)"),
     ];
 
+    // A new Mac, in the middle of the VM.
+    static readonly SetupProgress[] FirstRun = MacInstall([.. MacPhases, "Starting up"]);
+
     // Opened again on an installed Dockyard with Helm picked and Buildx left out: the install is brought up to date, then
     // each change is a step of its own.
-    static readonly string[] Plan = ["Installing Dockyard", "Adding Helm", "Removing Docker Buildx"];
+    static readonly string[] Plan = [.. MacPhases, "Adding Helm", "Removing Docker Buildx", "Starting up"];
 
     static readonly SetupProgress[] Rerun =
     [
-        new("Installing Dockyard", Step: 1, Steps: 3) { Plan = Plan },
-        Info("The tools come from Homebrew"),
-        Cmd("brew upgrade docker kind"),
-        Info("Installed /opt/homebrew/bin/docker (29.0.2)"),
+        .. MacInstall(Plan),
         Info("Docker context 'dockyard' → unix:///Users/me/.dockyard/run/docker.sock"),
-        Info("Dockyard starts at login (~/Library/LaunchAgents/dev.dockyard.plist)"),
-        new("Adding Helm", Step: 2, Steps: 3),
+        new("Adding Helm", Step: 5, Steps: Plan.Length),
         Cmd("brew install helm"),
         Info("==> Fetching helm 3.19.2"),
     ];

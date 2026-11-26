@@ -316,14 +316,33 @@ public sealed partial class DockyardSetup : IDisposable
             foreach (var c in Changed(without))
                 if (await host.Installed(c.Id) is not null) removes.Add(c);
         }
-        var steps = 1 + adds.Count + removes.Count;
+        var installRequest = new InstallRequest(dashboard, request.Image, request.Silent, request.TrustHttps) { Without = removed, Tray = !removed.Contains(ComponentRules.TrayId) };
+        var phases = host.InstallPlan(installRequest);
+        List<string> plan =
+        [
+            .. phases,
+            .. adds.Select(c => $"Adding {c.Title}"),
+            .. removes.Select(c => $"Removing {c.Title}"),
+            .. request.Start ? [Hosts.InstallPhases.StartingUp] : Array.Empty<string>(),
+        ];
+        var steps = plan.Count;
         var step = 1;
 
-        progress.Report(new SetupProgress("Installing Dockyard", Step: step, Steps: steps)
+        progress.Report(new SetupProgress(plan[0], Step: step, Steps: steps) { Plan = plan });
+        // A host's phase marker moves the steps on; one it did not plan, or one it entered already, is only a line.
+        void InstallLog(string line)
         {
-            Plan = ["Installing Dockyard", .. adds.Select(c => $"Adding {c.Title}"), .. removes.Select(c => $"Removing {c.Title}")],
-        });
-        var reboot = await host.Install(log, new InstallRequest(dashboard, request.Image, request.Silent, request.TrustHttps) { Without = removed, Tray = !removed.Contains(ComponentRules.TrayId) });
+            if (Hosts.InstallPhases.Read(line) is not { } phase) log(line);
+            else if (plan.IndexOf(phase, step - 1) is var at and >= 0 && at < phases.Count)
+            {
+                if (at + 1 == step) return;
+                step = at + 1;
+                progress.Report(new SetupProgress(phase, Step: step, Steps: steps));
+            }
+            else log(phase);
+        }
+        var reboot = await host.Install(InstallLog, installRequest);
+        step = phases.Count;
         // Setup turns trusted HTTPS on through the file.
         settings.Reload();
         ct.ThrowIfCancellationRequested();
@@ -338,6 +357,7 @@ public sealed partial class DockyardSetup : IDisposable
             progress.Report(new SetupProgress($"Removing {c.Title}", Step: ++step, Steps: steps));
             if (await host.Installed(c.Id) is not null) await host.SetComponent(log, c.Id, installed: false, request.RemoveData);
         }
+        if (request.Start) progress.Report(new SetupProgress(Hosts.InstallPhases.StartingUp, Step: ++step, Steps: steps));
         ApplyShell(log);
         // The definitions are the user's: a setup run with sudo would tell the agent there are none.
         if (Environment.UserName != "root")

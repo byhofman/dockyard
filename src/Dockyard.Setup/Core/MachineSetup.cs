@@ -14,17 +14,28 @@ static class MachineSetup
         await MachineApps.AddDefenderExclusions(log);
         await MachineApps.InstallCli(log, Updates.LocalAssets);
         var withWindows = !without.Contains(nameof(Component.Engine));
+        var withLinux = !without.Contains(nameof(Component.LinuxEngine));
+        log(Hosts.InstallPhases.Start(Hosts.InstallPhases.WindowsFeatures(withWindows, withLinux)));
         var reboot = withWindows && await MachineEngine.EnableContainersFeature(log);
-        if (!without.Contains(nameof(Component.LinuxEngine))) reboot |= await InstallWsl(log);
-        if (withWindows) await MachineEngine.Update(log, onlyIfNewer: true);
+        if (withLinux) reboot |= await InstallWsl(log);
+        if (withWindows)
+        {
+            log(Hosts.InstallPhases.Start(Hosts.InstallPhases.WindowsEngine));
+            await MachineEngine.Update(log, onlyIfNewer: true);
+            await MachineEngine.Configure(log, userSid, userName);
+        }
         else await MachineEngine.Remove(log);
         MachineApps.AddToMachinePath(Paths.DockerDir);
         await InstallTools(log, without, source);
         await MachineApps.InstallCredentialHelper(log);
-        if (without.Contains(nameof(Component.LinuxEngine))) await UnrouteDomains();
-        else await RouteDomains(log);
-        if (withWindows) await MachineEngine.Configure(log, userSid, userName);
+        log(Hosts.InstallPhases.Start(Hosts.InstallPhases.Dockyard));
         await InstallApps(log, keepPid, tray: !without.Contains(nameof(Component.Tray)), dashboard: !engineOnly);
+        if (withLinux)
+        {
+            log(Hosts.InstallPhases.Start(Hosts.InstallPhases.ContainerDomains));
+            await RouteDomains(log);
+        }
+        else await UnrouteDomains();
         MarkInstalled(Paths.InstalledMarker);
         return reboot;
     }
@@ -52,9 +63,12 @@ static class MachineSetup
     static async Task InstallTools(Action<string> log, IReadOnlyCollection<string> without, ToolSource source)
     {
         var tools = MachineTools.For(source);
+        log(Hosts.InstallPhases.Start(Hosts.InstallPhases.DockerCli));
         if (tools.Packages is { } winget && !await winget.IsAvailable()) log("winget is not available, so the tools come from Dockyard, in Program Files");
+        var kubernetes = Tools.Standalone.Any(t => !without.Contains(t.Id));
         foreach (var tool in Tools.All)
         {
+            if (kubernetes && tool == Tools.Standalone[0]) log(Hosts.InstallPhases.Start(Hosts.InstallPhases.KubernetesTools));
             if (without.Contains(tool.Id))
             {
                 await tools.RemoveDockyardCopy(log, tool);

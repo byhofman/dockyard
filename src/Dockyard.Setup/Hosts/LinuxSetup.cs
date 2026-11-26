@@ -19,13 +19,16 @@ sealed class LinuxSetup(LinuxRoot root, LinuxComponents components, ToolComponen
 
     public async Task Install(Action<string> log, InstallRequest request, IEngineHost host)
     {
+        log(InstallPhases.Start(InstallPhases.Dockyard));
         if (LinuxComponents.HasDashboard && !request.Dashboard) await components.StopDashboard();
         await components.InstallApp(log, request.Dashboard, tag: null);
+        log(InstallPhases.Start(InstallPhases.DockerEngine));
         await InstallWithAgent(log);
         if (Environment.UserName == "root")
             log("Running as root: the tray autostart is set up the first time you run setup as your own user");
         else await SetTray(log, request.Tray);
         await SetUpCredentialStore(log);
+        if (Core.Tools.Standalone.Any(t => !request.Without.Contains(t.Id))) log(InstallPhases.Start(InstallPhases.KubernetesTools));
         foreach (var tool in Core.Tools.Standalone)
         {
             try
@@ -38,7 +41,11 @@ sealed class LinuxSetup(LinuxRoot root, LinuxComponents components, ToolComponen
                 log($"{tool.Title} was not installed ({e.Message}); running the wizard again retries it");
             }
         }
-        if (request.TrustHttps) await Https.Enable(host, Settings.Load(), log, request.Silent);
+        if (request.TrustHttps)
+        {
+            log(InstallPhases.Start(InstallPhases.TrustedHttps));
+            await Https.Enable(host, Settings.Load(), log, request.Silent);
+        }
         await root.TryRun("gnome-extensions", "enable", "appindicatorsupport@rgcjonas.gmail.com");
         if ((await root.TryRun("docker", "context", "show"))?.Output.Trim() is { Length: > 0 } current && current != "default")
         {

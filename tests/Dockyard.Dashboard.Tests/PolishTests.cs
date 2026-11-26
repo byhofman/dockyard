@@ -151,3 +151,19 @@ public sealed class PolishTests
         }
     });
 }
+
+public sealed class SetupRunWithoutPlanTests
+{
+    // A run that names only some steps lists those, in their order, and no row without a name.
+    [Fact]
+    public void Without_a_plan_only_named_steps_are_listed()
+    {
+        var run = new SetupRun("Updating");
+        run.Report(new SetupProgress("Adding Helm", Step: 3, Steps: 4));
+        Assert.Equal(["Adding Helm"], run.Checklist.Select(s => s.Title));
+        run.Report(new SetupProgress("Setting up kubectl", Step: 4, Steps: 4));
+        Assert.Equal(["Adding Helm", "Setting up kubectl"], run.Checklist.Select(s => s.Title));
+        Assert.Equal([SetupStepState.Done, SetupStepState.Running], run.Checklist.Select(s => s.State));
+        Assert.DoesNotContain(run.Checklist, s => s.Title.Length == 0);
+    }
+}

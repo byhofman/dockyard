@@ -170,6 +170,8 @@ sealed class LinuxHost : IEngineHost
         return false;
     }
 
+    public IReadOnlyList<string> InstallPlan(InstallRequest request) => InstallPhases.Linux(request.Without, request.TrustHttps);
+
     public async Task<bool> Install(Action<string> log, InstallRequest request)
     {
         await setup.Install(log, request, this);

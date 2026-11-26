@@ -54,8 +54,17 @@ sealed class FakeHost : IEngineHost
         return Task.FromResult(false);
     }
 
+    // An install in phases, as the real hosts run one: each phase's marker, then a line of its own.
+    public IReadOnlyList<string>? Phases { get; init; }
+    public IReadOnlyList<string> InstallPlan(InstallRequest request) => Phases ?? ["Installing Dockyard"];
+
     public Task<bool> Install(Action<string> log, InstallRequest request)
     {
+        foreach (var phase in Phases ?? [])
+        {
+            log(InstallPhases.Start(phase));
+            log($"doing {phase}");
+        }
         Calls.Add($"install dashboard={request.Dashboard} silent={request.Silent}");
         Requests.Add(request);
         if (Failure is not null) throw Failure;

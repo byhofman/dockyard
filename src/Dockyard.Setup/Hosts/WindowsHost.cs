@@ -233,6 +233,8 @@ sealed class WindowsHost : IEngineHost
         }
     }
 
+    public IReadOnlyList<string> InstallPlan(InstallRequest request) => InstallPhases.Windows(request.Without, request.TrustHttps);
+
     public async Task<bool> Install(Action<string> log, InstallRequest request)
     {
         foreach (var tool in Tools.All.Where(t => !request.Without.Contains(t.Id))) await RemoveUserCopy(log, tool);
@@ -243,6 +245,7 @@ sealed class WindowsHost : IEngineHost
         var hadDistro = withLinux && await distro.Exists();
         try
         {
+            if (withLinux) log(InstallPhases.Start(InstallPhases.LinuxEngine));
             await UserSetup.Install(log, request.Image, request.Without);
         }
         catch (Exception ex) when (reboot)
@@ -254,7 +257,11 @@ sealed class WindowsHost : IEngineHost
         }
         await FindWingetPlugins(log);
         if (hadDistro) await UpdateLinuxEngineIfNewer(log);
-        if (request.TrustHttps) await Https.Enable(this, Settings.Load(), log, request.Silent);
+        if (request.TrustHttps)
+        {
+            log(InstallPhases.Start(InstallPhases.TrustedHttps));
+            await Https.Enable(this, Settings.Load(), log, request.Silent);
+        }
         return reboot;
     }
 

@@ -40,6 +40,15 @@ sealed class SetupRun : Observable, IProgress<SetupProgress>
     public double Percent => Step is { } at && Steps is { } of && of > 1 ? (at - 0.5) / of * 100 : 0;
     public bool IsIndeterminate => Steps is not > 1;
 
+    readonly SortedDictionary<int, SetupStep> numbered = new();
+
+    void Add(int number, string title)
+    {
+        var row = new SetupStep(title);
+        numbered[number] = row;
+        Checklist.Insert(numbered.Keys.TakeWhile(n => n < number).Count(), row);
+    }
+
     SetupStep? Current => Checklist.LastOrDefault(s => s.State is SetupStepState.Running or SetupStepState.Failed);
 
     public void Report(SetupProgress value)
@@ -51,10 +60,10 @@ sealed class SetupRun : Observable, IProgress<SetupProgress>
             Steps = value.Steps;
             Raise(nameof(StatusText), nameof(Percent), nameof(IsIndeterminate));
             if (value.Plan is { } plan && Checklist.Count == 0)
-                foreach (var title in plan) Checklist.Add(new SetupStep(title));
-            while (Checklist.Count < at) Checklist.Add(new SetupStep(Checklist.Count == at - 1 ? value.Line : ""));
-            for (var i = 0; i < at - 1; i++) Checklist[i].State = SetupStepState.Done;
-            Checklist[at - 1].State = SetupStepState.Running;
+                for (var i = 0; i < plan.Count; i++) Add(i + 1, plan[i]);
+            // Without a plan only the steps that were named are listed: a skipped number has no name to show.
+            if (!numbered.ContainsKey(at)) Add(at, value.Line);
+            foreach (var (number, row) in numbered) row.State = number < at ? SetupStepState.Done : number == at ? SetupStepState.Running : row.State;
         }
         else if (Current is { } current)
         {

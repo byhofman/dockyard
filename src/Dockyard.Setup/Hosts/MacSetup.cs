@@ -12,8 +12,10 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
 
     public async Task Install(Action<string> log, InstallRequest request, IEngineHost host)
     {
+        log(InstallPhases.Start(InstallPhases.Dockyard));
         await InstallBundle(log, request.Dashboard);
 
+        log(InstallPhases.Start(InstallPhases.MacTools));
         if (tools.Packages is null) log("The tools come from Dockyard, in " + MacLayout.BinDir);
         else if (!await tools.Packages.IsAvailable()) log($"No Homebrew here, so the tools come from Dockyard, in {MacLayout.BinDir}");
         foreach (var tool in Tools.All)
@@ -23,10 +25,12 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
         }
         await FindBrewPlugins(log, tools);
 
+        log(InstallPhases.Start(InstallPhases.Administrator));
         await AdministratorSteps(log, request.Silent);
         await InstallCredentialHelper(log);
         LinkUserSocket(log);
 
+        log(InstallPhases.Start(InstallPhases.LinuxVm));
         await vm.PrepareForInstall(log);
         await vm.WriteEngineConfig(log);
 
@@ -38,10 +42,14 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
         await runner.Check(MacLayout.Docker, "context", "use", MacLayout.Context);
         log($"Docker context '{MacLayout.Context}' → {dockerHost}");
 
-        if (request.TrustHttps) await Https.Enable(host, Settings.Load(), log, request.Silent);
-
         if (request.Tray) await AddLoginItem(log);
         else RemoveLoginItem(log);
+
+        if (request.TrustHttps)
+        {
+            log(InstallPhases.Start(InstallPhases.TrustedHttps));
+            await Https.Enable(host, Settings.Load(), log, request.Silent);
+        }
     }
 
     public static async Task AddLoginItem(Action<string> log)

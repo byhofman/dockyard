@@ -22,6 +22,9 @@ interface IEngineHost
     // Returns true when a reboot is needed to finish.
     Task<bool> Install(Action<string> log, InstallRequest request);
 
+    // The steps Install runs for this request, in order; it logs InstallPhases.Start as it enters each one.
+    IReadOnlyList<string> InstallPlan(InstallRequest request) => ["Installing Dockyard"];
+
     // Finishes an install that had to wait for a reboot.
     Task Resume(Action<string> log) => Task.CompletedTask;
 
