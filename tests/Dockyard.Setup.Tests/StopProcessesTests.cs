@@ -35,15 +35,31 @@ public sealed class LinuxUpdateTests
     [Fact]
     public void The_dashboard_alone_comes_from_its_own_release_without_the_app()
     {
-        var (app, dashboard) = LinuxHost.AppUpdate([(ComponentRules.DashboardId, Dashboard), ("Kind", null)]);
+        var (app, dashboard) = LinuxHost.AppUpdate([(ComponentRules.DashboardId, Dashboard), ("Kind", null)], tarball: false);
         Assert.Null(app);
         Assert.Equal(Dashboard, dashboard);
     }
 
     [Fact]
+    public void Without_packages_the_dashboard_follows_the_command_and_has_no_update_of_its_own()
+    {
+        Assert.Null(LinuxComponents.TarballDashboardLatest(Cli, installedCli: new Version(2, 0, 0)));
+        Assert.Null(LinuxComponents.TarballDashboardLatest(null, installedCli: new Version(1, 0, 0)));
+        Assert.Equal(Cli, LinuxComponents.TarballDashboardLatest(Cli, installedCli: new Version(1, 0, 0)));
+    }
+
+    [Fact]
+    public void Without_packages_a_dashboard_update_is_the_command_s_tarball()
+    {
+        var (app, dashboard) = LinuxHost.AppUpdate([(ComponentRules.DashboardId, Cli)], tarball: true);
+        Assert.Equal(Cli, app);
+        Assert.Null(dashboard);
+    }
+
+    [Fact]
     public void With_the_command_the_app_update_brings_the_dashboard_along()
     {
-        var (app, dashboard) = LinuxHost.AppUpdate([(ComponentRules.DashboardId, Dashboard), (nameof(Component.DockyardCli), Cli)]);
+        var (app, dashboard) = LinuxHost.AppUpdate([(ComponentRules.DashboardId, Dashboard), (nameof(Component.DockyardCli), Cli)], tarball: false);
         Assert.Equal(Cli, app);
         Assert.Null(dashboard);
     }

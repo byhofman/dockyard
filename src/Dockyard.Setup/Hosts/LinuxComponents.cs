@@ -46,9 +46,20 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
         "Buildx" => Updates.LinuxBuildx,
         // One package holds the command and the tray, so the update is the command's.
         nameof(Component.DockyardCli) => await Updates.LatestComponentAsset(Updates.CliComponent, LinuxLayout.AppPackage("apt")),
-        ComponentRules.DashboardId => await Updates.LatestComponentAsset(Updates.DashboardComponent, LinuxLayout.DashboardPackage("apt")),
+        ComponentRules.DashboardId => IsTarball
+            ? TarballDashboardLatest(await Updates.LatestComponentAsset(Updates.CliComponent, LinuxLayout.Tarball), TarballVersion())
+            : await Updates.LatestComponentAsset(Updates.DashboardComponent, LinuxLayout.DashboardPackage("apt")),
         _ => null,
     };
+
+    // Neither apt nor dnf: the app is the CLI's tarball in the user's home, the dashboard included.
+    public static bool IsTarball => LinuxLayout.InstallDir == LinuxLayout.HomeDir;
+
+    static Version? TarballVersion() => File.Exists(LinuxLayout.VersionFile) ? Updates.ParseVersion(File.ReadAllText(LinuxLayout.VersionFile)) : null;
+
+    // The dashboard's own release has only packages, so in the tarball it is as new as the command it came with.
+    internal static Release? TarballDashboardLatest(Release? cliLatest, Version? installedCli) =>
+        cliLatest is not null && (installedCli is null || cliLatest.Version > installedCli) ? cliLatest : null;
 
     public async Task UpdateDockerPackages(Action<string> log)
     {
@@ -107,15 +118,10 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
         await StopDashboard();
     }
 
-    // From the dashboard's own release; the app stays as it is.
+    // From the dashboard's own release, as a package; the app stays as it is.
     public async Task UpdateDashboard(Action<string> log)
     {
         await StopDashboard();
-        if (LinuxLayout.InstallDir == LinuxLayout.HomeDir)
-        {
-            await InstallFromTarball(log, dashboard: true, tag: null);
-            return;
-        }
         var os = OsRelease.Parse(await File.ReadAllTextAsync("/etc/os-release"));
         await InstallPackages(log, os.PackageManager, app: false, dashboard: true, tag: null);
     }

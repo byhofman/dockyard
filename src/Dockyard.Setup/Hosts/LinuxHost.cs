@@ -147,7 +147,7 @@ sealed class LinuxHost : IEngineHost
         if (components.Any(c => c.Component is "Engine" or "Compose" or "Buildx")) await this.components.UpdateDockerPackages(log);
         foreach (var (component, _) in components)
             if (Tool(component) is { } tool) await tools.Install(log, tool);
-        var (app, dashboard) = AppUpdate(components);
+        var (app, dashboard) = AppUpdate(components, LinuxComponents.IsTarball);
         if (app is not null)
         {
             await this.components.StopApps();
@@ -159,11 +159,14 @@ sealed class LinuxHost : IEngineHost
         return false;
     }
 
-    // The command's release brings the dashboard of its version along; the dashboard by itself comes from its own.
-    internal static (Release? App, Release? Dashboard) AppUpdate(IReadOnlyList<(string Component, Release? Release)> components)
+    // The command's release brings the dashboard of its version along; the dashboard by itself comes from its own, except
+    // in the tarball, where its update is the command's tarball.
+    internal static (Release? App, Release? Dashboard) AppUpdate(IReadOnlyList<(string Component, Release? Release)> components, bool tarball)
     {
         var app = components.FirstOrDefault(c => c.Component == nameof(Component.DockyardCli)).Release;
-        return app is not null ? (app, null) : (null, components.FirstOrDefault(c => c.Component == ComponentRules.DashboardId).Release);
+        var dashboard = components.FirstOrDefault(c => c.Component == ComponentRules.DashboardId).Release;
+        if (app is null && tarball) (app, dashboard) = (dashboard, null);
+        return app is not null ? (app, null) : (null, dashboard);
     }
 
     public bool RunsFromInstallLocation => LinuxComponents.RunsFromInstallLocation;
