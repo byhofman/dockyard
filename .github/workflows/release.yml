@@ -1,13 +1,13 @@
 name: build
 
-# One workflow for every component. Pull requests and main build and test everything; a tag <component>/<version>
+# One workflow for every component, run by a release tag or by hand (which builds and tests everything); there is no CI
+# on pull requests or main, by the owner's choice. A tag <component>/<version>
 # builds, tests and releases only that component, and a tag v<version> releases all four at that version, in the order
 # the index needs them. See docs/design/components-and-releases.md.
 on:
   push:
-    branches: [main]
     tags: ['toolbox/*', 'dashboard/*', 'cli/*', 'engine/*', 'v*']
-  pull_request:
+  workflow_dispatch:
 
 # Read only, except for the job that publishes the release.
 permissions:
