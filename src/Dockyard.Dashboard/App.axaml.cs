@@ -26,6 +26,7 @@ public partial class App : Application
             return;
         }
         var vm = new ShellViewModel();
+        Failures.Show = vm.ShowError;
         var window = new MainWindow { DataContext = vm };
         if (ShellViewModel.InitialSection is { } first) vm.ShowSection(first);
         StartupTrace.Mark("main window built");

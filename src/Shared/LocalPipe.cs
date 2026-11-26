@@ -77,7 +77,9 @@ static class LocalPipe
                     using var reader = new StreamReader(pipe);
                     if (reader.ReadLine() is { } line) onLine(line.Trim());
                 }
-                catch (IOException) { Thread.Sleep(200); }
+                // On Windows a name another process still holds is UnauthorizedAccessException, not IOException; on this
+                // thread anything uncaught ends the process, so every failure waits and tries again.
+                catch (Exception) { Thread.Sleep(200); }
             }
         }) { IsBackground = true, Name = "Dockyard.Pipe." + name }.Start();
     }
