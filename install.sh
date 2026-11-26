@@ -27,4 +27,9 @@ curl -fsSL -o "$dir/SHA256SUMS" "https://github.com/$repo/releases/download/$tag
 (cd "$dir" && grep " $asset\$" SHA256SUMS | sha256sum -c - >/dev/null) || { echo "Checksum mismatch for $asset, not running it" >&2; exit 1; }
 
 chmod +x "$dir/$asset"
-"$dir/$asset" setup "$@"
+# Piped into sh, stdin is this script: setup asks on the terminal instead, when there is one.
+if [ -t 1 ] && (exec </dev/tty) 2>/dev/null; then
+  "$dir/$asset" setup "$@" </dev/tty
+else
+  "$dir/$asset" setup "$@"
+fi

@@ -18,7 +18,7 @@ sealed record CliEnvironment(Func<DockyardSetup> Setup, IAnsiConsole Console, Te
         DockyardSetup.ForThisMachine,
         AnsiConsole.Console,
         System.Console.Error,
-        HasTerminal: !System.Console.IsInputRedirected && !System.Console.IsOutputRedirected,
+        DockyardSetup.HasTerminal,
         Session.HasDesktop(),
         new SystemDashboardLauncher());
 }

@@ -27,22 +27,9 @@ sealed class LinuxRoot(ICommandRunner runner)
         hasDisplay: LinuxLayout.HasDisplay(Environment.GetEnvironmentVariable("DISPLAY"), Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")),
         hasPkexec: OnPath("pkexec"),
         hasSudo: OnPath("sudo"),
-        hasTerminal: HasTerminal());
+        hasTerminal: Terminal.IsAttached);
 
     static bool OnPath(string file) => (Environment.GetEnvironmentVariable("PATH") ?? "").Split(':').Any(dir => dir.Length > 0 && File.Exists(Path.Combine(dir, file)));
-
-    static bool HasTerminal()
-    {
-        try
-        {
-            using var tty = File.Open("/dev/tty", FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-            return true;
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            return false;
-        }
-    }
 
     public async Task RunSetup(Action<string> log, params string[] args)
     {

@@ -58,6 +58,7 @@ fake_dockyard() {
   cat > "$1" <<DOCKYARD
 #!/bin/sh
 printf '%s\n' "\$@" > "$work/dockyard-args"
+if [ -t 0 ]; then echo terminal; else echo pipe; fi > "$work/dockyard-stdin"
 echo ran >> "$work/dockyard-runs"
 exit \${FAKE_DOCKYARD_EXIT:-0}
 DOCKYARD
@@ -79,7 +80,14 @@ cat > "$assets/components.json" <<'JSON'
 }
 JSON
 
-reset() { rm -f "$work/forbidden" "$work/dockyard-args" "$work/dockyard-runs" "$work/curl.log"; }
+reset() { rm -f "$work/forbidden" "$work/dockyard-args" "$work/dockyard-stdin" "$work/dockyard-runs" "$work/curl.log"; }
+
+# Runs a command line with a terminal for its output and as /dev/tty, as a person's shell has; its input stays whatever
+# the command line gives it. BSD and util-linux script take their arguments differently.
+in_terminal() {
+  if script -q /dev/null true </dev/null >/dev/null 2>&1; then script -q /dev/null sh -c "$1" </dev/null
+  else script -qec "$1" /dev/null </dev/null; fi
+}
 
 good_sums() {
   { sum dockyard-linux-x64; sum dockyard-macos-arm64; sum dockyard-tray-linux-x64; sum Dockyard-9.9.9-macos.zip; } > "$assets/SHA256SUMS"
@@ -101,6 +109,15 @@ scenario() {
   good_sums; reset
   env PATH="$bin:$PATH" sh "$script" >/dev/null || fail "$name: exit $?"
   [ "$(tr '\n' ' ' < "$work/dockyard-args")" = "setup " ] && pass "without arguments it runs dockyard setup" || fail "$name: arguments were: $(cat "$work/dockyard-args")"
+
+  # curl ... | sh: the script itself comes in on stdin, which setup must not take for a person's answers.
+  good_sums; reset
+  in_terminal "cat '$script' | env PATH='$bin:$PATH' sh" >/dev/null 2>&1 || true
+  [ "$(cat "$work/dockyard-stdin" 2>/dev/null)" = terminal ] && pass "piped into sh in a terminal, setup asks on the terminal" || fail "$name: setup's input was $(cat "$work/dockyard-stdin" 2>/dev/null || echo nothing)"
+
+  good_sums; reset
+  rc=0; cat "$script" | env PATH="$bin:$PATH" sh >/dev/null 2>&1 || rc=$?
+  [ "$rc" -eq 0 ] && [ "$(cat "$work/dockyard-stdin")" = pipe ] && pass "piped into sh without a terminal, setup runs as it is" || fail "$name: exit $rc, input $(cat "$work/dockyard-stdin" 2>/dev/null)"
 
   good_sums; reset
   env PATH="$bin:$PATH" DOCKYARD_VERSION=1.2.3 sh "$script" >/dev/null 2>&1 || true

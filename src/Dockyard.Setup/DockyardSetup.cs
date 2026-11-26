@@ -55,6 +55,9 @@ public sealed partial class DockyardSetup : IDisposable
     public const string DashboardFlag = "dashboard";
     public const string TrayFlag = "tray";
 
+    // A person can be asked here: the input and the output are a terminal.
+    public static bool HasTerminal => Terminal.IsAttached;
+
     public bool IsInstalled => host.IsInstalled;
     public bool HasDashboard => host.HasDashboard;
     public string? DashboardExe => host.DashboardExe;
