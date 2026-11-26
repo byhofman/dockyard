@@ -15,4 +15,20 @@ public sealed record SetupRequest(IReadOnlyList<string> With, IReadOnlyList<stri
     public bool RemoveData { get; init; }
     // No desktop session here: a new install leaves the tray and the dashboard out unless With names them.
     public bool Headless { get; init; }
+
+    // What a front end's setup screen asks for, from its components and the values of its setting rows, keyed as
+    // SettingDefinitions names them. A source it does not show keeps what an earlier install chose.
+    public static SetupRequest FromSettings(IReadOnlyList<string> with, IReadOnlyList<string> without, IReadOnlyDictionary<string, string> values) => new(
+        with,
+        without,
+        values.GetValueOrDefault(SettingDefinitions.Source) switch
+        {
+            null => null,
+            SettingDefinitions.DockyardSource => ToolSource.Dockyard,
+            _ => ToolSource.PackageManager,
+        },
+        TrustHttps: values.GetValueOrDefault(SettingDefinitions.TrustedHttps) == SettingDefinitions.On,
+        KubectlShell: values.GetValueOrDefault(SettingDefinitions.KubectlShell) == SettingDefinitions.On,
+        Silent: false,
+        Resume: false);
 }

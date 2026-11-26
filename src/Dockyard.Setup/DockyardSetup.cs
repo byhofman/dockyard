@@ -171,8 +171,10 @@ public sealed partial class DockyardSetup : IDisposable
         c.Note,
         c.Flag,
         CanAdd: host.IsInstalled && c.IsOptional && !present,
-        CanRemove: host.IsInstalled && c.IsOptional && present && WhyNotRemovable(c.Id) is null,
-        CanUpdate: installed is not null && latest is not null && latest.Version > installed);
+        // Dockyard itself goes by Uninstall, which takes everything else along.
+        CanRemove: host.IsInstalled && c.IsOptional && present && c.Id != SelfId && WhyNotRemovable(c.Id) is null,
+        CanUpdate: installed is not null && latest is not null && latest.Version > installed)
+    { HasData = c.IsEngine };
 
     string? WhyNotRemovable(string id) =>
         ComponentRules.WhyNotRemovable(Catalog, id, Catalog.Where(c => IsPresent(c.Id)).Select(c => c.Id).ToHashSet());
@@ -317,7 +319,10 @@ public sealed partial class DockyardSetup : IDisposable
         var steps = 1 + adds.Count + removes.Count;
         var step = 1;
 
-        progress.Report(new SetupProgress("Installing Dockyard", Step: step, Steps: steps));
+        progress.Report(new SetupProgress("Installing Dockyard", Step: step, Steps: steps)
+        {
+            Plan = ["Installing Dockyard", .. adds.Select(c => $"Adding {c.Title}"), .. removes.Select(c => $"Removing {c.Title}")],
+        });
         var reboot = await host.Install(log, new InstallRequest(dashboard, request.Image, request.Silent, request.TrustHttps) { Without = removed, Tray = !removed.Contains(ComponentRules.TrayId) });
         // Setup turns trusted HTTPS on through the file.
         settings.Reload();
