@@ -23,6 +23,7 @@ sealed class SetupViewModel : Observable
         TryAgainCommand = new Command(Start, () => !IsRunning);
         BackCommand = new Command(() => { Run = null; return Task.CompletedTask; }, () => !IsRunning);
         CancelCommand = new Command(() => { cancel?.Cancel(); return Task.CompletedTask; }, () => IsRunning);
+        CloseCommand = new Command(() => { Closed?.Invoke(); return Task.CompletedTask; }, () => CanClose && !IsRunning);
         foreach (var item in Items)
             item.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(ComponentItem.IsPicked)) Raise(nameof(PickedText)); };
     }
@@ -41,7 +42,7 @@ sealed class SetupViewModel : Observable
     public SetupRun? Run
     {
         get => run;
-        private set { if (Set(ref run, value)) Raise(nameof(ShowsChoices), nameof(ShowsRun), nameof(IsRunning), nameof(IsFailed)); }
+        private set { if (Set(ref run, value)) Raise(nameof(ShowsChoices), nameof(ShowsRun), nameof(IsRunning), nameof(IsFailed), nameof(ShowsClose)); }
     }
 
     public bool ShowsChoices => run is null;
@@ -54,21 +55,22 @@ sealed class SetupViewModel : Observable
     public Command BackCommand { get; }
     public Command CancelCommand { get; }
 
+    // Opened on an installed Dockyard, as --section setup does, it can be left without running.
+    public bool CanClose => source.IsInstalled;
+    public bool ShowsClose => CanClose && !IsRunning;
+    public Command CloseCommand { get; }
+    public event Action? Closed;
+
     // The setup is done and Dockyard is installed: the shell shows its sections.
     public event Action? Installed;
 
     async Task Start()
     {
         var picked = Items.Where(i => i.Row.Flag is not null).ToList();
-        var sourceChoice = Options[0];
-        var request = new SetupRequest(
+        var request = SetupRequest.FromSettings(
             picked.Where(i => i.IsPicked).Select(i => i.Row.Flag!).ToList(),
             picked.Where(i => !i.IsPicked).Select(i => i.Row.Flag!).ToList(),
-            sourceChoice.Value == SettingDefinitions.DockyardSource ? global::Dockyard.Core.ToolSource.Dockyard : global::Dockyard.Core.ToolSource.PackageManager,
-            TrustHttps: Options[1].Value == SettingDefinitions.On,
-            KubectlShell: Options[2].Value == SettingDefinitions.On,
-            Silent: false,
-            Resume: false);
+            Options.ToDictionary(o => o.Definition.Key, o => o.Value));
         var now = new SetupRun("Installing Dockyard");
         cancel = new CancellationTokenSource();
         Run = now;
@@ -81,7 +83,7 @@ sealed class SetupViewModel : Observable
         }
         catch (OperationCanceledException) { now.Finish("The setup was cancelled."); }
         catch (Exception ex) { now.Finish(ex.Message); }
-        Raise(nameof(IsRunning), nameof(IsFailed));
+        Raise(nameof(IsRunning), nameof(IsFailed), nameof(ShowsClose));
         Refresh();
         if (!now.IsFailed) Installed?.Invoke();
     }
@@ -92,5 +94,6 @@ sealed class SetupViewModel : Observable
         TryAgainCommand.Refresh();
         BackCommand.Refresh();
         CancelCommand.Refresh();
+        CloseCommand.Refresh();
     }
 }

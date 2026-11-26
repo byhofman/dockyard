@@ -99,9 +99,18 @@ sealed class ToolsViewModel : Observable
 
     Task AskRemove(ComponentItem item)
     {
-        shell?.Open(new Dialog($"Remove {item.Row.Title}?", item.Row.Needs ?? "", "Remove",
-            d => Act(item, $"Removing {item.Row.Title}", "Removing…", p => source.Remove(item.Row.Id, d.Option, p)), danger: true));
+        shell?.Open(new Dialog($"Remove {item.Row.Title}?", RemoveText(item.Row), "Remove",
+            d => Act(item, $"Removing {item.Row.Title}", "Removing…", p => source.Remove(item.Row.Id, item.Row.HasData && d.Option, p)), danger: true,
+            optionText: item.Row.HasData ? "Also remove its images and containers" : null));
         return Task.CompletedTask;
+    }
+
+    // What goes and what stays.
+    internal static string RemoveText(ComponentRow row)
+    {
+        var how = row.Source == SettingDefinitions.DockyardSource ? "" : $" through {row.Source}";
+        var stays = row.HasData ? "Its images and containers stay unless you choose otherwise below." : "Your images, containers and settings stay.";
+        return $"{row.Title} is taken off this computer{how}. {stays} You can add it again here later.";
     }
 
     Task AskUninstall(ComponentItem item)

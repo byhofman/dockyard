@@ -59,7 +59,7 @@
                       <dctl:ComponentRowView Margin="16,10" CommandParameter="{Binding}"
                                              Title="{Binding Row.Title}" Needs="{Binding Row.Needs}" RequiredBecause="{Binding Row.RequiredBecause}"
                                              Installed="{Binding Row.Installed}" Newest="{Binding Row.Newest}" Source="{Binding Row.Source}"
-                                             CanAdd="{Binding Row.CanAdd}" CanRemove="{Binding CanRemove}" CanUpdate="{Binding Row.CanUpdate}"
+                                             CanAdd="{Binding Row.CanAdd}" CanRemove="{Binding Row.CanRemove}" CanUpdate="{Binding Row.CanUpdate}"
                                              CanUninstall="{Binding IsSelf}" BusyText="{Binding BusyText}"
                                              IsEnabled="{Binding !$parent[UserControl].((setup:ToolsViewModel)DataContext).IsBusy}"
                                              AddCommand="{Binding $parent[UserControl].((setup:ToolsViewModel)DataContext).AddCommand}"

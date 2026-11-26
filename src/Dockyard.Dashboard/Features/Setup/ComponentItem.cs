@@ -12,7 +12,6 @@ sealed class ComponentItem(ComponentRow row, bool isSelf) : Observable
     public ComponentRow Row { get; } = row;
     public bool IsSelf { get; } = isSelf;
     public bool IsRequired => Row.RequiredBecause is not null;
-    public bool CanRemove => Row.CanRemove && !IsSelf;
 
     public bool IsPicked { get => isPicked; set => Set(ref isPicked, value || IsRequired); }
     public string? BusyText { get => busyText; set { if (Set(ref busyText, value)) Raise(nameof(IsBusy)); } }

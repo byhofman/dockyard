@@ -127,9 +127,10 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
 
     public Command LoadBalancerCommand { get; }
 
+    // The engine first: on the Windows engine kind cannot run, whether it is installed or not.
     public string Hint =>
-        !HasKind ? "kind is not installed, so clusters cannot be made or shown. Add it in"
-        : NeedsLinuxEngine ? "kind runs on the Linux engine. Switch to Linux to see and create clusters."
+        NeedsLinuxEngine ? "kind runs on the Linux engine. Switch to Linux to see and create clusters."
+        : !HasKind ? "kind is not installed, so clusters cannot be made or shown. Add it in Tools."
         : Rows.Count == 0 ? "No clusters yet. kind runs each node as a container on this engine."
         : "";
 
@@ -137,7 +138,7 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     // Above the containers, with Tools as its link, as the banner for a missing docker tool has. Not on the Windows
     // engine, where kind cannot run whether it is installed or not.
     public bool MissingKind => !HasKind && !NeedsLinuxEngine;
-    public string? HintLink => HasKind ? null : "Tools";
+    public string? HintLink => MissingKind ? "Open Tools" : null;
     public Command HintCommand => Shell.OpenToolsCommand;
     public string KubectlHint => Selected is { } c ? $"kubectl --context {c.Context} get nodes" : "";
 
@@ -196,7 +197,12 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
     // each cluster's ports.
     async Task RefreshForwards()
     {
-        if (NeedsLinuxEngine || !Session.IsConnected || Session.Client is not { } client || Dockyard.Engine.AgentClient.For(client.Endpoint) is not { } agent) return;
+        if (NeedsLinuxEngine || !Session.IsConnected || Session.Client is not { } client || Dockyard.Engine.AgentClient.For(client.Endpoint) is not { } agent)
+        {
+            // Said of an engine that is gone or not the one shown, it would stay up after the cause did.
+            ServicesError = "";
+            return;
+        }
         Dockyard.Engine.ClusterServicesStatus report;
         try { report = await agent.ClusterStatusAsync(); }
         catch (Exception ex) when (ex is IOException or System.Net.Sockets.SocketException or InvalidOperationException or TimeoutException) { return; }

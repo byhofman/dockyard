@@ -19,9 +19,20 @@ sealed class SettingsViewModel : Observable
             .Where(d => d.Key != SettingDefinitions.Source)
             .Select(d => new SettingItem(d, d.Kind == SettingKind.EngineFile ? "" : source.GetSetting(d.Key), Change, Edit))
             .ToList();
+        // The facade's order keeps a group's settings together.
+        Groups = Items.GroupBy(i => i.Definition.Group).Select(g => new SettingGroup(g.Key, g.ToList())).ToList();
     }
 
     public IReadOnlyList<SettingItem> Items { get; }
+    public IReadOnlyList<SettingGroup> Groups { get; }
+
+    // A setting can change elsewhere meanwhile, from the command line or the tray; one that is applying keeps its value.
+    public void Load()
+    {
+        foreach (var item in Items.Where(i => i.Definition.Kind != SettingKind.EngineFile && !i.IsWorking))
+            try { item.Show(source.GetSetting(item.Definition.Key)); }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or IOException) { item.Error = ex.Message; }
+    }
 
     async Task Change(SettingItem item, string value)
     {
@@ -74,4 +85,9 @@ sealed class SettingsViewModel : Observable
     {
         public void Report(SetupProgress value) => dialog.Report(value.Line);
     }
+}
+
+sealed record SettingGroup(string Title, IReadOnlyList<SettingItem> Items)
+{
+    public string Header => Title.ToUpperInvariant();
 }

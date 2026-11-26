@@ -92,6 +92,7 @@ sealed class ShellViewModel : Observable
             ApplySearch();
             (value.Content as SectionViewModel)?.OnShown();
             if (value.Content is Features.Setup.ToolsViewModel tools) _ = tools.Load();
+            if (value.Content is Features.Setup.SettingsViewModel settings) settings.Load();
             _ = Tools.Refresh();
         }
     }
@@ -268,6 +269,7 @@ sealed class ShellViewModel : Observable
             Setup = null;
             ShowSection("Containers");
         };
+        setup.Closed += () => Setup = null;
         Setup = setup;
     }
 
