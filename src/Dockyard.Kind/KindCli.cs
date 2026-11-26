@@ -33,6 +33,13 @@ static class KindCli
 
     // One control plane and this many workers, each mounting the shared folder when asked; without a config kind makes
     // the control plane alone.
+    // The shared host folder on or off in a kind config: the same mounts Config gives each node.
+    public static string WithSharedStorage(string yaml, bool on)
+    {
+        var text = yaml.Replace("\r\n", "\n").Replace(SharedStorage.NodeMounts, "");
+        return on ? System.Text.RegularExpressions.Regex.Replace(text, @"(?m)^- role: \w+\n", m => m.Value + SharedStorage.NodeMounts) : text;
+    }
+
     public static string Config(int workers, bool sharedStorage = false)
     {
         var mounts = sharedStorage ? SharedStorage.NodeMounts : "";

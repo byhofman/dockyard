@@ -49,7 +49,7 @@ sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
     // A running cluster's add-ons changed: removed in reverse order, so nothing goes before what uses it, then added as at
     // creation, Headlamp's address and cert-manager's issuer with them.
     public async Task EditAddons(string name, IReadOnlyList<ClusterAddon> current, IReadOnlyList<ClusterAddon> wanted, string helm,
-        Func<string, Task<string>>? clusterCa, Action<string>? onLine)
+        Func<string, Task<string>>? clusterCa, Action<string>? onLine, bool? nfs = null)
     {
         var scratch = Directory.CreateTempSubdirectory("dockyard-kind-");
         try
@@ -59,6 +59,15 @@ sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
             var context = dockerContext.Length > 0 ? dockerContext : "default";
             foreach (var addon in ClusterAddons.All.Reverse().Where(a => current.Contains(a) && !wanted.Contains(a)))
                 await ClusterAddons.Uninstall(helm, addon, own, name, onLine);
+            // NFS is a driver and a storage class, so it comes and goes on a running cluster; claims on it stay, and the
+            // dockyard-nfs server keeps the files.
+            if (nfs == false)
+            {
+                await ClusterAddons.Uninstall(helm, NfsStorage.Driver, own, name, onLine);
+                await SharedStorage.Docker(["--context", context, "exec", name + "-control-plane", "kubectl", "--kubeconfig", SharedStorage.AdminConfig,
+                    "delete", "storageclass", NfsStorage.ClassName, "--ignore-not-found"]);
+            }
+            if (nfs == true) await NfsStorage.Install(context, name, own, helm, Path.Combine(scratch.FullName, "helm"), onLine);
             var added = ClusterAddons.All.Where(a => wanted.Contains(a) && !current.Contains(a)).ToList();
             foreach (var addon in added)
                 await ClusterAddons.Install(helm, addon, own, name, Path.Combine(scratch.FullName, "helm"), onLine);

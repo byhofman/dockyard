@@ -92,6 +92,28 @@ sealed class Clusters(Action<string> log)
         log($"{name} is made again from its definition");
     }
 
+    // A running cluster's add-ons and NFS storage, as the dashboard's Add-ons does; the rest is its nodes' and needs recreate.
+    public async Task Edit(string name, string? addons, string? storage)
+    {
+        await RequireLinuxEngine();
+        var saved = ClusterDefinitions.Load(name) ?? throw new InvalidOperationException($"Dockyard has no definition of {name}: the dashboard puts one together from its nodes, under Definition");
+        var helm = CliLocator.Locate("helm") ?? throw new InvalidOperationException("The add-ons go in with Helm, which is not installed: dockyard --silent --with helm adds it");
+        var wanted = addons is null ? saved.AddonList : Addons(addons);
+        var wantedStorage = storage is null ? saved.Storage : Storage(storage);
+        if (wantedStorage != saved.Storage && (wantedStorage == ClusterStorage.HostFolder || saved.Storage == ClusterStorage.HostFolder))
+            throw new InvalidOperationException("The shared host folder is mounted on each node when kind makes it: change it with dockyard cluster recreate and --file");
+        bool? nfs = wantedStorage == saved.Storage ? null : wantedStorage == ClusterStorage.Nfs;
+        await Actions().EditAddons(name, saved.AddonList, wanted, helm, ClusterCa, log, nfs);
+        ClusterDefinitions.Save(name, saved with { Addons = wanted.Select(a => a.Release).ToList(), Storage = wantedStorage });
+        log($"{name} is changed");
+    }
+
+    public async Task DashboardToken(string name)
+    {
+        await RequireLinuxEngine();
+        log(await Headlamp.Token(Context, name));
+    }
+
     public async Task Delete(string name)
     {
         await RequireLinuxEngine();

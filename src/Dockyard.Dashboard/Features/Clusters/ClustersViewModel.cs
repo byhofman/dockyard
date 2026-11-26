@@ -438,14 +438,43 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         var certManager = DialogField.Check($"cert-manager {CertManager.Addon.Version}: certificates from the ClusterIssuer dockyard", Has(CertManager.Addon));
         var headlamp = DialogField.Check($"Headlamp {Headlamp.Addon.Version}: the Kubernetes UI at {Headlamp.Host(cluster.Name)}, with Traefik", Has(Headlamp.Addon));
         headlamp.Changed += () => { if (headlamp.IsChecked) traefik.IsChecked = true; };
-        Shell.Open(new Dialog($"{cluster.Name}: add-ons", "Added and removed with Helm on the running cluster. Storage and the kind config need Recreate.", "Apply",
+        var storage = new DialogField("Storage that every node can use at once", choices: StorageChoices)
+        {
+            Choice = StorageChoices[current.Storage switch { ClusterStorage.HostFolder => 1, ClusterStorage.Nfs => 2, _ => 0 }],
+        };
+        // The host folder is mounted on each node when kind makes it: choosing it, or leaving it, makes the cluster anew.
+        bool NeedsRecreate() => (StorageOf(storage.Value) == ClusterStorage.HostFolder) != (current.Storage == ClusterStorage.HostFolder);
+        Dialog? dialog = null;
+        dialog = new Dialog($"{cluster.Name}: add-ons and storage",
+            "Add-ons and NFS change on the running cluster. A change to or from the shared host folder makes it Recreate: the cluster is deleted, with everything in it, and made again with these choices. Workers and the kind config change under Definition.", "Apply",
             d => RunKind(d, async (actions, onLine) =>
             {
                 var wanted = Addons(metrics, traefik, certManager, headlamp, helm);
-                await actions.EditAddons(cluster.Name, current.AddonList, wanted, helm, c => CertManager.FromToolbox(Dashboard.Shell.TrayClient.TrayExe, c), onLine);
-                ClusterDefinitions.Save(cluster.Name, current with { Addons = wanted.Select(a => a.Release).ToList() });
-                Shell.ShowInfo($"The add-ons of {cluster.Name} are as chosen");
-            }), fields: [metrics, traefik, certManager, headlamp]));
+                var chosen = StorageOf(storage.Value);
+                if (NeedsRecreate())
+                {
+                    d.Report($"Deleting {cluster.Name}");
+                    await actions.Delete(cluster.Name, onLine);
+                    await RemoveProxies(cluster.Name);
+                    var remade = current with { Yaml = KindCli.WithSharedStorage(current.Yaml, chosen == ClusterStorage.HostFolder), Storage = chosen, Addons = wanted.Select(a => a.Release).ToList() };
+                    ClusterDefinitions.Save(cluster.Name, remade);
+                    await actions.Create(cluster.Name, onLine, storage: remade.Storage, addons: remade.AddonList, helm: helm, definition: remade.Yaml,
+                        publishNames: remade.LoadBalancer, clusterCa: c => CertManager.FromToolbox(Dashboard.Shell.TrayClient.TrayExe, c));
+                    Shell.ShowInfo($"{cluster.Name} is made again with the add-ons and storage as chosen");
+                    return;
+                }
+                bool? nfs = chosen == current.Storage ? null : chosen == ClusterStorage.Nfs;
+                await actions.EditAddons(cluster.Name, current.AddonList, wanted, helm, c => CertManager.FromToolbox(Dashboard.Shell.TrayClient.TrayExe, c), onLine, nfs);
+                ClusterDefinitions.Save(cluster.Name, current with { Addons = wanted.Select(a => a.Release).ToList(), Storage = chosen });
+                Shell.ShowInfo($"{cluster.Name} has the add-ons and storage as chosen");
+            }), fields: [metrics, traefik, certManager, headlamp, storage]);
+        storage.Changed += () =>
+        {
+            var recreate = NeedsRecreate();
+            dialog.ConfirmText = recreate ? "Recreate" : "Apply";
+            dialog.IsDanger = recreate;
+        };
+        Shell.Open(dialog);
     }
 
     async Task CopyHeadlampToken()
