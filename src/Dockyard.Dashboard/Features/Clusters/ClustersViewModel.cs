@@ -21,15 +21,15 @@ sealed class ClustersViewModel : SelectableSection<KindCluster>
         this.kubeconfig = kubeconfig ?? HostKubeconfig.FromEnvironment();
         this.settings = settings ?? DashboardSettings.Current;
         CreateCommand = new Command(() => { AskCreate(); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine);
-        DeleteCommand = new Command(() => { AskDelete(Picked); return Task.CompletedTask; }, () => !IsBusy && HasKind && SelectionCount > 0);
+        DeleteCommand = new Command(() => { AskDelete(Picked); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine && SelectionCount > 0);
         DeleteRowCommand = new Command<KindCluster>(c => { AskDelete([c]); return Task.CompletedTask; });
-        CopyKubeconfigCommand = new Command(CopyKubeconfig, () => HasKind && Selected is { IsRunning: true });
-        UseContextCommand = new Command(UseContext, () => !IsBusy && HasKind && Selected is { IsRunning: true });
+        CopyKubeconfigCommand = new Command(CopyKubeconfig, () => HasKind && !NeedsLinuxEngine && Selected is { IsRunning: true });
+        UseContextCommand = new Command(UseContext, () => !IsBusy && HasKind && !NeedsLinuxEngine && Selected is { IsRunning: true });
         DuplicateCommand = new Command(() => { if (Selected is { } c) AskDuplicate(c); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine && Selected is not null);
         RecreateCommand = new Command(() => { if (Selected is { } c) AskRecreate(c); return Task.CompletedTask; }, () => !IsBusy && HasKind && !NeedsLinuxEngine && Selected is not null);
         ToggleCommand = new Command(() => Selected is { } c ? Toggle(c) : Task.CompletedTask, () => !IsBusy && Selected is not null);
         ToggleRowCommand = new Command<KindCluster>(c => IsBusy ? Task.CompletedTask : Toggle(c));
-        LoadBalancerCommand = new Command(() => { if (Selected is { } c) AskLoadBalancer(c); return Task.CompletedTask; }, () => HasKind && Selected is not null);
+        LoadBalancerCommand = new Command(() => { if (Selected is { } c) AskLoadBalancer(c); return Task.CompletedTask; }, () => HasKind && !NeedsLinuxEngine && Selected is not null);
         OpenUrlCommand = new Command<PublishedPort>(p =>
         {
             try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(p.Url) { UseShellExecute = true })?.Dispose(); }

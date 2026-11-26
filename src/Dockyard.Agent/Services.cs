@@ -105,7 +105,7 @@ sealed class Services(Func<DockerClient> connect, DomainTable table, string root
         var lastCheck = DateTime.UtcNow;
         while (!ct.IsCancellationRequested)
         {
-            await Task.Delay(TimeSpan.FromSeconds(2), ct);
+            await table.WaitForChange(TimeSpan.FromSeconds(2), ct);
             try
             {
                 if (DateTime.UtcNow - publishedRead > TimeSpan.FromSeconds(5))

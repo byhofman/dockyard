@@ -102,6 +102,7 @@ sealed class DomainTable(Func<DockerClient> connect, string choicesFile, Action<
             if (name is null) return;
             if (port is { } p) chosen[name] = p;
             else chosen.Remove(name);
+            Changed();
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(choicesFile)!);
@@ -165,5 +166,17 @@ sealed class DomainTable(Func<DockerClient> connect, string choicesFile, Action<
             byDomain = next;
             clusters = ingress;
         }
+        Changed();
     }
+
+    readonly SemaphoreSlim changes = new(0, 1);
+
+    void Changed()
+    {
+        if (changes.CurrentCount == 0) try { changes.Release(); } catch (SemaphoreFullException) { }
+    }
+
+    // Returns when a container started, stopped or got another port chosen, or after the timeout: a port a container only
+    // starts to listen on later shows up in no event.
+    public Task WaitForChange(TimeSpan timeout, CancellationToken ct) => changes.WaitAsync(timeout, ct);
 }
