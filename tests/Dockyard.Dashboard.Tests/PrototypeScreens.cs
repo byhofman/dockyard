@@ -13,7 +13,7 @@ namespace Dockyard.Dashboard.Tests;
 
 // The screens of the image and volume files, drawn by the real views over fictive data: the prototype for a dashboard
 // that has no prototype mode. Every run checks they render; with DOCKYARD_SCREENSHOTS set they are also saved there.
-public sealed class PrototypeScreens
+public sealed partial class PrototypeScreens
 {
     static readonly DateTimeOffset When = new(2026, 11, 3, 9, 30, 0, TimeSpan.Zero);
 

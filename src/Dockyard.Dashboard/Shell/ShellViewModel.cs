@@ -23,8 +23,9 @@ sealed class ShellViewModel : Observable
     Dialog? dialog;
     TaskCompletionSource<string?>? switchResult;
 
-    public ShellViewModel()
+    public ShellViewModel(Features.Setup.ISetupSource? setup = null)
     {
+        SetupSource = setup ?? new Features.Setup.StubSetupSource();
         Containers = new ContainersViewModel(this, Session);
         // No tab of its own: clusters are rows in Containers, which shows these details and actions for them.
         Clusters = new ClustersViewModel(this, Session);
@@ -36,6 +37,8 @@ sealed class ShellViewModel : Observable
             new Section("Networks", new NetworksViewModel(this, Session), Section.Resource("IconNetworks")),
             new Section("Builds", new Features.Builds.BuildsViewModel(this, Session), Section.Resource("IconBuilds")),
             new Section("Disk", new DiskViewModel(this, Session), Section.Resource("IconDisk")),
+            new Section("Tools", new Features.Setup.ToolsViewModel(SetupSource, this), Section.Resource("IconTools")),
+            new Section("Settings", new Features.Setup.SettingsViewModel(SetupSource, this), Section.Resource("IconSettings")),
         ];
         currentSection = Sections[0];
         _ = Tools.Refresh();
@@ -57,6 +60,12 @@ sealed class ShellViewModel : Observable
     public string SearchHint => OperatingSystem.IsMacOS() ? "Search  (\u2318K)" : "Search  (Ctrl+K)";
 
     public EngineSession Session { get; } = new();
+    public Features.Setup.ISetupSource SetupSource { get; }
+
+    // Shown instead of the sections until Dockyard is installed.
+    public Features.Setup.SetupViewModel? Setup { get => setup; set { if (Set(ref setup, value)) Raise(nameof(ShowsSetup)); } }
+    public bool ShowsSetup => setup is not null;
+    Features.Setup.SetupViewModel? setup;
     public ContainersViewModel Containers { get; }
     public IReadOnlyList<Section> Sections { get; }
     public ObservableCollection<Toast> Toasts { get; } = [];

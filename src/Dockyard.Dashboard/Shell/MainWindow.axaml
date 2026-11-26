@@ -5,6 +5,7 @@
         xmlns:res="using:Dockyard.Dashboard.Features.Resources"
         xmlns:clu="using:Dockyard.Dashboard.Features.Clusters"
         xmlns:bld="using:Dockyard.Dashboard.Features.Builds"
+        xmlns:setup="using:Dockyard.Dashboard.Features.Setup"
         xmlns:ctl="using:Dockyard.Shared"
         xmlns:dctl="using:Dockyard.Dashboard.Controls"
         x:Class="Dockyard.Dashboard.Shell.MainWindow"
@@ -62,6 +63,15 @@
     </DataTemplate>
     <DataTemplate DataType="res:DiskViewModel">
       <res:DiskView />
+    </DataTemplate>
+    <DataTemplate DataType="setup:ToolsViewModel">
+      <setup:ToolsView />
+    </DataTemplate>
+    <DataTemplate DataType="setup:SettingsViewModel">
+      <setup:SettingsView />
+    </DataTemplate>
+    <DataTemplate DataType="setup:SetupViewModel">
+      <setup:SetupView />
     </DataTemplate>
   </Window.DataTemplates>
 
@@ -131,7 +141,7 @@
           </StackPanel>
 
           <TextBox x:Name="SearchBox" Grid.Column="1" Margin="40,0,16,0" MaxWidth="380" HorizontalAlignment="Stretch"
-                   PlaceholderText="{Binding SearchHint}" Text="{Binding Search}" VerticalAlignment="Center" >
+                   PlaceholderText="{Binding SearchHint}" Text="{Binding Search}" VerticalAlignment="Center" IsVisible="{Binding !ShowsSetup}">
             <TextBox.InnerLeftContent>
               <PathIcon Data="{StaticResource IconSearch}" Margin="10,0,0,0" Foreground="{DynamicResource Muted}" />
             </TextBox.InnerLeftContent>
@@ -189,7 +199,7 @@
             </StackPanel>
           </Border>
 
-          <Button Grid.Column="4" Classes="iconbtn" Command="{Binding SettingsCommand}" ToolTip.Tip="Engines, updates and settings">
+          <Button Grid.Column="4" Classes="iconbtn" Command="{Binding SettingsCommand}" ToolTip.Tip="Engines, updates and settings" IsVisible="{Binding !ShowsSetup}">
             <PathIcon Data="{StaticResource IconSettings}" Width="18" Height="18" />
           </Button>
         </Grid>
@@ -287,7 +297,9 @@
         </Grid>
       </Border>
 
-      <Grid ColumnDefinitions="170,*">
+      <Panel>
+      <ContentControl Content="{Binding Setup}" IsVisible="{Binding ShowsSetup}" />
+      <Grid ColumnDefinitions="170,*" IsVisible="{Binding !ShowsSetup}">
         <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0">
           <ListBox Classes="sidebar" Margin="0,10" ItemsSource="{Binding Sections}" SelectedItem="{Binding CurrentSection}">
             <!-- Otherwise an item is named after the record's ToString, so screen readers and UI Automation never find "Clusters". -->
@@ -308,6 +320,7 @@
         </Border>
         <ContentControl Grid.Column="1" Content="{Binding CurrentSection.Content}" />
       </Grid>
+      </Panel>
     </DockPanel>
 
     <ItemsControl ItemsSource="{Binding Toasts}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="16" MaxWidth="420">

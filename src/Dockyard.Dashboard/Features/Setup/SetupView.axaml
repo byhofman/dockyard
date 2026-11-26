@@ -1,0 +1,89 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:setup="using:Dockyard.Dashboard.Features.Setup"
+             xmlns:dctl="using:Dockyard.Dashboard.Controls"
+             x:Class="Dockyard.Dashboard.Features.Setup.SetupView"
+             x:DataType="setup:SetupViewModel">
+  <DockPanel>
+    <Border DockPanel.Dock="Bottom" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="24,10">
+      <Grid ColumnDefinitions="*,Auto" MaxWidth="760">
+        <Panel VerticalAlignment="Center" Margin="0,0,16,0">
+          <TextBlock Classes="muted small" Text="{Binding PickedText}" TextWrapping="Wrap" IsVisible="{Binding ShowsChoices}" />
+          <TextBlock Classes="muted small" Text="Running the setup again keeps your images, containers and settings." TextWrapping="Wrap"
+                     IsVisible="{Binding IsFailed}" />
+        </Panel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+          <Button Content="Cancel" Command="{Binding CancelCommand}" IsVisible="{Binding IsRunning}" />
+          <Button Content="Back" Command="{Binding BackCommand}" IsVisible="{Binding IsFailed}" ToolTip.Tip="Change what is installed" />
+          <Button Classes="primary" Content="Try again" Command="{Binding TryAgainCommand}" IsVisible="{Binding IsFailed}" />
+          <Button Classes="primary" Content="Install" Command="{Binding InstallCommand}" IsVisible="{Binding ShowsChoices}" IsDefault="True" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Panel>
+      <ScrollViewer HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding ShowsChoices}">
+        <StackPanel Margin="24,22" Spacing="14" MaxWidth="760">
+          <StackPanel Spacing="2">
+            <TextBlock Classes="title" Text="Set up Dockyard" />
+            <TextBlock Classes="muted" Text="{Binding Description}" TextWrapping="Wrap" />
+          </StackPanel>
+
+          <ItemsControl ItemsSource="{Binding Groups}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Spacing="14" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="setup:ComponentGroup">
+                <StackPanel Spacing="6">
+                  <TextBlock Classes="section" Text="{Binding Header}" Margin="2,0" />
+                  <Border Classes="card">
+                    <ItemsControl Classes="hairlines" ItemsSource="{Binding Items}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="setup:ComponentItem">
+                          <dctl:ComponentRowView Margin="16,10" ShowsPick="True" IsPicked="{Binding IsPicked}"
+                                                 Title="{Binding Row.Title}" Needs="{Binding Row.Needs}" RequiredBecause="{Binding Row.RequiredBecause}" />
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </Border>
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <StackPanel Spacing="6">
+            <TextBlock Classes="section" Text="OPTIONS" Margin="2,0" />
+            <Border Classes="card">
+              <ItemsControl Classes="hairlines" ItemsSource="{Binding Options}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="setup:SettingItem">
+                    <dctl:SettingRow Margin="16,12" Title="{Binding Definition.Title}" Description="{Binding Definition.Description}"
+                                     NeedsAdmin="{Binding Definition.NeedsAdmin}">
+                      <dctl:SettingEditor Kind="{Binding Definition.Kind}" Choices="{Binding Definition.Choices}" Value="{Binding Value}"
+                                          Label="{Binding Definition.Title}" />
+                    </dctl:SettingRow>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </Border>
+          </StackPanel>
+        </StackPanel>
+      </ScrollViewer>
+
+      <DockPanel Margin="24,22" MaxWidth="760" IsVisible="{Binding ShowsRun}">
+        <StackPanel DockPanel.Dock="Top" Spacing="2" Margin="0,0,0,14">
+          <TextBlock Classes="title" Text="Setting up Dockyard" />
+          <TextBlock Classes="muted" Text="{Binding Description}" TextWrapping="Wrap" />
+        </StackPanel>
+        <Border Classes="card" Padding="16,14">
+          <dctl:ProgressPanel Heading="{Binding Run.Heading, FallbackValue={x:Null}}" Step="{Binding Run.Step, FallbackValue={x:Null}}"
+                              Steps="{Binding Run.Steps, FallbackValue={x:Null}}" Lines="{Binding Run.Lines, FallbackValue={x:Null}}"
+                              Error="{Binding Run.Error, FallbackValue={x:Null}}" IsRunning="{Binding Run.IsRunning, FallbackValue=False}" />
+        </Border>
+      </DockPanel>
+    </Panel>
+  </DockPanel>
+</UserControl>

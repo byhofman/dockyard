@@ -1,0 +1,88 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:setup="using:Dockyard.Dashboard.Features.Setup"
+             xmlns:dctl="using:Dockyard.Dashboard.Controls"
+             x:Class="Dockyard.Dashboard.Features.Setup.ToolsView"
+             x:DataType="setup:ToolsViewModel">
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+    <StackPanel Margin="24,18" Spacing="14" MaxWidth="960" HorizontalAlignment="Stretch" Grid.IsSharedSizeScope="True">
+      <Grid ColumnDefinitions="*,Auto,Auto">
+        <StackPanel VerticalAlignment="Center">
+          <TextBlock Classes="title" Text="Tools" />
+          <TextBlock Classes="muted" Text="{Binding Summary}" TextWrapping="Wrap" />
+        </StackPanel>
+        <Button Grid.Column="1" Command="{Binding RefreshCommand}" Margin="24,0,8,0" VerticalAlignment="Center"
+                ToolTip.Tip="Check for updates" AutomationProperties.Name="Check for updates">
+          <PathIcon Data="{StaticResource IconRefresh}" />
+        </Button>
+        <Button Grid.Column="2" Classes="primary" Command="{Binding UpdateAllCommand}" VerticalAlignment="Center"
+                ToolTip.Tip="Update every component that has a newer version, except Dockyard itself">
+          <StackPanel Classes="label"><PathIcon Data="{StaticResource IconDown}" /><TextBlock Text="Update all" /></StackPanel>
+        </Button>
+      </Grid>
+      <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsLoading}" />
+
+      <Border Classes="card" Padding="16,14" IsVisible="{Binding HasRun}">
+        <StackPanel Spacing="8">
+          <dctl:ProgressPanel Height="150" Heading="{Binding Run.Heading, FallbackValue={x:Null}}" Step="{Binding Run.Step, FallbackValue={x:Null}}"
+                              Steps="{Binding Run.Steps, FallbackValue={x:Null}}" Lines="{Binding Run.Lines, FallbackValue={x:Null}}"
+                              Error="{Binding Run.Error, FallbackValue={x:Null}}" IsRunning="{Binding Run.IsRunning, FallbackValue=False}" />
+          <Button Classes="link" Content="Close" Command="{Binding CloseRunCommand}" HorizontalAlignment="Right"
+                  IsVisible="{Binding !IsBusy}" />
+        </StackPanel>
+      </Border>
+
+      <Border Classes="card" Padding="16,12">
+        <dctl:SettingRow DataContext="{Binding SourceSetting}" x:DataType="setup:SettingItem" Title="{Binding Definition.Title}"
+                         Description="{Binding Definition.Description}" Status="{Binding Status}" Error="{Binding Error}">
+          <dctl:SettingEditor Kind="{Binding Definition.Kind}" Choices="{Binding Definition.Choices}" Value="{Binding Value}"
+                              Label="{Binding Definition.Title}" IsEnabled="{Binding !$parent[UserControl].((setup:ToolsViewModel)DataContext).IsBusy}" />
+        </dctl:SettingRow>
+      </Border>
+
+      <dctl:EmptyState Icon="IconSettings" Text="No components found. Check for updates to look again." IsVisible="{Binding IsEmpty}" Margin="0,24" />
+
+      <ItemsControl ItemsSource="{Binding Groups}">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <StackPanel Spacing="14" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="setup:ComponentGroup">
+            <StackPanel Spacing="6">
+              <TextBlock Classes="section" Text="{Binding Header}" Margin="2,0" />
+              <Border Classes="card">
+                <ItemsControl Classes="hairlines" ItemsSource="{Binding Items}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="setup:ComponentItem">
+                      <dctl:ComponentRowView Margin="16,10" CommandParameter="{Binding}"
+                                             Title="{Binding Row.Title}" Needs="{Binding Row.Needs}" RequiredBecause="{Binding Row.RequiredBecause}"
+                                             Installed="{Binding Row.Installed}" Newest="{Binding Row.Newest}" Source="{Binding Row.Source}"
+                                             CanAdd="{Binding Row.CanAdd}" CanRemove="{Binding CanRemove}" CanUpdate="{Binding Row.CanUpdate}"
+                                             CanUninstall="{Binding IsSelf}" BusyText="{Binding BusyText}"
+                                             IsEnabled="{Binding !$parent[UserControl].((setup:ToolsViewModel)DataContext).IsBusy}"
+                                             AddCommand="{Binding $parent[UserControl].((setup:ToolsViewModel)DataContext).AddCommand}"
+                                             RemoveCommand="{Binding $parent[UserControl].((setup:ToolsViewModel)DataContext).RemoveCommand}"
+                                             UpdateCommand="{Binding $parent[UserControl].((setup:ToolsViewModel)DataContext).UpdateCommand}"
+                                             UninstallCommand="{Binding $parent[UserControl].((setup:ToolsViewModel)DataContext).UninstallCommand}" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </Border>
+            </StackPanel>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+
+      <StackPanel Spacing="6">
+        <TextBlock Classes="section" Text="DOCKER DESKTOP" Margin="2,0" />
+        <Border Classes="card" Padding="16,12">
+          <dctl:SettingRow Title="Import from Docker Desktop" Description="{x:Static setup:ToolsViewModel.ImportText}">
+            <Button Content="Import…" Command="{Binding ImportCommand}" />
+          </dctl:SettingRow>
+        </Border>
+      </StackPanel>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

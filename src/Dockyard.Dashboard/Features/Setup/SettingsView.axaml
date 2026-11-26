@@ -1,0 +1,30 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:setup="using:Dockyard.Dashboard.Features.Setup"
+             xmlns:dctl="using:Dockyard.Dashboard.Controls"
+             x:Class="Dockyard.Dashboard.Features.Setup.SettingsView"
+             x:DataType="setup:SettingsViewModel">
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+    <StackPanel Margin="24,18" Spacing="14" MaxWidth="960" HorizontalAlignment="Stretch">
+      <StackPanel>
+        <TextBlock Classes="title" Text="Settings" />
+        <TextBlock Classes="muted" Text="A change applies at once." TextWrapping="Wrap" />
+      </StackPanel>
+      <Border Classes="card">
+        <ItemsControl Classes="hairlines" ItemsSource="{Binding Items}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="setup:SettingItem">
+              <dctl:SettingRow Margin="16,12" Title="{Binding Definition.Title}" Description="{Binding Definition.Description}"
+                               IsLinuxEngineOnly="{Binding Definition.LinuxEngineOnly}" NeedsAdmin="{Binding Definition.NeedsAdmin}"
+                               Status="{Binding Status}" Error="{Binding Error}">
+                <dctl:SettingEditor Kind="{Binding Definition.Kind}" Choices="{Binding Definition.Choices}" Value="{Binding Value}"
+                                    Label="{Binding Definition.Title}" EditText="{Binding EditText}" EditCommand="{Binding EditCommand}"
+                                    IsHitTestVisible="{Binding !IsWorking}" />
+              </dctl:SettingRow>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>
