@@ -18,10 +18,13 @@ sealed class TrayController : ITrayActions
     IReadOnlyList<TrayContainer> containers = [];
     bool refreshingContainers;
 
-    public TrayController(DockyardSetup setup, Action quit)
+    readonly Func<string, bool> sendToDashboard;
+
+    public TrayController(DockyardSetup setup, Action quit, Func<string, bool>? sendToDashboard = null)
     {
         this.setup = setup;
         this.quit = quit;
+        this.sendToDashboard = sendToDashboard ?? (line => LocalPipe.TrySend(LocalPipe.DashboardName, line));
         Menu = new TrayMenu(this);
     }
 
@@ -43,7 +46,14 @@ sealed class TrayController : ITrayActions
         _ = Refresh();
     }
 
+    // Never throws: a tick that fails keeps what was shown, says so on stderr, and the next tick tries again.
     public async Task Refresh()
+    {
+        try { await RefreshCore(); }
+        catch (Exception e) { Console.Error.WriteLine($"dockyard-tray: refresh failed: {e.Message}"); }
+    }
+
+    async Task RefreshCore()
     {
         List<TrayEngine> engines = [];
         var active = setup.ActiveEngine();
@@ -76,7 +86,7 @@ sealed class TrayController : ITrayActions
             containers = found;
             await Refresh();
         }
-        catch (Exception e) when (e is DockerException or EngineUnavailableException or IOException) { }
+        catch (Exception) { }
         finally { refreshingContainers = false; }
     }
 
@@ -120,7 +130,7 @@ sealed class TrayController : ITrayActions
     // The dashboard is started first when it is not running, and then asked to show the section.
     public void OpenDashboard(string? section)
     {
-        if (LocalPipe.TrySend(LocalPipe.DashboardName, section is null ? "show" : $"show {section}")) return;
+        if (sendToDashboard(section is null ? "show" : $"show {section}")) return;
         if (setup.DashboardExe is { } exe && File.Exists(exe)) Start(new ProcessStartInfo(exe, section is null ? [] : ["--section", section]) { UseShellExecute = false });
     }
 
@@ -134,5 +144,10 @@ sealed class TrayController : ITrayActions
         }
     }
 
-    public void Quit() => quit();
+    // The dashboard goes with the tray: with no tray its window would have no way to be shown or ended.
+    public void Quit()
+    {
+        sendToDashboard("quit");
+        quit();
+    }
 }

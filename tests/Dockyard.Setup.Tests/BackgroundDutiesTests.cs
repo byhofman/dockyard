@@ -231,3 +231,12 @@ public sealed class ProcessLockTests
         File.Delete(file);
     }
 }
+
+public sealed class DashboardCloseTests
+{
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public void Closing_the_dashboard_hides_it_only_while_a_tray_runs(bool trayRunning, bool hides) =>
+        Assert.Equal(hides, TrayInstance.ClosingHidesDashboard(trayRunning));
+}

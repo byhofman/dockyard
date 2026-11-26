@@ -43,11 +43,12 @@ public partial class App : Application
             vm.Stop();
         };
 
-        // Closing hides it and it stays connected, so opening it again from the tray is instant; the tray's Quit ends it.
+        // With a tray running, closing hides the window and the dashboard stays connected, so opening it again is instant; the
+        // tray's Quit ends it. Without a tray nothing could ever show or end a hidden dashboard, so closing ends it.
         var quitting = false;
         window.Closing += (_, e) =>
         {
-            if (quitting || e.CloseReason != WindowCloseReason.WindowClosing) return;
+            if (quitting || e.CloseReason != WindowCloseReason.WindowClosing || !TrayInstance.ClosingHidesDashboard()) return;
             e.Cancel = true;
             window.Hide();
         };

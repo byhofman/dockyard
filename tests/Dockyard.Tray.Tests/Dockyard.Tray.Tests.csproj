@@ -12,6 +12,7 @@
   <ItemGroup>
     <Using Include="Xunit" />
     <ProjectReference Include="..\..\src\Dockyard.Tray\Dockyard.Tray.csproj" />
+    <Compile Include="..\Dockyard.Setup.Tests\FakeHost.cs;..\Dockyard.Setup.Tests\TempSettings.cs" LinkBase="Fakes" />
   </ItemGroup>
 
   <ItemGroup>

@@ -15,5 +15,9 @@ public static class TrayInstance
         }
     }
 
+    // Closing the dashboard's window hides it only while a tray can bring it back or end it.
+    public static bool ClosingHidesDashboard(bool trayRunning) => trayRunning;
+    public static bool ClosingHidesDashboard() => ClosingHidesDashboard(IsRunning);
+
     public static bool IsRunning => ProcessLock.IsHeld(ProcessLock.TrayFile);
 }
