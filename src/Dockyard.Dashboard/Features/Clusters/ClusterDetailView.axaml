@@ -103,6 +103,9 @@
               <Button Command="{Binding RecreateCommand}" ToolTip.Tip="kind cannot change a cluster that exists: this deletes it and makes it again from a changed definition">
                 <StackPanel Classes="label"><PathIcon Data="{StaticResource IconRestart}" /><TextBlock Text="Change and recreate…" /></StackPanel>
               </Button>
+              <Button Command="{Binding UpgradeCommand}" IsVisible="{Binding CanUpgrade}" ToolTip.Tip="A newer Kubernetes: kind cannot upgrade in place, so the cluster is made again and its workloads go">
+                <StackPanel Classes="label"><PathIcon Data="{StaticResource IconPull}" /><TextBlock Text="Upgrade…" /></StackPanel>
+              </Button>
               <Button Command="{Binding DuplicateCommand}" ToolTip.Tip="A new cluster from this one's definition">
                 <StackPanel Classes="label"><PathIcon Data="{StaticResource IconCopy}" /><TextBlock Text="Duplicate…" /></StackPanel>
               </Button>

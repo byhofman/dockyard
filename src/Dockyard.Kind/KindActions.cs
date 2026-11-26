@@ -7,7 +7,7 @@ sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
     // Add-ons go in with helm once the cluster is in the kubeconfig, so a chart that fails leaves a cluster kubectl can reach.
     public async Task<string> Create(string name, Action<string>? onLine = null, int workers = 0, ClusterStorage storage = ClusterStorage.None,
         IReadOnlyList<ClusterAddon>? addons = null, string? helm = null, string? definition = null, bool publishNames = false,
-        Func<string, Task<string>>? clusterCa = null)
+        Func<string, Task<string>>? clusterCa = null, NodeImage? image = null)
     {
         var scratch = Directory.CreateTempSubdirectory("dockyard-kind-");
         try
@@ -22,7 +22,7 @@ sealed class KindActions(string kind, string dockerContext, HostKubeconfig host)
                 config = Path.Combine(scratch.FullName, "cluster.yaml");
                 await File.WriteAllTextAsync(config, definition ?? KindCli.Config(workers, storage == ClusterStorage.HostFolder));
             }
-            try { Check(await KindCli.Run(kind, dockerContext, KindCli.Create(name, own, config), onLine)); }
+            try { Check(await KindCli.Run(kind, dockerContext, KindCli.Create(name, own, config, image), onLine)); }
             finally { await prefetch; }
             if (storage == ClusterStorage.HostFolder) await SharedStorage.Install(dockerContext.Length > 0 ? dockerContext : "default", name, onLine);
             if (storage == ClusterStorage.Nfs) await NfsStorage.Install(dockerContext.Length > 0 ? dockerContext : "default", name, own, helm, Path.Combine(scratch.FullName, "helm"), onLine);

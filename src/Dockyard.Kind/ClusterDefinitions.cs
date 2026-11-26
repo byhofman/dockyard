@@ -7,7 +7,7 @@ namespace Dockyard.Kind;
 enum ClusterStorage { None, HostFolder, Nfs }
 
 // The load balancer gives LoadBalancer services an address; Ports are the host ports on 127.0.0.1 its services get.
-sealed record ClusterDefinition(string Yaml, ClusterStorage Storage, IReadOnlyList<string> Addons, bool LoadBalancer = true, IReadOnlyList<int>? Ports = null)
+sealed record ClusterDefinition(string Yaml, ClusterStorage Storage, IReadOnlyList<string> Addons, bool LoadBalancer = true, IReadOnlyList<int>? Ports = null, string? KubernetesVersion = null)
 {
     // None: <host>.<cluster>.dockyard.internal reaches a cluster's ingress by name on 80 and 443, which fixed ports would take.
     public static readonly IReadOnlyList<int> DefaultPorts = [];
@@ -41,7 +41,8 @@ static class ClusterDefinitions
             storage,
             (Value("addons") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries),
             Value("load-balancer") != "false",
-            ParsePorts(Value("ports") ?? "") ?? ClusterDefinition.DefaultPorts);
+            ParsePorts(Value("ports") ?? "") ?? ClusterDefinition.DefaultPorts,
+            Value("kubernetes") is { Length: > 0 } version ? version : null);
     }
 
     public static void Save(string name, ClusterDefinition definition, string? folder = null)
@@ -55,6 +56,7 @@ static class ClusterDefinitions
             $"addons={string.Join(',', definition.Addons)}",
             $"load-balancer={(definition.LoadBalancer ? "true" : "false")}",
             $"ports={string.Join(',', definition.Ports ?? ClusterDefinition.DefaultPorts)}",
+            $"kubernetes={definition.KubernetesVersion}",
         ]);
     }
 
@@ -88,7 +90,7 @@ static class ClusterDefinitions
     // A cluster made elsewhere, or before Dockyard kept definitions: its nodes are what its config said, near enough.
     public static ClusterDefinition Guess(KindCluster cluster) => new(
         KindCli.Config(cluster.Nodes.Count(n => n.Role == "worker"), cluster.HasSharedStorage),
-        cluster.HasSharedStorage ? ClusterStorage.HostFolder : ClusterStorage.None, []);
+        cluster.HasSharedStorage ? ClusterStorage.HostFolder : ClusterStorage.None, [], KubernetesVersion: cluster.KubernetesVersion);
 
     // Null when kind can take it as far as can be told without kind: a v1alpha4 Cluster with a control plane.
     public static string? Problem(string yaml)

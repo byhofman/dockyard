@@ -26,10 +26,12 @@ static class KindCli
     }
 
     // kind writes to a file of its own; HostKubeconfig puts the entries in the user's kubeconfig safely.
-    public static string[] Create(string name, string kubeconfig, string? config = null) =>
-        config is null
-            ? ["create", "cluster", "--name", name, "--kubeconfig", kubeconfig]
-            : ["create", "cluster", "--name", name, "--kubeconfig", kubeconfig, "--config", config];
+    public static string[] Create(string name, string kubeconfig, string? config = null, NodeImage? image = null) =>
+    [
+        "create", "cluster", "--name", name, "--kubeconfig", kubeconfig,
+        .. config is null ? Array.Empty<string>() : ["--config", config],
+        .. image is null ? Array.Empty<string>() : ["--image", image.Reference],
+    ];
 
     // One control plane and this many workers, each mounting the shared folder when asked; without a config kind makes
     // the control plane alone.
