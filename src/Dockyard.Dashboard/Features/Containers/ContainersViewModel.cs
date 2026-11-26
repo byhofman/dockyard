@@ -396,19 +396,21 @@ sealed class ContainersViewModel : Observable, ISearchable
     {
         var volumes = DialogField.Check("Also remove its volumes, with the data in them", isChecked: false);
         var images = DialogField.Check("Also remove the images it built or pulled", isChecked: false);
-        shell.Open(new Dialog($"Down {project.Name}?", "Stops and removes the project's containers and networks, and takes it off the list here.", "Down",
-            d => ComposeDown(project, d, volumes.IsChecked, images.IsChecked), danger: true, fields: [volumes, images]));
+        // Off by default: a project downed now is often upped again later from the same file.
+        var forget = DialogField.Check("Also take it off the list here", isChecked: false);
+        List<DialogField> fields = [volumes, images, .. IsRecent(project.Name) ? [forget] : Array.Empty<DialogField>()];
+        shell.Open(new Dialog($"Down {project.Name}?", "Stops and removes the project's containers and networks.", "Down",
+            d => ComposeDown(project, d, volumes.IsChecked, images.IsChecked, forget.IsChecked), danger: true, fields: fields));
     }
 
-    async Task ComposeDown(ComposeProject project, Dialog dialog, bool volumes = false, bool images = false)
+    async Task ComposeDown(ComposeProject project, Dialog dialog, bool volumes = false, bool images = false, bool forget = false)
     {
         var context = Session.ContextName.Length > 0 ? Session.ContextName : "default";
         string[] verb = ["down", .. volumes ? ["--volumes"] : Array.Empty<string>(), .. images ? ["--rmi", "all"] : Array.Empty<string>()];
         dialog.Report($"docker compose {string.Join(' ', verb)} {project.Name}…");
         var exit = await CliRunner.Run(ComposeCli.Args(context, project, verb), line => { if (line.Trim().Length > 0) dialog.Report(line.Trim()); }, Session.IsWindowsEngine);
         if (exit != 0) throw new InvalidOperationException($"docker compose down failed for {project.Name} (exit code {exit}). {dialog.Progress}");
-        // Down is the end of it here: a compose file opened before stays on the list as a project to start again otherwise.
-        await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => ForgetRecent(project.Name));
+        if (forget) await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => ForgetRecent(project.Name));
     }
 
     Task Exec(ContainerItem item)
