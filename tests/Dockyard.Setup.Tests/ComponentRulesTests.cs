@@ -97,6 +97,6 @@ public sealed class ComponentRulesTests
     [InlineData("Server Core", false)]
     [InlineData(null, false)]
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
-    public void Only_a_Windows_client_has_a_desktop_to_start_the_tray_in(string? installationType, bool desktop) =>
-        Assert.Equal(desktop, WindowsHost.IsClientSku(installationType));
+    public void Only_a_Windows_client_gets_mirrored_networking(string? installationType, bool client) =>
+        Assert.Equal(client, WindowsHost.IsClientSku(installationType));
 }

@@ -88,7 +88,7 @@ The line runs `dockyard setup` with them; once installed, `dockyard` itself take
 
 ### Engine only
 
-The engine, the docker CLI and the Dockyard CLI, with no tray and no dashboard. On Windows Server the Linux engine is not part of a new install, so there is no WSL either; `--with linux-engine` adds it.
+Only the engine and the docker CLI, with the Dockyard CLI: no tray and no dashboard.
 
 ```pwsh
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/byhofman/dockyard/main/install.ps1))) --silent --without tray --without dashboard
