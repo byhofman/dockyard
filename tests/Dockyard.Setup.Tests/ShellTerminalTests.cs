@@ -40,6 +40,18 @@ public sealed class ShellTerminalTests
     }
 
     [Fact]
+    public void Any_dockyard_command_runs_the_same_way()
+    {
+        var mac = ShellTerminal.Running(["--help"], ShellTerminal.Os.MacOS, On());
+        var ps = ShellTerminal.Running(["--help"], ShellTerminal.Os.Windows, On());
+        var x = ShellTerminal.Running(["--help"], ShellTerminal.Os.Linux, On("x-terminal-emulator"));
+
+        Assert.Contains("tell application \"Terminal\" to do script \"dockyard --help\"", mac.Args);
+        Assert.Equal(["-NoExit", "-Command", "dockyard --help"], ps.Args);
+        Assert.Equal(["-e", "dockyard", "--help"], x.Args);
+    }
+
+    [Fact]
     public void Linux_without_a_terminal_says_so()
     {
         var ex = Assert.Throws<InvalidOperationException>(() => ShellTerminal.For("dev", ShellTerminal.Os.Linux, On()));
