@@ -44,6 +44,76 @@ sealed class HostKubeconfig(IReadOnlyList<string> paths)
         return (names, current);
     }
 
+    // A kubeconfig of its own holding only the context, with its cluster and user taken from whichever file of the list has them and the
+    // certificate files inlined, so it works without the files it came from. Readable by the person only; the caller deletes it.
+    public string WriteContext(string context)
+    {
+        var configs = paths.Where(File.Exists).Select(p => (Path: p, Config: TryRead(p))).Where(f => f.Config is not null).ToList();
+        var source = configs.FirstOrDefault(f => KindKubeconfig.Find(f.Config!, "contexts", context) is not null);
+        if (source.Config is null) throw new ArgumentException($"There is no context named {context} in the kubeconfig");
+        var entry = KindKubeconfig.Find(source.Config, "contexts", context)!;
+        var body = entry.Children.TryGetValue(new YamlDotNet.RepresentationModel.YamlScalarNode("context"), out var b) && b is YamlDotNet.RepresentationModel.YamlMappingNode m
+            ? m : throw new InvalidDataException($"context {context} has no body");
+        var clusterName = KindKubeconfig.Scalar(body, "cluster");
+        var userName = KindKubeconfig.Scalar(body, "user");
+
+        var flat = KubeconfigFile.Parse("apiVersion: v1\nkind: Config\n", "the new kubeconfig");
+        flat.Children[new YamlDotNet.RepresentationModel.YamlScalarNode("current-context")] = new YamlDotNet.RepresentationModel.YamlScalarNode(context);
+        var clusters = Section(flat, "clusters");
+        var users = Section(flat, "users");
+        if (clusterName is not null) clusters.Add(Inlined(configs, "clusters", clusterName, "cluster", ["certificate-authority"]));
+        if (userName is not null) users.Add(Inlined(configs, "users", userName, "user", ["client-certificate", "client-key"]));
+        Section(flat, "contexts").Add(entry);
+
+        var path = Path.Combine(Path.GetTempPath(), $"dockyard-ctx-{Guid.NewGuid():N}.yaml");
+        var text = KubeconfigFile.Serialize(flat);
+        try { PrivateFile.Write(path, text); }
+        catch { File.Delete(path); throw; }
+        return path;
+    }
+
+    static YamlDotNet.RepresentationModel.YamlSequenceNode Section(YamlDotNet.RepresentationModel.YamlMappingNode config, string name)
+    {
+        var list = new YamlDotNet.RepresentationModel.YamlSequenceNode();
+        config.Children[new YamlDotNet.RepresentationModel.YamlScalarNode(name)] = list;
+        return list;
+    }
+
+    static YamlDotNet.RepresentationModel.YamlMappingNode Inlined(
+        List<(string Path, YamlDotNet.RepresentationModel.YamlMappingNode? Config)> configs, string list, string name, string body, string[] files)
+    {
+        foreach (var (path, config) in configs)
+        {
+            if (KindKubeconfig.Find(config!, list, name) is not { } found) continue;
+            var copy = Clone(found);
+            if (copy.Children.TryGetValue(new YamlDotNet.RepresentationModel.YamlScalarNode(body), out var node) && node is YamlDotNet.RepresentationModel.YamlMappingNode inner)
+            {
+                var home = Path.GetDirectoryName(Path.GetFullPath(path))!;
+                foreach (var key in files)
+                {
+                    if (KindKubeconfig.Scalar(inner, key) is not { } file) continue;
+                    var full = Path.GetFullPath(file, home);
+                    if (!File.Exists(full)) throw new FileNotFoundException($"{key} {full} of {name} in {path} does not exist");
+                    inner.Children.Remove(new YamlDotNet.RepresentationModel.YamlScalarNode(key));
+                    inner.Children[new YamlDotNet.RepresentationModel.YamlScalarNode(key + "-data")] =
+                        new YamlDotNet.RepresentationModel.YamlScalarNode(Convert.ToBase64String(File.ReadAllBytes(full)));
+                }
+            }
+            return copy;
+        }
+        throw new ArgumentException($"The kubeconfig has no {list.TrimEnd('s')} named {name}");
+    }
+
+    static YamlDotNet.RepresentationModel.YamlMappingNode Clone(YamlDotNet.RepresentationModel.YamlMappingNode node) =>
+        (YamlDotNet.RepresentationModel.YamlMappingNode)KubeconfigFile.Parse(
+            KubeconfigFile.Serialize(node), "a kubeconfig entry");
+
+    static YamlDotNet.RepresentationModel.YamlMappingNode? TryRead(string path)
+    {
+        try { return KubeconfigFile.Read(path); }
+        catch (InvalidDataException) { return null; }
+    }
+
     // Like kubectl config use-context: the name has to exist in one of the files, and the current-context is written where kubectl
     // reads it from, the first file that has one, otherwise where new entries go.
     public void Use(string context)

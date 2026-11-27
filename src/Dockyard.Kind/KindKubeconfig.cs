@@ -77,13 +77,13 @@ static class KindKubeconfig
         return node as YamlSequenceNode ?? throw new InvalidDataException($"'{name}' in the kubeconfig is not a list");
     }
 
-    static YamlMappingNode? Find(YamlMappingNode config, string list, string key) =>
+    public static YamlMappingNode? Find(YamlMappingNode config, string list, string key) =>
         List(config, list, create: false) is { } entries && IndexOf(entries, key) is >= 0 and var at ? (YamlMappingNode)entries.Children[at] : null;
 
     static int IndexOf(YamlSequenceNode entries, string key) =>
         entries.Children.ToList().FindIndex(e => e is YamlMappingNode m && Scalar(m, "name") == key);
 
-    static string? Scalar(YamlMappingNode node, string key) =>
+    public static string? Scalar(YamlMappingNode node, string key) =>
         node.Children.TryGetValue(new YamlScalarNode(key), out var value) && value is YamlScalarNode { Value: { Length: > 0 } s } && !IsNull(value) ? s : null;
 
     static bool IsNull(YamlNode node) => node is YamlScalarNode { Value: null or "" or "~" or "null", Style: not (YamlDotNet.Core.ScalarStyle.SingleQuoted or YamlDotNet.Core.ScalarStyle.DoubleQuoted) };

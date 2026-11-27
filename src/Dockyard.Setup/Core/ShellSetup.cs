@@ -1,6 +1,6 @@
 namespace Dockyard.Core;
 
-// kubectl as the CKAD exams have people set it up: k, its completion, and $do and $now for dry runs and forced deletes. A
+// kubectl as the CKAD exams have people set it up: k, its completion, and $do and $now for dry runs and forced deletes; and dockctx, a shell pinned to one kube context. A
 // marked block in the shell's profile, which Dockyard replaces when it changes and takes out when the setting is off.
 static class ShellSetup
 {
@@ -19,6 +19,7 @@ static class ShellSetup
         [
             Begin,
             "alias k=kubectl",
+            "alias dockctx='dockyard ctx'",
             "if command -v kubectl >/dev/null 2>&1; then",
             "  source <(kubectl completion bash)",
             "  complete -o default -F __start_kubectl k",
@@ -32,6 +33,7 @@ static class ShellSetup
         [
             Begin,
             "alias k=kubectl",
+            "alias dockctx='dockyard ctx'",
             "if command -v kubectl >/dev/null 2>&1; then",
             "  (( $+functions[compdef] )) || { autoload -Uz compinit && compinit -C; }",
             "  source <(kubectl completion zsh)",
@@ -46,6 +48,7 @@ static class ShellSetup
         [
             Begin,
             "Set-Alias -Name k -Value kubectl",
+            "function dockctx { dockyard ctx @args }",
             "if (Get-Command kubectl -ErrorAction SilentlyContinue) {",
             "    kubectl completion powershell | Out-String | Invoke-Expression",
             "    Register-ArgumentCompleter -Native -CommandName k -ScriptBlock $__kubectlCompleterBlock",

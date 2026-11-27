@@ -20,12 +20,14 @@ sealed class TrayController : ITrayActions
     bool refreshingContainers;
 
     readonly Func<string, bool> sendToDashboard;
+    readonly Action<ShellTerminal.Command> openTerminal;
 
-    public TrayController(DockyardSetup setup, Action quit, Func<string, bool>? sendToDashboard = null)
+    public TrayController(DockyardSetup setup, Action quit, Func<string, bool>? sendToDashboard = null, Action<ShellTerminal.Command>? openTerminal = null)
     {
         this.setup = setup;
         this.quit = quit;
         this.sendToDashboard = sendToDashboard ?? (line => LocalPipe.TrySend(LocalPipe.DashboardName, line));
+        this.openTerminal = openTerminal ?? (command => Start(new ProcessStartInfo(command.File, command.Args)));
         Menu = new TrayMenu(this);
     }
 
@@ -135,6 +137,17 @@ sealed class TrayController : ITrayActions
     });
 
     public void UseKubeContext(string name) => _ = Run($"Switching to {name}", () => Task.Run(() => setup.UseKubeContext(name)));
+
+    // A terminal running dockyard ctx, so the shell is pinned to the context the same way as from a command line.
+    public void OpenShell(string context)
+    {
+        try { openTerminal(ShellTerminal.For(context, ShellTerminal.ThisSystem, ShellTerminal.OnPath)); }
+        catch (InvalidOperationException e)
+        {
+            problem = e.Message;
+            _ = Refresh();
+        }
+    }
 
     public void OpenWeb(int port) => Start(new ProcessStartInfo($"http://127.0.0.1:{port}") { UseShellExecute = true });
 

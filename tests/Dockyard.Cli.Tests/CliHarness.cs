@@ -5,6 +5,21 @@ using Spectre.Console.Rendering;
 
 namespace Dockyard.Cli.Tests;
 
+sealed class FakeShellLauncher : IShellLauncher
+{
+    public Func<string, int> Behaviour { get; set; } = _ => 0;
+    public string? Path { get; private set; }
+    public string? Context { get; private set; }
+    public string? Seen { get; set; }
+
+    public int Run(string kubeconfig, string context)
+    {
+        Path = kubeconfig;
+        Context = context;
+        return Behaviour(kubeconfig);
+    }
+}
+
 sealed class RecordingLauncher : IDashboardLauncher
 {
     public List<string> Sections { get; } = [];
@@ -40,7 +55,7 @@ sealed class CliHarness : IDisposable
     readonly StringWriter output = new();
     readonly StringWriter error = new();
 
-    public CliHarness(IReadOnlyList<Dockyard.Hosts.ComponentInfo>? catalog = null)
+    public CliHarness(IReadOnlyList<Dockyard.Hosts.ComponentInfo>? catalog = null, string? kubeconfig = null)
     {
         Host = catalog is null ? new FakeHost() : new FakeHost { Components = catalog };
         var console = AnsiConsole.Create(new AnsiConsoleSettings
@@ -54,20 +69,21 @@ sealed class CliHarness : IDisposable
         });
         console.Profile.Width = 200;
         Console = new ScriptedConsole(console, Keys);
-        Setup = Facade.For(Host, settings);
+        Setup = Facade.For(Host, settings, kubeconfig is null ? null : [kubeconfig]);
     }
 
     public FakeHost Host { get; }
     public DockyardSetup Setup { get; }
     public ScriptedInput Keys { get; } = new();
     public RecordingLauncher Launcher { get; } = new();
+    public FakeShellLauncher Shell { get; } = new();
     public IAnsiConsole Console { get; }
     public bool HasTerminal { get; set; } = true;
     public bool HasDesktop { get; set; }
     public string Output => output.ToString();
     public string Error => error.ToString();
 
-    public CliEnvironment Environment => new(() => Setup, Console, error, HasTerminal, HasDesktop, Launcher);
+    public CliEnvironment Environment => new(() => Setup, Console, error, HasTerminal, HasDesktop, Launcher, Shell);
 
     public int Run(params string[] args) => Commands.Execute(args, Environment);
 

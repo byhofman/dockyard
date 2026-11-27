@@ -13,6 +13,26 @@ public sealed class TrayControllerTests : IDisposable
         new(Facade.For(host, settings), quit ?? (() => { }), send ?? (_ => true));
 
     [Fact]
+    public async Task A_shell_item_opens_a_terminal_running_dockyard_ctx_for_that_context()
+    {
+        var kubeconfig = Path.Combine(Path.GetTempPath(), $"dockyard-tray-kube-{Guid.NewGuid():N}");
+        File.WriteAllText(kubeconfig, "apiVersion: v1\nkind: Config\ncontexts:\n- name: dev\n  context:\n    cluster: dev\n");
+        try
+        {
+            List<Dockyard.Core.ShellTerminal.Command> opened = [];
+            var controller = new TrayController(Facade.For(new FakeHost { Installed = true }, settings, [kubeconfig]), () => { }, _ => true, opened.Add);
+
+            await controller.Refresh();
+            controller.Menu.Visible.Single(i => i.Header == "Open a shell on…").Items.Single().Click!();
+
+            var command = Assert.Single(opened);
+            Assert.Contains("dockyard ctx", command.File + " " + string.Join(" ", command.Args));
+            Assert.Contains("dev", string.Join(" ", command.Args));
+        }
+        finally { File.Delete(kubeconfig); }
+    }
+
+    [Fact]
     public void Quit_tells_the_dashboard_to_quit_and_then_quits_the_tray()
     {
         List<string> events = [];
