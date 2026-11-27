@@ -2,6 +2,25 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-27: Components release on their own, found through `components.json`
+
+From docs/design/components-and-releases.md (accepted 2026-11-25: "one binary is wrong"), deleted with the move to issues.
+
+- **Four components**, each its own version and tag: the CLI (`cli/v…`), the tray (`tray/v…`), the dashboard (`dashboard/v…`) and the engine image (`engine/v…`); `v<version>` releases all four in the order engine, tray, dashboard, CLI. A release carries only its component's assets and its own `SHA256SUMS`. Dockyard's own service containers are pinned by digest in `Dockyard.Setup`, not released.
+- **Each app carries its own payloads** (`-p:GuestBundle`, `-p:HostExe`) and installs into its own folder, so the CLI and the dashboard share no file and either can set up the engine alone.
+- **`components.json` on the fixed `index` release** names each component's newest tag, read from github.com, never the API: `releases/latest` names one release only, and the API's 60 anonymous calls an hour are shared by an office. Every component release updates its own entry under one concurrency group. `requires` names the lowest CLI a component works with; its update is offered only once that is met. The one-liners read the `cli` entry and accept only `cli/*` tags.
+- **One workflow**, `release.yml`, run by a release tag or by hand, never on pull requests or `main`; its `plan` job builds and tests only what the tagged component needs.
+
+## 2026-11-25: The installer hosts nothing; services are containers, OS integration is dockyard-host
+
+From docs/design/dockyard-services.md, deleted with the move to issues. Owner: "the toolbox is just the installer, it should not host any port."
+
+- **The dockyard command, tray and dashboard** install, configure and show state, including the one-time admin steps (DNS routing rules, trusting the CA); they never listen on a port, relay traffic or keep an engine alive.
+- **dockyard-host**, an OS-native background service per OS (a per-user logon service on Windows, a LaunchAgent on macOS, a systemd user unit on Linux), does only what must run while the engine does: loopback relays, the engine's pipes and socket, keeping it running. No UI, a fixed list of OS operations, the least rights it needs.
+- **Services are containers** in the Dockyard group, pinned by digest: `dockyard-dns` (CoreDNS with etcd for external-dns), `dockyard-proxy` (Traefik, a router per container name and a passthrough per cluster on 443), kind's cloud provider, NFS. When their images cannot be had, the agent serves names itself.
+- **`.internal`, not `.test`**; the root CA allows one level below it, and each cluster gets an intermediate constrained to `<cluster>.dockyard.internal` for cert-manager's `dockyard` ClusterIssuer.
+- Known gap, by choice for now: any container can write to `dockyard-etcd` and so publish a name under `dockyard.internal`; a name a container already has always wins.
+
 ## 2026-11-27: Component tags carry a v; releases publish through pipeline-templates
 
 Owner 2026-11-27 ("the convention is version with a v* prefix"; the CLI keeps the latest badge). The release skill now writes the notes into the annotated tag and never creates the Release itself; vaultbar v0.6.0 failed when it did.

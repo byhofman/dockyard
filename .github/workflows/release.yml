@@ -3,7 +3,7 @@ name: build
 # One workflow for every component, run by a release tag or by hand (which builds and tests everything); there is no CI
 # on pull requests or main, by the owner's choice. A tag <component>/<version>
 # builds, tests and releases only that component, and a tag v<version> releases all four at that version, in the order
-# the index needs them. See docs/design/components-and-releases.md.
+# the index needs them. See docs/decisions.md, "Components release on their own".
 on:
   push:
     tags: ['cli/v*', 'tray/v*', 'dashboard/v*', 'engine/v*', 'v*']

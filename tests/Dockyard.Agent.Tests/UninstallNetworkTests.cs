@@ -2,7 +2,7 @@ using System.Diagnostics;
 
 namespace Dockyard.Agent.Tests;
 
-/// <summary>DOK-19: uninstall on a Linux host takes away every rule and address the agent added, without a reboot. The
+/// <summary>#163: uninstall on a Linux host takes away every rule and address the agent added, without a reboot. The
 /// setup script matches them by what is Dockyard's own, so this runs it against the agent's own list.</summary>
 public sealed class UninstallNetworkTests : IDisposable
 {

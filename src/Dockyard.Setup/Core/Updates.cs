@@ -139,7 +139,7 @@ static partial class Updates
     public static Task<string> DownloadImage(string targetDir) => DownloadComponentAsset(EngineComponent, ImageAsset, targetDir);
 
     // Components are released on their own, tagged <component>/<version>; components.json on the release tagged index
-    // names each one's latest. See docs/design/components-and-releases.md.
+    // names each one's latest. See docs/decisions.md, "Components release on their own".
     public const string DashboardZipPattern = @"^Dockyard\.Dashboard\.zip$";
     public const string CliAssetPattern = @"^dockyard-windows-x64\.exe$";
     public const string TrayComponent = "tray";
