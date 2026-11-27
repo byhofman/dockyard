@@ -19,6 +19,14 @@ static class ThisApp
 
     public static bool IsApp(RunningApp app) => app is RunningApp.Cli or RunningApp.Dashboard;
 
+    // The released component each app is (its tag's prefix); the tray and anything else run as neither.
+    public static string? OwnComponent(RunningApp app) => app switch
+    {
+        RunningApp.Cli => Updates.CliComponent,
+        RunningApp.Dashboard => Updates.DashboardComponent,
+        _ => null,
+    };
+
     // The two apps' components, of which at least one stays.
     public static readonly string[] Components = [nameof(Component.DockyardCli), ComponentRules.DashboardId];
 

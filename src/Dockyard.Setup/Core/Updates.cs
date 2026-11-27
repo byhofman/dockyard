@@ -109,23 +109,19 @@ static partial class Updates
     // which everyone behind one office network or VPN shares.
     static string AssetUrl(string repo, string tag, string asset) => $"https://github.com/{repo}/releases/download/{tag}/{asset}";
 
-    // "The Dockyard version" is the installed copy of the app that runs: the CLI and the dashboard each run this library,
-    // and so does the tray, with a version of its own. Only an app has none installed yet during a first install, and goes by
-    // its own. The facade points InstalledApp at its host's Dockyard itself, and InstalledCli at its dockyard command.
-    internal static Func<Task<Version?>> InstalledApp { get; set; } = () => Task.FromResult<Version?>(null);
-    internal static Func<Task<Version?>> InstalledCli { get; set; } = () => Task.FromResult<Version?>(null);
+    // The installed version of a component (cli, dashboard, tray, engine), or null when it is not there or not known. The
+    // facade points it at its host.
+    internal static Func<string, Task<Version?>> InstalledComponent { get; set; } = _ => Task.FromResult<Version?>(null);
 
-    internal static Version? DockyardVersion(Version? installedApp, RunningApp app, string ownVersion) =>
-        installedApp ?? (ThisApp.IsApp(app) ? ParseVersion(ownVersion) : null);
+    // The running app's own component is what its setup puts in place, so it goes by its own version; any other by what is
+    // installed. A development build (0.0.0) has no release of its own.
+    internal static Version? VersionOf(string component, Version? installed, RunningApp app, string ownVersion) =>
+        ThisApp.OwnComponent(app) == component && ParseVersion(ownVersion) is { } own && own != Development ? own : installed;
 
-    internal static async Task<Version?> DockyardVersion() => DockyardVersion(await InstalledApp(), ThisApp.Current, Paths.AppVersion);
+    static async Task<Version?> VersionOf(string component) =>
+        VersionOf(component, await InstalledComponent(component), ThisApp.Current, Paths.AppVersion);
 
-    // A dockyard command run from a download that differs from the installed one brings its own package along. Nothing else
-    // does: its version is not the command's.
-    internal static bool BringsCliAlong(Version? installedCli, RunningApp app, string ownVersion) =>
-        app == RunningApp.Cli && installedCli != ParseVersion(ownVersion);
-
-    internal static async Task<bool> BringsCliAlong() => BringsCliAlong(await InstalledCli(), ThisApp.Current, Paths.AppVersion);
+    static readonly Version Development = new(0, 0, 0);
 
     [SupportedOSPlatform("windows")]
     static async Task<Version?> OwnToolVersion(CliTool tool) =>
@@ -137,12 +133,8 @@ static partial class Updates
         return File.Exists(path) ? ParseVersion((await Shell.Run(path, args)).Output) : null;
     }
 
-    public static async Task<string> DownloadTray(Release release)
-    {
-        var dir = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(dir);
-        return await DownloadReleaseAsset(Path.GetFileName(new Uri(release.DownloadUrl!).LocalPath), dir, tag: release.Tag);
-    }
+    public static Task<string> DownloadTray(Release release) =>
+        DownloadComponentAsset(TrayComponent, TrayZipPattern, Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}"), release.Tag);
 
     public static Task<string> DownloadImage(string targetDir) => DownloadComponentAsset(EngineComponent, ImageAsset, targetDir);
 
@@ -154,6 +146,7 @@ static partial class Updates
     public const string DashboardComponent = "dashboard";
     public const string CliComponent = "cli";
     public const string EngineComponent = "engine";
+    public const string VmAsset = @"^dockyard-vm-[\d.]+-aarch64\.tar\.gz$";
 
     public static string ComponentTag(string component, string version) => $"{component}/{version}";
 
@@ -185,10 +178,17 @@ static partial class Updates
     static async Task<Dictionary<string, ComponentEntry>> Index() =>
         await GetTextIfFound(AssetUrl(Paths.Repo, "index", "components.json")) is { } json ? ParseIndex(json) : [];
 
-    // A component that needs a newer dockyard command waits for the command's own update, which comes first: the command
-    // installs everything else. A development build (0.0.0) is taken as meeting every requirement.
-    internal static bool RequirementsMet(ComponentEntry entry, Version? cli) =>
-        !entry.Requires.TryGetValue(CliComponent, out var needed) || cli is null || cli == new Version(0, 0, 0) || cli >= needed;
+    // An update waits until every component it names is at least that version: that component's own update comes first.
+    // One that is not there, or a development build (0.0.0), stands in the way of nothing.
+    internal static bool RequirementsMet(ComponentEntry entry, Func<string, Version?> versionOf) =>
+        entry.Requires.All(r => versionOf(r.Key) is not { } version || version == Development || version >= r.Value);
+
+    static async Task<bool> RequirementsMet(ComponentEntry entry)
+    {
+        Dictionary<string, Version?> versions = [];
+        foreach (var name in entry.Requires.Keys) versions[name] = await VersionOf(name);
+        return RequirementsMet(entry, versions.GetValueOrDefault);
+    }
 
     // A component's latest release, or null when the index does not name it.
     internal static async Task<ComponentEntry?> LatestComponent(string component) =>
@@ -197,33 +197,31 @@ static partial class Updates
     public static async Task<Release?> LatestComponentAsset(string component, string assetPattern)
     {
         if (await LatestComponent(component) is not { } entry) return null;
-        if (!RequirementsMet(entry, await DockyardVersion())) return null;
+        if (!await RequirementsMet(entry)) return null;
         if (await GetTextIfFound(AssetUrl(Paths.Repo, entry.Tag, "SHA256SUMS")) is not { } sums) return null;
         return Checksums.Names(sums).FirstOrDefault(n => Regex.IsMatch(n, assetPattern)) is { } asset
             ? new Release(entry.Version, entry.Tag, AssetUrl(Paths.Repo, entry.Tag, asset))
             : null;
     }
 
-    // --assets wins; otherwise the component's own latest release.
-    public static async Task<string> DownloadComponentAsset(string component, string assetPattern, string targetDir)
+    // The release of the component that owns the asset: the one named; otherwise that component's version here, so what is
+    // added matches what is installed; otherwise its latest. Without a release named, a file given with --assets wins.
+    public static async Task<string> DownloadComponentAsset(string component, string assetPattern, string targetDir, string? tag = null)
     {
-        if (LocalAsset(assetPattern) is { } local)
+        if (tag is null && LocalAsset(assetPattern) is { } local)
         {
             Directory.CreateDirectory(targetDir);
             var copy = Path.Combine(targetDir, Path.GetFileName(local));
             File.Copy(local, copy, overwrite: true);
             return copy;
         }
-        var entry = await LatestComponent(component)
+        var release = ReleaseTag(component, await VersionOf(component), tag) ?? (await LatestComponent(component))?.Tag
             ?? throw new InvalidOperationException($"Could not read which {component} release is the latest (components.json on the release tagged index); check the connection to github.com, or pass the files with --assets");
-        return await DownloadReleaseAsset(assetPattern, targetDir, isPattern: true, tag: entry.Tag);
+        return await DownloadReleaseAsset(release, assetPattern, targetDir);
     }
 
-    // From the given release; without one, the CLI release of the Dockyard version, so what is added matches what is
-    // installed. A development build (0.0.0) or no version at all leaves it to the index's cli entry. The CLI's release also
-    // carries the macOS app and the Linux packages and tarball.
-    internal static string? ReleaseTag(Version? dockyard, string? tag) =>
-        tag ?? (dockyard is null || dockyard == new Version(0, 0, 0) ? null : ComponentTag(CliComponent, dockyard.ToString()));
+    internal static string? ReleaseTag(string component, Version? version, string? tag) =>
+        tag ?? (version is null || version == Development ? null : ComponentTag(component, version.ToString()));
 
     // --assets: Dockyard's own files from a folder the user named, for offline installs and for testing a build before its
     // release. Never the installer's own folder by itself: that is usually Downloads, where any web page can leave a file.
@@ -233,24 +231,11 @@ static partial class Updates
         : Directory.EnumerateFiles(LocalAssets).Where(f => Regex.IsMatch(Path.GetFileName(f), pattern))
             .OrderByDescending(f => ParseVersion(Path.GetFileName(f))).FirstOrDefault();
 
-    // Without a tag, a file given with --assets wins.
-    public static async Task<string> ReleaseAssetOrLocal(string pattern, string targetDir, string? tag)
+    static async Task<string> DownloadReleaseAsset(string release, string assetPattern, string targetDir)
     {
-        var local = tag is not null ? null : LocalAsset(pattern);
-        if (local is null) return await DownloadReleaseAsset(pattern, targetDir, isPattern: true, tag);
-        Directory.CreateDirectory(targetDir);
-        var copy = Path.Combine(targetDir, Path.GetFileName(local));
-        File.Copy(local, copy);
-        return copy;
-    }
-
-    public static async Task<string> DownloadReleaseAsset(string name, string targetDir, bool isPattern = false, string? tag = null)
-    {
-        var release = ReleaseTag(await DockyardVersion(), tag) ?? (await LatestComponent(CliComponent))?.Tag
-            ?? throw new InvalidOperationException("No Dockyard release found: components.json on the release tagged index names no cli release");
         var sums = await GetText(AssetUrl(Paths.Repo, release, "SHA256SUMS"));
-        var asset = Checksums.Names(sums).FirstOrDefault(n => isPattern ? Regex.IsMatch(n, name) : n == name)
-            ?? throw new InvalidOperationException($"Release {release} has no {name}");
+        var asset = Checksums.Names(sums).FirstOrDefault(n => Regex.IsMatch(n, assetPattern))
+            ?? throw new InvalidOperationException($"Release {release} has no {assetPattern}");
         Directory.CreateDirectory(targetDir);
         var target = Path.Combine(targetDir, asset);
         await DownloadFile(AssetUrl(Paths.Repo, release, asset), target);

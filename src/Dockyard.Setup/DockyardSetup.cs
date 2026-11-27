@@ -37,11 +37,19 @@ public sealed partial class DockyardSetup : IDisposable
         this.host = host;
         this.settings = settings;
         this.shell = shell ?? ShellProfiles.User;
-        Updates.InstalledApp = () => host.Installed(host.SelfComponent);
-        Updates.InstalledCli = () => host.Installed(nameof(Component.DockyardCli));
+        Updates.InstalledComponent = InstalledComponent(host);
         Duties = new BackgroundDuties(this, host, settings);
         ClusterAgent = () => AgentClient.For(DockerEndpoint.Parse(host.Engines[0].Endpoint));
     }
+
+    // The engine's release version is not what its installed version is (Docker's), so it goes by its latest.
+    internal static Func<string, Task<Version?>> InstalledComponent(IEngineHost host) => component => component switch
+    {
+        Updates.CliComponent => host.Installed(nameof(Component.DockyardCli)),
+        Updates.DashboardComponent => host.Installed(ComponentRules.DashboardId),
+        Updates.TrayComponent => host.Installed(ComponentRules.TrayId),
+        _ => Task.FromResult<Version?>(null),
+    };
 
     public static DockyardSetup ForThisMachine() => new(HostFactory.Create(), Settings.Load());
 
@@ -262,7 +270,7 @@ public sealed partial class DockyardSetup : IDisposable
 
     // Which of Dockyard's own apps this process is, null for a command-line run. An app does not change itself or replace
     // Dockyard: that step would stop or overwrite it halfway, so a command-line run of an installed app does it. Updating
-    // the CLI goes there too: on macOS and Linux one bundle or package can hold it with the tray and the dashboard.
+    // the CLI goes there too, so that the CLI replaces itself.
     internal string? Caller { get; init; } = ThisApp.Caller(ThisApp.Current);
     internal Action<string, IReadOnlyList<string>> HandOff { get; init; } = StartCommand;
     internal Func<string, bool> AppExists { get; init; } = File.Exists;

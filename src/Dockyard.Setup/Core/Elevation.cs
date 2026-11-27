@@ -159,6 +159,7 @@ static partial class Elevation
         {
             var (source, assets) = WorkerOptions(args);
             Updates.LocalAssets = assets;
+            Updates.InstalledComponent = Dockyard.Setup.DockyardSetup.InstalledComponent(new Hosts.WindowsHost(Hosts.ProcessRunner.Instance));
             var keepPid = int.Parse(Arg("--keep-pid"));
             if (args.Contains("--machine-uninstall"))
             {
