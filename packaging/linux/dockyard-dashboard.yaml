@@ -6,19 +6,20 @@ section: admin
 priority: optional
 maintainer: Thomas Hofman <noreply@github.com>
 description: |
-  Dockyard dashboard: containers, compose projects, images, volumes, networks and disk usage.
+  Dockyard dashboard: containers, compose projects, images, volumes, networks and disk usage, with its own tray and
+  setup. It installs the engine itself and works without the dockyard command.
 homepage: https://github.com/byhofman/dockyard
 license: MIT
-depends:
-  - dockyard
-overrides:
-  rpm:
-    depends:
-      - dockyard
 contents:
   - src: dist/linux/dashboard/dockyard-dashboard
-    dst: /usr/lib/dockyard/dockyard-dashboard
+    dst: /usr/lib/dockyard-dashboard/dockyard-dashboard
     file_info: { mode: 0755 }
-  # Skia and HarfBuzz come with the dockyard package, for the tray.
+  - src: dist/linux/tray/dockyard-tray
+    dst: /usr/lib/dockyard-dashboard/dockyard-tray
+    file_info: { mode: 0755 }
+  - src: dist/linux/tray/libSkiaSharp.so
+    dst: /usr/lib/dockyard-dashboard/libSkiaSharp.so
+  - src: dist/linux/tray/libHarfBuzzSharp.so
+    dst: /usr/lib/dockyard-dashboard/libHarfBuzzSharp.so
   - src: packaging/linux/dockyard-dashboard.desktop
     dst: /usr/share/applications/dockyard-dashboard.desktop

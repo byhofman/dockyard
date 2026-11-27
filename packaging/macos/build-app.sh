@@ -1,8 +1,8 @@
 #!/bin/sh
 # build-app.sh <version> <dist> <out>: Dockyard.app from the published files in <dist> (dockyard-tray and the Avalonia
-# and Skia dylibs, dockyard-dashboard, dockyard-cli, dockyard-host, vm/), ad-hoc signed (no certificate needed), as
-# Dockyard-<version>-macos.zip, -macos-engine-only.zip and Dockyard-<version>-macos.dmg. They are assets of the CLI's
-# release: dockyard setup puts the bundle in place and links /usr/local/bin/dockyard to its dockyard-cli.
+# and Skia dylibs, dockyard-dashboard, dockyard-host, vm/), ad-hoc signed (no certificate needed), as
+# Dockyard-<version>-macos.zip and Dockyard-<version>-macos.dmg. They are assets of the dashboard's release; the CLI
+# is not inside: it is its own asset, and dockyard setup puts it in ~/.dockyard/cli.
 set -eu
 version="$1"; dist="$2"; out="$3"
 here="$(cd "$(dirname "$0")" && pwd)"; root="$here/../.."
@@ -10,16 +10,13 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
 bundle() {
-  app="$1/Dockyard.app"; with_dashboard="$2"
+  app="$1/Dockyard.app"
   mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
   sed "s/VERSION/$version/g" "$here/Info.plist" > "$app/Contents/Info.plist"
-  # Inside the bundle the tray and the dashboard keep the app's name. The tray links the dylibs too, so every edition has
-  # them. The CLI stays dockyard-cli: the default file system cannot tell dockyard from Dockyard.
+  # Inside the bundle the tray and the dashboard keep the app's name.
   cp "$dist/dockyard-tray" "$app/Contents/MacOS/Dockyard"
-  cp "$dist/dockyard-host" "$dist/dockyard-cli" "$dist"/*.dylib "$app/Contents/MacOS/"
-  if [ "$with_dashboard" = 1 ]; then
-    cp "$dist/dockyard-dashboard" "$app/Contents/MacOS/Dockyard Dashboard"
-  fi
+  cp "$dist/dockyard-host" "$dist"/*.dylib "$app/Contents/MacOS/"
+  cp "$dist/dockyard-dashboard" "$app/Contents/MacOS/Dockyard Dashboard"
   cp -R "$dist/vm" "$app/Contents/Resources/vm"
   cp "$work/Dockyard.icns" "$app/Contents/Resources/Dockyard.icns"
 
@@ -39,11 +36,9 @@ for size in 16 32 128 256 512; do
 done
 iconutil -c icns "$iconset" -o "$work/Dockyard.icns"
 
-mkdir -p "$out" "$work/full" "$work/engine"
-bundle "$work/full" 1
-bundle "$work/engine" 0
+mkdir -p "$out" "$work/full"
+bundle "$work/full"
 ditto -c -k --keepParent "$work/full/Dockyard.app" "$out/Dockyard-$version-macos.zip"
-ditto -c -k --keepParent "$work/engine/Dockyard.app" "$out/Dockyard-$version-macos-engine-only.zip"
 
 # Disk image for manual download: Dockyard.app next to an Applications link.
 mkdir -p "$work/dmg"

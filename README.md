@@ -8,6 +8,8 @@ Docker without Docker Desktop, on Windows, macOS and Linux. The engines start on
 
 Run one line. It downloads the `dockyard` command and runs `dockyard setup`, which asks in the terminal which optional components you want and sets up everything, including what Docker needs from your system. When you choose the dashboard, setup opens it at **Tools** once it is done, with every component and its version. A silent install is there for scripts ([Without a window](#without-a-window)), but it is never the default.
 
+Dockyard is two apps that stand on their own: the **`dockyard` command** and the **dashboard**. Each carries the whole setup, installs and removes the other components, and can be installed or uninstalled without the other. The one-liner starts with the command because it is a small download that needs no display; with the dashboard alone you download it from its release and it runs the same setup in a window (`dockyard-dashboard --setup`, or `--setup --silent` without one).
+
 **Windows 11**, in PowerShell:
 
 ```pwsh
@@ -46,9 +48,9 @@ Everything Dockyard downloads itself (its own downloads of those tools, the engi
 
 | Component | | |
 |---|---|---|
-| `dockyard` command | Required | It installs and updates everything else; see [The dockyard command](#the-dockyard-command) |
-| Tray | Optional | An icon and its menu, no window, with a Kubernetes context submenu that switches the kubectl context; the command and the tray are a whole install |
-| Dashboard | Optional | The only Dockyard window: containers, clusters, and Setup, Tools and Settings |
+| `dockyard` command | Optional app | A terminal app with the whole setup; see [The dockyard command](#the-dockyard-command). One of the two apps has to stay |
+| Tray | Optional | An icon and its menu, no window, with a Kubernetes context submenu that switches the kubectl context; the tray comes with whichever app is installed |
+| Dashboard | Optional app | The only Dockyard window: containers, clusters, and Setup, Tools and Settings. Installs everything on its own, without the command |
 | Docker Compose, Docker Buildx | Optional | Need the Docker CLI |
 | kind | Optional | Kubernetes clusters in containers, on the Linux engine |
 | kubectl, Helm | Optional | The Kubernetes command line, and the charts Clusters can add to a new cluster |
@@ -80,15 +82,29 @@ The line runs `dockyard setup` with them; once installed, `dockyard` itself take
 | `--source dockyard`, `--source package-manager` | Where the tools come from: Dockyard's own pinned downloads, or winget, Homebrew or apt/dnf (the default). Remembered for later runs. |
 | `--kubectl-shell` | Add the kubectl shell setup (`k`, completion, `$do`, `$now`; `@do` and `@now` in PowerShell). `dockyard settings set kubectl-shell off` takes it out. |
 | `--no-start` | Do not start Dockyard afterwards. |
-| `--assets <folder>` | Take Dockyard's own release files (image, tray, dashboard, packages, the macOS app) from this folder instead of downloading them, for an install without internet or a build before its release. They are not checked, so only name a folder you filled yourself. |
+| `--assets <folder>` | Take Dockyard's own release files (image, tray, dashboard, packages, the macOS app, the VM helper) from this folder instead of downloading them, for an install without internet or a build before its release. They are not checked, so only name a folder you filled yourself. |
 | `--trust-https` | Add Dockyard's own certificate to the trust store, for HTTPS on container domains. |
 | `--open-dashboard` | Open the dashboard at Tools when done. |
 
 `dockyard import` copies images, volumes and containers from Docker Desktop, which keeps them (**Import** in the dashboard's Tools does the same). `dockyard uninstall` removes Dockyard and keeps images and containers; `dockyard uninstall --remove-data` takes them too.
 
+### The dashboard on its own
+
+The dashboard takes the same arguments as `dockyard setup`. Without the command at all, in a script or from a download of the dashboard's release:
+
+```sh
+dockyard-dashboard --setup --silent --without cli
+```
+
+```pwsh
+.\Dockyard.Dashboard.exe --setup --silent --without cli
+```
+
+Setup then installs the dashboard, the tray and the engine, and no `dockyard` command, and it is the dashboard that updates and removes them later. `--with cli` adds the command to such an install, and `--without cli` takes it out of one that has it; `dockyard-dashboard --component remove cli` does the same. The exit codes are the command's.
+
 ### Engine only
 
-Only the engine and the docker CLI, with the Dockyard CLI: no tray and no dashboard.
+Only the engine and the docker CLI, with the Dockyard command: no tray and no dashboard.
 
 ```pwsh
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/byhofman/dockyard/main/install.ps1))) --silent --without tray --without dashboard
@@ -107,11 +123,13 @@ The exit code is `0` when done, `1` on failure with the reason on stderr, `2` fo
 
 ### Without the one-liner
 
-Each release of the command (tagged `cli/<version>`, and marked as the latest release) has `dockyard-windows-x64.exe` for Windows, `dockyard-macos-arm64` for macOS and `dockyard-linux-x64` for Linux: download it and run `dockyard setup`. The same release carries what setup puts in place on macOS and Linux: `Dockyard-<version>-macos.zip` (the app with the tray, the dashboard and the command; `-macos-engine-only.zip` without the dashboard), `Dockyard-<version>-macos.dmg`, the `dockyard` deb and rpm (the command and the tray) and `Dockyard-<version>-linux-x64.tar.gz`. On Windows the tray comes from its own release (`tray/<version>`, `Dockyard.Tray.zip`, the tray with its native libraries) and the dashboard from its own (`dashboard/<version>`). Set `DOCKYARD_VERSION` to have the one-liner take a particular version of the command. On macOS, a browser download needs **System Settings → Privacy & Security → Open Anyway** once, because nothing has a Developer ID yet; the one-liner does not.
+Each release of the command (tagged `cli/<version>`, and marked as the latest release) has `dockyard-windows-x64.exe` for Windows, `dockyard-macos-arm64` for macOS and `dockyard-linux-x64` for Linux: download it and run `dockyard setup`. The same release carries `dockyard-host-macos-arm64` (the signed VM helper for a Mac without the dashboard), the `dockyard` deb and rpm (the command and the tray) and `Dockyard-<version>-linux-x64.tar.gz` for distributions without apt or dnf.
+
+The dashboard has releases of its own (`dashboard/<version>`): `Dockyard.Dashboard.zip` for Windows, `Dockyard-<version>-macos.zip` and `.dmg` (the app with the tray, the dashboard and the VM helper, and no command inside), `dockyard-dashboard-<version>-linux-x64.tar.gz`, and the `dockyard-dashboard` deb and rpm, which do not depend on `dockyard`. The tray has `tray/<version>` (`Dockyard.Tray.zip`) on Windows. Set `DOCKYARD_VERSION` to have the one-liner take a particular version of the command. On macOS, a browser download needs **System Settings → Privacy & Security → Open Anyway** once, because nothing has a Developer ID yet; the one-liner does not.
 
 ## What it sets up
 
-**Windows.** WSL if it is missing, the Windows `Containers` feature, Docker's static engine in `C:\Program Files\Docker`, the docker CLI with compose and buildx, kind, kubectl and helm from winget (for all users; `~/.docker/config.json` gets winget's folder in `cliPluginsExtraDirs` so `docker compose` finds it), Dockyard itself in `C:\Program Files\Dockyard` (`bin\dockyard.exe` on the PATH, `dockyard-tray.exe`, `dockyard-dashboard.exe` and `dockyard-host.exe`), the `docker` service started on demand, a small `dockyard` WSL distro for Linux containers, the `linux` and `win` docker contexts, Defender exclusions for Dockyard, mirrored WSL networking unless you chose otherwise in `.wslconfig`, and autostart at logon.
+**Windows.** WSL if it is missing, the Windows `Containers` feature, Docker's static engine in `C:\Program Files\Docker`, the docker CLI with compose and buildx, kind, kubectl and helm from winget (for all users; `~/.docker/config.json` gets winget's folder in `cliPluginsExtraDirs` so `docker compose` finds it), Dockyard itself in `C:\Program Files\Dockyard` (`bin\dockyard.exe` on the PATH when the command is chosen, `dockyard-tray.exe`, `dockyard-dashboard.exe` and `dockyard-host.exe`), the `docker` service started on demand, a small `dockyard` WSL distro for Linux containers, the `linux` and `win` docker contexts, Defender exclusions for Dockyard, mirrored WSL networking unless you chose otherwise in `.wslconfig`, and autostart at logon.
 
 | Context | Engine | Endpoint |
 |---|---|---|
@@ -122,9 +140,9 @@ The Linux engine has no open port on Windows: `dockyard-host`, a small backgroun
 
 Bind mounts of Windows folders work as you would write them: `docker run -v C:\src:/src` and Compose's `./src:/src` reach the Linux engine as `/c/src`, which the engine links to the drive.
 
-**macOS.** Docker's `docker` CLI with compose and buildx, kind, kubectl and helm, from Homebrew when it is there, Rosetta for `linux/amd64` images, a small Linux VM on Apple's Virtualization.framework in `~/.dockyard`, the `dockyard` docker context, `docker`, `kind`, `kubectl` and `helm` on the PATH through `/usr/local/dockyard/bin` (small scripts that run your copy for your account only, or Homebrew's), `~/Applications/Dockyard.app` (the tray as its executable, the dashboard and the `dockyard` command, linked from `/usr/local/bin/dockyard`) and a login item for the tray, and `dockyard-host`, which runs the VM under a LaunchAgent of its own (`com.byhofman.dockyard.host`), so the engine keeps running when the tray and the dashboard are closed. It makes `/var/run/docker.sock` point at the engine unless another Docker app has it, and `docker login` keeps credentials in the Keychain. In the VM: `/Users`, `/Volumes` and the temp folders are shared at the same paths, so `-v $PWD:/app` works; published ports reach `127.0.0.1`, and so do servers in `--network host` containers; memory the guest does not use goes back to macOS.
+**macOS.** Docker's `docker` CLI with compose and buildx, kind, kubectl and helm, from Homebrew when it is there, Rosetta for `linux/amd64` images, a small Linux VM on Apple's Virtualization.framework in `~/.dockyard`, the `dockyard` docker context, `docker`, `kind`, `kubectl` and `helm` on the PATH through `/usr/local/dockyard/bin` (small scripts that run your copy for your account only, or Homebrew's), `~/Applications/Dockyard.app` when the dashboard or the tray is chosen (the tray as its executable, the dashboard, the VM helper and the VM files) and a login item for the tray, the `dockyard` command as an app of its own in `~/.dockyard/cli` (linked from `/usr/local/bin/dockyard`), with the helper and the VM files in `~/.dockyard` when there is no app bundle, and `dockyard-host`, which runs the VM under a LaunchAgent of its own (`com.byhofman.dockyard.host`), so the engine keeps running when the tray and the dashboard are closed. It makes `/var/run/docker.sock` point at the engine unless another Docker app has it, and `docker login` keeps credentials in the Keychain. In the VM: `/Users`, `/Volumes` and the temp folders are shared at the same paths, so `-v $PWD:/app` works; published ports reach `127.0.0.1`, and so do servers in `--network host` containers; memory the guest does not use goes back to macOS.
 
-**Linux.** Docker CE with buildx and compose from Docker's repository on Debian, Ubuntu, Fedora, RHEL and their derivatives, or from the distribution on Arch and openSUSE; kubectl from the Kubernetes project's apt or dnf repository and helm from Helm's apt repository or Fedora's own, with kind (and the others where there is neither apt nor dnf) as Dockyard's own copy in `/usr/local/bin`; the Dockyard packages (`dockyard` with the command and the tray, and `dockyard-dashboard`, in `/usr/lib/dockyard`, with `/usr/bin/dockyard` the command), or a copy in `~/.local/lib/dockyard` on distributions without apt or dnf; the engine started on demand; `dockyard-host.service`, which comes and goes with the engine; docker access for you right away; the tray with its GNOME extension where needed, started at login.
+**Linux.** Docker CE with buildx and compose from Docker's repository on Debian, Ubuntu, Fedora, RHEL and their derivatives, or from the distribution on Arch and openSUSE; kubectl from the Kubernetes project's apt or dnf repository and helm from Helm's apt repository or Fedora's own, with kind (and the others where there is neither apt nor dnf) as Dockyard's own copy in `/usr/local/bin`; the Dockyard packages, one per app and neither needing the other (`dockyard` with the command and a tray in `/usr/lib/dockyard`, `/usr/bin/dockyard` being the command, and `dockyard-dashboard` with the dashboard and a tray in `/usr/lib/dockyard-dashboard`), or the same folders in `~/.local/lib` on distributions without apt or dnf; the engine started on demand; `dockyard-host.service`, which comes and goes with the engine; docker access for you right away; the tray with its GNOME extension where needed, started at login.
 
 ## How it fits together
 

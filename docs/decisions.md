@@ -444,3 +444,14 @@ The owner chose `.internal`, the name space ICANN reserved for private use, over
 ## 2026-11-25: All installation logic is in the Toolbox; the one-liners only fetch it
 
 The owner: the Toolbox is meant for installing all components and features, and the scripts the one-liners download stay minimal. Each script finds the release, downloads the Toolbox, checks it against `SHA256SUMS` and starts it with its arguments. `install.ps1` lost `-Build` (`gh run download` and `--assets` do the same by hand), the `-EngineOnly` and `-NoStart` aliases, the clean-up of earlier downloads and the Defender exclusion it added when the Toolbox was blocked; it now says how to allow it. DNS routing rules and trusting the CA stay in the Toolbox's setup, not in dockyard-host, which only runs what has to run while the engine does.
+
+## 2026-11-27: Neither the CLI nor the dashboard is the core; each app packages and installs on its own
+
+DOK-79 and DOK-78. The owner: "dockyard cli is NOT the core and can be uninstalled/installed seperate from dashboard and vice versa". This replaces DOK-59's CLI as the core component. Both apps are a presentation layer over `Dockyard.Setup`, and either runs the whole setup, silently too: `dockyard setup --silent` and `dockyard-dashboard --setup --silent` take the same arguments, and `--without cli` / `--with cli` add or remove the command. That is what DOK-78 needs, so packagers can later take either app; winget and Homebrew are not done (nothing is published there yet).
+
+- **Each release carries what its app needs.** The dashboard's release has the macOS bundle (without the command inside), its own Linux tarball, deb and rpm, and the Windows zip. The CLI's has its executables and, on Linux, its packages. The engine-only macOS zip is gone: the CLI without a bundle uses a signed `dockyard-host-macos-arm64` from its release and the VM files from the engine's.
+- **Linux: one folder per app**, `/usr/lib/dockyard` and `/usr/lib/dockyard-dashboard`, each with its own tray and libraries. Sharing the tray's libraries was what made `dockyard-dashboard` depend on `dockyard`; two copies of two small libraries cost less than a dependency, and dpkg sees no shared file.
+- **macOS: the command is an app of its own** in `~/.dockyard/cli/dockyard`, so the bundle is the dashboard's and removing either leaves the other working.
+- **Both Windows publishes embed the guest and the host** (`-p:GuestBundle`, `-p:HostExe`), so the dashboard can install the engine alone.
+- **Rejected: the dashboard downloads the command to set up.** It would make the command the core again and fail offline.
+- **Tags unchanged.** `cli/`, `tray/`, `dashboard/`, `engine/` and `v*`; the CLI's release stays the latest. The one-liners still fetch the command and run `dockyard setup <args>`.

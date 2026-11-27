@@ -20,7 +20,7 @@ contents:
   - src: dist/linux/tray/dockyard-tray
     dst: /usr/lib/dockyard/dockyard-tray
     file_info: { mode: 0755 }
-  # The tray's Skia and HarfBuzz; the dashboard, which depends on this package, uses the same ones.
+  # The tray's Skia and HarfBuzz; the dashboard package carries its own copies.
   - src: dist/linux/tray/libSkiaSharp.so
     dst: /usr/lib/dockyard/libSkiaSharp.so
   - src: dist/linux/tray/libHarfBuzzSharp.so

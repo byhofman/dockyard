@@ -8,14 +8,18 @@ list=0
 if [ "$1" = --list ]; then list=1; shift; fi
 component="$1"; version="$2"; assets="${3:-}"
 
-# The CLI's release also carries what holds the command on Linux and macOS: the packages and tarball with the tray, and
-# the app bundle with the tray and the dashboard.
+# Each app's release carries what holds it on Linux and macOS: the CLI its packages and tarball, with the tray; the
+# dashboard its packages, tarball and the macOS bundle. The CLI also carries the plain VM helper a Mac without the
+# dashboard runs the engine with.
 cli() {
-  echo SHA256SUMS dockyard-windows-x64.exe dockyard-linux-x64 dockyard-macos-arm64 "Dockyard-$1-linux-x64.tar.gz" \
-    "dockyard_$1_amd64.deb" "dockyard-$1-1.x86_64.rpm" "Dockyard-$1-macos.zip" "Dockyard-$1-macos-engine-only.zip" "Dockyard-$1-macos.dmg"
+  echo SHA256SUMS dockyard-windows-x64.exe dockyard-linux-x64 dockyard-macos-arm64 dockyard-host-macos-arm64 \
+    "Dockyard-$1-linux-x64.tar.gz" "dockyard_$1_amd64.deb" "dockyard-$1-1.x86_64.rpm"
 }
 tray() { echo SHA256SUMS Dockyard.Tray.zip; }
-dashboard() { echo SHA256SUMS Dockyard.Dashboard.zip "dockyard-dashboard_$1_amd64.deb" "dockyard-dashboard-$1-1.x86_64.rpm"; }
+dashboard() {
+  echo SHA256SUMS Dockyard.Dashboard.zip "dockyard-dashboard-$1-linux-x64.tar.gz" "dockyard-dashboard_$1_amd64.deb" \
+    "dockyard-dashboard-$1-1.x86_64.rpm" "Dockyard-$1-macos.zip" "Dockyard-$1-macos.dmg"
+}
 engine() { echo SHA256SUMS "dockyard-linux-$1-x86_64.tar.gz" "dockyard-vm-$1-aarch64.tar.gz"; }
 
 case "$component" in
