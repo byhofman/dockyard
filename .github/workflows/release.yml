@@ -305,7 +305,8 @@ jobs:
   # release, with all its assets, until this one has all of its own. Only the CLI's release becomes the latest;
   # the others are found through components.json.
   release:
-    if: ${{ !cancelled() && github.ref_type == 'tag' && needs.release-assets.result == 'success' && !contains(needs.*.result, 'failure') }}
+    # Only a pushed tag publishes: install-tests.yml calls this workflow, also from a tag, and must never release.
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref_type == 'tag' && needs.release-assets.result == 'success' && !contains(needs.*.result, 'failure') }}
     needs: [plan, windows, linux, image, macos, vm-image, release-assets]
     runs-on: ubuntu-latest
     concurrency:
