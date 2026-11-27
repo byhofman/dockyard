@@ -43,10 +43,14 @@
     }
 
     $arguments = @('setup') + @($args)
-    $parameters = @{ FilePath = $exe; Wait = $true; PassThru = $true; NoNewWindow = $true }
+    # Not -Wait: it waits for every process setup starts too (the tray, the dashboard, dockyard-host), which keep running.
+    $parameters = @{ FilePath = $exe; PassThru = $true; NoNewWindow = $true }
     $parameters.ArgumentList = @($arguments | ForEach-Object { if ($_ -match '\s') { "`"$_`"" } else { $_ } })
     try {
         $process = Start-Process @parameters
+        # Windows PowerShell 5.1 only keeps the exit code of a process whose handle was taken while it ran.
+        $null = $process.Handle
+        $process.WaitForExit()
     } catch {
         throw "Windows did not let $exe start ($_). Dockyard's builds are not signed, so Defender may block a new one; allow it under Windows Security > Virus & threat protection > Protection history, or ask your administrator on a managed device, then run this again."
     }
