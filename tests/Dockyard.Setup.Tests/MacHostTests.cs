@@ -456,6 +456,7 @@ public sealed class MacInstallTests : IDisposable
     [Fact]
     public void A_CLI_only_install_needs_no_bundle_and_runs_the_engine_from_its_own_folder()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix paths");
         Assert.False(MacLayout.WantsBundle(dashboard: false, tray: false));
         Assert.Equal(MacLayout.OwnHelper, MacLayout.HelperWhere(_ => false, BundleBase));
         Assert.Equal(MacLayout.OwnAssets, MacLayout.AssetsWhere(_ => false, BundleBase));
@@ -469,6 +470,7 @@ public sealed class MacInstallTests : IDisposable
     [Fact]
     public void A_dashboard_install_is_the_bundle_and_its_engine_parts_come_first()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix paths");
         Assert.True(MacLayout.WantsBundle(dashboard: true, tray: false));
         Assert.True(MacLayout.WantsBundle(dashboard: false, tray: true));
         var helper = BundleBase + "/dockyard-host";

@@ -226,8 +226,7 @@ public sealed class ProcessLockTests
         }
 
         Assert.False(ProcessLock.IsHeld(file));
-        using var again = ProcessLock.TryTake(file);
-        Assert.NotNull(again);
+        using (var again = ProcessLock.TryTake(file)) Assert.NotNull(again);
         File.Delete(file);
     }
 }

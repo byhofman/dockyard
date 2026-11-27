@@ -40,6 +40,7 @@ public sealed class LinuxHostTests
     [Fact]
     public void Removing_one_app_keeps_the_other_and_the_autostart_follows_the_tray_that_stays()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix paths");
         var both = new HashSet<string>([LinuxLayout.InstalledMarker, PackagedCli, Tray(LinuxLayout.PackageDir), PackagedDashboard, Tray(LinuxLayout.DashboardPackageDir)]);
         Assert.Equal(Tray(LinuxLayout.DashboardPackageDir), LinuxLayout.TrayWhere(both.Contains));
 
@@ -98,6 +99,7 @@ public sealed class LinuxHostTests
     [InlineData(false)]
     public void Uninstall_removes_both_home_folders_the_running_app_s_last(bool cli)
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix paths");
         var running = Path.Combine(cli ? LinuxLayout.HomeDir : LinuxLayout.DashboardHomeDir, cli ? LinuxLayout.Cli : LinuxLayout.DashboardName);
         var order = LinuxLayout.HomeDirsToRemove(running);
         Assert.Equal(new[] { LinuxLayout.HomeDir, LinuxLayout.DashboardHomeDir }.Order(), order.Order());
