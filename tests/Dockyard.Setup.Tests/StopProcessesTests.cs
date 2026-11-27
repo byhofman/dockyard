@@ -33,35 +33,13 @@ public sealed class LinuxUpdateTests
     static readonly Release Dashboard = new(new Version(2, 1, 0), "dashboard/2.1.0", null);
 
     [Fact]
-    public void The_dashboard_alone_comes_from_its_own_release_without_the_app()
+    public void Each_app_updates_from_its_own_release_and_brings_nothing_of_the_other_along()
     {
-        var (app, dashboard) = LinuxHost.AppUpdate([(ComponentRules.DashboardId, Dashboard), ("Kind", null)], tarball: false);
-        Assert.Null(app);
-        Assert.Equal(Dashboard, dashboard);
-    }
-
-    [Fact]
-    public void Without_packages_the_dashboard_follows_the_command_and_has_no_update_of_its_own()
-    {
-        Assert.Null(LinuxComponents.TarballDashboardLatest(Cli, installedCli: new Version(2, 0, 0)));
-        Assert.Null(LinuxComponents.TarballDashboardLatest(null, installedCli: new Version(1, 0, 0)));
-        Assert.Equal(Cli, LinuxComponents.TarballDashboardLatest(Cli, installedCli: new Version(1, 0, 0)));
-    }
-
-    [Fact]
-    public void Without_packages_a_dashboard_update_is_the_command_s_tarball()
-    {
-        var (app, dashboard) = LinuxHost.AppUpdate([(ComponentRules.DashboardId, Cli)], tarball: true);
-        Assert.Equal(Cli, app);
-        Assert.Null(dashboard);
-    }
-
-    [Fact]
-    public void With_the_command_the_app_update_brings_the_dashboard_along()
-    {
-        var (app, dashboard) = LinuxHost.AppUpdate([(ComponentRules.DashboardId, Dashboard), (nameof(Component.DockyardCli), Cli)], tarball: false);
-        Assert.Equal(Cli, app);
-        Assert.Null(dashboard);
+        Assert.Equal([(ComponentRules.DashboardId, "dashboard/2.1.0")], LinuxHost.AppUpdates([(ComponentRules.DashboardId, Dashboard), ("Kind", null)]));
+        Assert.Equal([(nameof(Component.DockyardCli), "cli/2.0.0")], LinuxHost.AppUpdates([(nameof(Component.DockyardCli), Cli)]));
+        Assert.Equal([(ComponentRules.DashboardId, "dashboard/2.1.0"), (nameof(Component.DockyardCli), "cli/2.0.0")],
+            LinuxHost.AppUpdates([(ComponentRules.DashboardId, Dashboard), (nameof(Component.DockyardCli), Cli)]));
+        Assert.Empty(LinuxHost.AppUpdates([(ComponentRules.DashboardId, null)]));
     }
 }
 
