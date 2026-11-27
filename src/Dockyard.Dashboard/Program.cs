@@ -9,6 +9,8 @@ static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        // Setup's elevated step on Windows runs as the app that asked for it.
+        if (global::Dockyard.Setup.DockyardSetup.IsElevatedWorker(args)) return global::Dockyard.Setup.DockyardSetup.RunElevatedWorker(args);
         // Asked by setup on macOS and Linux to learn which version is installed, so this comes before anything with a window.
         if (args.Contains("--version"))
         {

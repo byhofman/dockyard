@@ -14,6 +14,13 @@ static class LinuxLayout
     public static string InstalledExe => Path.Combine(InstallDir, TrayName);
     public static string Dashboard => Path.Combine(InstallDir, DashboardName);
     public const string Cli = "dockyard-cli";
+    public static string CliExe => Path.Combine(InstallDir, Cli);
+    public const string InstalledMarker = "/etc/dockyard/installed";
+    public const string PolkitRule = "/etc/polkit-1/rules.d/50-dockyard.rules";
+
+    // The polkit rules folder is closed to normal users, so setup leaves a marker they can see.
+    public static bool IsInstalled(Func<string, bool> exists) =>
+        (exists(InstalledMarker) || exists(PolkitRule)) && (exists(CliExe) || exists(Dashboard));
     public static string VersionFile => Path.Combine(HomeDir, "version");
 
     public static string DashboardPackage(string? packageManager) =>

@@ -8,11 +8,40 @@ namespace Dockyard.Setup.Tests;
 [SupportedOSPlatform("windows")]
 public sealed class ElevationTests
 {
-    [Fact]
-    public void The_worker_is_the_installed_CLI_and_else_this_executable()
+    [Theory]
+    [InlineData("Cli")]
+    [InlineData("Dashboard")]
+    public void Either_app_is_its_own_worker_installed_or_not(string app)
     {
-        Assert.Equal(Paths.DockyardCliExe, Elevation.WorkerExe(path => path == Paths.DockyardCliExe));
-        Assert.Equal(Paths.Self, Elevation.WorkerExe(_ => false));
+        var running = Enum.Parse<RunningApp>(app);
+        Assert.Equal(Paths.Self, Elevation.WorkerExe(running, _ => true));
+        Assert.Equal(Paths.Self, Elevation.WorkerExe(running, _ => false));
+    }
+
+    [Theory]
+    [InlineData("Tray")]
+    [InlineData("Other")]
+    public void Anything_else_asks_whichever_app_is_installed(string app)
+    {
+        var running = Enum.Parse<RunningApp>(app);
+        Assert.Equal(Paths.DockyardCliExe, Elevation.WorkerExe(running, _ => true));
+        Assert.Equal(Paths.DockyardCliExe, Elevation.WorkerExe(running, path => path == Paths.DockyardCliExe));
+        Assert.Equal(Paths.DashboardExe, Elevation.WorkerExe(running, path => path == Paths.DashboardExe));
+        Assert.Equal(Paths.Self, Elevation.WorkerExe(running, _ => false));
+    }
+
+    [Fact]
+    public void The_worker_reads_the_source_and_the_assets_as_setup_does()
+    {
+        var assets = Directory.CreateTempSubdirectory("dockyard-worker-").FullName;
+        try
+        {
+            var (source, folder) = Elevation.WorkerOptions(["--machine-install", "--source", "dockyard", "--assets", assets, "--log", "x", "--keep-pid", "1"]);
+            Assert.Equal(ToolSource.Dockyard, source);
+            Assert.Equal(Path.GetFullPath(assets), folder);
+            Assert.Equal((ToolSource.PackageManager, (string?)null), Elevation.WorkerOptions(["--machine-uninstall", "--log", "x"]));
+        }
+        finally { Directory.Delete(assets); }
     }
 
     [Fact]

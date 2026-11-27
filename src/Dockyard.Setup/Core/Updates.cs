@@ -109,23 +109,23 @@ static partial class Updates
     // which everyone behind one office network or VPN shares.
     static string AssetUrl(string repo, string tag, string asset) => $"https://github.com/{repo}/releases/download/{tag}/{asset}";
 
-    // "The Dockyard version" is the installed dockyard command's: the tray and the dashboard run this library too, with
-    // versions of their own. Only the command itself has none installed yet during a first install, and goes by its own.
-    // The facade points InstalledCli at its host.
+    // "The Dockyard version" is the installed copy of the app that runs: the CLI and the dashboard each run this library,
+    // and so does the tray, with a version of its own. Only an app has none installed yet during a first install, and goes by
+    // its own. The facade points InstalledApp at its host's Dockyard itself, and InstalledCli at its dockyard command.
+    internal static Func<Task<Version?>> InstalledApp { get; set; } = () => Task.FromResult<Version?>(null);
     internal static Func<Task<Version?>> InstalledCli { get; set; } = () => Task.FromResult<Version?>(null);
-    internal static readonly bool RunsAsCli = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name == "dockyard-cli";
 
-    internal static Version? DockyardVersion(Version? installedCli, bool runsAsCli, string ownVersion) =>
-        installedCli ?? (runsAsCli ? ParseVersion(ownVersion) : null);
+    internal static Version? DockyardVersion(Version? installedApp, RunningApp app, string ownVersion) =>
+        installedApp ?? (ThisApp.IsApp(app) ? ParseVersion(ownVersion) : null);
 
-    internal static async Task<Version?> DockyardVersion() => DockyardVersion(await InstalledCli(), RunsAsCli, Paths.AppVersion);
+    internal static async Task<Version?> DockyardVersion() => DockyardVersion(await InstalledApp(), ThisApp.Current, Paths.AppVersion);
 
-    // A dockyard command run from a download that differs from the installed one brings its own package along. The tray and
-    // the dashboard never do: their version is not the command's.
-    internal static bool BringsCliAlong(Version? installedCli, bool runsAsCli, string ownVersion) =>
-        runsAsCli && installedCli != ParseVersion(ownVersion);
+    // A dockyard command run from a download that differs from the installed one brings its own package along. Nothing else
+    // does: its version is not the command's.
+    internal static bool BringsCliAlong(Version? installedCli, RunningApp app, string ownVersion) =>
+        app == RunningApp.Cli && installedCli != ParseVersion(ownVersion);
 
-    internal static async Task<bool> BringsCliAlong() => BringsCliAlong(await InstalledCli(), RunsAsCli, Paths.AppVersion);
+    internal static async Task<bool> BringsCliAlong() => BringsCliAlong(await InstalledCli(), ThisApp.Current, Paths.AppVersion);
 
     [SupportedOSPlatform("windows")]
     static async Task<Version?> OwnToolVersion(CliTool tool) =>

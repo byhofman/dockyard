@@ -12,7 +12,7 @@ static class WindowsSetup
     static ToolSource Source => Settings.Load().Source;
     static string[] SourceArgs => ["--source", Source.Argument()];
     // The elevated step may run from the installed copy, so the file to install is named by the process that asks.
-    static string? RunningCli => Updates.RunsAsCli ? Paths.Self : null;
+    static string? RunningCli => ThisApp.Current == RunningApp.Cli ? Paths.Self : null;
 
     public static async Task<bool> MachineInstall(Action<string> log, bool dashboard, IReadOnlyCollection<string> without)
     {

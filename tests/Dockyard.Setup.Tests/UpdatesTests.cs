@@ -6,8 +6,8 @@ using Dockyard.Hosts;
 
 namespace Dockyard.Setup.Tests;
 
-// Classes that swap Updates.Http or Updates.InstalledCli, which are static, run alone: a facade made by a test running
-// next to them would point InstalledCli at its own host.
+// Classes that swap Updates.Http or Updates.InstalledApp, which are static, run alone: a facade made by a test running
+// next to them would point InstalledApp at its own host.
 [CollectionDefinition(nameof(SharedHttp), DisableParallelization = true)]
 public sealed class SharedHttp;
 
@@ -81,7 +81,7 @@ public sealed class UpdatesTests : IDisposable
     public async Task Without_a_cli_release_in_the_index_nothing_is_downloaded()
     {
         github.Serve($"{Base}/download/index/components.json", """{ "tray": { "version": "1.1.0", "tag": "tray/1.1.0" } }""");
-        Updates.InstalledCli = () => Task.FromResult<Version?>(null);
+        Updates.InstalledApp = () => Task.FromResult<Version?>(null);
 
         var e = await Assert.ThrowsAsync<InvalidOperationException>(() => Updates.DownloadReleaseAsset(Updates.ImageAsset, dir, isPattern: true, tag: null));
 

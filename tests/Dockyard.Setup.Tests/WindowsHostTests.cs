@@ -129,7 +129,9 @@ public sealed class WindowsHostTests
     {
         Assert.NotEqual(Paths.DockyardCliExe, Paths.InstalledMarker);
         Assert.False(WindowsHost.IsInstalledWhere(path => path == Paths.DockyardCliExe));
-        Assert.True(WindowsHost.IsInstalledWhere(path => path == Paths.InstalledMarker));
+        Assert.False(WindowsHost.IsInstalledWhere(path => path == Paths.InstalledMarker));
+        Assert.True(WindowsHost.IsInstalledWhere(new HashSet<string>([Paths.InstalledMarker, Paths.DockyardCliExe]).Contains));
+        Assert.True(WindowsHost.IsInstalledWhere(new HashSet<string>([Paths.InstalledMarker, Paths.DashboardExe]).Contains));
 
         var marker = Path.Combine(Directory.CreateTempSubdirectory().FullName, "app", "installed");
         MachineSetup.MarkInstalled(marker);
@@ -137,14 +139,17 @@ public sealed class WindowsHostTests
         Directory.Delete(Path.GetDirectoryName(Path.GetDirectoryName(marker))!, recursive: true);
     }
 
-    [Fact]
-    public void Uninstall_removes_the_CLI_last()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Uninstall_removes_the_app_that_runs_it_last(bool cli)
     {
+        var running = cli ? Paths.DockyardCliExe : Paths.DashboardExe;
         string[] files = [Paths.DockyardCliExe, Paths.AppExe, Paths.HostExe, Paths.DashboardExe, Path.Combine(Paths.AppDir, "bin", "other.dll")];
-        var order = MachineSetup.RemovalOrder(files).ToList();
-        Assert.Equal(Paths.DockyardCliExe, order[^1]);
+        var order = MachineSetup.RemovalOrder(files, running).ToList();
+        Assert.Equal(running, order[^1]);
         Assert.Equal(files.Length, order.Count);
-        Assert.Equal(files.Where(f => f != Paths.DockyardCliExe), order.Take(files.Length - 1));
+        Assert.Equal(files.Where(f => f != running), order.Take(files.Length - 1));
     }
 
     [Fact]

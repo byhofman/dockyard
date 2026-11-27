@@ -7,9 +7,11 @@ static class ComponentRules
 {
     public const string DashboardId = "Dashboard";
     public const string TrayId = "Tray";
+    public const string LastAppReason = "Dockyard needs an app to update and uninstall it: keep the CLI or the dashboard";
+    static readonly string[] Apps = [nameof(Component.DockyardCli), DashboardId];
 
     // Every name --with and --without accept on any system. Whether it exists on this one is a host's catalog's business.
-    public static readonly string[] KnownFlags = ["dashboard", "tray", "compose", "buildx", "kind", "kubectl", "helm", "linux-engine", "windows-engine"];
+    public static readonly string[] KnownFlags = ["cli", "dashboard", "tray", "compose", "buildx", "kind", "kubectl", "helm", "linux-engine", "windows-engine"];
 
     public static ComponentInfo? ByFlag(IEnumerable<ComponentInfo> catalog, string flag) => catalog.FirstOrDefault(c => c.Flag == flag);
 
@@ -21,10 +23,12 @@ static class ComponentRules
         if (component.RequiredBecause is { } reason) return $"{component.Title} is required: {reason}";
         if (component.IsEngine && !catalog.Any(c => c.IsEngine && c.Id != id && present.Contains(c.Id)))
             return $"{component.Title} is the last engine left, and Dockyard does nothing without one. Uninstall removes Dockyard altogether.";
+        if (Apps.Contains(id) && !catalog.Any(c => Apps.Contains(c.Id) && c.Id != id && present.Contains(c.Id)))
+            return LastAppReason;
         return null;
     }
 
-    // Problems with a silent request, before anything changes.
+    // Problems with a silent request, before anything changes. removedBefore holds the dashboard when it is not there.
     public static IReadOnlyList<string> Problems(IReadOnlyList<ComponentInfo> catalog, IReadOnlyList<string> with, IReadOnlyList<string> without, IReadOnlyCollection<string> removedBefore)
     {
         List<string> problems = [];
@@ -39,6 +43,8 @@ static class ComponentRules
         var engines = catalog.Where(c => c.IsEngine).ToList();
         if (engines.Count > 0 && engines.All(e => gone.Contains(e.Id)))
             problems.Add("At least one engine has to stay. Uninstall removes Dockyard altogether.");
+        var apps = catalog.Where(c => Apps.Contains(c.Id)).ToList();
+        if (apps.Count > 0 && apps.All(a => gone.Contains(a.Id))) problems.Add(LastAppReason);
         return problems;
     }
 

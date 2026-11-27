@@ -144,6 +144,42 @@ public sealed class FacadeTests : IDisposable
         Assert.Null(app.Flag);
     }
 
+    static IReadOnlyList<ComponentInfo> Apps => [new("DockyardCli", "Dockyard CLI", Flag: "cli"), new("Tray", "Dockyard tray", Flag: "tray"), new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard")];
+
+    [Fact]
+    public async Task The_dashboard_can_remove_the_CLI_and_the_CLI_the_dashboard_but_never_the_last_app()
+    {
+        var both = new FakeHost { Installed = true, Dashboard = true, SelfComponent = ComponentRules.DashboardId, Components = Apps };
+        var rows = For(both).Components();
+        Assert.True(rows.Single(r => r.Id == "DockyardCli").CanRemove);
+        Assert.False(rows.Single(r => r.Id == ComponentRules.DashboardId).CanRemove);
+        await For(both).Remove("cli", removeData: false, progress);
+        Assert.Equal(["remove DockyardCli"], both.Calls);
+
+        var cliOnly = new FakeHost { Installed = true, Dashboard = false, Components = Apps };
+        Assert.False(For(cliOnly).Components().Single(r => r.Id == "DockyardCli").CanRemove);
+        var refused = await Assert.ThrowsAsync<InvalidOperationException>(() => For(cliOnly).Remove("cli", removeData: false, progress));
+        Assert.Equal(ComponentRules.LastAppReason, refused.Message);
+    }
+
+    [Theory]
+    [InlineData(true, false, null, true)]
+    [InlineData(false, true, null, true)]
+    [InlineData(true, false, "dashboard", false)]
+    [InlineData(false, false, null, false)]
+    public async Task Setup_without_the_CLI_is_refused_when_no_dashboard_would_be_left(bool installed, bool headless, string? with, bool refused)
+    {
+        var host = new FakeHost { Installed = installed, Dashboard = false, Components = Apps };
+        var request = new SetupRequest(with is null ? [] : [with], ["cli"], null, false, false, Silent: true, Resume: false) { Start = false, Headless = headless };
+        var code = await For(host).Setup(request, progress, CancellationToken.None);
+        if (refused)
+        {
+            Assert.Equal(DockyardSetup.WrongArguments, code);
+            Assert.Contains(progress.All, p => p.Line == ComponentRules.LastAppReason);
+        }
+        else Assert.NotEqual(DockyardSetup.WrongArguments, code);
+    }
+
     [Fact]
     public void Dockyard_itself_is_the_dockyard_command_on_every_system_and_not_the_tray() =>
         Assert.Equal("DockyardCli", For(new FakeHost { Installed = true }).SelfId);

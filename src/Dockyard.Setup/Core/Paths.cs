@@ -19,12 +19,12 @@ static class Paths
     public static readonly string HostExe = Path.Combine(AppDir, HostProcess + ".exe");
     public static readonly string AppExe = Path.Combine(AppDir, AppProcess + ".exe");
     public static readonly string CommandDir = Path.Combine(AppDir, "bin");
-    // The dockyard command, the one component every install has: it installs and updates the rest.
+    // The dockyard command, one of the two apps, either of which installs and updates the rest.
     public static string DockyardCliExe => OperatingSystem.IsWindows() ? Path.Combine(CommandDir, "dockyard.exe")
         : OperatingSystem.IsMacOS() ? Hosts.MacLayout.CliLink
         : "/usr/bin/dockyard";
-    // Written when an install has finished, and not by the CLI that is put in place first: an install that stopped after
-    // that is still a first install on the next run.
+    // Written when an install has finished, by whichever app ran it, and not when the app is put in place first: an install
+    // that stopped after that is still a first install on the next run.
     public static readonly string InstalledMarker = Path.Combine(AppDir, "installed");
     public const string DashboardProcess = "dockyard-dashboard";
     public static readonly string DashboardExe = Path.Combine(AppDir, DashboardProcess + ".exe");
@@ -49,7 +49,7 @@ static class Paths
     public const string AppName = "Dockyard";
 
     public static string Self => Environment.ProcessPath!;
-    public static bool IsInstalledCopy => new[] { AppExe, DockyardCliExe }.Contains(Path.GetFullPath(Self), StringComparer.OrdinalIgnoreCase);
+    public static bool IsInstalledCopy => new[] { AppExe, DockyardCliExe, DashboardExe }.Contains(Path.GetFullPath(Self), StringComparer.OrdinalIgnoreCase);
 
     public static string AppVersion =>
         (typeof(Paths).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0").Split('+')[0];

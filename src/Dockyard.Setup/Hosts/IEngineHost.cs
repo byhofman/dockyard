@@ -61,8 +61,8 @@ interface IEngineHost
     // True for the installed copy; false for dockyard setup run from a download.
     bool RunsFromInstallLocation { get; }
 
-    // The component that is Dockyard itself for updates and for the installed version: the dockyard command.
-    string SelfComponent => nameof(Core.Component.DockyardCli);
+    // The component that is Dockyard itself for updates and for the installed version: the app that runs.
+    string SelfComponent => Core.ThisApp.SelfComponent(Core.ThisApp.Current, HasDashboard);
     // Whether updating Dockyard itself stops the tray or the dashboard, as where one bundle or package holds them all.
     bool SelfUpdateStops(string app) => true;
 

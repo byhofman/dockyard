@@ -9,7 +9,6 @@ namespace Dockyard.Hosts;
 sealed class LinuxHost : IEngineHost
 {
     public const string Engine = "linux";
-    const string PolkitRule = "/etc/polkit-1/rules.d/50-dockyard.rules";
 
     readonly ICommandRunner runner;
     readonly LinuxComponents components;
@@ -40,7 +39,7 @@ sealed class LinuxHost : IEngineHost
     // The tray and the dashboard need a display: without one a new install leaves them out unless asked.
     public static IReadOnlyList<ComponentInfo> CatalogFor(bool desktop) =>
     [
-        new(nameof(Component.DockyardCli), Updates.Title(Component.DockyardCli), RequiredBecause: "it installs and updates everything else here. Uninstall removes it.", RequiredFlag: "dockyard-cli"),
+        new(nameof(Component.DockyardCli), Updates.Title(Component.DockyardCli), Flag: "cli", Note: "The dockyard command. It or the dashboard has to stay: either one updates and uninstalls Dockyard."),
         new("Engine", "Docker Engine & CLI", RequiredBecause: "it is what Dockyard starts and stops. It stays yours to remove with your package manager, also after uninstalling Dockyard.", RequiredFlag: "linux-engine"),
         new("Compose", "Docker Compose", Flag: "compose", Note: "Needs Docker. The dashboard's Compose actions use it."),
         new("Buildx", "Docker Buildx", Flag: "buildx", Note: "Needs Docker. docker build uses it."),
@@ -51,8 +50,7 @@ sealed class LinuxHost : IEngineHost
         new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard", Note: "Optional. Its package is versioned with Dockyard, so updating it updates both.", Default: desktop),
     ];
 
-    // The polkit rules folder is closed to normal users, so setup leaves a marker they can see.
-    public bool IsInstalled => File.Exists("/etc/dockyard/installed") || File.Exists(PolkitRule);
+    public bool IsInstalled => LinuxLayout.IsInstalled(File.Exists);
 
     public async Task<bool> IsRunning(string engine) =>
         (await runner.Run("systemctl", "is-active", "--quiet", "docker.service")).ExitCode == 0;

@@ -8,6 +8,17 @@ namespace Dockyard.Setup.Tests;
 public sealed class MacHostTests
 {
     [Fact]
+    public void Dockyard_is_installed_when_the_engine_is_set_up_and_either_app_is_there()
+    {
+        var dashboard = Path.Combine(MacLayout.AppBase, MacLayout.DashboardName);
+        string[] engine = [MacLayout.VmConfig, MacLayout.Docker];
+        Assert.True(MacLayout.IsInstalled(new HashSet<string>([.. engine, MacLayout.CliExe]).Contains));
+        Assert.True(MacLayout.IsInstalled(new HashSet<string>([.. engine, dashboard]).Contains));
+        Assert.False(MacLayout.IsInstalled(new HashSet<string>(engine).Contains));
+        Assert.False(MacLayout.IsInstalled(new HashSet<string>([MacLayout.VmConfig, MacLayout.CliExe, dashboard]).Contains));
+    }
+
+    [Fact]
     public void Launch_agent_starts_the_tray_at_login()
     {
         var plist = MacLayout.LaunchAgentPlist("/Applications/Dockyard.app/Contents/MacOS/Dockyard");

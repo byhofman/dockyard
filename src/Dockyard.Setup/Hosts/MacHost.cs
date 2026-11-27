@@ -21,7 +21,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
 
     public static IReadOnlyList<ComponentInfo> Catalog { get; } =
     [
-        new(nameof(Component.DockyardCli), Updates.Title(Component.DockyardCli), RequiredBecause: "it installs and updates everything else here. Uninstall removes it.", RequiredFlag: "dockyard-cli"),
+        new(nameof(Component.DockyardCli), Updates.Title(Component.DockyardCli), Flag: "cli", Note: "The dockyard command. It or the dashboard has to stay: either one updates and uninstalls Dockyard."),
         new("LinuxEngine", "Docker Engine (Linux VM)", RequiredBecause: "it runs your containers, and it is the only engine here. Uninstall removes it.", RequiredFlag: "linux-engine"),
         new(nameof(Component.DockerCli), "Docker CLI", RequiredBecause: "the engine, Compose and Buildx are used through it.", RequiredFlag: "docker-cli"),
         new("Compose", "Docker Compose", Flag: "compose", Note: "Needs the Docker CLI. The dashboard's Compose actions use it."),
@@ -33,7 +33,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard", Note: "Optional. Opens from the menu bar."),
     ];
 
-    public bool IsInstalled => File.Exists(MacLayout.VmConfig) && File.Exists(MacLayout.Docker);
+    public bool IsInstalled => MacLayout.IsInstalled(File.Exists);
 
     public Task<bool> IsRunning(string engine) => vm.IsRunning();
     public Task Start(string engine) => vm.Start();

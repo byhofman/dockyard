@@ -4,6 +4,15 @@ namespace Dockyard.Setup.Tests;
 
 public sealed class LinuxHostTests
 {
+    [Fact]
+    public void Dockyard_is_installed_when_setup_finished_and_either_app_is_there()
+    {
+        Assert.True(LinuxLayout.IsInstalled(new HashSet<string>([LinuxLayout.InstalledMarker, LinuxLayout.CliExe]).Contains));
+        Assert.True(LinuxLayout.IsInstalled(new HashSet<string>([LinuxLayout.PolkitRule, LinuxLayout.Dashboard]).Contains));
+        Assert.False(LinuxLayout.IsInstalled(new HashSet<string>([LinuxLayout.InstalledMarker]).Contains));
+        Assert.False(LinuxLayout.IsInstalled(new HashSet<string>([LinuxLayout.CliExe, LinuxLayout.Dashboard]).Contains));
+    }
+
     [Theory]
     [InlineData("ID=ubuntu\nID_LIKE=debian\nVERSION_CODENAME=noble\nUBUNTU_CODENAME=noble\n", "ubuntu", "apt", "noble")]
     [InlineData("ID=debian\nVERSION_CODENAME=bookworm\n", "debian", "apt", "bookworm")]

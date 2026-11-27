@@ -103,7 +103,7 @@ static partial class Elevation
         string[] args = [mode, .. extra, .. assets, "--user-sid", sid, "--user-name", name, "--log", logFile, "--keep-pid", keepPid.ToString()];
         try
         {
-            return Process.Start(new ProcessStartInfo(WorkerExe(File.Exists), string.Join(' ', args.Select(Shell.Quote)))
+            return Process.Start(new ProcessStartInfo(WorkerExe(ThisApp.Current, File.Exists), string.Join(' ', args.Select(Shell.Quote)))
             {
                 UseShellExecute = true,
                 Verb = "runas",
@@ -121,13 +121,27 @@ static partial class Elevation
         ? new InvalidOperationException(Declined)
         : new InvalidOperationException($"Could not ask for administrator rights ({ex.Message}). In a session without a desktop, run this from an elevated shell.");
 
-    // The installed CLI is the worker; the first install runs from the download, before there is an installed CLI.
-    internal static string WorkerExe(Func<string, bool> exists) =>
-        exists(Paths.DockyardCliExe) ? Paths.DockyardCliExe : Paths.Self;
+    // Either app is its own worker, installed or run from a download. Anything else, such as the tray, asks whichever app is
+    // installed; at least one always is.
+    internal static string WorkerExe(RunningApp running, Func<string, bool> exists) =>
+        ThisApp.IsApp(running) ? Paths.Self
+        : exists(Paths.DockyardCliExe) ? Paths.DockyardCliExe
+        : exists(Paths.DashboardExe) ? Paths.DashboardExe
+        : Paths.Self;
+
+    // --source and --assets as setup reads them; the rest of the worker's arguments are its own.
+    internal static (ToolSource Source, string? Assets) WorkerOptions(IReadOnlyList<string> args)
+    {
+        List<string> setup = [];
+        for (var i = 0; i < args.Count - 1; i++)
+            if (args[i] is "--source" or "--assets") setup.AddRange([args[i], args[++i]]);
+        var request = Dockyard.Setup.SetupArguments.Parse(setup, out var problems);
+        if (problems.Count > 0) throw new ArgumentException(string.Join("; ", problems));
+        return (request.Source ?? ToolSource.PackageManager, request.Assets);
+    }
 
     public static int Worker(string[] args)
     {
-        ToolSource ElevatedSource() => ToolSourceArgument.Parse(Opt("--source")) ?? ToolSource.PackageManager;
         string? Opt(string name) => args.SkipWhile(a => a != name).Skip(1).FirstOrDefault();
         string Arg(string name) => Opt(name) ?? throw new ArgumentException($"Missing {name}");
 
@@ -143,7 +157,8 @@ static partial class Elevation
 
         try
         {
-            Updates.LocalAssets = Opt("--assets");
+            var (source, assets) = WorkerOptions(args);
+            Updates.LocalAssets = assets;
             var keepPid = int.Parse(Arg("--keep-pid"));
             if (args.Contains("--machine-uninstall"))
             {
@@ -153,13 +168,13 @@ static partial class Elevation
             if (args.Contains("--machine-update"))
             {
                 foreach (var name in Arg("--machine-update").Split(','))
-                    MachineSetup.Update(Log, Enum.Parse<Component>(name), Opt("--app-file"), keepPid, ElevatedSource()).GetAwaiter().GetResult();
+                    MachineSetup.Update(Log, Enum.Parse<Component>(name), Opt("--app-file"), keepPid, source).GetAwaiter().GetResult();
                 return 0;
             }
             if (Opt("--machine-component") is { } component)
             {
                 var change = args.SkipWhile(a => a != "--machine-component").Skip(2).First();
-                MachineSetup.SetComponent(Log, Enum.Parse<Component>(component), change == "add", Arg("--user-sid"), Arg("--user-name"), ElevatedSource(), Opt("--app-file"), keepPid).GetAwaiter().GetResult();
+                MachineSetup.SetComponent(Log, Enum.Parse<Component>(component), change == "add", Arg("--user-sid"), Arg("--user-name"), source, Opt("--app-file"), keepPid).GetAwaiter().GetResult();
                 return 0;
             }
             if (Opt("--machine-dashboard") == "update")
@@ -187,7 +202,7 @@ static partial class Elevation
                 MachineSetup.SetDashboard(Log, dashboard == "add", keepPid).GetAwaiter().GetResult();
                 return 0;
             }
-            var reboot = MachineSetup.Install(Log, Arg("--user-sid"), Arg("--user-name"), keepPid, args.Contains("--engine-only"), Opt("--without")?.Split(',') ?? [], ElevatedSource(), Opt("--cli-file")).GetAwaiter().GetResult();
+            var reboot = MachineSetup.Install(Log, Arg("--user-sid"), Arg("--user-name"), keepPid, args.Contains("--engine-only"), Opt("--without")?.Split(',') ?? [], source, Opt("--cli-file")).GetAwaiter().GetResult();
             return reboot ? RebootExitCode : 0;
         }
         catch (Exception ex)

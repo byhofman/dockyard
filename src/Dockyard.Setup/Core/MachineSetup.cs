@@ -128,18 +128,21 @@ static class MachineSetup
         {
             if (!Directory.Exists(dir)) continue;
             log($"Removing {dir}");
-            foreach (var file in RemovalOrder(Directory.GetFiles(dir, "*", SearchOption.AllDirectories)))
+            foreach (var file in RemovalOrder(Directory.GetFiles(dir, "*", SearchOption.AllDirectories), Paths.Self))
             {
                 if (string.Equals(file, Paths.Self, StringComparison.OrdinalIgnoreCase)) continue;
                 try { File.Delete(file); } catch (IOException) { log($"  in use, left behind: {file}"); }
             }
         }
-        // The dockyard command that runs this uninstall cannot delete itself, so a process of its own does once it has exited.
-        if (File.Exists(Paths.DockyardCliExe))
+        // The app that runs this uninstall, either one, cannot delete itself, so a process of its own does once it has exited.
+        if (Path.GetFullPath(Paths.Self).StartsWith(Path.TrimEndingDirectorySeparator(Paths.AppDir) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
         {
-            DeleteAfterExit(Paths.DockyardCliExe, [Paths.AppDir]);
-            log($"{Paths.DockyardCliExe} goes once this command has finished");
+            DeleteAfterExit(Paths.Self, [Paths.AppDir]);
+            log($"{Paths.Self} goes once this app has finished");
         }
+        else
+            try { if (Directory.Exists(Paths.AppDir)) Directory.Delete(Paths.AppDir, recursive: true); }
+            catch (IOException) { log($"  in use, left behind: {Paths.AppDir}"); }
         log($"Windows images and containers under {Path.GetDirectoryName(Paths.DaemonConfigDir)} were left in place");
     }
 
@@ -151,9 +154,9 @@ static class MachineSetup
         Shell.Spawn("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script).Dispose();
     }
 
-    // The CLI last: it is what finishes an uninstall that stopped halfway.
-    public static IEnumerable<string> RemovalOrder(IEnumerable<string> files) =>
-        files.OrderBy(f => string.Equals(f, Paths.DockyardCliExe, StringComparison.OrdinalIgnoreCase));
+    // The app that runs the uninstall last: it is what finishes an uninstall that stopped halfway.
+    public static IEnumerable<string> RemovalOrder(IEnumerable<string> files, string running) =>
+        files.OrderBy(f => string.Equals(f, running, StringComparison.OrdinalIgnoreCase));
 
     public static async Task SetComponent(Action<string> log, Component component, bool installed, string userSid, string userName, ToolSource source, string? appFile = null, int keepPid = 0)
     {
