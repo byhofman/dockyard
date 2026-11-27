@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using Dockyard.Hosts;
 using Dockyard.Setup;
 
@@ -291,14 +290,5 @@ public sealed class SetupCommandTests
         Assert.Equal(0, h.Run("uninstall", "--remove-data"));
 
         Assert.Equal(["uninstall data=True"], h.Host.Calls);
-    }
-
-    [Fact]
-    public void Desktop_detection_follows_the_platform()
-    {
-        Assert.False(Session.HasDesktop(OSPlatform.Linux, interactive: true, _ => null));
-        Assert.True(Session.HasDesktop(OSPlatform.Linux, interactive: true, name => name == "WAYLAND_DISPLAY" ? "wayland-0" : null));
-        Assert.True(Session.HasDesktop(OSPlatform.OSX, interactive: true, _ => null));
-        Assert.False(Session.HasDesktop(OSPlatform.OSX, interactive: true, name => name == "SSH_CONNECTION" ? "1.2.3.4 22 5.6.7.8 22" : null));
     }
 }

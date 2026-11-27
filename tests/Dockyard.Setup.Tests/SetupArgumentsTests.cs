@@ -141,4 +141,93 @@ public sealed class SetupArgumentsTests
     {
         Assert.Equal(["Unknown option --bogus", "Unexpected argument extra"], Problems("--bogus", "--silent", "extra"));
     }
+
+    static AppCommand Command(params string[] args)
+    {
+        var command = SetupArguments.ParseCommand(args, out var problems);
+        Assert.Empty(problems);
+        return Assert.IsType<AppCommand>(command);
+    }
+
+    static IReadOnlyList<string> CommandProblems(params string[] args)
+    {
+        SetupArguments.ParseCommand(args, out var problems);
+        return problems;
+    }
+
+    [Fact]
+    public void Without_one_of_the_apps_actions_there_is_no_command()
+    {
+        Assert.Null(SetupArguments.ParseCommand([], out var none));
+        Assert.Empty(none);
+        Assert.Null(SetupArguments.ParseCommand(["--section", "setup"], out _));
+    }
+
+    [Fact]
+    public void Setup_takes_setups_options_wherever_the_action_stands()
+    {
+        var command = Command("--silent", "--setup", "--with", "kind", "--no-start");
+
+        Assert.Equal(AppAction.Setup, command.Action);
+        Assert.True(command.Setup.Silent);
+        Assert.Equal(["kind"], command.Setup.With);
+        Assert.False(command.Setup.Start);
+        Assert.Equal(["Unknown option --help"], CommandProblems("--setup", "--silent", "--help"));
+    }
+
+    [Fact]
+    public void Update_names_components_or_none_for_everything_with_an_update()
+    {
+        Assert.Equal(AppAction.Update, Command("--update").Action);
+        Assert.Empty(Command("--update").Components);
+        Assert.Equal(["Tray", "DockyardCli", "Dashboard"], Command("--update", "Tray,DockyardCli", "Dashboard").Components);
+        Assert.Equal(["Unknown option --remove-data"], CommandProblems("--update", "--remove-data"));
+    }
+
+    [Fact]
+    public void Component_adds_or_removes_one_and_only_a_removal_takes_its_data()
+    {
+        var add = Command("--component", "add", "kind");
+        Assert.Equal((AppAction.Add, "kind", false), (add.Action, Assert.Single(add.Components), add.RemoveData));
+        var remove = Command("--component", "remove", "linux-engine", "--remove-data");
+        Assert.Equal((AppAction.Remove, "linux-engine", true), (remove.Action, Assert.Single(remove.Components), remove.RemoveData));
+
+        Assert.Equal(["--component is add or remove, then the component"], CommandProblems("--component"));
+        Assert.Equal(["--component is add or remove, then the component"], CommandProblems("--component", "change", "kind"));
+        Assert.Equal(["--component is add or remove, then the component"], CommandProblems("--component", "add"));
+        Assert.Equal(["Unknown option --remove-data"], CommandProblems("--component", "add", "kind", "--remove-data"));
+        Assert.Equal(["Unexpected argument helm"], CommandProblems("--component", "add", "kind", "helm"));
+    }
+
+    [Fact]
+    public void Uninstall_keeps_the_data_unless_asked_and_takes_nothing_else()
+    {
+        Assert.Equal((AppAction.Uninstall, false), (Command("--uninstall").Action, Command("--uninstall").RemoveData));
+        Assert.True(Command("--uninstall", "--remove-data").RemoveData);
+        Assert.Equal(["Unknown option --with", "Unexpected argument kind"], CommandProblems("--uninstall", "--with", "kind"));
+    }
+
+    [Fact]
+    public void Every_action_runs_silently_anyway_so_silent_is_allowed_with_each()
+    {
+        Assert.Equal(AppAction.Uninstall, Command("--uninstall", "--silent").Action);
+        Assert.Equal(AppAction.Update, Command("--update", "--silent").Action);
+        Assert.Equal(AppAction.Add, Command("--component", "add", "kind", "--silent").Action);
+    }
+
+    [Theory]
+    [InlineData("Cli", "component remove tray --remove-data")]
+    [InlineData("Dashboard", "--component remove tray --remove-data")]
+    public void A_handed_over_step_is_written_as_the_app_that_finishes_it_reads_it(string app, string expected) =>
+        Assert.Equal(expected, string.Join(' ', SetupArguments.ForApp(Enum.Parse<RunningApp>(app), ["component", "remove", "tray", "--remove-data"])));
+
+    [Fact]
+    public void What_is_handed_to_the_dashboard_reads_back_as_the_same_step()
+    {
+        var update = Command([.. SetupArguments.ForApp(RunningApp.Dashboard, ["update", "Dashboard", "DockyardCli"])]);
+        Assert.Equal(AppAction.Update, update.Action);
+        Assert.Equal(["Dashboard", "DockyardCli"], update.Components);
+        var remove = Command([.. SetupArguments.ForApp(RunningApp.Dashboard, ["component", "remove", "tray", "--remove-data"])]);
+        Assert.Equal((AppAction.Remove, "tray", true), (remove.Action, remove.Components.Single(), remove.RemoveData));
+    }
 }

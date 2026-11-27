@@ -7,23 +7,38 @@ namespace Dockyard.Dashboard;
 static class Program
 {
     [STAThread]
-    public static int Main(string[] args)
+    public static int Main(string[] args) => Run(args, Launch.ForThisMachine(OpenWindow));
+
+    // Setup's elevated step on Windows runs as the app that asked for it, and the command-line actions run without a
+    // window: neither waits for a display, so both come before anything that does.
+    public static int Run(string[] args, Launch launch)
     {
-        // Setup's elevated step on Windows runs as the app that asked for it.
-        if (global::Dockyard.Setup.DockyardSetup.IsElevatedWorker(args)) return global::Dockyard.Setup.DockyardSetup.RunElevatedWorker(args);
-        // Asked by setup on macOS and Linux to learn which version is installed, so this comes before anything with a window.
+        if (launch.IsWorker(args)) return launch.Worker(args);
+        // Asked by setup on macOS and Linux to learn which version is installed.
         if (args.Contains("--version"))
         {
-            Console.WriteLine((System.Reflection.Assembly.GetEntryAssembly()?.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false).OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion ?? "0.0.0").Split('+')[0]);
+            launch.AttachConsole();
+            launch.Out.WriteLine((System.Reflection.Assembly.GetEntryAssembly()?.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false).OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion ?? "0.0.0").Split('+')[0]);
             return 0;
         }
+        var command = global::Dockyard.Setup.SetupArguments.ParseCommand(args, out var problems);
+        if (command is { Action: global::Dockyard.Setup.AppAction.Setup, Setup.Silent: false }) return launch.Window("setup");
+        if (command is not null)
+        {
+            launch.AttachConsole();
+            return Headless.Run(command, problems, launch);
+        }
+        return launch.Window(args.SkipWhile(a => a != "--section").Skip(1).FirstOrDefault());
+    }
+
+    static int OpenWindow(string? section)
+    {
         Shell.StartupTrace.Mark("main");
         WatchFailures();
-        var section = args.SkipWhile(a => a != "--section").Skip(1).FirstOrDefault();
         if (LocalPipe.TrySend(LocalPipe.DashboardName, section is null ? "show" : $"show {section}")) return 0;
         Shell.ShellViewModel.InitialSection = section;
         if (!DisplayGate.WaitUntilUsable(TimeSpan.FromMinutes(10))) return 0;
-        return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args, ShutdownMode.OnMainWindowClose);
+        return BuildAvaloniaApp().StartWithClassicDesktopLifetime([], ShutdownMode.OnMainWindowClose);
     }
 
     // An error on the UI thread that nothing caught is logged and shown, and the dashboard stays up: what it changes goes

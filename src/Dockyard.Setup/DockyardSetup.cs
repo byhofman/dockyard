@@ -45,6 +45,9 @@ public sealed partial class DockyardSetup : IDisposable
 
     public static DockyardSetup ForThisMachine() => new(HostFactory.Create(), Settings.Load());
 
+    // For an app's command-line run, which does every step itself: nothing of it stays running for a step to replace.
+    public static DockyardSetup ForCommandLine() => new(HostFactory.Create(), Settings.Load()) { Caller = null };
+
     // Dockyard itself is being replaced, and the process that asked should exit.
     public event Action? ExitRequested;
 
@@ -58,6 +61,11 @@ public sealed partial class DockyardSetup : IDisposable
 
     // A person can be asked here: the input and the output are a terminal.
     public static bool HasTerminal => Terminal.IsAttached;
+    // A desktop session, where the tray and the dashboard can show.
+    public static bool HasDesktop => Session.HasDesktop();
+
+    // A Windows app without a console of its own writes to the one it was started from, such as winget's.
+    public static void AttachParentConsole() => Terminal.AttachParent();
 
     public bool IsInstalled => host.IsInstalled;
     public bool HasDashboard => host.HasDashboard;
@@ -252,34 +260,40 @@ public sealed partial class DockyardSetup : IDisposable
         if (mine.Count > 0) HandOver(log, ["update", .. mine.Select(i => i.Component)], mine.Select(i => i.Component).ToList());
     }
 
-    // Which of Dockyard's own apps this process is, null for the dockyard command. An app does not change itself or replace
-    // Dockyard: that step would stop or overwrite it halfway, so a dockyard command of its own does it. Updating the command
-    // goes there too: on macOS and Linux one bundle or package holds it with the tray and the dashboard.
+    // Which of Dockyard's own apps this process is, null for a command-line run. An app does not change itself or replace
+    // Dockyard: that step would stop or overwrite it halfway, so a command-line run of an installed app does it. Updating
+    // the CLI goes there too: on macOS and Linux one bundle or package can hold it with the tray and the dashboard.
     internal string? Caller { get; init; } = ThisApp.Caller(ThisApp.Current);
-    internal Action<IReadOnlyList<string>> HandOff { get; init; } = StartCommand;
+    internal Action<string, IReadOnlyList<string>> HandOff { get; init; } = StartCommand;
+    internal Func<string, bool> AppExists { get; init; } = File.Exists;
 
     bool ReplacesDockyard(string id, bool update) => id == SelfId || update && id == nameof(Component.DockyardCli);
     bool HandsOver(string id, bool update = false) => Caller is not null && (id == Caller || ReplacesDockyard(id, update));
 
     void HandOver(Action<string> log, IReadOnlyList<string> args, IReadOnlyList<string> ids)
     {
-        HandOff(args);
+        var running = Caller == ComponentRules.DashboardId ? RunningApp.Dashboard : RunningApp.Tray;
+        var removesRunning = args is ["component", "remove", ..] && ids.Contains(Caller);
+        var (app, exe) = ThisApp.HandOffTarget(running, removesRunning, AppExists, Paths.DockyardCliExe, host.DashboardExe);
+        var command = SetupArguments.ForApp(app, args);
+        HandOff(exe, command);
         var exits = ids.Any(id => id == Caller || ReplacesDockyard(id, update: true) && host.SelfUpdateStops(Caller!));
-        log(exits ? $"dockyard {string.Join(' ', args)} finishes this, and this app closes so that it can" : $"dockyard {string.Join(' ', args)} finishes this in the background");
+        var line = $"{(app == RunningApp.Cli ? "dockyard" : Paths.DashboardProcess)} {string.Join(' ', command)}";
+        log(exits ? $"{line} finishes this, and this app closes so that it can" : $"{line} finishes this in the background");
         if (exits) ExitRequested?.Invoke();
     }
 
     // Detached, and on macOS and Linux with its output in a log: the app that started it is gone before it is done.
-    static void StartCommand(IReadOnlyList<string> args)
+    static void StartCommand(string exe, IReadOnlyList<string> args)
     {
         if (OperatingSystem.IsWindows())
         {
-            Shell.Spawn(Paths.DockyardCliExe, [.. args]).Dispose();
+            Shell.Spawn(exe, [.. args]).Dispose();
             return;
         }
         Directory.CreateDirectory(Paths.SettingsDir);
         var log = Path.Combine(Paths.SettingsDir, "handed-over.log");
-        Shell.Spawn("/bin/sh", ["-c", $"exec \"$0\" \"$@\" </dev/null >>{Shell.ShQuote(log)} 2>&1", Paths.DockyardCliExe, .. args]).Dispose();
+        Shell.Spawn("/bin/sh", ["-c", $"exec \"$0\" \"$@\" </dev/null >>{Shell.ShQuote(log)} 2>&1", exe, .. args]).Dispose();
     }
 
     // Clusters
