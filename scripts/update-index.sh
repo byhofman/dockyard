@@ -14,7 +14,7 @@ if ! gh release view index --repo "$repo" >/dev/null 2>&1; then
 fi
 gh release download index --repo "$repo" --pattern components.json --dir "$work" 2>/dev/null || echo '{}' > "$work/components.json"
 
-jq --arg c "$component" --arg v "$version" --arg t "$component/$version" --argjson r "${requires:-null}" \
+jq --arg c "$component" --arg v "$version" --arg t "$component/v$version" --argjson r "${requires:-null}" \
   '.[$c] = ({ version: $v, tag: $t } + (if $r == null then {} else { requires: $r } end))' \
   "$work/components.json" > "$work/next.json"
 mv "$work/next.json" "$work/components.json"

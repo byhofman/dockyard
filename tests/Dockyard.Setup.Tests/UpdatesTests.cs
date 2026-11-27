@@ -97,7 +97,7 @@ public sealed class UpdatesTests : IDisposable
     public async Task An_asset_comes_from_the_installed_release_of_the_component_that_owns_it()
     {
         github.Serve($"{Base}/download/index/components.json", """{ "cli": { "version": "3.0.0", "tag": "cli/3.0.0" }, "dashboard": { "version": "3.0.0", "tag": "dashboard/3.0.0" } }""");
-        ServeRelease("dashboard/1.1.0", "Dockyard.Dashboard.zip", "installed dashboard");
+        ServeRelease("dashboard/v1.1.0", "Dockyard.Dashboard.zip", "installed dashboard");
         Updates.InstalledComponent = c => Task.FromResult<Version?>(c == Updates.DashboardComponent ? new Version(1, 1, 0) : new Version(2, 0, 0));
 
         var file = await Updates.DownloadComponentAsset(Updates.DashboardComponent, Updates.DashboardZipPattern, dir);

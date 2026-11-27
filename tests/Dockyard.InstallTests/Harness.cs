@@ -95,7 +95,7 @@ public abstract class InstallFixture(InstallOs os) : IAsyncLifetime
     {
         var asset = OperatingSystem.IsWindows() ? "dockyard-windows-x64.exe" : OperatingSystem.IsMacOS() ? "dockyard-macos-arm64" : "dockyard-linux-x64";
         var folder = Directory.CreateTempSubdirectory("dockyard-release-").FullName;
-        await Sh.Ok("gh", "release", "download", $"cli/{version}", "--repo", "byhofman/dockyard", "--pattern", asset, "--dir", folder);
+        await Sh.Ok("gh", "release", "download", $"cli/v{version.TrimStart('v')}", "--repo", "byhofman/dockyard", "--pattern", asset, "--dir", folder);
         var path = Path.Combine(folder, asset);
         if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         return path;

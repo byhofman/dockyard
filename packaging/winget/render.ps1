@@ -14,7 +14,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $id = 'byhofman.Dockyard'
 $schema = '1.6.0'
-$url = "https://github.com/byhofman/dockyard/releases/download/cli/$Version/dockyard-windows-x64.exe"
+$url = "https://github.com/byhofman/dockyard/releases/download/cli/v$Version/dockyard-windows-x64.exe"
 $sha = (Get-FileHash $Installer -Algorithm SHA256).Hash
 $dir = Join-Path $PSScriptRoot "out/$Version"
 New-Item -ItemType Directory -Force $dir | Out-Null

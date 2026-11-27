@@ -2,6 +2,15 @@
 
 Non-obvious choices, newest first.
 
+## 2026-11-27: Component tags carry a v; releases publish through pipeline-templates
+
+Owner 2026-11-27 ("the convention is version with a v* prefix"; the CLI keeps the latest badge). The release skill now writes the notes into the annotated tag and never creates the Release itself; vaultbar v0.6.0 failed when it did.
+
+- **Tags:** `cli/v<version>`, `tray/v<version>`, `dashboard/v<version>`, `engine/v<version>`, and `v<version>` for all four. Releases before 0.10 keep their old `cli/0.9.0` tags; `components.json` names each entry's tag, so the updater and the one-liners follow either, but `DOCKYARD_VERSION` now only reaches `v` tags, and an install from before 0.10 that fetches its installed release's assets (`ReleaseTag` without an index tag) finds them again only once that component is on 0.10. No compatibility shim: v0.
+- **A single component** publishes through `upsert-release@v4`: a draft until its assets are on it, the tag's message as notes, then public. A `v` tag still goes through `scripts/release-component.sh`, which needs per-component asset lists and the index update in between.
+- **Latest:** GitHub has one latest release per repository. The CLI's keeps it (`latest: 'false'` for the others), since the gitops download probe follows `releases/latest`; a version with a `-` suffix is a prerelease and never latest.
+- **Reruns:** a component release that is already published keeps its notes and flags and only gets its assets replaced, checked and indexed; it used to be skipped, which would have left a Release made first by hand without assets.
+
 ## 2026-11-27: Install tests run on demand, as a C# project
 
 DOK-83, owner 2026-11-27 ("40 minutes is way to long for a release!"; "change it to a c# test project … and just exlcude/include a testing category"). The release waited for three end-to-end scripts (about 1,300 lines of PowerShell and shell) and the VM test, none of which tell a release whether it builds. Now a release builds, unit-tests and publishes, and nothing more.

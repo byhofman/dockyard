@@ -9,13 +9,13 @@ asset=dockyard-linux-x64
 [ "$(uname -m)" = x86_64 ] || { echo "Dockyard for Linux is built for x86_64" >&2; exit 1; }
 
 if [ -n "${DOCKYARD_VERSION:-}" ]; then
-  tag="cli/$DOCKYARD_VERSION"
+  tag="cli/v${DOCKYARD_VERSION#v}"
 else
   # components.json names each component's latest release, from github.com, which has no API rate limit.
-  tag="$(curl -fsSL "https://github.com/$repo/releases/download/index/components.json" | grep -o '"cli/[0-9][^"]*"' | head -n 1 | tr -d '"')" || tag=""
+  tag="$(curl -fsSL "https://github.com/$repo/releases/download/index/components.json" | grep -o '"cli/v\{0,1\}[0-9][^"]*"' | head -n 1 | tr -d '"')" || tag=""
 fi
 case "$tag" in
-  cli/[0-9]*) ;;
+  cli/[0-9]*|cli/v[0-9]*) ;;
   *) echo "No Dockyard release found" >&2; exit 1 ;;
 esac
 

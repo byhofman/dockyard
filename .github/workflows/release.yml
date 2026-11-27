@@ -6,7 +6,7 @@ name: build
 # the index needs them. See docs/design/components-and-releases.md.
 on:
   push:
-    tags: ['cli/*', 'tray/*', 'dashboard/*', 'engine/*', 'v*']
+    tags: ['cli/v*', 'tray/v*', 'dashboard/v*', 'engine/v*', 'v*']
   workflow_dispatch:
   # install-tests.yml builds a ref through this, and its jobs install what the build produced.
   workflow_call:
@@ -24,6 +24,7 @@ jobs:
     outputs:
       component: ${{ steps.plan.outputs.component }}
       version: ${{ steps.plan.outputs.version }}
+      prerelease: ${{ steps.plan.outputs.prerelease }}
       cli: ${{ steps.plan.outputs.cli }}
       tray: ${{ steps.plan.outputs.tray }}
       dashboard: ${{ steps.plan.outputs.dashboard }}
@@ -34,10 +35,12 @@ jobs:
           component=all; version=0.0.0
           case "$GITHUB_REF_TYPE:$GITHUB_REF_NAME" in
             tag:v[0-9]*) version="${GITHUB_REF_NAME#v}" ;;
-            tag:*) component="${GITHUB_REF_NAME%%/*}"; version="${GITHUB_REF_NAME#*/}" ;;
+            tag:*) component="${GITHUB_REF_NAME%%/*}"; version="${GITHUB_REF_NAME#*/v}" ;;
           esac
+          case "$version" in *-*) prerelease=true ;; *) prerelease=false ;; esac
           echo "component=$component" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
           for c in cli tray dashboard engine; do
             if [ "$component" = all ] || [ "$component" = "$c" ]; then echo "$c=true"; else echo "$c=false"; fi >> "$GITHUB_OUTPUT"
           done
@@ -302,8 +305,9 @@ jobs:
           sh scripts/check-release-assets.sh "${{ needs.plan.outputs.component }}" "${{ needs.plan.outputs.version }}" "$(ls dist)"
 
   # A draft is invisible to releases/latest and to anyone downloading, so the one-liners keep getting the previous
-  # release, with all its assets, until this one has all of its own. Only the CLI's release becomes the latest;
-  # the others are found through components.json.
+  # release, with all its assets, until this one has all of its own. GitHub has one latest release per repository and the
+  # download probe reads the CLI's files from it, so only the CLI's release takes it; each component's own latest is its
+  # entry in components.json. The notes are the annotated tag's message, which the release skill writes.
   release:
     # Only a pushed tag publishes: install-tests.yml calls this workflow, also from a tag, and must never release.
     if: ${{ !cancelled() && github.event_name == 'push' && github.ref_type == 'tag' && needs.release-assets.result == 'success' && !contains(needs.*.result, 'failure') }}
@@ -321,29 +325,37 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Release
+      # The setup test's screenshots are for looking at in the run, not for the release.
+      - run: rm -f dist/*.png
+
+      - name: Release every component
+        if: needs.plan.outputs.component == 'all'
         env:
           GH_TOKEN: ${{ github.token }}
-          COMPONENT: ${{ needs.plan.outputs.component }}
           VERSION: ${{ needs.plan.outputs.version }}
         run: |
-          # The setup test's screenshots are for looking at in the run, not for the release.
-          rm -f dist/*.png
-          if [ "$COMPONENT" = all ]; then
-            # Each component its own release, with the v tag's message as notes: the engine first, the CLI, whose setup
-            # finds the others through components.json, last.
-            git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
-            git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > "$RUNNER_TEMP/notes.md"
-            for component in engine tray dashboard cli; do
-              sh scripts/release-component.sh "$component" "$VERSION" "$RUNNER_TEMP/notes.md" dist
-            done
-            exit 0
-          fi
-          (cd dist && sha256sum -- * > SHA256SUMS)
-          # The release notes are the annotated tag's message.
-          gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "$COMPONENT $VERSION" --notes-from-tag
-          gh release upload "$GITHUB_REF_NAME" dist/*
-          sh scripts/check-release-assets.sh "$COMPONENT" "$VERSION" "$(gh release view "$GITHUB_REF_NAME" --json assets -q '.assets[].name')"
-          if [ "$COMPONENT" = cli ]; then latest=--latest; else latest=--latest=false; fi
-          gh release edit "$GITHUB_REF_NAME" --draft=false "$latest"
-          sh scripts/update-index.sh "$COMPONENT" "$VERSION"
+          # Each component its own release, with the v tag's message as notes: the engine first, the CLI, whose setup
+          # finds the others through components.json, last.
+          git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
+          git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > "$RUNNER_TEMP/notes.md"
+          for component in engine tray dashboard cli; do
+            sh scripts/release-component.sh "$component" "$VERSION" "$RUNNER_TEMP/notes.md" dist
+          done
+
+      - if: needs.plan.outputs.component != 'all'
+        run: (cd dist && sha256sum -- * > SHA256SUMS)
+
+      - if: needs.plan.outputs.component != 'all'
+        uses: byhofman/pipeline-templates/.github/actions/upsert-release@v4
+        with:
+          tag-prefix: ${{ needs.plan.outputs.component }}/
+          title: ${{ needs.plan.outputs.component }} ${{ needs.plan.outputs.version }}
+          prerelease: ${{ needs.plan.outputs.prerelease }}
+          latest: ${{ needs.plan.outputs.component == 'cli' }}
+          token: ${{ github.token }}
+          files: dist/*
+
+      - if: needs.plan.outputs.component != 'all'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: sh scripts/update-index.sh "${{ needs.plan.outputs.component }}" "${{ needs.plan.outputs.version }}"

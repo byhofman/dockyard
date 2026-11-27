@@ -20,7 +20,7 @@ public sealed class ComponentVersionTests
     {
         var version = Updates.VersionOf(component, Installed, Enum.Parse<RunningApp>(app), OwnVersion);
         Assert.Equal(Installed, version);
-        Assert.Equal($"{component}/1.0.0", Updates.ReleaseTag(component, version, tag: null));
+        Assert.Equal($"{component}/v1.0.0", Updates.ReleaseTag(component, version, tag: null));
     }
 
     [Theory]
