@@ -202,11 +202,11 @@ fi
 echo "== add the dashboard"
 setup --silent --with dashboard --no-start
 check "dashboard added" test -x "$(dash)"
-check "with its libraries" test -f "$app_dir/libSkiaSharp.so"
+check "with its libraries" test -f "${app_dir}-dashboard/libSkiaSharp.so"
 
 if [ "$container" -eq 0 ] && [ -n "${DOCKYARD:-}" ]; then
   echo "== the process name"
-  check "the file name" test -x "$app_dir/dockyard-dashboard"
+  check "the file name" test -x "$(dash)"
   echo "  for the record, /proc comm of that file name is 15 characters: $(printf 'dockyard-dashboard' | cut -c1-15)"
 fi
 
