@@ -20,7 +20,10 @@
         $tag = "cli/v$($env:DOCKYARD_VERSION.TrimStart('v'))"
     } else {
         # components.json names each component's latest release, from github.com, which has no API rate limit.
-        $index = (Invoke-WebRequest "https://github.com/$repo/releases/download/index/components.json" -UseBasicParsing).Content | ConvertFrom-Json
+        # GitHub serves release assets as application/octet-stream, which Windows PowerShell 5.1 hands over as bytes.
+        $content = (Invoke-WebRequest "https://github.com/$repo/releases/download/index/components.json" -UseBasicParsing).Content
+        if ($content -is [byte[]]) { $content = [Text.Encoding]::UTF8.GetString($content) }
+        $index = $content | ConvertFrom-Json
         $tag = $index.cli.tag
     }
     if ($tag -notmatch '^cli/v?\d') { throw 'No Dockyard release found.' }
