@@ -30,9 +30,9 @@ public sealed partial class TrayIconTests
     }
 
     [Fact]
-    public void Every_state_stands_out_on_a_light_and_a_dark_bar()
+    public void Every_state_and_the_running_dot_stand_out_on_a_light_and_a_dark_bar()
     {
-        foreach (var color in new[] { TrayColors.Running, TrayColors.Stopped, TrayColors.Busy })
+        foreach (var color in new[] { TrayColors.Running, TrayColors.Stopped, TrayColors.Busy, TrayColors.RunningDot })
             foreach (var bar in new[] { LightBar, DarkBar })
                 Assert.True(Contrast(color, bar) >= 3, $"{color} on {bar} is {Contrast(color, bar):F2}:1, needs 3:1");
     }
