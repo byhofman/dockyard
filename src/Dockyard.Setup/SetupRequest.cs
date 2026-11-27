@@ -15,6 +15,10 @@ public sealed record SetupRequest(IReadOnlyList<string> With, IReadOnlyList<stri
     public bool RemoveData { get; init; }
     // No desktop session here: a new install leaves the tray and the dashboard out unless With names them.
     public bool Headless { get; init; }
+    // Open the dashboard at Tools when done.
+    public bool OpenDashboard { get; init; }
+    // Dockyard's own release files come from this folder instead of a download; the app sets DockyardSetup.LocalAssets from it.
+    public string? Assets { get; init; }
 
     // What a front end's setup screen asks for, from its components and the values of its setting rows, keyed as
     // SettingDefinitions names them. A source it does not show keeps what an earlier install chose.
