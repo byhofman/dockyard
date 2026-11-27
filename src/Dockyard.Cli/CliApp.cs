@@ -174,9 +174,9 @@ sealed class ClusterListCommand : AsyncCommand
             Console.WriteLine("No clusters");
             return 0;
         }
-        var table = new Table().Border(TableBorder.None).AddColumn("NAME").AddColumn("DETAILS");
-        foreach (var (name, details) in clusters) table.AddRow(Markup.Escape(name), Markup.Escape(details));
-        AnsiConsole.Write(table);
+        var table = new CliTable("NAME", "KUBERNETES", "NODES", "DETAILS");
+        foreach (var c in clusters) table.Add(c.Name, c.Kubernetes, c.Nodes, c.Details);
+        table.Write(AnsiConsole.Console);
         return 0;
     }
 }
