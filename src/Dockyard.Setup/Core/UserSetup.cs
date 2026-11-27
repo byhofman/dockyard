@@ -36,6 +36,7 @@ static partial class UserSetup
             if (!tray) key.DeleteValue(Paths.AppName, throwOnMissingValue: false);
         }
         if (tray) log($"{Paths.AppName} autostarts at logon");
+        await StartMenu.Place(log);
     }
 
     static string TestcontainersFile => Path.Combine(Paths.UserProfile, ".testcontainers.properties");
@@ -139,6 +140,7 @@ static partial class UserSetup
             key?.DeleteValue(Paths.AppName, throwOnMissingValue: false);
             key?.DeleteValue(HostRunValue, throwOnMissingValue: false);
         }
+        StartMenu.Remove(log);
         foreach (var host in System.Diagnostics.Process.GetProcessesByName(Paths.HostProcess))
             using (host) try { host.Kill(); } catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception) { }
 
