@@ -13,6 +13,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Dockyard.Setup" />
     <InternalsVisibleTo Include="Dockyard.Setup.Tests" />
+    <InternalsVisibleTo Include="Dockyard.Tray.Tests" />
     <InternalsVisibleTo Include="dockyard-cli" />
     <InternalsVisibleTo Include="Dockyard.Cli.Tests" />
     <InternalsVisibleTo Include="Dockyard.Dashboard" />

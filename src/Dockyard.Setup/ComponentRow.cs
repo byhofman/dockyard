@@ -9,3 +9,5 @@ public sealed record ComponentRow(string Id, string Title, string Group, string?
     // Picked when a setup screen opens: what a new install has without being asked, or on an existing install what is there.
     public bool Default { get; init; }
 }
+
+public sealed record KubeContexts(IReadOnlyList<string> Names, string? Current);

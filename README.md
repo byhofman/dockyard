@@ -47,7 +47,7 @@ Everything Dockyard downloads itself (its own downloads of those tools, the engi
 | Component | | |
 |---|---|---|
 | `dockyard` command | Required | It installs and updates everything else; see [The dockyard command](#the-dockyard-command) |
-| Tray | Optional | An icon and its menu, no window; the command and the tray are a whole install |
+| Tray | Optional | An icon and its menu, no window, with a Kubernetes context submenu that switches the kubectl context; the command and the tray are a whole install |
 | Dashboard | Optional | The only Dockyard window: containers, clusters, and Setup, Tools and Settings |
 | Docker Compose, Docker Buildx | Optional | Need the Docker CLI |
 | kind | Optional | Kubernetes clusters in containers, on the Linux engine |
