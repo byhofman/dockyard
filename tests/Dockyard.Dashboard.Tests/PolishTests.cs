@@ -83,11 +83,25 @@ public sealed class PolishTests
     });
 
     [Fact]
+    public Task Settings_is_no_sidebar_section_yet_opens_by_name_and_from_the_gear() => Ui(() =>
+    {
+        var shell = new ShellViewModel(new RecordingSetup());
+        Assert.DoesNotContain(shell.Sections, s => s.Title == "Settings");
+
+        shell.ShowSection("settings");
+        Assert.Same(shell.Settings, shell.CurrentSection);
+
+        shell.ShowSection("Tools");
+        shell.SettingsCommand.Execute(null);
+        Assert.Same(shell.Settings, shell.CurrentSection);
+    });
+
+    [Fact]
     public Task Settings_read_their_values_again_when_shown() => Ui(() =>
     {
         var setup = new RecordingSetup();
         var shell = new ShellViewModel(setup);
-        var settings = (SettingsViewModel)shell.Sections.Single(s => s.Title == "Settings").Content;
+        var settings = (SettingsViewModel)shell.Settings.Content;
         var domains = settings.Items.Single(i => i.Definition.Key == SettingDefinitions.ContainerDomains);
         Assert.Equal(SettingDefinitions.Off, domains.Value);
 

@@ -37,8 +37,8 @@ sealed class ShellViewModel : Observable
             new Section("Builds", new Features.Builds.BuildsViewModel(this, Session), Section.Resource("IconBuilds")),
             new Section("Disk", new DiskViewModel(this, Session), Section.Resource("IconDisk")),
             new Section("Tools", new Features.Setup.ToolsViewModel(SetupSource, this), Section.Resource("IconTools")),
-            new Section("Settings", new Features.Setup.SettingsViewModel(SetupSource, this), Section.Resource("IconSettings")),
         ];
+        Settings = new Section("Settings", new Features.Setup.SettingsViewModel(SetupSource, this), Section.Resource("IconSettings"));
         currentSection = Sections[0];
         _ = Tools.Refresh();
 
@@ -69,6 +69,9 @@ sealed class ShellViewModel : Observable
     Features.Setup.SetupViewModel? setup;
     public ContainersViewModel Containers { get; }
     public IReadOnlyList<Section> Sections { get; }
+
+    // Reached from the gear, not the sidebar.
+    public Section Settings { get; }
     public ObservableCollection<Toast> Toasts { get; } = [];
 
     public void ShowSection(string title)
@@ -78,7 +81,7 @@ sealed class ShellViewModel : Observable
             OpenSetup();
             return;
         }
-        if (Sections.FirstOrDefault(s => s.Title.Equals(title, StringComparison.OrdinalIgnoreCase)) is { } section) CurrentSection = section;
+        if (Sections.Append(Settings).FirstOrDefault(s => s.Title.Equals(title, StringComparison.OrdinalIgnoreCase)) is { } section) CurrentSection = section;
     }
 
     public static string? InitialSection { get; set; }

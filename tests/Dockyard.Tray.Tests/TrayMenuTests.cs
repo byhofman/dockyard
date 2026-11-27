@@ -13,6 +13,7 @@ public sealed class TrayMenuTests
         public void Container(TrayContainer container, ContainerCommand command) => Calls.Add($"{command} {container.Name}");
         public void OpenWeb(int port) => Calls.Add($"web {port}");
         public void OpenDashboard(string? section) => Calls.Add($"dashboard {section}");
+        public void UseKubeContext(string name) => Calls.Add($"kube {name}");
         public void Quit() => Calls.Add("quit");
     }
 
@@ -20,8 +21,8 @@ public sealed class TrayMenuTests
     static readonly TrayEngine Windows = new("win", "Windows", Running: false, Active: false, Available: true);
 
     static TrayState State(IReadOnlyList<TrayEngine>? engines = null, bool dashboard = true, IReadOnlyList<TrayContainer>? containers = null,
-        string? busy = null, bool update = false, string? problem = null) =>
-        new(engines ?? [Linux], dashboard, containers ?? [], busy, update, problem);
+        string? busy = null, bool update = false, string? problem = null, string[]? kube = null, string? kubeCurrent = null) =>
+        new(engines ?? [Linux], dashboard, containers ?? [], busy, update, problem, kube, kubeCurrent);
 
     static (TrayMenu Menu, Actions Actions) Menu(TrayState state)
     {
@@ -45,6 +46,45 @@ public sealed class TrayMenuTests
         Assert.DoesNotContain("Settings…", headers);
         Assert.Contains("Quit", headers);
         Assert.False(menu.Visible[^2].IsSeparator && menu.Visible[^3].IsSeparator, "two separators in a row");
+    }
+
+    [Fact]
+    public void The_kubernetes_context_submenu_has_a_radio_item_per_context_with_the_current_one_checked()
+    {
+        var (menu, _) = Menu(State(kube: ["docker-desktop", "kind-dev", "prod"], kubeCurrent: "kind-dev"));
+
+        var submenu = Item(menu, "Kubernetes context");
+
+        Assert.Equal(["docker-desktop", "kind-dev", "prod"], submenu.Items.Select(i => i.Header));
+        Assert.All(submenu.Items, i => Assert.True(i.IsRadio));
+        Assert.Equal(["kind-dev"], submenu.Items.Where(i => i.IsChecked == true).Select(i => i.Header));
+    }
+
+    [Fact]
+    public void Clicking_a_context_switches_to_it_and_the_check_follows_the_next_update()
+    {
+        var (menu, actions) = Menu(State(kube: ["a", "b"], kubeCurrent: "a"));
+
+        Item(menu, "Kubernetes context").Items[1].Click!();
+        menu.Update(State(kube: ["a", "b"], kubeCurrent: "b"));
+
+        Assert.Equal(["kube b"], actions.Calls);
+        Assert.Equal([false, true], Item(menu, "Kubernetes context").Items.Select(i => i.IsChecked == true));
+    }
+
+    [Fact]
+    public void Without_contexts_there_is_no_submenu_and_no_stray_separator()
+    {
+        var (menu, _) = Menu(State(dashboard: false, kube: []));
+        Assert.DoesNotContain(menu.Visible, i => i.Header == "Kubernetes context");
+        Assert.False(menu.Visible[^2].IsSeparator && menu.Visible[^3].IsSeparator, "two separators in a row");
+
+        menu.Update(State(dashboard: false, kube: ["a"], kubeCurrent: "a"));
+        Assert.Contains(menu.Visible, i => i.Header == "Kubernetes context");
+
+        menu.Update(State(dashboard: false));
+        Assert.DoesNotContain(menu.Visible, i => i.Header == "Kubernetes context");
+        Assert.Equal(["Quit"], menu.Visible.Where(i => !i.IsSeparator).Skip(2).Select(i => i.Header));
     }
 
     [Fact]

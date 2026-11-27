@@ -293,6 +293,19 @@ public sealed partial class DockyardSetup : IDisposable
     internal Func<IClusterAgent?> ClusterAgent { get; init; }
     internal string ClusterFolder { get; init; } = ClusterDefinitions.Folder;
 
+    // Read again for every call, so a changed $KUBECONFIG is followed.
+    internal Func<HostKubeconfig> Kubeconfig { get; init; } = HostKubeconfig.FromEnvironment;
+
+    // The contexts of the user's kubeconfig and the current one, which is null when none is set.
+    public KubeContexts KubeContexts()
+    {
+        var (names, current) = Kubeconfig().Contexts();
+        return new KubeContexts(names, current);
+    }
+
+    // Makes it the current context, as kubectl config use-context does.
+    public void UseKubeContext(string name) => Kubeconfig().Use(name);
+
     // Tells the engine's agent what every cluster's definition wants, after each change to one. With no Linux engine
     // running, as when only the Windows engine is, nothing is told: the agent keeps what it was told last. An agent that
     // answers with an error throws, since then nothing keeps the cloud provider, the forwarders or NFS running.

@@ -113,6 +113,9 @@ sealed class FakeHost : IEngineHost
 static class Facade
 {
     // Over the test's own settings, and with the shell's profiles left alone.
-    public static DockyardSetup For(IEngineHost host, TempSettings settings) =>
-        new(host, settings.Settings, new ShellProfiles((_, _) => { }, () => []));
+    public static DockyardSetup For(IEngineHost host, TempSettings settings, IReadOnlyList<string>? kubeconfigs = null) =>
+        new(host, settings.Settings, new ShellProfiles((_, _) => { }, () => []))
+        {
+            Kubeconfig = () => new Dockyard.Kind.HostKubeconfig(kubeconfigs ?? []),
+        };
 }

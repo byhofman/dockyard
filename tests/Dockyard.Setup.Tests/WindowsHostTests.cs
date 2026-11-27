@@ -148,37 +148,6 @@ public sealed class WindowsHostTests
     }
 
     [Fact]
-    public async Task On_a_server_the_Windows_engine_alone_is_the_default_and_WSL_is_not_touched()
-    {
-        var catalog = WindowsHost.CatalogFor(desktop: false, server: true);
-        Assert.Equal(["LinuxEngine", "Tray", "Dashboard"], catalog.Where(c => !c.Default).Select(c => c.Id));
-        Assert.All(WindowsHost.CatalogFor(desktop: true, server: false), c => Assert.True(c.Default));
-
-        using var settings = new TempSettings();
-        var host = new FakeHost { Components = catalog };
-        var request = new SetupRequest([], [], null, false, false, Silent: true, Resume: false) { Start = false };
-        Assert.Equal(DockyardSetup.Ok, await Facade.For(host, settings).Setup(request, new ProgressLines(), CancellationToken.None));
-
-        // Without the Linux engine, MachineSetup runs no `wsl --install` and removes the container domains' NRPT rule, and
-        // UserSetup sets up no distro.
-        var installed = host.Requests.Single();
-        Assert.Contains("LinuxEngine", installed.Without);
-        Assert.DoesNotContain("Engine", installed.Without);
-        Assert.DoesNotContain("DockerCli", installed.Without);
-        Assert.DoesNotContain("DockyardCli", installed.Without);
-        Assert.False(installed.Dashboard);
-        Assert.False(installed.Tray);
-    }
-
-    [Theory]
-    [InlineData("Client", false)]
-    [InlineData("Server", true)]
-    [InlineData("Server Core", true)]
-    [InlineData(null, false)]
-    public void Server_and_Server_Core_are_servers(string? installationType, bool server) =>
-        Assert.Equal(server, OsInfo.IsServerSku(installationType));
-
-    [Fact]
     public void Testcontainers_is_pinned_to_the_Linux_engine_only_where_there_is_one()
     {
         var dir = Directory.CreateTempSubdirectory("dockyard-tc-").FullName;

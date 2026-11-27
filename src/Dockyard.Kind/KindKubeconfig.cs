@@ -28,8 +28,11 @@ static class KindKubeconfig
             else entries.Add(entry);
         }
         if (previous is not null) Remember(Find(config, "contexts", key)!, previous);
-        config.Children[new YamlScalarNode(CurrentContext)] = new YamlScalarNode(key);
+        Use(config, key);
     }
+
+    public static void Use(YamlMappingNode config, string context) =>
+        config.Children[new YamlScalarNode(CurrentContext)] = new YamlScalarNode(context);
 
     // Takes the cluster's entries out. When its context was the current one, the context that was current before it
     // comes back if it still exists anywhere, otherwise none is current, as kind leaves it.

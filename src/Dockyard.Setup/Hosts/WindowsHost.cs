@@ -36,19 +36,16 @@ sealed class WindowsHost : IEngineHost
 
     public IReadOnlyList<ComponentInfo> Components => Catalog;
 
-    public static IReadOnlyList<ComponentInfo> Catalog { get; } = CatalogFor(desktop: !OperatingSystem.IsWindows() || IsClientSku(OsInfo.InstallationType()), server: OperatingSystem.IsWindows() && OsInfo.IsServer);
+    public static IReadOnlyList<ComponentInfo> Catalog { get; } = CatalogFor(desktop: true);
 
-    // A Server edition has no desktop to run the tray or open the dashboard in, so a new install leaves them out unless asked.
     public static bool IsClientSku(string? installationType) => installationType == "Client";
 
-    // On a server the Windows engine alone is the default: WSL is not there to be counted on, so the Linux engine, and with it
-    // WSL's install, the mirrored networking and the container domains, wait until asked for with --with linux-engine.
-    public static IReadOnlyList<ComponentInfo> CatalogFor(bool desktop, bool server = false) =>
+    public static IReadOnlyList<ComponentInfo> CatalogFor(bool desktop) =>
     [
         new(nameof(Component.DockyardCli), Updates.Title(Component.DockyardCli), RequiredBecause: "it installs and updates everything else here, and the tray and the dashboard use it. Uninstall removes it.", RequiredFlag: "dockyard-cli"),
         new(nameof(Component.DockerCli), Updates.Title(Component.DockerCli), RequiredBecause: "both engines, Compose and Buildx are used through it.", RequiredFlag: "docker-cli"),
         new(nameof(Component.Engine), Updates.Title(Component.Engine), Flag: "windows-engine", Note: "Windows containers. Its images stay when you remove it. One engine has to stay.", IsEngine: true),
-        new(nameof(Component.LinuxEngine), Updates.Title(Component.LinuxEngine), CheckNeedsEngine: Linux, Flag: "linux-engine", Note: "Linux containers. Its images stay when you remove it. One engine has to stay.", IsEngine: true, Default: !server),
+        new(nameof(Component.LinuxEngine), Updates.Title(Component.LinuxEngine), CheckNeedsEngine: Linux, Flag: "linux-engine", Note: "Linux containers. Its images stay when you remove it. One engine has to stay.", IsEngine: true),
         new(nameof(Component.Compose), Updates.Title(Component.Compose), Flag: "compose", Note: "Needs the Docker CLI. The dashboard's Compose actions use it."),
         new(nameof(Component.Buildx), Updates.Title(Component.Buildx), Flag: "buildx", Note: "Needs the Docker CLI. docker build uses it."),
         Tools.Kind.Component with { Note = "Local Kubernetes clusters in containers. Needs the Linux engine; the dashboard makes and runs its clusters with it." },

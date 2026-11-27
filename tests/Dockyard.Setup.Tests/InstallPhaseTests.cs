@@ -22,7 +22,7 @@ public sealed class InstallPhaseTests : IDisposable
         Assert.Equal(
             ["Windows features and WSL", "The Windows engine", "docker CLI and plugins", "Kubernetes tools", "Dockyard", "Container domains", "The Linux engine", "Trusted HTTPS"],
             ((IEngineHost)host).InstallPlan(Request(https: true)));
-        // An engine-only Windows Server: no WSL, no Linux engine and none of its domains.
+        // Without the Linux engine: no WSL and none of its domains.
         Assert.Equal(
             ["Windows features", "The Windows engine", "docker CLI and plugins", "Kubernetes tools", "Dockyard"],
             ((IEngineHost)host).InstallPlan(Request(false, nameof(Component.LinuxEngine))));

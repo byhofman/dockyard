@@ -37,7 +37,7 @@ sealed class LinuxHost : IEngineHost
 
     public static IReadOnlyList<ComponentInfo> Catalog { get; } = CatalogFor(desktop: LinuxLayout.HasDisplay(Environment.GetEnvironmentVariable("DISPLAY"), Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")));
 
-    // The tray and the dashboard need a display: on a server a new install leaves them out unless asked.
+    // The tray and the dashboard need a display: without one a new install leaves them out unless asked.
     public static IReadOnlyList<ComponentInfo> CatalogFor(bool desktop) =>
     [
         new(nameof(Component.DockyardCli), Updates.Title(Component.DockyardCli), RequiredBecause: "it installs and updates everything else here. Uninstall removes it.", RequiredFlag: "dockyard-cli"),

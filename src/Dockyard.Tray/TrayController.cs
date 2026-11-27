@@ -16,6 +16,7 @@ sealed class TrayController : ITrayActions
     string? problem;
     bool updateAvailable;
     IReadOnlyList<TrayContainer> containers = [];
+    KubeContexts kube = new([], null);
     bool refreshingContainers;
 
     readonly Func<string, bool> sendToDashboard;
@@ -59,9 +60,17 @@ sealed class TrayController : ITrayActions
         var active = setup.ActiveEngine();
         foreach (var e in setup.Engines)
             engines.Add(new TrayEngine(e.Id, e.Name, await IsRunning(e.Id), e.Id == active, e.ComponentId is not { } id || setup.IsPresent(id)));
-        Menu.Update(new TrayState(engines, setup.HasDashboard, containers, busy, updateAvailable, problem));
+        kube = ReadKubeContexts();
+        Menu.Update(new TrayState(engines, setup.HasDashboard, containers, busy, updateAvailable, problem, kube.Names, kube.Current));
         Changed?.Invoke();
         _ = RefreshContainers(engines.FirstOrDefault(e => e.Active && e.Running));
+    }
+
+    // A kubeconfig that cannot be read leaves the submenu out until it can.
+    KubeContexts ReadKubeContexts()
+    {
+        try { return setup.KubeContexts(); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return new KubeContexts([], null); }
     }
 
     async Task<bool> IsRunning(string engine)
@@ -124,6 +133,8 @@ sealed class TrayController : ITrayActions
             case ContainerCommand.Restart: await docker.RestartContainerAsync(container.Id); break;
         }
     });
+
+    public void UseKubeContext(string name) => _ = Run($"Switching to {name}", () => Task.Run(() => setup.UseKubeContext(name)));
 
     public void OpenWeb(int port) => Start(new ProcessStartInfo($"http://127.0.0.1:{port}") { UseShellExecute = true });
 
