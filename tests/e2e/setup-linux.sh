@@ -25,7 +25,8 @@ if [ "$container" -eq 1 ]; then
 else
   app_dir=/usr/lib/dockyard
 fi
-dash() { echo "$app_dir/dockyard-dashboard"; }
+# The dashboard is a package of its own, in a folder of its own next to the CLI's.
+dash() { echo "${app_dir}-dashboard/dockyard-dashboard"; }
 marker=/etc/dockyard/installed
 
 echo "== wrong arguments are refused"
