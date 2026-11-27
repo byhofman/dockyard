@@ -53,6 +53,8 @@ public sealed class SettingsCommandTests
         Assert.Equal(0, h.Run("engine", "ls"));
 
         Assert.Contains("* linux", h.Output);
+        Assert.Matches("^  ENGINE +NAME +STATE +DOCKER CONTEXT +ENDPOINT", h.Output);
+        Assert.Contains(h.Setup.Engines[0].Endpoint, h.Output);
     }
 
     [Fact]

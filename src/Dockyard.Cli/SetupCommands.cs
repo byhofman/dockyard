@@ -158,18 +158,16 @@ sealed class ComponentListCommand(CliEnvironment env) : AsyncCommand
     public override async Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellation)
     {
         using var setup = env.Setup();
-        var table = new Table().Border(TableBorder.None).AddColumns("FLAG", "COMPONENT", "INSTALLED", "NEWEST", "SOURCE", "NOTE");
+        var table = new CliTable("FLAG", "COMPONENT", "INSTALLED", "NEWEST", "SOURCE", "NOTE");
         foreach (var row in await setup.ComponentsAsync(cancellation))
-            table.AddRow(
-                Markup.Escape(row.Flag ?? "-"),
-                Markup.Escape(row.Title),
-                Markup.Escape(row.Installed ?? "-"),
-                Markup.Escape(row.Newest ?? "-"),
-                Markup.Escape(row.Source),
-                Markup.Escape(row.RequiredBecause ?? row.Needs ?? ""));
-        env.Console.Write(table);
+            table.Add(row.Flag, row.Title, row.Installed ?? "not installed", row.Newest, row.Source, Note(row));
+        table.Write(env.Console);
         return 0;
     }
+
+    // As the dashboard's Tools says it: why a component has to stay, or what it needs.
+    internal static string? Note(ComponentRow row) =>
+        row.RequiredBecause is { Length: > 0 } why ? $"Required: {why}" : row.Needs;
 }
 
 sealed class ComponentAddCommand(CliEnvironment env) : AsyncCommand<ComponentNameSettings>
@@ -199,7 +197,7 @@ sealed class UpdateSettings : CommandSettings
     public string[] Components { get; init; } = [];
 
     [CommandOption("--check")]
-    [Description("Only list what has an update")]
+    [Description("Only list each component's version and newest version; update nothing")]
     public bool Check { get; init; }
 }
 
@@ -214,12 +212,14 @@ sealed class UpdateCommand(CliEnvironment env) : AsyncCommand<UpdateSettings>
             return 0;
         }
         var checks = await setup.CheckUpdates(cancellation);
+        var table = new CliTable("COMPONENT", "INSTALLED", "NEWEST", "SOURCE", "STATUS");
         foreach (var check in checks)
         {
             if (check.Error is { } problem) { env.Error.WriteLine($"{check.Row.Title}: {problem}"); continue; }
             if (check.Row.Installed is not { } installed) continue;
-            env.Console.WriteLine($"{check.Row.Title}\t{installed}\t{(check.Row.CanUpdate ? $"{check.Row.Newest} available" : "up to date")}");
+            table.Add(check.Row.Title, installed, check.Row.Newest, check.Row.Source, check.Row.CanUpdate ? "update available" : "up to date");
         }
+        table.Write(env.Console);
         if (!s.Check) await setup.UpdateAvailable(checks, new ProgressRenderer(env.Console, env.Error));
         return checks.Any(c => c.Error is not null) ? DockyardSetup.Failed : DockyardSetup.Ok;
     }

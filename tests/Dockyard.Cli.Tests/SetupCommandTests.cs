@@ -203,6 +203,16 @@ public sealed class SetupCommandTests
 
         Assert.Contains(SettingDefinitions.PackageManager, Assert.Single(h.Output.Split('\n'), line => line.StartsWith("kind ")));
         Assert.Contains("Dockyard tray", h.Output);
+        Assert.Matches("^FLAG +COMPONENT +INSTALLED +NEWEST +SOURCE +NOTE", h.Output);
+    }
+
+    [Fact]
+    public void Component_ls_says_why_a_component_has_to_stay()
+    {
+        var row = new ComponentRow("LinuxEngine", "Docker Engine", "Docker", "29.9.2", "29.9.2", "Dockyard", "it runs your containers.", null, null, false, false, false);
+
+        Assert.Equal("Required: it runs your containers.", ComponentListCommand.Note(row));
+        Assert.Equal("Needs the Docker CLI.", ComponentListCommand.Note(row with { RequiredBecause = null, Needs = "Needs the Docker CLI." }));
     }
 
     [Fact]
@@ -289,7 +299,9 @@ public sealed class SetupCommandTests
 
         Assert.Equal(0, h.Run("update", "--check"));
 
-        Assert.Contains("2.0.0", h.Output);
+        var lines = h.Output.Split('\n');
+        Assert.Matches("^COMPONENT +INSTALLED +NEWEST +SOURCE +STATUS$", lines[0]);
+        Assert.Matches("^kind +[0-9.]+ +2\\.0\\.0 +.+ +update available$", Assert.Single(lines, l => l.StartsWith("kind")));
         Assert.DoesNotContain(h.Host.Calls, c => c.StartsWith("update"));
     }
 

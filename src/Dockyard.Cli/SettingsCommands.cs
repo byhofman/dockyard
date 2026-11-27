@@ -24,13 +24,13 @@ sealed class SettingsListCommand(CliEnvironment env) : Command
     public override int Execute(CommandContext context, CancellationToken cancellation)
     {
         using var setup = env.Setup();
-        var table = new Table().Border(TableBorder.None).AddColumns("KEY", "VALUE", "SETTING");
+        var table = new CliTable("KEY", "VALUE", "SETTING");
         foreach (var definition in setup.SettingDefinitions)
-            table.AddRow(
-                Markup.Escape(definition.Key),
-                Markup.Escape(definition.Kind == SettingKind.EngineFile ? "daemon.json" : setup.GetSetting(definition.Key)),
-                Markup.Escape(SettingDefinitions.ShowsLinuxEngineOnly(definition) ? $"{definition.Title} (Linux engine only)" : definition.Title));
-        env.Console.Write(table);
+            table.Add(
+                definition.Key,
+                definition.Kind == SettingKind.EngineFile ? "daemon.json" : setup.GetSetting(definition.Key),
+                $"{definition.Title}{(SettingDefinitions.ShowsLinuxEngineOnly(definition) ? " (Linux engine only)" : "")}: {definition.Description}");
+        table.Write(env.Console);
         return 0;
     }
 }
@@ -73,8 +73,10 @@ sealed class EngineListCommand(CliEnvironment env) : AsyncCommand
     {
         using var setup = env.Setup();
         var active = setup.ActiveEngine();
+        var table = new CliTable("  ENGINE", "NAME", "STATE", "DOCKER CONTEXT", "ENDPOINT");
         foreach (var engine in setup.Engines)
-            env.Console.WriteLine($"{(engine.Id == active ? "*" : " ")} {engine.Id}\t{engine.Title}\t{(await setup.IsAnswering(engine.Id) ? "running" : "stopped")}");
+            table.Add($"{(engine.Id == active ? "*" : " ")} {engine.Id}", engine.Title, await setup.IsAnswering(engine.Id) ? "running" : "stopped", engine.Context, engine.Endpoint);
+        table.Write(env.Console);
         return 0;
     }
 }

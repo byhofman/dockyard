@@ -48,15 +48,21 @@ sealed class Clusters(Action<string> log)
         return ClusterAddons.All.Where(a => wanted.Contains(a.Release)).ToList();
     }
 
-    public async Task<IReadOnlyList<(string Name, string Details)>> List()
+    public async Task<IReadOnlyList<ClusterLine>> List()
     {
         await RequireLinuxEngine();
         var r = await KindCli.Run(KindExe, Context, KindCli.Clusters);
         if (r.ExitCode != 0) throw new InvalidOperationException(r.Error.Trim());
-        return r.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(n => !n.StartsWith("No kind clusters", StringComparison.Ordinal))
-            .Select(n => (n, ClusterDefinitions.Load(n) is { } d ? Describe(d) : "made elsewhere"))
-            .ToList();
+        var names = r.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(n => !n.StartsWith("No kind clusters", StringComparison.Ordinal));
+        List<ClusterLine> lines = [];
+        foreach (var name in names)
+        {
+            var nodes = await Docker(["--context", Context, "ps", "-a", "--filter", $"label={KindLabels.Cluster}={name}", "--format", "{{.State}}\t{{.Image}}"]);
+            var definition = ClusterDefinitions.Load(name);
+            lines.Add(ClusterLine.From(name, definition?.KubernetesVersion, definition is null ? null : Describe(definition), nodes));
+        }
+        return lines;
     }
 
     public async Task Create(string name, int workers, IReadOnlyList<ClusterAddon> addons, ClusterStorage storage, bool loadBalancer, IReadOnlyList<int> ports, string? definition, string? kubernetes = null)
@@ -190,5 +196,19 @@ sealed class Clusters(Action<string> log)
         var output = await process.StandardOutput.ReadToEndAsync();
         await process.WaitForExitAsync();
         return output;
+    }
+}
+
+// One row of dockyard cluster ls. The node containers say whether it runs and, for a cluster made elsewhere, its version.
+sealed record ClusterLine(string Name, string Kubernetes, string Nodes, string Details)
+{
+    public static ClusterLine From(string name, string? kubernetes, string? details, string nodeStates)
+    {
+        var nodes = nodeStates.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(l => l.Split('\t')).ToList();
+        var running = nodes.Count(n => n[0] == "running");
+        var version = kubernetes ?? nodes.Select(n => n.Length > 1 ? KindImages.VersionOf(n[1]) : null).FirstOrDefault(v => v is not null);
+        var state = nodes.Count == 0 ? "no nodes" : running == nodes.Count ? $"{running} running" : $"{running} of {nodes.Count} running";
+        return new(name, version ?? "-", state, details ?? "made elsewhere");
     }
 }
