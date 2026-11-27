@@ -50,10 +50,11 @@ static class MacLayout
         return folder == "/Applications" || folder == userApplications ? bundle! : Path.Combine(userApplications, "Dockyard.app");
     }
 
-    // The files of the app that is or will be installed. A folder that is no bundle (a development build) is its own install.
-    public static string AppBase => Bundle(AppContext.BaseDirectory) is null
-        ? AppContext.BaseDirectory
-        : Path.Combine(InstallLocation(AppContext.BaseDirectory, UserApplications), "Contents", "MacOS");
+    // The files of the app that is or will be installed. The bare dockyard-macos-arm64 a one-liner downloads is no bundle,
+    // and it installs into ~/Applications like any other run.
+    public static string AppBase => AppBaseFor(AppContext.BaseDirectory, UserApplications);
+    public static string AppBaseFor(string baseDirectory, string userApplications) =>
+        Path.Combine(InstallLocation(baseDirectory, userApplications), "Contents", "MacOS");
 
     // The bundle's own executable is the tray.
     public static string InstalledExe => Path.Combine(AppBase, "Dockyard");

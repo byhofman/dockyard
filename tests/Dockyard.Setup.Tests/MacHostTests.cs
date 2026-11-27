@@ -251,6 +251,15 @@ public sealed class MacInstallTests : IDisposable
         Assert.Equal(expected, MacLayout.InstallLocation(baseDirectory, "/Users/a/Applications"));
     }
 
+    [Theory]
+    [InlineData("/Users/a/Downloads/")]
+    [InlineData("/private/tmp/build/out/")]
+    public void The_bare_command_a_one_liner_downloads_installs_into_applications_and_is_not_the_install(string baseDirectory)
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix paths");
+        Assert.Equal("/Users/a/Applications/Dockyard.app/Contents/MacOS", MacLayout.AppBaseFor(baseDirectory, "/Users/a/Applications"));
+    }
+
     [Fact]
     public void Bundle_version_comes_from_the_installed_info_plist()
     {
