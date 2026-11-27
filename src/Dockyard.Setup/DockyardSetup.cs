@@ -335,6 +335,12 @@ public sealed partial class DockyardSetup : IDisposable
         if (ClusterAgent() is not { } agent) return;
         try { await agent.SetClusterWantsAsync(ClusterDefinitions.Wants(ClusterFolder)); }
         catch (Exception e) when (e is IOException or System.Net.Sockets.SocketException or TimeoutException) { }
+        // An app update does not restart a running engine, so its agent can be older than the app until the engine's next start.
+        catch (InvalidOperationException e) when (e.Message == "unknown request")
+        {
+            throw new InvalidOperationException("The Linux engine still runs the agent of an earlier Dockyard, which knows nothing of clusters. "
+                + "Stop and start it (dockyard engine stop linux, then dockyard engine start linux) and try again.", e);
+        }
         catch (InvalidOperationException e) { throw new InvalidOperationException($"The engine's agent refused the cluster settings: {e.Message}", e); }
     }
 

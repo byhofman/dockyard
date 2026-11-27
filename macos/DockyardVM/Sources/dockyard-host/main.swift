@@ -42,15 +42,7 @@ func prepare(assets: String) throws {
     try fm.createDirectory(atPath: dir + "/engine", withIntermediateDirectories: true)
     try settings.save(path: configPath)
 
-    // The root image is cloned (APFS copy-on-write) whenever the bundled release changes; the data disk is never replaced.
-    let bundledRelease = try String(contentsOfFile: assets + "/dockyard-release", encoding: .utf8)
-    let installedRelease = try? String(contentsOfFile: dir + "/root-release", encoding: .utf8)
-    if bundledRelease != installedRelease || !fm.fileExists(atPath: settings.rootImage) {
-        try? fm.removeItem(atPath: settings.rootImage)
-        try fm.copyItem(atPath: assets + "/root.img", toPath: settings.rootImage)
-        try bundledRelease.write(toFile: dir + "/root-release", atomically: true, encoding: .utf8)
-        log("root image updated: \(bundledRelease.replacingOccurrences(of: "\n", with: " "))")
-    }
+    try refreshRootImage(assets: assets, rootImage: settings.rootImage)
 
     if !fm.fileExists(atPath: settings.dataImage) {
         fm.createFile(atPath: settings.dataImage, contents: nil)
@@ -59,6 +51,19 @@ func prepare(assets: String) throws {
         try handle.close()
         log("created \(settings.dataImageGiB) GiB sparse data disk")
     }
+}
+
+// The root image is cloned (APFS copy-on-write) whenever the bundled release changes; the data disk is never replaced.
+func refreshRootImage(assets: String, rootImage: String) throws {
+    let fm = FileManager.default
+    let releaseFile = home + "/.dockyard/root-release"
+    let bundledRelease = try String(contentsOfFile: assets + "/dockyard-release", encoding: .utf8)
+    let installedRelease = try? String(contentsOfFile: releaseFile, encoding: .utf8)
+    guard bundledRelease != installedRelease || !fm.fileExists(atPath: rootImage) else { return }
+    try? fm.removeItem(atPath: rootImage)
+    try fm.copyItem(atPath: assets + "/root.img", toPath: rootImage)
+    try bundledRelease.write(toFile: releaseFile, atomically: true, encoding: .utf8)
+    log("root image updated: \(bundledRelease.replacingOccurrences(of: "\n", with: " "))")
 }
 
 final class HostDialListener: NSObject, VZVirtioSocketListenerDelegate {
@@ -264,6 +269,16 @@ case "prepare":
 case "run", nil:
     let settings: VMSettings
     do { settings = try VMSettings.load(path: configPath) } catch { fail("cannot read \(configPath): \(error); run prepare first") }
+    // A helper still running, or still stopping, holds the disk images: this one could not boot, and must not swap its
+    // root image underneath it.
+    if let fd = try? Sockets.connectUnix(path: settings.controlSocket) {
+        close(fd)
+        fail("another dockyard-host is running this VM")
+    }
+    // launchd boots the VM at login and after a crash without a prepare, so an updated app would otherwise run its new
+    // kernel on the previous root image, with its previous agent.
+    do { try refreshRootImage(assets: (settings.kernel as NSString).deletingLastPathComponent, rootImage: settings.rootImage) }
+    catch { fail("cannot update the root image: \(error)") }
     let machine: Machine
     do { machine = try Machine(settings: settings) } catch { fail("invalid VM configuration: \(error)") }
 

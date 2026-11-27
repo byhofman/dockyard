@@ -53,9 +53,21 @@ public sealed class ClusterWantsTests : IDisposable
         ClusterDefinitions.Save("dev", new ClusterDefinition(Yaml, ClusterStorage.None, []), folder);
 
         var e = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            For(new FakeHost(), new RecordingAgent { Failure = new InvalidOperationException("no such cluster") }).PushClusterWants());
+
+        Assert.Equal("The engine's agent refused the cluster settings: no such cluster", e.Message);
+    }
+
+    [Fact]
+    public async Task An_agent_older_than_clusters_says_to_restart_the_engine()
+    {
+        ClusterDefinitions.Save("dev", new ClusterDefinition(Yaml, ClusterStorage.None, []), folder);
+
+        var e = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             For(new FakeHost(), new RecordingAgent { Failure = new InvalidOperationException("unknown request") }).PushClusterWants());
 
-        Assert.Equal("The engine's agent refused the cluster settings: unknown request", e.Message);
+        Assert.Equal("The Linux engine still runs the agent of an earlier Dockyard, which knows nothing of clusters. "
+            + "Stop and start it (dockyard engine stop linux, then dockyard engine start linux) and try again.", e.Message);
     }
 
     sealed class RecordingAgent : IClusterAgent
