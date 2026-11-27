@@ -346,7 +346,30 @@ dotnet publish src/Dockyard.Dashboard/Dockyard.Dashboard.csproj -c Release -r wi
 
 The tray and the dashboard are native AOT builds and need the platform's C++ tools. The CLI's release build embeds what it installs on Windows: `-p:GuestBundle=<guest tarball>` and `-p:HostExe=<dockyard-host.exe>` reach `Dockyard.Setup` through its publish. Each component is released from a tag of its own, `cli/<version>`, `tray/<version>`, `dashboard/<version>` or `engine/<version>`, or all four at once from `v<version>`: the build workflow builds and tests only what that component needs (the CLI also runs `dockyard setup --silent` for real on Windows, macOS and Linux), publishes the release from a draft once all its assets are there, and records it in `components.json` on the release tagged `index`, where `dockyard` and the one-liners find each component's latest. The CLI's release is the one marked latest. See [docs/design/components-and-releases.md](docs/design/components-and-releases.md).
 
-`tests/e2e` runs `dockyard setup` or a published one-liner end to end, `tests/oneliners` checks that the scripts only fetch and check the `dockyard` command and run `dockyard setup`, `scripts/mac-e2e.sh` checks the VM on a Mac, and `scripts/measure.ps1` checks the dashboard's budgets. Integration tests (`Category=Engine`) run against real engines and are skipped when none is running.
+`tests/Dockyard.InstallTests` installs Dockyard for real and checks what it did (below), `tests/e2e` keeps the Linux import and firewall scripts, `tests/oneliners` checks that the scripts only fetch and check the `dockyard` command and run `dockyard setup`, `scripts/mac-e2e.sh` checks the VM on a Mac, and `scripts/measure.ps1` checks the dashboard's budgets. Integration tests (`Category=Engine`) run against real engines and are skipped when none is running.
+
+### Install tests
+
+The install tests (`tests/Dockyard.InstallTests`, `Category=Install`) run `dockyard setup`, `component`, `uninstall`, the dashboard and Docker, kind and kubectl against a real machine, so a release never waits for them and `dotnet test` skips them: they run only with `DOCKYARD_INSTALL_TESTS=1`, and every build job filters them out with `--filter-not-trait "Category=Install"`.
+
+On GitHub, tick the systems to run on (`windows`, `macos`, `linux`, and `vm` for the VM image test); an empty `version` builds the ref, and `-f version=0.12.0` installs that CLI release instead:
+
+```sh
+gh workflow run install-tests -f windows=true
+```
+
+On your own Windows PC (from an administrator PowerShell) or Mac, against a local build with the other assets next to it, or against a release:
+
+```pwsh
+$env:DOCKYARD_INSTALL_TESTS = "1"
+$env:DOCKYARD = "C:\build\dockyard-windows-x64.exe"   # or DOCKYARD_VERSION=0.12.0 for a release
+$env:DOCKYARD_ASSETS = "C:\build"                        # passed as --assets
+dotnet test --project tests/Dockyard.InstallTests --filter-trait "Category=Install"
+```
+
+On a Mac the same with `export`, and `dockyard-macos-arm64` in place of the exe. A Mac run installs into a throwaway home; `DOCKYARD_INSTALL_BOOT=1` also boots the VM and runs a kind cluster, and `DOCKYARD_INSTALL_ADMIN=1` lets setup change system files (the resolver, the trust store).
+
+**A local run installs Dockyard on that machine, with its engine, the CA and the name routing, and removes it again at the end** (images and volumes stay, and the WSL distro on Windows). A run that fails midway leaves it installed: `dockyard uninstall`.
 
 ## License
 
