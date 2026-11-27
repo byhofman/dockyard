@@ -148,7 +148,7 @@ static partial class Updates
     public const string EngineComponent = "engine";
     public const string VmAsset = @"^dockyard-vm-[\d.]+-aarch64\.tar\.gz$";
 
-    public static string ComponentTag(string component, string version) => $"{component}/{version}";
+    public static string ComponentTag(string component, string version) => $"{component}/v{version}";
 
     internal sealed record ComponentEntry(string Tag, Version Version, IReadOnlyDictionary<string, Version> Requires);
 

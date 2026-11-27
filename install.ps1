@@ -17,13 +17,13 @@
     $exe = Join-Path $dir $name
 
     if ($env:DOCKYARD_VERSION) {
-        $tag = "cli/$env:DOCKYARD_VERSION"
+        $tag = "cli/v$($env:DOCKYARD_VERSION.TrimStart('v'))"
     } else {
         # components.json names each component's latest release, from github.com, which has no API rate limit.
         $index = (Invoke-WebRequest "https://github.com/$repo/releases/download/index/components.json" -UseBasicParsing).Content | ConvertFrom-Json
         $tag = $index.cli.tag
     }
-    if ($tag -notmatch '^cli/\d') { throw 'No Dockyard release found.' }
+    if ($tag -notmatch '^cli/v?\d') { throw 'No Dockyard release found.' }
 
     New-Item -ItemType Directory -Force $dir | Out-Null
     Write-Host "Downloading the dockyard command ($tag)"

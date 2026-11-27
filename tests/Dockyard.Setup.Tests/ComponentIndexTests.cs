@@ -25,7 +25,7 @@ public sealed class ComponentIndexTests
     [Fact]
     public void A_component_tag_names_the_component_and_its_version()
     {
-        Assert.Equal(new Version(0, 9, 0), Updates.ParseVersion("cli/0.9.0"));
-        Assert.Equal("cli/1.2.3", Updates.ComponentTag(Updates.CliComponent, "1.2.3"));
+        Assert.Equal(new Version(0, 9, 0), Updates.ParseVersion("cli/v0.9.0"));
+        Assert.Equal("cli/v1.2.3", Updates.ComponentTag(Updates.CliComponent, "1.2.3"));
     }
 }

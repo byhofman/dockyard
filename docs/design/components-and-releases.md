@@ -15,10 +15,10 @@ services (DNS, the container-domain proxy) inside its own process.
 
 | Component | What it is | Project / source | Tag |
 |---|---|---|---|
-| CLI | The `dockyard` command, a terminal app with the whole setup: installs, updates and removes the others, settings, engines, clusters; the elevated worker on Windows | `src/Dockyard.Cli` over `src/Dockyard.Setup` | `cli/<semver>` |
-| Tray | An icon and its menu, no window; runs the background duties (update checks, the certificate) while it runs | `src/Dockyard.Tray` | `tray/<semver>` |
-| Dashboard | The only window: containers, images, volumes, networks, builds and clusters, and Setup, Tools and Settings; runs the same setup, also silently (`--setup --silent`) | `src/Dockyard.Dashboard` | `dashboard/<semver>` |
-| Engine | The Linux engine image (WSL tarball, macOS VM images) | `image/` | `engine/<semver>` |
+| CLI | The `dockyard` command, a terminal app with the whole setup: installs, updates and removes the others, settings, engines, clusters; the elevated worker on Windows | `src/Dockyard.Cli` over `src/Dockyard.Setup` | `cli/v<semver>` |
+| Tray | An icon and its menu, no window; runs the background duties (update checks, the certificate) while it runs | `src/Dockyard.Tray` | `tray/v<semver>` |
+| Dashboard | The only window: containers, images, volumes, networks, builds and clusters, and Setup, Tools and Settings; runs the same setup, also silently (`--setup --silent`) | `src/Dockyard.Dashboard` | `dashboard/v<semver>` |
+| Engine | The Linux engine image (WSL tarball, macOS VM images) | `image/` | `engine/v<semver>` |
 | Services | Dockyard's own containers (proxy, DNS, NFS), shown in the dashboard's Dockyard group | `services/` | images pinned by digest in `Dockyard.Setup` |
 
 A component's version is its own. The tag names the component and the version; a release carries only that component's
@@ -26,10 +26,10 @@ assets and its own `SHA256SUMS`:
 
 | Release | Assets |
 |---|---|
-| `cli/<v>` | `dockyard-windows-x64.exe`, `dockyard-linux-x64`, `dockyard-macos-arm64`, `dockyard-host-macos-arm64` (the VM helper, signed with its entitlement, for a Mac without the dashboard); and on Linux `dockyard_<v>_amd64.deb` and `dockyard-<v>-1.x86_64.rpm` (the command and a tray) and `Dockyard-<v>-linux-x64.tar.gz` (for distributions without apt or dnf) |
-| `tray/<v>` | `Dockyard.Tray.zip` (the tray and its native libraries) |
-| `dashboard/<v>` | `Dockyard.Dashboard.zip`; `Dockyard-<v>-macos.zip` and `Dockyard-<v>-macos.dmg` (the app bundle: tray, dashboard, VM helper and VM files, no command); `dockyard-dashboard-<v>-linux-x64.tar.gz`, `dockyard-dashboard_<v>_amd64.deb` and `dockyard-dashboard-<v>-1.x86_64.rpm` (the dashboard and a tray, no dependency on `dockyard`) |
-| `engine/<v>` | `dockyard-linux-<v>-x86_64.tar.gz`, `dockyard-vm-<v>-aarch64.tar.gz` |
+| `cli/v<v>` | `dockyard-windows-x64.exe`, `dockyard-linux-x64`, `dockyard-macos-arm64`, `dockyard-host-macos-arm64` (the VM helper, signed with its entitlement, for a Mac without the dashboard); and on Linux `dockyard_<v>_amd64.deb` and `dockyard-<v>-1.x86_64.rpm` (the command and a tray) and `Dockyard-<v>-linux-x64.tar.gz` (for distributions without apt or dnf) |
+| `tray/v<v>` | `Dockyard.Tray.zip` (the tray and its native libraries) |
+| `dashboard/v<v>` | `Dockyard.Dashboard.zip`; `Dockyard-<v>-macos.zip` and `Dockyard-<v>-macos.dmg` (the app bundle: tray, dashboard, VM helper and VM files, no command); `dockyard-dashboard-<v>-linux-x64.tar.gz`, `dockyard-dashboard_<v>_amd64.deb` and `dockyard-dashboard-<v>-1.x86_64.rpm` (the dashboard and a tray, no dependency on `dockyard`) |
+| `engine/v<v>` | `dockyard-linux-<v>-x86_64.tar.gz`, `dockyard-vm-<v>-aarch64.tar.gz` |
 
 Each app carries its own payloads: both Windows publishes pass `-p:GuestBundle` and `-p:HostExe`, so either can set up the
 engine without the other. On Windows each component is a file of its own. On Linux each app has a package, a tarball and a
@@ -44,10 +44,10 @@ shares. So one release with the fixed tag `index` carries a single asset, `compo
 
 ```json
 {
-  "cli":       { "version": "0.9.0", "tag": "cli/0.9.0" },
-  "tray":      { "version": "0.9.0", "tag": "tray/0.9.0" },
-  "dashboard": { "version": "0.9.0", "tag": "dashboard/0.9.0", "requires": { "cli": "0.9.0" } },
-  "engine":    { "version": "0.9.0", "tag": "engine/0.9.0" }
+  "cli":       { "version": "0.9.0", "tag": "cli/v0.9.0" },
+  "tray":      { "version": "0.9.0", "tag": "tray/v0.9.0" },
+  "dashboard": { "version": "0.9.0", "tag": "dashboard/v0.9.0", "requires": { "cli": "0.9.0" } },
+  "engine":    { "version": "0.9.0", "tag": "engine/v0.9.0" }
 }
 ```
 
@@ -57,10 +57,12 @@ shares. So one release with the fixed tag `index` carries a single asset, `compo
 - `requires` names the lowest version of the CLI this one works with. An update is offered only when its requirements are
   met; otherwise the CLI's own update comes first.
 - Without an index (a network that blocks the download) setup says so; `--assets` installs without it.
-- The one-liners read the index too: they take the `cli` entry's tag (or `cli/$DOCKYARD_VERSION`), download only that
+- The one-liners read the index too: they take the `cli` entry's tag (or `cli/v$DOCKYARD_VERSION`), download only that
   release's command for their OS and its `SHA256SUMS`, check it and run `dockyard setup <args>`. They accept only `cli/*` tags.
-- The CLI's release is the one marked latest; the other components publish with `--latest=false`. Nothing reads
-  `releases/latest`: a development build (0.0.0) takes its Dockyard files from the index's `cli` entry.
+- GitHub marks one release per repository as latest. The CLI's release takes it, since the download probe and anyone
+  following `releases/latest` expect the command there; the other components publish with `latest: 'false'` (prereleases
+  never take it). Each component's own newest release is its entry in `components.json`. Dockyard itself never
+  reads `releases/latest`: a development build (0.0.0) takes its Dockyard files from the index's `cli` entry.
 
 ## The CLI
 
@@ -81,16 +83,16 @@ the ref and turns on only the jobs a component needs:
 | Ref | Builds and tests | Releases |
 |---|---|---|
 | run by hand (`workflow_dispatch`) | everything | nothing |
-| `cli/<version>` | the CLI for Windows, Linux and macOS and its Linux packages and tarball, and the dashboard and tray of this commit for the `setup-*` end-to-end tests that drive `dockyard setup --silent` | the CLI, marked latest |
-| `tray/<version>` | the tray for Windows | the tray |
-| `dashboard/<version>` | the dashboard for Windows, Linux and macOS (the app bundle) | the dashboard |
-| `engine/<version>` | the WSL image and the macOS VM images, with their boot tests | the engine |
+| `cli/v<version>` | the CLI for Windows, Linux and macOS and its Linux packages and tarball, and the dashboard and tray of this commit for the `setup-*` end-to-end tests that drive `dockyard setup --silent` | the CLI, marked latest |
+| `tray/v<version>` | the tray for Windows | the tray |
+| `dashboard/v<version>` | the dashboard for Windows, Linux and macOS (the app bundle) | the dashboard |
+| `engine/v<version>` | the WSL image and the macOS VM images, with their boot tests | the engine |
 | `v<version>` | everything, as for a run by hand | all four at `<version>`, in order: engine, tray, dashboard, CLI |
 
-A single component's release writes `SHA256SUMS`, publishes the release as a draft, checks its assets, makes it public and
-updates `components.json`. A `v` tag does the same for each component in turn (`scripts/release-component.sh`): it creates
-`<component>/<version>` at the tagged commit with the `v` tag's message as its notes, and uploads only that component's
-assets, as `check-release-assets.sh --list` names them. A component already released is skipped, so rerunning a `v` release
+A single component's release writes `SHA256SUMS` and publishes through pipeline-templates' `upsert-release`: a draft until
+its assets are on it, its notes from the annotated tag, then public; it then updates `components.json`. A `v` tag does the same for each component in turn (`scripts/release-component.sh`): it creates
+`<component>/v<version>` at the tagged commit with the `v` tag's message as its notes, and uploads only that component's
+assets, as `check-release-assets.sh --list` names them. A component already released keeps its notes and flags and only gets its assets replaced, so rerunning a `v` release
 that stopped halfway carries on. Use a `v` tag when everything changed together, and a component tag for a fix to one part.
 
 ## Not in this step

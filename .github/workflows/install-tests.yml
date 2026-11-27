@@ -142,7 +142,7 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: |
           mkdir setup
-          gh release download "cli/$VERSION" --pattern dockyard-linux-x64 --dir setup
+          gh release download "cli/v${VERSION#v}" --pattern dockyard-linux-x64 --dir setup
           chmod +x setup/dockyard-linux-x64
 
       - name: Import from a second engine that plays Docker Desktop
