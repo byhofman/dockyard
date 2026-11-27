@@ -44,7 +44,7 @@ if [ "$container" -eq 0 ] && [ -n "${DOCKYARD:-}" ]; then
 fi
 
 echo "== first install, no dashboard"
-setup --silent --without dashboard --no-start
+setup --silent --with tray --without dashboard --no-start
 check "the tray in place" test -x "$app_dir/dockyard-tray"
 check "the command in place" test -x "$app_dir/dockyard-cli"
 check "no dashboard" missing "$(dash)"
@@ -227,7 +227,7 @@ setup --silent --no-start
 check "dashboard kept" test -x "$(dash)"
 
 echo "== remove the dashboard"
-setup --silent --without dashboard --no-start
+setup --silent --with tray --without dashboard --no-start
 check "dashboard removed" missing "$(dash)"
 check "the tray stays" test -x "$app_dir/dockyard-tray"
 check "and the libraries it links" test -f "$app_dir/libSkiaSharp.so"
