@@ -16,20 +16,19 @@ static class WindowsSetup
 
     public static async Task<bool> MachineInstall(Action<string> log, bool dashboard, IReadOnlyCollection<string> without)
     {
-        if (!Elevation.IsElevated)
-        {
-            string[] extra =
-            [
-                .. dashboard ? Array.Empty<string>() : ["--engine-only"],
-                .. without.Count > 0 ? new[] { "--without", string.Join(',', without) } : [],
-                .. SourceArgs,
-                .. RunningCli is { } cli ? new[] { "--cli-file", cli } : [],
-            ];
-            return await Elevation.Run(log, "--machine-install", extra);
-        }
+        if (!Elevation.IsElevated) return await Elevation.Run(log, "--machine-install", [.. MachineInstallArgs(dashboard, without, Source.Argument(), RunningCli)]);
         var (sid, name) = Elevation.CurrentUser;
-        return await MachineSetup.Install(log, sid, name, Environment.ProcessId, engineOnly: !dashboard, without, Source, RunningCli);
+        return await MachineSetup.Install(log, sid, name, Environment.ProcessId, engineOnly: !dashboard, without, Source, MachineSetup.InstallsCli(without) ? RunningCli : null);
     }
+
+    // The same machine step whichever app asks: only the CLI brings a file of its own, itself, and only when it is chosen.
+    internal static IReadOnlyList<string> MachineInstallArgs(bool dashboard, IReadOnlyCollection<string> without, string source, string? runningCli) =>
+    [
+        .. dashboard ? Array.Empty<string>() : ["--engine-only"],
+        .. without.Count > 0 ? new[] { "--without", string.Join(',', without) } : [],
+        "--source", source,
+        .. MachineSetup.InstallsCli(without) && runningCli is { } cli ? new[] { "--cli-file", cli } : [],
+    ];
 
     public static async Task MachineUninstall(Action<string> log)
     {
@@ -54,7 +53,7 @@ static class WindowsSetup
         try
         {
             log($"Downloading the dockyard command {release.Tag}");
-            var cli = await Updates.DownloadReleaseAsset(Updates.CliAssetPattern, dir, isPattern: true, tag: release.Tag);
+            var cli = await Updates.DownloadComponentAsset(Updates.CliComponent, Updates.CliAssetPattern, dir, release.Tag);
             if (Elevation.IsElevated) await MachineSetup.Update(log, Component.DockyardCli, cli, Environment.ProcessId, Source);
             else await Elevation.Run(log, "--machine-update", Component.DockyardCli.ToString(), "--app-file", cli);
         }
@@ -94,7 +93,7 @@ static class WindowsSetup
         try
         {
             log($"Downloading the dashboard {release.Tag}");
-            await Updates.DownloadReleaseAsset(Paths.DashboardZipName, dir, tag: release.Tag);
+            await Updates.DownloadComponentAsset(Updates.DashboardComponent, Updates.DashboardZipPattern, dir, release.Tag);
             if (Elevation.IsElevated) await MachineSetup.UpdateDashboard(log, dir, Environment.ProcessId);
             else await Elevation.Run(log, "--machine-dashboard", "update", "--source-dir", dir);
         }

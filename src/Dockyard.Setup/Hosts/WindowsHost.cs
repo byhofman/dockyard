@@ -252,7 +252,8 @@ sealed class WindowsHost : IEngineHost
         {
             // WSL does not work until the restart its install asked for, and the rest of setup needs WSL.
             log($"The Linux engine has to wait for the restart ({ex.Message})");
-            UserSetup.ResumeAfterReboot(request.Dashboard, log);
+            var app = UserSetup.ResumeApp(ThisApp.Current, MachineSetup.InstallsCli(request.Without), request.Dashboard);
+            UserSetup.ResumeAfterReboot(app, request.Dashboard, log);
             return true;
         }
         await FindWingetPlugins(log);

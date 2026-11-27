@@ -115,13 +115,70 @@ public sealed class WindowsHostTests
         Assert.Empty(UserSetup.LogonEntries(tray: false, host: false));
     }
 
+    [Theory]
+    [InlineData("Cli", true, true, "Cli")]
+    [InlineData("Cli", true, false, "Cli")]
+    [InlineData("Cli", false, true, "Dashboard")]
+    [InlineData("Dashboard", true, true, "Dashboard")]
+    [InlineData("Dashboard", false, true, "Dashboard")]
+    [InlineData("Dashboard", true, false, "Cli")]
+    [InlineData("Tray", true, true, "Cli")]
+    [InlineData("Tray", false, true, "Dashboard")]
+    public void A_restart_resumes_with_the_app_that_ran_setup_when_it_stays(string running, bool cli, bool dashboard, string resumes) =>
+        Assert.Equal(Enum.Parse<RunningApp>(resumes), UserSetup.ResumeApp(Enum.Parse<RunningApp>(running), cli, dashboard));
+
     [Fact]
-    public void A_restart_resumes_with_the_CLI_and_opens_the_dashboard_only_when_chosen()
+    public void Each_app_resumes_in_its_own_words_and_opens_the_dashboard_only_when_chosen()
     {
         var cli = $"\"{Paths.DockyardCliExe}\"";
-        Assert.Equal($"{cli} setup --resume", UserSetup.ResumeCommand(dashboard: false, assets: null));
-        Assert.Equal($"{cli} setup --resume --open-dashboard", UserSetup.ResumeCommand(dashboard: true, assets: null));
-        Assert.Equal($"{cli} setup --resume --open-dashboard --assets \"D:\\my files\"", UserSetup.ResumeCommand(dashboard: true, assets: @"D:\my files"));
+        var dashboard = $"\"{Paths.DashboardExe}\"";
+        Assert.Equal($"{cli} setup --resume", UserSetup.ResumeCommand(RunningApp.Cli, openDashboard: false, assets: null));
+        Assert.Equal($"{cli} setup --resume --open-dashboard --assets \"D:\\my files\"", UserSetup.ResumeCommand(RunningApp.Cli, openDashboard: true, assets: @"D:\my files"));
+        Assert.Equal($"{dashboard} --setup --silent --resume", UserSetup.ResumeCommand(RunningApp.Dashboard, openDashboard: false, assets: null));
+        Assert.Equal($"{dashboard} --setup --silent --resume --open-dashboard", UserSetup.ResumeCommand(RunningApp.Dashboard, openDashboard: true, assets: null));
+    }
+
+    [Fact]
+    public void A_CLI_only_install_asks_for_no_dashboard_and_installs_the_running_CLI_itself()
+    {
+        var args = WindowsSetup.MachineInstallArgs(dashboard: false, without: [nameof(Component.Dashboard)], "dockyard", runningCli: @"C:\Downloads\dockyard.exe");
+        Assert.Equal(["--engine-only", "--without", "Dashboard", "--source", "dockyard", "--cli-file", @"C:\Downloads\dockyard.exe"], args);
+        Assert.True(MachineSetup.InstallsCli([nameof(Component.Dashboard)]));
+    }
+
+    [Fact]
+    public void A_dashboard_only_install_leaves_the_CLI_out_whichever_app_runs_it()
+    {
+        string[] without = [nameof(Component.DockyardCli)];
+        var fromCli = WindowsSetup.MachineInstallArgs(dashboard: true, without, "winget", runningCli: @"C:\Downloads\dockyard.exe");
+        var fromDashboard = WindowsSetup.MachineInstallArgs(dashboard: true, without, "winget", runningCli: null);
+        Assert.Equal(["--without", "DockyardCli", "--source", "winget"], fromCli);
+        Assert.Equal(fromCli, fromDashboard);
+        Assert.False(MachineSetup.InstallsCli(without));
+    }
+
+    [Fact]
+    public void A_full_install_is_the_same_machine_step_from_either_app_but_for_the_file_the_CLI_brings()
+    {
+        var fromCli = WindowsSetup.MachineInstallArgs(dashboard: true, without: [], "winget", runningCli: @"C:\Downloads\dockyard.exe");
+        var fromDashboard = WindowsSetup.MachineInstallArgs(dashboard: true, without: [], "winget", runningCli: null);
+        Assert.Equal([.. fromDashboard, "--cli-file", @"C:\Downloads\dockyard.exe"], fromCli);
+    }
+
+    [Fact]
+    public void Removing_one_app_keeps_the_other_and_Dockyard_installed()
+    {
+        Assert.True(WindowsHost.IsInstalledWhere(new HashSet<string>([Paths.InstalledMarker, Paths.DashboardExe]).Contains));
+        Assert.True(WindowsHost.IsInstalledWhere(new HashSet<string>([Paths.InstalledMarker, Paths.DockyardCliExe]).Contains));
+        Assert.Equal(Paths.DashboardExe, Elevation.WorkerExe(RunningApp.Tray, path => path == Paths.DashboardExe));
+        Assert.Equal(Paths.DockyardCliExe, Elevation.WorkerExe(RunningApp.Tray, path => path == Paths.DockyardCliExe));
+    }
+
+    [Fact]
+    public void Uninstall_takes_both_apps_along_from_the_one_folder()
+    {
+        foreach (var app in new[] { Paths.CommandDir, Paths.DashboardExe, Paths.AppExe, Paths.HostExe })
+            Assert.Equal(Paths.AppDir, Path.GetDirectoryName(app));
     }
 
     [Fact]

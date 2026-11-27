@@ -14,7 +14,8 @@ static class MachineSetup
         InUseFiles.CleanUp(Paths.AppDir);
         // First, so that a setup that stops halfway leaves the command that finishes it.
         await MachineApps.AddDefenderExclusions(log);
-        await MachineApps.InstallCli(log, MachineApps.CliFile(runningCli, Updates.LocalAssets));
+        if (InstallsCli(without)) await MachineApps.InstallCli(log, MachineApps.CliFile(runningCli, Updates.LocalAssets));
+        else MachineApps.RemoveCli(log);
         var withWindows = !without.Contains(nameof(Component.Engine));
         var withLinux = !without.Contains(nameof(Component.LinuxEngine));
         log(Hosts.InstallPhases.Start(Hosts.InstallPhases.WindowsFeatures(withWindows, withLinux)));
@@ -41,6 +42,8 @@ static class MachineSetup
         MarkInstalled(Paths.InstalledMarker);
         return reboot;
     }
+
+    public static bool InstallsCli(IReadOnlyCollection<string> without) => !without.Contains(nameof(Component.DockyardCli));
 
     public static void MarkInstalled(string marker)
     {
@@ -184,6 +187,11 @@ static class MachineSetup
                 MachineApps.StopApps(keepPid, trayOnly: true);
                 if (installed) await MachineApps.InstallTray(log, appFile);
                 else MachineApps.RemoveTray(log);
+                break;
+            case Component.DockyardCli:
+                if (!installed) { MachineApps.RemoveCli(log); break; }
+                await MachineApps.AddDefenderExclusions(log);
+                await MachineApps.InstallCli(log, appFile ?? MachineApps.CliFile(null, Updates.LocalAssets));
                 break;
             default: throw new ArgumentException($"{component} cannot be changed here");
         }
