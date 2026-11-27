@@ -45,11 +45,11 @@ public sealed class ElevationTests
     }
 
     [Fact]
-    public void The_installed_CLI_is_where_the_system_keeps_commands()
+    public void The_installed_CLI_is_the_CLI_app_s_own_file()
     {
         var expected = OperatingSystem.IsWindows() ? Path.Combine(Paths.AppDir, "bin", "dockyard.exe")
-            : OperatingSystem.IsMacOS() ? "/usr/local/bin/dockyard"
-            : "/usr/bin/dockyard";
+            : OperatingSystem.IsMacOS() ? MacLayout.CliExe
+            : LinuxLayout.CliExe;
         Assert.Equal(expected, Paths.DockyardCliExe);
     }
 

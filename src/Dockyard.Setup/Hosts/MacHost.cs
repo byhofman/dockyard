@@ -71,10 +71,18 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
             }
             switch (component)
             {
-                case ComponentRules.DashboardId when release is not null: await parts.AddDashboard(log, release.Tag); break;
+                case ComponentRules.DashboardId:
+                    await parts.UpdateBundle(log, release?.Tag);
+                    return true;
                 case "LinuxEngine": await vm.Update(log); break;
+                // The command, and dockyard-host and the VM files with it where no bundle brings its own.
                 case nameof(Component.DockyardCli):
-                    await parts.SelfUpdate(log, engineOnly: !HasDashboard, release?.Tag);
+                    await parts.PlaceCli(log, release?.Tag);
+                    if (!MacLayout.HasBundleHelper)
+                    {
+                        await parts.PlaceEngineParts(log, release?.Tag, refreshVm: true);
+                        await vm.PrepareForInstall(log);
+                    }
                     return true;
             }
         }
@@ -97,6 +105,13 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
     public async Task<bool> SetComponent(Action<string> log, string component, bool installed, bool removeData = false)
     {
         if (component == ComponentRules.DashboardId) return await SetDashboard(log, installed);
+        if (component == nameof(Component.DockyardCli))
+        {
+            if (installed) await parts.PlaceCli(log);
+            else MacComponents.RemoveCli(log);
+            await Setup.LinkCli(log, installed);
+            return false;
+        }
         if (component == ComponentRules.TrayId)
         {
             if (installed) await MacSetup.AddLoginItem(log);

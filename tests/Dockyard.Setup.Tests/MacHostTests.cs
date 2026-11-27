@@ -109,12 +109,18 @@ public sealed class MacUpdateTests
         Assert.Null(MacLayout.Bundle(Path.Combine(Path.GetTempPath(), "Downloads", "Dockyard") + Path.DirectorySeparatorChar));
     }
 
-    [Fact]
-    public void Release_zip_names_per_edition()
+    [Theory]
+    [InlineData("Dockyard-1.2.0-macos.zip", true, false, false, false)]
+    [InlineData("Dockyard-1.2.0-macos-engine-only.zip", false, false, false, false)]
+    [InlineData("dockyard-macos-arm64", false, true, false, false)]
+    [InlineData("dockyard-host-macos-arm64", false, false, true, false)]
+    [InlineData("dockyard-vm-1.2.0-aarch64.tar.gz", false, false, false, true)]
+    public void Each_part_has_an_asset_of_its_own(string asset, bool bundle, bool cli, bool host, bool vm)
     {
-        Assert.Matches(MacLayout.ZipAsset(engineOnly: false), "Dockyard-1.2.0-macos.zip");
-        Assert.DoesNotMatch(MacLayout.ZipAsset(engineOnly: false), "Dockyard-1.2.0-macos-engine-only.zip");
-        Assert.Matches(MacLayout.ZipAsset(engineOnly: true), "Dockyard-1.2.0-macos-engine-only.zip");
+        Assert.Equal(bundle, System.Text.RegularExpressions.Regex.IsMatch(asset, MacLayout.BundleZip));
+        Assert.Equal(cli, System.Text.RegularExpressions.Regex.IsMatch(asset, MacLayout.CliAsset));
+        Assert.Equal(host, System.Text.RegularExpressions.Regex.IsMatch(asset, MacLayout.HostAsset));
+        Assert.Equal(vm, System.Text.RegularExpressions.Regex.IsMatch(asset, Updates.VmAsset));
     }
 
     [Fact]
@@ -290,15 +296,6 @@ public sealed class MacInstallTests : IDisposable
     }
 
     [Fact]
-    public void Self_update_downloads_the_offered_release_not_the_running_one()
-    {
-        Assert.Equal("v2.0.0", Updates.ReleaseTag(new Version(1, 0, 0), "v2.0.0"));
-        Assert.Equal("cli/1.0.0", Updates.ReleaseTag(new Version(1, 0, 0), null));
-        Assert.Null(Updates.ReleaseTag(new Version(0, 0, 0), null));
-        Assert.Null(Updates.ReleaseTag(null, null));
-    }
-
-    [Fact]
     [SupportedOSPlatform("macos")]
     public async Task Starting_an_engine_that_already_answers_starts_no_second_helper()
     {
@@ -404,6 +401,57 @@ public sealed class MacInstallTests : IDisposable
         Assert.Equal([MacLayout.RemoveCliLink], MacLayout.AdministratorUninstall(pathEntry: false, resolver: false, socketDaemon: false, cliLink: true, MacLayout.DockerSocket));
     }
 
+    const string Bundle = "/Users/me/Applications/Dockyard.app";
+    static readonly string BundleBase = Bundle + "/Contents/MacOS";
+
+    [Fact]
+    public void A_CLI_only_install_needs_no_bundle_and_runs_the_engine_from_its_own_folder()
+    {
+        Assert.False(MacLayout.WantsBundle(dashboard: false, tray: false));
+        Assert.Equal(MacLayout.OwnHelper, MacLayout.HelperWhere(_ => false, BundleBase));
+        Assert.Equal(MacLayout.OwnAssets, MacLayout.AssetsWhere(_ => false, BundleBase));
+        Assert.StartsWith(MacLayout.DataDir + "/", MacLayout.OwnHelper);
+        Assert.StartsWith(MacLayout.DataDir + "/", MacLayout.OwnAssets);
+        Assert.StartsWith(MacLayout.DataDir + "/", MacLayout.CliExe);
+        Assert.Contains($"<string>{MacLayout.OwnHelper}</string>", MacLayout.HostAgentPlist(MacLayout.HelperWhere(_ => false, BundleBase), MacLayout.VmConfig, atLogin: true));
+        Assert.True(MacLayout.IsInstalled(new HashSet<string>([MacLayout.VmConfig, MacLayout.Docker, MacLayout.CliExe]).Contains));
+    }
+
+    [Fact]
+    public void A_dashboard_install_is_the_bundle_and_its_engine_parts_come_first()
+    {
+        Assert.True(MacLayout.WantsBundle(dashboard: true, tray: false));
+        Assert.True(MacLayout.WantsBundle(dashboard: false, tray: true));
+        var helper = BundleBase + "/dockyard-host";
+        var vm = Bundle + "/Contents/Resources/vm";
+        Assert.Equal(helper, MacLayout.HelperWhere(new HashSet<string>([helper, MacLayout.OwnHelper]).Contains, BundleBase));
+        Assert.Equal(vm, MacLayout.AssetsWhere(new HashSet<string>([vm, MacLayout.OwnAssets]).Contains, BundleBase));
+        Assert.True(MacLayout.IsInstalled(new HashSet<string>([MacLayout.VmConfig, MacLayout.Docker, Path.Combine(MacLayout.AppBase, MacLayout.DashboardName)]).Contains));
+    }
+
+    [Fact]
+    public void Removing_one_app_keeps_the_other_because_neither_lives_inside_the_other()
+    {
+        Assert.False(MacLayout.CliExe.StartsWith(MacLayout.Bundle(MacLayout.AppBase + "/") + "/", StringComparison.Ordinal));
+        if (OperatingSystem.IsMacOS()) Assert.Equal(MacLayout.CliExe, Paths.DockyardCliExe);
+        var dashboard = Path.Combine(MacLayout.AppBase, MacLayout.DashboardName);
+        Assert.True(MacLayout.IsInstalled(new HashSet<string>([MacLayout.VmConfig, MacLayout.Docker, dashboard]).Contains));
+        Assert.True(MacLayout.IsInstalled(new HashSet<string>([MacLayout.VmConfig, MacLayout.Docker, MacLayout.CliExe]).Contains));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Uninstall_removes_both_apps_and_the_engine_parts_and_the_running_app_last(bool runsFromBundle)
+    {
+        string[] bundles = [Bundle, "/Applications/Dockyard.app"];
+        var running = runsFromBundle ? BundleBase + "/Dockyard Dashboard" : MacLayout.CliExe;
+        var order = MacLayout.AppFilesToRemove(bundles, running);
+        string[] everything = [MacLayout.BinDir, MacLayout.CliDir, MacLayout.OwnHostDir, MacLayout.OwnAssets, .. bundles];
+        Assert.Equal(everything.Order(), order.Order());
+        Assert.Equal(runsFromBundle ? Bundle : MacLayout.CliDir, order[^1]);
+    }
+
     [Fact]
     public async Task The_administrator_step_runs_before_the_app_is_deleted_and_a_failed_one_leaves_the_app()
     {
@@ -423,10 +471,10 @@ public sealed class MacInstallTests : IDisposable
     public void The_CLI_is_linked_into_usr_local_bin_and_the_link_is_taken_back_only_when_it_is_ours()
     {
         Assert.Equal("/usr/local/bin/dockyard", MacLayout.CliLink);
-        Assert.Contains("ln -sfn '/Applications/Dockyard.app/Contents/MacOS/Dockyard' /usr/local/bin/dockyard", MacLayout.InstallCliLink("/Applications/Dockyard.app/Contents/MacOS/Dockyard"));
+        Assert.Contains($"ln -sfn {Shell.ShQuote(MacLayout.CliExe)} /usr/local/bin/dockyard", MacLayout.InstallCliLink(MacLayout.CliExe));
         Assert.Contains("readlink /usr/local/bin/dockyard", MacLayout.RemoveCliLink);
-        Assert.Contains("*/Dockyard.app/Contents/MacOS/dockyard-cli)", MacLayout.RemoveCliLink);
-        Assert.Equal("dockyard-cli", Path.GetFileName(MacLayout.CliExe));
+        Assert.Contains("*/.dockyard/cli/dockyard)", MacLayout.RemoveCliLink);
+        Assert.Equal("dockyard", Path.GetFileName(MacLayout.CliExe));
         Assert.Equal("Dockyard", Path.GetFileName(MacLayout.InstalledExe));
         Assert.DoesNotContain("dockyard", MacLayout.SharedCommands);
     }
