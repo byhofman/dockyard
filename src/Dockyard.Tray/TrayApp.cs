@@ -12,8 +12,8 @@ sealed class TrayApp : Application
     readonly CancellationTokenSource lifetime = new();
 
     // Windows and Linux draw a tray icon's menu as Avalonia's own popup, which shows nothing without a theme; macOS uses
-    // the system's menu.
-    public override void Initialize() => Styles.Add(new Avalonia.Themes.Fluent.FluentTheme());
+    // the system's menu. Compact, as a system tray menu is, not touch-sized.
+    public override void Initialize() => Styles.Add(new Avalonia.Themes.Fluent.FluentTheme { DensityStyle = Avalonia.Themes.Fluent.DensityStyle.Compact });
 
     public override void OnFrameworkInitializationCompleted()
     {
@@ -43,7 +43,7 @@ sealed class TrayApp : Application
                 TrayLevel.Busy => TrayColors.Busy,
                 TrayLevel.Running => TrayColors.Running,
                 _ => TrayColors.Stopped,
-            }, image.Badge, image.Update);
+            }, image.Badge, image.Update, running: image.Level == TrayLevel.Running);
             tray.ToolTipText = controller.Menu.Tooltip;
         };
         TrayIcon.SetIcons(this, [tray]);
