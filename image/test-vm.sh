@@ -83,13 +83,7 @@ reply="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 5 --resolve web.dock
 case "$reply" in 000 | 404) echo "no site over HTTPS before a certificate arrives" ;; *) echo "FAIL: HTTPS without a certificate: '$reply'"; exit 1 ;; esac
 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -keyout /tmp/k -out /tmp/c -days 2 -subj /CN=web.dockyard.internal -addext subjectAltName=DNS:web.dockyard.internal 2>/dev/null
 tls="$(awk 'NF {printf "%s\\n", $0}' /tmp/c)"; key="$(awk 'NF {printf "%s\\n", $0}' /tmp/k)"
-# The agent may be busy reconciling its service containers right after it starts, so the request gets a few tries.
-i=0; took=""
-while [ $i -lt 5 ]; do
-  printf '{"op":"tls","cert":"%s","key":"%s"}\n' "$tls" "$key" | nc -w 3 127.0.0.1 12379 | grep -qv error && { took=1; break; }
-  i=$((i+1)); sleep 2
-done
-[ -n "$took" ] && echo "the agent takes a certificate" || { echo "FAIL: certificate"; exit 1; }
+printf '{"op":"tls","cert":"%s","key":"%s"}\n' "$tls" "$key" | nc -w 3 127.0.0.1 12379 | grep -qv error && echo "the agent takes a certificate" || { echo "FAIL: certificate"; exit 1; }
 # dockyard-proxy reloads its certificate a moment after the agent writes it.
 i=0; reply=""
 while [ $i -lt 15 ]; do
