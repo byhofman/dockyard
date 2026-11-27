@@ -28,6 +28,18 @@ curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install-mac.
 curl -fsSL https://raw.githubusercontent.com/byhofman/dockyard/main/install.sh | sh
 ```
 
+> **Beta, not yet signed.** Dockyard's builds don't have a code-signing certificate yet, so antivirus can block a new one.
+> On Windows, Defender's rule against unknown executables may stop the downloaded command with *Access is denied*. To allow
+> it, run this once in PowerShell **as administrator**, then run the one-liner again:
+>
+> ```pwsh
+> Add-MpPreference -AttackSurfaceReductionOnlyExclusions "$env:USERPROFILE\Downloads\dockyard-windows-x64.exe"
+> ```
+>
+> Setup excludes the files it installs by itself. On a work device whose security is managed (Intune), a local exclusion
+> may not count; ask your administrator to allow the file. On macOS, a browser download needs **Open Anyway** once
+> (see below); the one-liner does not.
+
 The line only reads `components.json` to find the command's latest release, downloads the command, checks it against that release's `SHA256SUMS` and runs `dockyard setup`. Your system may ask for an administrator's approval during setup, and if Windows has to restart, Dockyard carries on by itself afterwards.
 
 Run the same line again at any time: setup brings what is installed up to date and keeps what you chose. Your images, containers and settings stay.
