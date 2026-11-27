@@ -38,6 +38,7 @@
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.5" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.5" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.5" />
   </ItemGroup>
 
   <!-- What Task Manager, Activity Monitor and ps show. Native AOT puts its binary in place in a target that runs after

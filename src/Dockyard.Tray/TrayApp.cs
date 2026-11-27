@@ -6,10 +6,14 @@ using Dockyard.Setup;
 
 namespace Dockyard.Tray;
 
-// No window, no theme, no XAML: an icon and its menu.
+// No window and no XAML: an icon and its menu.
 sealed class TrayApp : Application
 {
     readonly CancellationTokenSource lifetime = new();
+
+    // Windows and Linux draw a tray icon's menu as Avalonia's own popup, which shows nothing without a theme; macOS uses
+    // the system's menu.
+    public override void Initialize() => Styles.Add(new Avalonia.Themes.Fluent.FluentTheme());
 
     public override void OnFrameworkInitializationCompleted()
     {
