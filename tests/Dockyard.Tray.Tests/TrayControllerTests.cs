@@ -20,7 +20,7 @@ public sealed class TrayControllerTests : IDisposable
         try
         {
             List<Dockyard.Core.ShellTerminal.Command> opened = [];
-            var controller = new TrayController(Facade.For(new FakeHost { Installed = true }, settings, [kubeconfig]), () => { }, _ => true, opened.Add);
+            var controller = new TrayController(Facade.For(new FakeHost { Installed = true }, settings, [kubeconfig]), () => { }, _ => true, opened.Add, onPath: _ => true);
 
             await controller.Refresh();
             controller.Menu.Visible.Single(i => i.Header == "Open a shell on…").Items.Single().Click!();
