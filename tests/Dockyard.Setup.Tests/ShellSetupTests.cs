@@ -14,6 +14,7 @@ public sealed class ShellSetupTests : IDisposable
         var block = ShellSetup.Block(ShellSetup.Kind.Bash);
 
         Assert.Contains("alias k=kubectl\n", block);
+        Assert.Contains("alias dockctx='dockyard ctx'\n", block);
         Assert.Contains("source <(kubectl completion bash)\n", block);
         Assert.Contains("complete -o default -F __start_kubectl k\n", block);
         Assert.Contains("export do=\"--dry-run=client -o yaml\"\n", block);
@@ -23,6 +24,8 @@ public sealed class ShellSetupTests : IDisposable
     [Fact]
     public void Zsh_and_PowerShell_get_do_and_now_as_lists_so_they_become_separate_arguments()
     {
+        Assert.Contains("alias dockctx='dockyard ctx'\n", ShellSetup.Block(ShellSetup.Kind.Zsh));
+        Assert.Contains("function dockctx { dockyard ctx @args }\n", ShellSetup.Block(ShellSetup.Kind.PowerShell));
         Assert.Contains("typeset -ga do=(--dry-run=client -o yaml)", ShellSetup.Block(ShellSetup.Kind.Zsh));
         Assert.Contains("$now = @('--force', '--grace-period', '0')", ShellSetup.Block(ShellSetup.Kind.PowerShell));
     }
