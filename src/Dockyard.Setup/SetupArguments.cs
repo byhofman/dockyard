@@ -5,7 +5,7 @@ namespace Dockyard.Setup;
 public enum AppAction { Setup, Update, Add, Remove, Uninstall }
 
 // Components: what Update, Add and Remove name; none for Update is everything with an update.
-public sealed record AppCommand(AppAction Action, SetupRequest Setup, IReadOnlyList<string> Components, bool RemoveData = false);
+public sealed record AppCommand(AppAction Action, SetupRequest Setup, IReadOnlyList<string> Components, bool RemoveData = false, bool Silent = false);
 
 // The one reading of setup's command line, for the CLI and for the dashboard's silent install. Problems come back as
 // messages and the caller exits with DockyardSetup.WrongArguments.
@@ -81,15 +81,19 @@ public static class SetupArguments
         if (at < 0) return null;
         List<string> rest = [.. args.Take(at), .. args.Skip(at + 1)];
         var none = Parse([], out _);
+        var silent = rest.Contains("--silent");
         switch (args[at])
         {
             case "--setup":
-                return new AppCommand(AppAction.Setup, Parse(rest, out problems), []);
+            {
+                var request = Parse(rest, out problems);
+                return new AppCommand(AppAction.Setup, request, [], Silent: request.Silent);
+            }
             case "--update":
             {
                 var found = Unknown(rest.Where(a => a.StartsWith("--", StringComparison.Ordinal)), "--silent");
                 problems = found;
-                return new AppCommand(AppAction.Update, none, [.. rest.Where(a => !a.StartsWith("--", StringComparison.Ordinal)).SelectMany(Split)]);
+                return new AppCommand(AppAction.Update, none, [.. rest.Where(a => !a.StartsWith("--", StringComparison.Ordinal)).SelectMany(Split)], Silent: silent);
             }
             case "--component":
             {
@@ -99,17 +103,38 @@ public static class SetupArguments
                 var found = Unknown(rest.Where(a => a.StartsWith("--", StringComparison.Ordinal)), remove ? ["--silent", "--remove-data"] : ["--silent"]);
                 found.AddRange(words.Skip(2).Select(w => $"Unexpected argument {w}"));
                 problems = found;
-                return new AppCommand(remove ? AppAction.Remove : AppAction.Add, none, [words[1]], rest.Contains("--remove-data"));
+                return new AppCommand(remove ? AppAction.Remove : AppAction.Add, none, [words[1]], rest.Contains("--remove-data"), silent);
             }
             default:
             {
                 var found = Unknown(rest.Where(a => a.StartsWith("--", StringComparison.Ordinal)), "--silent", "--remove-data");
                 found.AddRange(rest.Where(a => !a.StartsWith("--", StringComparison.Ordinal)).Select(w => $"Unexpected argument {w}"));
                 problems = found;
-                return new AppCommand(AppAction.Uninstall, none, [], rest.Contains("--remove-data"));
+                return new AppCommand(AppAction.Uninstall, none, [], rest.Contains("--remove-data"), silent);
             }
         }
     }
+
+    // Nothing may ask: asked for, or there is no terminal to ask in.
+    public static bool Silent(bool asked, bool hasTerminal) => asked || !hasTerminal;
+
+    public static string DashboardUsage => $"""
+        Usage:
+          dockyard-dashboard [--section <name>]       opens the window, at that section
+          dockyard-dashboard --setup [option…]        opens the window at Setup
+          dockyard-dashboard --setup --silent [option…]
+                                                      installs, or brings the install up to date, without a window
+          dockyard-dashboard --update [component…]    updates these, or everything with an update
+          dockyard-dashboard --component add|remove <component> [--remove-data]
+          dockyard-dashboard --uninstall [--remove-data]
+          dockyard-dashboard --help
+
+        Setup's options, as dockyard setup takes them:
+          {string.Join(" ", Switches)}
+          {string.Join(" ", Valued.Select(v => $"{v} <value>"))}
+        --silent goes with every action; without a window nothing is asked.
+
+        """;
 
     static List<string> Unknown(IEnumerable<string> options, params string[] allowed) =>
         [.. options.Where(o => !allowed.Contains(o)).Select(o => $"Unknown option {o}")];

@@ -43,11 +43,12 @@ static class ThisApp
         _ => null,
     };
 
-    // The app that finishes a step the running one hands over: the running app's own installed copy, else the other app. A
-    // step that removes the running app goes to the other, which stays: at least one does.
+    // The app that finishes a step the running one hands over: the CLI's own installed copy for the CLI, and for anything
+    // else the dashboard first, as Dockyard itself is for the tray. A step that removes the running app goes to the other,
+    // which stays: at least one does.
     public static (RunningApp App, string Exe) HandOffTarget(RunningApp running, bool removesRunning, Func<string, bool> exists, string cliExe, string? dashboardExe)
     {
-        RunningApp[] order = running == RunningApp.Dashboard ? [RunningApp.Dashboard, RunningApp.Cli] : [RunningApp.Cli, RunningApp.Dashboard];
+        RunningApp[] order = running == RunningApp.Cli ? [RunningApp.Cli, RunningApp.Dashboard] : [RunningApp.Dashboard, RunningApp.Cli];
         foreach (var app in order.Where(a => !(removesRunning && a == running)))
             if ((app == RunningApp.Cli ? cliExe : dashboardExe) is { } exe && exists(exe)) return (app, exe);
         throw new InvalidOperationException("Neither the dockyard command nor the dashboard is installed to finish this: run Dockyard's setup again");

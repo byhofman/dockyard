@@ -24,6 +24,7 @@ sealed class FakeHost : IEngineHost
     public bool IsInstalled => Installed;
     public bool RunsFromInstallLocation => false;
     public bool HasDashboard => Dashboard;
+    public bool? UninstalledSilently { get; private set; }
     public string? DashboardExe { get; set; }
     // The certificate authority goes in a folder of the test's own, never the user's.
     public string CaDirectory { get; } = Path.Combine(Path.GetTempPath(), "dockyard-tests-ca-" + Guid.NewGuid().ToString("N"));
@@ -103,6 +104,7 @@ sealed class FakeHost : IEngineHost
     public Task Uninstall(Action<string> log, bool removeData, bool silent)
     {
         Calls.Add($"uninstall data={removeData}");
+        UninstalledSilently = silent;
         Installed = false;
         Dashboard = false;
         return Task.CompletedTask;

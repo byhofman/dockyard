@@ -291,4 +291,17 @@ public sealed class SetupCommandTests
 
         Assert.Equal(["uninstall data=True"], h.Host.Calls);
     }
+
+    [Fact]
+    public void Uninstall_asks_only_in_a_terminal_and_never_with_silent()
+    {
+        using var h = new CliHarness(Catalog) { HasTerminal = true };
+        h.Host.Installed = true;
+        Assert.Equal(0, h.Run("uninstall"));
+        Assert.False(h.Host.UninstalledSilently);
+
+        h.Host.Installed = true;
+        Assert.Equal(0, h.Run("uninstall", "--silent"));
+        Assert.True(h.Host.UninstalledSilently);
+    }
 }

@@ -40,10 +40,12 @@ public sealed class RunningAppTests
     [InlineData("Dashboard", false, "cli,dashboard", "Dashboard")]
     [InlineData("Dashboard", false, "cli", "Cli")]
     [InlineData("Dashboard", true, "cli,dashboard", "Cli")]
-    [InlineData("Tray", false, "cli,dashboard", "Cli")]
-    [InlineData("Tray", false, "dashboard", "Dashboard")]
+    [InlineData("Tray", false, "cli,dashboard", "Dashboard")]
+    [InlineData("Tray", false, "cli", "Cli")]
+    [InlineData("Other", false, "cli,dashboard", "Dashboard")]
+    [InlineData("Cli", false, "cli,dashboard", "Cli")]
     [InlineData("Cli", false, "dashboard", "Dashboard")]
-    public void A_step_goes_to_the_running_apps_own_copy_else_to_the_other_and_never_to_an_app_it_removes(string running, bool removesRunning, string installed, string expected)
+    public void A_step_goes_to_the_running_apps_own_copy_and_otherwise_the_dashboard_first_and_never_to_an_app_it_removes(string running, bool removesRunning, string installed, string expected)
     {
         var present = installed.Split(',').Select(a => a == "cli" ? Cli : Dashboard).ToHashSet();
         var (app, exe) = ThisApp.HandOffTarget(Enum.Parse<RunningApp>(running), removesRunning, present.Contains, Cli, Dashboard);

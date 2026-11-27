@@ -227,6 +227,10 @@ sealed class UpdateCommand(CliEnvironment env) : AsyncCommand<UpdateSettings>
 
 sealed class UninstallSettings : CommandSettings
 {
+    [CommandOption("--silent")]
+    [Description("Do not ask anything, also in a terminal")]
+    public bool Silent { get; init; }
+
     [CommandOption("--remove-data")]
     [Description("Remove the images and containers too; they stay otherwise")]
     public bool RemoveData { get; init; }
@@ -237,7 +241,7 @@ sealed class UninstallCommand(CliEnvironment env) : AsyncCommand<UninstallSettin
     public override async Task<int> ExecuteAsync(CommandContext context, UninstallSettings s, CancellationToken cancellation)
     {
         using var setup = env.Setup();
-        await setup.Uninstall(s.RemoveData, new ProgressRenderer(env.Console, env.Error), silent: !env.HasTerminal);
+        await setup.Uninstall(s.RemoveData, new ProgressRenderer(env.Console, env.Error), silent: SetupArguments.Silent(s.Silent, env.HasTerminal));
         return 0;
     }
 }

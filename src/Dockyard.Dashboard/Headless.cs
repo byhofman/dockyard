@@ -63,9 +63,7 @@ static class Headless
     {
         if (problems.Count > 0)
         {
-            foreach (var problem in problems) launch.Error.WriteLine(problem);
-            launch.Error.WriteLine("dockyard-dashboard --setup --silent takes the options of dockyard setup; --update [component…], --component add|remove <component> [--remove-data] and --uninstall [--remove-data] those of their dockyard commands.");
-            return DockyardSetup.WrongArguments;
+            return Wrong(problems, launch);
         }
         if (command.Setup.Assets is { } assets) DockyardSetup.LocalAssets = assets;
         var progress = new Lines(launch.Out, launch.Error);
@@ -86,7 +84,7 @@ static class Headless
                     setup.Remove(command.Components[0], command.RemoveData, progress).GetAwaiter().GetResult();
                     break;
                 default:
-                    setup.Uninstall(command.RemoveData, progress, silent: !launch.HasTerminal()).GetAwaiter().GetResult();
+                    setup.Uninstall(command.RemoveData, progress, silent: SetupArguments.Silent(command.Silent, launch.HasTerminal())).GetAwaiter().GetResult();
                     break;
             }
             return DockyardSetup.Ok;
@@ -102,6 +100,31 @@ static class Headless
             launch.Error.WriteLine(e.Message);
             return DockyardSetup.Failed;
         }
+    }
+
+    public static int Wrong(IReadOnlyList<string> problems, Launch launch)
+    {
+        foreach (var problem in problems) launch.Error.WriteLine(problem);
+        launch.Error.WriteLine("dockyard-dashboard --help shows what it takes.");
+        return DockyardSetup.WrongArguments;
+    }
+
+    // Opening the window takes nothing but --section <name>.
+    public static string? Section(IReadOnlyList<string> args, out IReadOnlyList<string> problems)
+    {
+        List<string> found = [];
+        string? section = null;
+        for (var i = 0; i < args.Count; i++)
+        {
+            if (args[i] == "--section")
+            {
+                if (i + 1 < args.Count && !args[i + 1].StartsWith('-')) section = args[++i];
+                else found.Add("--section needs a value");
+            }
+            else found.Add(args[i].StartsWith('-') ? $"Unknown option {args[i]}" : $"Unexpected argument {args[i]}");
+        }
+        problems = found;
+        return section;
     }
 
     sealed class Lines(TextWriter output, TextWriter error) : IProgress<SetupProgress>

@@ -24,6 +24,32 @@ public sealed class AppFilesTests : IDisposable
         return zip;
     }
 
+    // The dashboard updates itself from a copy of its own installed exe, which Windows keeps locked while it runs: every file
+    // the update replaces, that exe included, moves aside instead of being overwritten.
+    [Fact]
+    public void The_dashboard_updates_over_its_own_running_exe()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows locks a running exe");
+        var exe = Path.Combine(dir, "dockyard-dashboard.exe");
+        File.Copy(Path.Combine(Environment.SystemDirectory, "ping.exe"), exe);
+        File.WriteAllText(Path.Combine(dir, "libSkiaSharp.dll"), "old");
+        using var running = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe, ["-n", "30", "127.0.0.1"]) { UseShellExecute = false, RedirectStandardOutput = true })!;
+        try
+        {
+            AppFiles.Extract(Zip("dockyard-dashboard.exe", "libSkiaSharp.dll"), dir, AppFiles.DashboardManifest);
+
+            Assert.Equal("dockyard-dashboard.exe", File.ReadAllText(exe));
+            Assert.Equal("libSkiaSharp.dll", File.ReadAllText(Path.Combine(dir, "libSkiaSharp.dll")));
+            Assert.False(running.HasExited);
+        }
+        finally
+        {
+            running.Kill();
+            running.WaitForExit();
+            InUseFiles.CleanUp(dir);
+        }
+    }
+
     [Fact]
     public void Adding_and_removing_leaves_the_rest_of_the_install_alone()
     {

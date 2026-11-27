@@ -230,4 +230,33 @@ public sealed class SetupArgumentsTests
         var remove = Command([.. SetupArguments.ForApp(RunningApp.Dashboard, ["component", "remove", "tray", "--remove-data"])]);
         Assert.Equal((AppAction.Remove, "tray", true), (remove.Action, remove.Components.Single(), remove.RemoveData));
     }
+
+    [Fact]
+    public void Silent_is_asked_for_with_any_action()
+    {
+        Assert.True(Command("--uninstall", "--silent").Silent);
+        Assert.False(Command("--uninstall").Silent);
+        Assert.True(Command("--update", "--silent").Silent);
+        Assert.True(Command("--setup", "--silent").Silent);
+        Assert.False(Command("--setup").Silent);
+    }
+
+    [Theory]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, true)]
+    [InlineData(false, false, true)]
+    public void A_run_is_silent_when_asked_or_when_there_is_no_terminal_to_ask_in(bool asked, bool hasTerminal, bool silent) =>
+        Assert.Equal(silent, SetupArguments.Silent(asked, hasTerminal));
+
+    [Fact]
+    public void The_dashboards_usage_names_every_action_and_every_setup_option()
+    {
+        var usage = SetupArguments.DashboardUsage;
+        foreach (var part in new[] { "--section <name>", "--setup", "--update [component", "--component add|remove <component> [--remove-data]", "--uninstall [--remove-data]", "--help" })
+            Assert.Contains(part, usage);
+        foreach (var option in new[] { "--silent", "--trust-https", "--kubectl-shell", "--resume", "--no-start", "--open-dashboard", "--remove-data" })
+            Assert.Contains(option, usage);
+        foreach (var option in new[] { "--with <value>", "--without <value>", "--source <value>", "--image <value>", "--assets <value>" })
+            Assert.Contains(option, usage);
+    }
 }

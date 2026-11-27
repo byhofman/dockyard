@@ -130,9 +130,9 @@ public sealed class DashboardSilentSetupTests
     {
         var h = new Harness();
 
-        Assert.Equal(DockyardSetup.WrongArguments, h.Run("--setup", "--silent", "--help"));
+        Assert.Equal(DockyardSetup.WrongArguments, h.Run("--setup", "--silent", "--frob"));
 
-        Assert.Contains("Unknown option --help", h.Error.ToString());
+        Assert.Contains("Unknown option --frob", h.Error.ToString());
         Assert.False(h.SetupCreated);
         Assert.Empty(h.Windows);
         Assert.Equal(1, h.Attached);
@@ -206,5 +206,57 @@ public sealed class DashboardSilentSetupTests
         failed.Setup.Failure = new HttpRequestException("offline");
         Assert.Equal(DockyardSetup.Failed, failed.Run("--update"));
         Assert.Contains("offline", failed.Error.ToString());
+    }
+
+    [Theory]
+    [InlineData("--help")]
+    [InlineData("-h")]
+    [InlineData("--setup", "--help")]
+    [InlineData("--setup", "--silent", "--help")]
+    [InlineData("--uninstall", "-h")]
+    public void Help_prints_the_usage_and_exits_0_without_a_window(params string[] args)
+    {
+        var h = new Harness();
+
+        Assert.Equal(0, h.Run(args));
+
+        Assert.Equal(SetupArguments.DashboardUsage.TrimEnd(), h.Out.ToString().Trim());
+        Assert.Empty(h.Windows);
+        Assert.False(h.SetupCreated);
+        Assert.Equal(1, h.Attached);
+    }
+
+    [Theory]
+    [InlineData("Unknown option --silent", "--silent")]
+    [InlineData("Unknown option --frob", "--frob")]
+    [InlineData("Unexpected argument stray", "stray")]
+    [InlineData("--section needs a value", "--section")]
+    [InlineData("Unexpected argument extra", "--section", "tools", "extra")]
+    [InlineData("Unknown option --frob", "--setup", "--frob")]
+    public void Anything_else_exits_2_with_the_problem_and_no_window(string problem, params string[] args)
+    {
+        var h = new Harness();
+
+        Assert.Equal(DockyardSetup.WrongArguments, h.Run(args));
+
+        Assert.Contains(problem, h.Error.ToString());
+        Assert.Empty(h.Windows);
+        Assert.False(h.SetupCreated);
+    }
+
+    [Fact]
+    public void Setup_with_fitting_options_but_without_silent_opens_the_setup_screen()
+    {
+        var h = new Harness();
+        Assert.Equal(0, h.Run("--setup", "--with", "kind"));
+        Assert.Equal(["setup"], h.Windows);
+    }
+
+    [Fact]
+    public void Uninstall_with_silent_never_asks_even_in_a_terminal()
+    {
+        var h = new Harness { HasTerminal = true };
+        h.Run("--uninstall", "--silent");
+        Assert.Equal(["uninstall data=False silent=True"], h.Setup.Calls);
     }
 }

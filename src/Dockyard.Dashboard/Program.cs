@@ -21,14 +21,23 @@ static class Program
             launch.Out.WriteLine((System.Reflection.Assembly.GetEntryAssembly()?.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false).OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion ?? "0.0.0").Split('+')[0]);
             return 0;
         }
+        if (args.Any(a => a is "--help" or "-h"))
+        {
+            launch.AttachConsole();
+            launch.Out.Write(global::Dockyard.Setup.SetupArguments.DashboardUsage);
+            return 0;
+        }
         var command = global::Dockyard.Setup.SetupArguments.ParseCommand(args, out var problems);
-        if (command is { Action: global::Dockyard.Setup.AppAction.Setup, Setup.Silent: false }) return launch.Window("setup");
+        if (command is { Action: global::Dockyard.Setup.AppAction.Setup, Silent: false } && problems.Count == 0) return launch.Window("setup");
         if (command is not null)
         {
             launch.AttachConsole();
             return Headless.Run(command, problems, launch);
         }
-        return launch.Window(args.SkipWhile(a => a != "--section").Skip(1).FirstOrDefault());
+        var section = Headless.Section(args, out problems);
+        if (problems.Count == 0) return launch.Window(section);
+        launch.AttachConsole();
+        return Headless.Wrong(problems, launch);
     }
 
     static int OpenWindow(string? section)

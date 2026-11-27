@@ -255,7 +255,7 @@ public sealed class FacadeTests : IDisposable
     }
 
     [Fact]
-    public async Task From_the_tray_removing_the_tray_goes_to_an_installed_app_and_the_tray_exits()
+    public async Task From_the_tray_removing_the_tray_goes_to_the_dashboard_else_the_cli_and_the_tray_exits()
     {
         var host = new FakeHost { Installed = true };
         List<string> handedOff = [];
@@ -266,12 +266,12 @@ public sealed class FacadeTests : IDisposable
         await setup.Remove("tray", removeData: false, progress);
 
         Assert.Empty(host.Calls);
-        Assert.Equal([$"{Paths.DockyardCliExe} component remove tray"], handedOff);
+        Assert.Equal([$"{DashboardExe} --component remove tray"], handedOff);
         Assert.Equal(1, exits);
 
-        List<string> onlyDashboard = [];
-        await FromApp(new FakeHost { Installed = true }, "Tray", onlyDashboard, DashboardExe).Remove("tray", removeData: false, progress);
-        Assert.Equal([$"{DashboardExe} --component remove tray"], onlyDashboard);
+        List<string> onlyCli = [];
+        await FromApp(new FakeHost { Installed = true }, "Tray", onlyCli, Paths.DockyardCliExe).Remove("tray", removeData: false, progress);
+        Assert.Equal([$"{Paths.DockyardCliExe} component remove tray"], onlyCli);
     }
 
     [Fact]
@@ -285,7 +285,7 @@ public sealed class FacadeTests : IDisposable
 
         await setup.Update(["DockyardCli"], progress);
 
-        Assert.Equal([$"{Paths.DockyardCliExe} update DockyardCli"], handedOff);
+        Assert.Equal([$"{DashboardExe} --update DockyardCli"], handedOff);
         Assert.Equal(0, exits);
     }
 
