@@ -23,6 +23,7 @@ public sealed partial class DockyardSetup
             StartEngineAtLogon => Toggle(settings.StartActiveAtLogon),
             StopOtherEngineOnSwitch => Toggle(settings.StopOtherOnSwitch),
             KubectlShell => Toggle(settings.KubectlShell),
+            Dockctx => Toggle(settings.Dockctx),
             Source => settings.Source.Argument(),
             _ => Task.Run(() => host.ReadEngineSettings(EngineOf(key))).GetAwaiter().GetResult()
                 ?? throw new InvalidOperationException($"The {EngineOf(key)} engine's settings are not Dockyard's to show"),
@@ -77,6 +78,13 @@ public sealed partial class DockyardSetup
                 if (!host.IsInstalled) return;
                 ApplyShell(log);
                 if (settings.KubectlShell) log($"kubectl is set up in your shell: open a new terminal for k, completion, {ShellSetup.DoAndNowHere}");
+                break;
+            case Dockctx:
+                settings.Dockctx = on;
+                settings.Save();
+                if (!host.IsInstalled) return;
+                ApplyShell(log);
+                if (settings.Dockctx) log("dockctx is set up in your shell: open a new terminal for it");
                 break;
             case Source:
                 var source = ToolSourceArgument.Parse(value.ToLowerInvariant())!.Value;

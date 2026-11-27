@@ -76,7 +76,7 @@ public sealed class BackgroundDuties
         host.StartTrayServices();
         // Setup often runs from Downloads, where Controlled Folder Access keeps it out of Documents and so out of the
         // PowerShell profile; the installed Dockyard may be allowed there, and writes only what is missing.
-        if (settings.KubectlShell) setup.ApplyShell(line => progress.Report(new SetupProgress(line)));
+        if (settings.KubectlShell || settings.Dockctx) setup.ApplyShell(line => progress.Report(new SetupProgress(line)));
         _ = Https.KeepCertificateCurrent(host, ct);
         _ = LookForUpdates(progress, ct);
         if (!startEngine || !settings.StartActiveAtLogon) return;

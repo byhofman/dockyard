@@ -33,6 +33,43 @@ public sealed class TrayControllerTests : IDisposable
     }
 
     [Fact]
+    public void Opened_without_a_dashboard_shows_dockyard_help_in_a_terminal()
+    {
+        List<Dockyard.Core.ShellTerminal.Command> opened = [];
+        var controller = new TrayController(Facade.For(new FakeHost { Installed = true }, settings), () => { }, _ => false, opened.Add, onPath: _ => true);
+
+        controller.Opened();
+
+        Assert.Equal(Dockyard.Core.ShellTerminal.Running(["--help"], Dockyard.Core.ShellTerminal.ThisSystem, _ => true), Assert.Single(opened), CommandComparer.Instance);
+    }
+
+    [Fact]
+    public void Opened_with_a_dashboard_shows_it_and_opens_no_terminal()
+    {
+        var exe = Path.GetTempFileName();
+        try
+        {
+            List<string> sent = [];
+            List<Dockyard.Core.ShellTerminal.Command> opened = [];
+            var controller = new TrayController(Facade.For(new FakeHost { Installed = true, Dashboard = true, DashboardExe = exe }, settings), () => { }, line => { sent.Add(line); return true; }, opened.Add, onPath: _ => true);
+
+            controller.Opened();
+
+            Assert.Equal(["show"], sent);
+            Assert.Empty(opened);
+        }
+        finally { File.Delete(exe); }
+    }
+
+    sealed class CommandComparer : IEqualityComparer<Dockyard.Core.ShellTerminal.Command>
+    {
+        public static readonly CommandComparer Instance = new();
+        public bool Equals(Dockyard.Core.ShellTerminal.Command? a, Dockyard.Core.ShellTerminal.Command? b) =>
+            a?.File == b?.File && (a?.Args ?? []).SequenceEqual(b?.Args ?? []);
+        public int GetHashCode(Dockyard.Core.ShellTerminal.Command c) => c.File.GetHashCode();
+    }
+
+    [Fact]
     public void Quit_tells_the_dashboard_to_quit_and_then_quits_the_tray()
     {
         List<string> events = [];

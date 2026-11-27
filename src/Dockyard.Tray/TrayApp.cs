@@ -55,6 +55,8 @@ sealed class TrayApp : Application
         poll.Tick += async (_, _) => await controller.Refresh();
         poll.Start();
         _ = controller.Refresh();
+        if (OperatingSystem.IsMacOS() && TrayInstance.OpensDashboardAtStart(Environment.GetEnvironmentVariable("XPC_SERVICE_NAME")))
+            controller.Opened();
         base.OnFrameworkInitializationCompleted();
     }
 }

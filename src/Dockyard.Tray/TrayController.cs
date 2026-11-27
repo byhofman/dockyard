@@ -141,9 +141,19 @@ sealed class TrayController : ITrayActions
     public void UseKubeContext(string name) => _ = Run($"Switching to {name}", () => Task.Run(() => setup.UseKubeContext(name)));
 
     // A terminal running dockyard ctx, so the shell is pinned to the context the same way as from a command line.
-    public void OpenShell(string context)
+    public void OpenShell(string context) => OpenTerminal(() => ShellTerminal.For(context, ShellTerminal.ThisSystem, onPath));
+
+    // Opened by someone rather than by the login item: the dashboard where there is one, otherwise a terminal with what the
+    // dockyard command does, so that it is clear Dockyard is there.
+    public void Opened()
     {
-        try { openTerminal(ShellTerminal.For(context, ShellTerminal.ThisSystem, onPath)); }
+        if (setup.DashboardExe is { } exe && File.Exists(exe)) OpenDashboard(null);
+        else OpenTerminal(() => ShellTerminal.Running(["--help"], ShellTerminal.ThisSystem, onPath));
+    }
+
+    void OpenTerminal(Func<ShellTerminal.Command> command)
+    {
+        try { openTerminal(command()); }
         catch (InvalidOperationException e)
         {
             problem = e.Message;
@@ -162,12 +172,20 @@ sealed class TrayController : ITrayActions
 
     void Start(ProcessStartInfo start)
     {
-        try { Process.Start(start)?.Dispose(); }
+        try { Process.Start(ForChild(start))?.Dispose(); }
         catch (Exception e) when (e is IOException or System.ComponentModel.Win32Exception or InvalidOperationException)
         {
             problem = e.Message;
             _ = Refresh();
         }
+    }
+
+    // launchd's name for the tray's job, inherited, makes macOS end the dashboard as it starts (SIGTRAP, exit 133): the
+    // name is the tray's, not the dashboard's.
+    internal static ProcessStartInfo ForChild(ProcessStartInfo start)
+    {
+        if (!start.UseShellExecute) start.Environment.Remove("XPC_SERVICE_NAME");
+        return start;
     }
 
     // The dashboard goes with the tray: with no tray its window would have no way to be shown or ended.

@@ -7,10 +7,10 @@ public class ShellBlockTests
     [Fact]
     public void A_block_without_its_end_is_recognised_and_not_added_to()
     {
-        var broken = $"before\n{ShellSetup.Begin}\nalias k=kubectl\n";
-        Assert.True(ShellSetup.HasBrokenBlock(broken));
-        Assert.False(ShellSetup.HasBrokenBlock(ShellSetup.With("before\n", ShellSetup.Kind.Bash)));
-        Assert.False(ShellSetup.HasBrokenBlock("nothing of Dockyard's\n"));
+        var broken = $"before\n{ShellSetup.Begin(ShellSetup.Part.Kubectl)}\nalias k=kubectl\n";
+        Assert.True(ShellSetup.HasBrokenBlock(broken, ShellSetup.Part.Kubectl));
+        Assert.False(ShellSetup.HasBrokenBlock(ShellSetup.With("before\n", ShellSetup.Part.Kubectl, ShellSetup.Kind.Bash), ShellSetup.Part.Kubectl));
+        Assert.False(ShellSetup.HasBrokenBlock("nothing of Dockyard's\n", ShellSetup.Part.Kubectl));
     }
 
     [Fact]
@@ -20,12 +20,12 @@ public class ShellBlockTests
         try
         {
             var documents = Path.Combine(home, "Documents");
-            Assert.NotEmpty(ShellSetup.Missing(home, documents));
-            ShellSetup.Apply(true, _ => { }, home, documents);
-            Assert.Empty(ShellSetup.Missing(home, documents));
+            Assert.NotEmpty(ShellSetup.Missing(ShellSetup.Part.Kubectl, home, documents));
+            ShellSetup.Apply(ShellSetup.Part.Kubectl, true, _ => { }, home, documents);
+            Assert.Empty(ShellSetup.Missing(ShellSetup.Part.Kubectl, home, documents));
             var first = ShellSetup.Profiles(home, documents).First().File;
-            File.WriteAllText(first, $"{ShellSetup.Begin}\nalias k=kubectl\n");
-            Assert.Equal([first], ShellSetup.Missing(home, documents));
+            File.WriteAllText(first, $"{ShellSetup.Begin(ShellSetup.Part.Kubectl)}\nalias k=kubectl\n");
+            Assert.Equal([first], ShellSetup.Missing(ShellSetup.Part.Kubectl, home, documents));
         }
         finally { Directory.Delete(home, recursive: true); }
     }
@@ -37,10 +37,10 @@ public class ShellBlockTests
         try
         {
             var bashrc = Path.Combine(home, ".bashrc");
-            var broken = $"before\n{ShellSetup.Begin}\nalias k=kubectl\n";
+            var broken = $"before\n{ShellSetup.Begin(ShellSetup.Part.Kubectl)}\nalias k=kubectl\n";
             File.WriteAllText(bashrc, broken);
             var lines = new List<string>();
-            ShellSetup.Apply(true, lines.Add, home, Path.Combine(home, "Documents"));
+            ShellSetup.Apply(ShellSetup.Part.Kubectl, true, lines.Add, home, Path.Combine(home, "Documents"));
             Assert.Equal(broken, File.ReadAllText(bashrc));
             Assert.Contains(lines, l => l.Contains("without its end"));
         }

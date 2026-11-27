@@ -20,4 +20,8 @@ public static class TrayInstance
     public static bool ClosingHidesDashboard() => ClosingHidesDashboard(IsRunning);
 
     public static bool IsRunning => ProcessLock.IsHeld(ProcessLock.TrayFile);
+
+    // On macOS someone who opens Dockyard.app from Finder or Spotlight wants the dashboard, where there is one; the login
+    // item starts only the tray. launchd names the login item's job in XPC_SERVICE_NAME, and an application otherwise.
+    public static bool OpensDashboardAtStart(string? xpcServiceName) => xpcServiceName != Hosts.MacLayout.LaunchAgentLabel;
 }

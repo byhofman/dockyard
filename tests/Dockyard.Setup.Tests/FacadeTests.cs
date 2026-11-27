@@ -202,7 +202,7 @@ public sealed class FacadeTests : IDisposable
     {
         host.DashboardExe = DashboardExe;
         string[] present = installed.Length > 0 ? installed : [Paths.DockyardCliExe, DashboardExe];
-        return new(host, settings.Settings, new ShellProfiles((_, _) => { }, () => []))
+        return new(host, settings.Settings, new ShellProfiles((_, _, _) => { }, _ => []))
         {
             Caller = app,
             HandOff = (exe, args) => handedOff.Add($"{exe} {string.Join(' ', args)}"),
@@ -294,7 +294,7 @@ public sealed class FacadeTests : IDisposable
     {
         var host = new FakeHost { Installed = true };
         List<IReadOnlyList<string>> handedOff = [];
-        var setup = new DockyardSetup(host, settings.Settings, new ShellProfiles((_, _) => { }, () => [])) { Caller = null, HandOff = (_, args) => handedOff.Add(args) };
+        var setup = new DockyardSetup(host, settings.Settings, new ShellProfiles((_, _, _) => { }, _ => [])) { Caller = null, HandOff = (_, args) => handedOff.Add(args) };
 
         await setup.Update(["DockyardCli", ComponentRules.DashboardId], progress);
         await setup.Remove("tray", removeData: false, progress);
