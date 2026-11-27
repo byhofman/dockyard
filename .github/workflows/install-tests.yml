@@ -1,0 +1,170 @@
+name: install tests
+
+# Installs Dockyard for real on a runner and checks what it did. Never part of a release; started by hand, with the
+# operating systems to run on ticked:
+#   gh workflow run install-tests -f windows=true
+# Without a version this builds the ref the workflow runs on (through release.yml, which also unit-tests it); with one
+# it installs that CLI release, `cli/<version>`.
+on:
+  workflow_dispatch:
+    inputs:
+      windows:
+        description: Windows, with WSL 2
+        type: boolean
+        default: false
+      macos:
+        description: macOS
+        type: boolean
+        default: false
+      linux:
+        description: Linux, with systemd and sudo
+        type: boolean
+        default: false
+      vm:
+        description: The VM image, booted with QEMU/KVM
+        type: boolean
+        default: false
+      version:
+        description: A CLI release to test, such as 0.12.0; empty builds this ref
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOCKYARD_INSTALL_TESTS: '1'
+  DOCKYARD_GITHUB_TOKEN: ${{ github.token }}
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  build:
+    if: ${{ inputs.version == '' && (inputs.windows || inputs.macos || inputs.linux) }}
+    uses: ./.github/workflows/release.yml
+
+  windows:
+    needs: [build]
+    if: ${{ !cancelled() && inputs.windows && needs.build.result != 'failure' }}
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: inputs.version == ''
+        with:
+          name: windows
+          path: setup
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: inputs.version == ''
+        with:
+          name: image
+          path: setup
+
+      - name: Install, update, add and remove on a real Windows runner with WSL 2
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [ -z "$VERSION" ]; then
+            export DOCKYARD="$GITHUB_WORKSPACE/setup/dockyard-windows-x64.exe" DOCKYARD_ASSETS="$GITHUB_WORKSPACE/setup"
+          else
+            export DOCKYARD_VERSION="$VERSION"
+          fi
+          dotnet test --project tests/Dockyard.InstallTests --filter-trait "Category=Install"
+
+  macos:
+    needs: [build]
+    if: ${{ !cancelled() && inputs.macos && needs.build.result != 'failure' }}
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: inputs.version == ''
+        with:
+          name: macos
+          path: setup
+
+      # Apple-silicon runners have no nested virtualization, so the tests that boot the VM stay off here; they run
+      # locally with DOCKYARD_INSTALL_BOOT=1. The runner is a throwaway machine, so setup may change system files.
+      - name: Install, update and remove with a real administrator
+        env:
+          VERSION: ${{ inputs.version }}
+          DOCKYARD_INSTALL_ADMIN: '1'
+        run: |
+          if [ -z "$VERSION" ]; then
+            chmod +x setup/dockyard-macos-arm64
+            export DOCKYARD="$GITHUB_WORKSPACE/setup/dockyard-macos-arm64" DOCKYARD_ASSETS="$GITHUB_WORKSPACE/setup"
+          else
+            export DOCKYARD_VERSION="$VERSION"
+          fi
+          dotnet test --project tests/Dockyard.InstallTests --filter-trait "Category=Install"
+
+  linux:
+    needs: [build]
+    if: ${{ !cancelled() && inputs.linux && needs.build.result != 'failure' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: inputs.version == ''
+        with:
+          name: linux
+          path: setup
+
+      - name: On this runner, with systemd and sudo
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [ -z "$VERSION" ]; then
+            chmod +x setup/dockyard-linux-x64
+            export DOCKYARD="$GITHUB_WORKSPACE/setup/dockyard-linux-x64" DOCKYARD_ASSETS="$GITHUB_WORKSPACE/setup"
+          else
+            export DOCKYARD_VERSION="$VERSION"
+          fi
+          dotnet test --project tests/Dockyard.InstallTests --filter-trait "Category=Install"
+
+      # The two scripts that stay shell: they set up engines and firewalls of their own around the install.
+      - name: Fetch the command for the scripts
+        if: inputs.version != ''
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          mkdir setup
+          gh release download "cli/$VERSION" --pattern dockyard-linux-x64 --dir setup
+          chmod +x setup/dockyard-linux-x64
+
+      - name: Import from a second engine that plays Docker Desktop
+        run: |
+          "$PWD/setup/dockyard-linux-x64" setup --silent --no-start --assets "$PWD/setup"
+          DOCKYARD="$PWD/setup/dockyard-linux-x64" sh tests/e2e/import-linux.sh
+          "$PWD/setup/dockyard-linux-x64" uninstall
+
+      - name: Behind ufw and firewalld
+        run: DOCKYARD="$PWD/setup/dockyard-linux-x64" sh tests/e2e/firewall-linux.sh
+
+  vm:
+    if: ${{ inputs.vm }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Boot the VM image with QEMU/KVM
+        run: |
+          sudo chmod 666 /dev/kvm
+          sh image/build.sh x86_64 0.0.0 vm
+          kind_tag="v$(sed -n 's/^KIND=//p' image/versions.env)"
+          kind_sha="$(awk -v u="https://github.com/kubernetes-sigs/kind/releases/download/$kind_tag/kind-linux-amd64" '$2 == u { print $1 }' image/versions.sha256)"
+          docker run --rm --device /dev/kvm -e KIND_TAG="$kind_tag" -e KIND_SHA256="$kind_sha" -v "$PWD/image/test-vm.sh:/test-vm.sh:ro" -v "$PWD/out:/out:ro" alpine:3.24 \
+            sh /test-vm.sh /out/dockyard-vm-0.0.0-x86_64.tar.gz
