@@ -32,7 +32,7 @@ Run the same line again at any time: setup brings what is installed up to date a
 
 ### Choose what you want
 
-`dockyard setup` asks which optional components to install. Afterwards the dashboard's **Tools** section, and `dockyard component ls` in a terminal, list every component in groups (Dockyard, Docker, Kubernetes) with its version, where it came from (winget, Homebrew, apt, dnf or Dockyard's own download), the newest version and **Update to** it, plus **Add** or **Remove** where that is possible. Each row says what it needs or why it cannot go. The dashboard's **Settings** section and `dockyard settings` show the same settings.
+`dockyard setup` asks which optional components to install. Afterwards the dashboard's **Tools** section, and `dockyard component ls` in a terminal, list every component in groups (Dockyard, Docker, Kubernetes) with its version, where it came from (winget, Homebrew, apt, dnf or Dockyard's own download), the newest version and **Update to** it, plus **Add** or **Remove** where that is possible. Each row says what it needs or why it cannot go. The dashboard's **Settings** (the gear at the top right) and `dockyard settings` show the same settings.
 
 Dockyard's own parts are released on their own, each with its own version: the `dockyard` command, the tray, the dashboard and the engine image. A fix to one of them does not wait for a release of everything.
 
@@ -191,7 +191,7 @@ Dockyard sits in the tray or menu bar. The icon is the Dockyard crane and contai
 In the dashboard:
 
 - **Tools**: every component with its version, where it came from, the newest version and **Update to** it, plus **Add** or **Remove** where that is possible, and **Import** from Docker Desktop. Checked when it opens, at most every 6 hours, or on **Check for updates**. Updating an engine keeps its images and containers. **Uninstall** is on Dockyard's own row.
-- **Settings**: Domains & HTTPS, the engine (stop the other engine when switching, start the active engine at logon, and its `daemon.json`, which `dockyard config edit` opens in your editor, checked before it is applied, with the previous one put back if the engine does not start; the keys Dockyard sets itself are kept), where the tools come from, and the kubectl shell setup.
+- **Settings** (the gear at the top right): Domains & HTTPS, the engine (stop the other engine when switching, start the active engine at logon, and its `daemon.json`, which `dockyard config edit` opens in your editor, checked before it is applied, with the previous one put back if the engine does not start; the keys Dockyard sets itself are kept), where the tools come from, and the kubectl shell setup.
 - **Setup**: what `dockyard setup` is doing, step by step, with its log.
 
 ### Dashboard

@@ -203,7 +203,7 @@ public sealed partial class PrototypeScreens
 
         var kind = screen.Split('-')[0];
         // Without OnShown, which for Builds would ask this machine's docker for its build history.
-        Set(shell, "currentSection", shell.Sections.First(s => s.Title.Equals(kind, StringComparison.OrdinalIgnoreCase)));
+        Set(shell, "currentSection", shell.Sections.Append(shell.Settings).First(s => s.Title.Equals(kind, StringComparison.OrdinalIgnoreCase)));
         Raise(shell, nameof(ShellViewModel.CurrentSection));
         foreach (var section in shell.Sections.Select(s => s.Content).OfType<SectionViewModel>().Where(s => s is not BuildsViewModel))
             Wait(section.Reload());
