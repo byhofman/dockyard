@@ -1,0 +1,159 @@
+# Copied from byhofman/pipeline-templates (v4): a public repository cannot use actions from a private one.
+name: Upsert GitHub release
+description: >-
+  Publish the GitHub Release for the tag with its files attached. A new release is created as a
+  draft, gets its files, and is only then published, so nobody downloading ever finds it without
+  them. A release that is already published (a re-run, or one made by hand) only gets its files
+  replaced: its notes, title and flags are left as they are.
+
+inputs:
+  tag:
+    description: Tag to release. Empty uses the tag that triggered the run.
+    required: false
+    default: ''
+  prerelease:
+    description: >-
+      'true' publishes the release as a prerelease; otherwise as a stable release, the latest unless
+      'latest' is 'false'. Only applied when this action publishes the release.
+    required: false
+    default: 'false'
+  token:
+    description: Token for the gh CLI. Needs contents:write.
+    required: true
+  tag-prefix:
+    description: >-
+      Namespace before the version in the tag, for a repository releasing several apps
+      separately ('pdfer/'). Generated notes then start from this app's previous tag,
+      not from whichever app was tagged last.
+    required: false
+    default: ''
+  latest:
+    description: >-
+      'false' publishes a stable release without making it the repository's latest. GitHub has one
+      latest release per repository, so a repository of separately released apps sets this for every
+      app but the one its downloads point at. Ignored for a prerelease.
+    required: false
+    default: 'true'
+  files:
+    description: >-
+      Newline-separated globs of files to attach (dist/*.zip). Each must match at least one
+      file. Re-runs replace files of the same name.
+    required: false
+    default: ''
+  title:
+    description: Release title. Empty uses the tag.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Find the previous release of this app
+      id: previous
+      shell: bash
+      env:
+        INPUT_TAG: ${{ inputs.tag }}
+        TAG_PREFIX: ${{ inputs.tag-prefix }}
+      run: |
+        set -euo pipefail
+
+        tag="${INPUT_TAG:-${GITHUB_REF_NAME}}"
+        start=''
+        if [[ -n "${TAG_PREFIX}" ]]; then
+          # A stable release's notes cover everything since the previous stable one, so its
+          # own prereleases are skipped; a prerelease's notes start from whatever came before.
+          if ! git fetch --quiet --tags origin 2>/dev/null; then
+            echo "::warning::Could not fetch tags; release notes may start from the wrong tag."
+          fi
+          stable_only=true
+          [[ "${tag#"${TAG_PREFIX}"v}" == *-* ]] && stable_only=false
+          while IFS= read -r candidate; do
+            [[ "${candidate}" == "${tag}" ]] && break
+            [[ "${stable_only}" == true && "${candidate}" == *-* ]] && continue
+            start="${candidate}"
+          done < <(git -c versionsort.suffix=- tag --list "${TAG_PREFIX}v*" --sort=v:refname)
+        fi
+
+        echo "notes-start-tag=${start}" >> "$GITHUB_OUTPUT"
+        [[ -n "${start}" ]] && echo "Notes start from ${start}" || true
+
+    - name: Upsert release
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        # The pushed tag lives in this repository, which a token for another one (GH_REPO) may not read.
+        TAG_READ_TOKEN: ${{ github.token }}
+        INPUT_TAG: ${{ inputs.tag }}
+        INPUT_TITLE: ${{ inputs.title }}
+        INPUT_FILES: ${{ inputs.files }}
+        PRERELEASE: ${{ inputs.prerelease }}
+        LATEST: ${{ inputs.latest }}
+        NOTES_START_TAG: ${{ steps.previous.outputs.notes-start-tag }}
+      run: |
+        set -euo pipefail
+
+        tag="${INPUT_TAG:-${GITHUB_REF_NAME}}"
+        title="${INPUT_TITLE:-${tag}}"
+
+        files=()
+        while IFS= read -r pattern; do
+          [[ -z "${pattern// }" ]] && continue
+          shopt -s nullglob
+          # shellcheck disable=SC2206 # unquoted on purpose: the pattern is a glob to expand
+          matched=(${pattern})
+          shopt -u nullglob
+          if [[ ${#matched[@]} -eq 0 ]]; then
+            echo "::error::No file matches '${pattern}'."
+            exit 1
+          fi
+          files+=("${matched[@]}")
+        done <<< "${INPUT_FILES}"
+
+        upload() {
+          if [[ ${#files[@]} -gt 0 ]]; then
+            gh release upload "${tag}" "${files[@]}" --clobber
+          fi
+        }
+
+        state="$(gh release view "${tag}" --json isDraft -q .isDraft 2>/dev/null || echo missing)"
+
+        if [[ "${state}" == false ]]; then
+          upload
+          echo "Release ${tag} is already published; replaced its files only"
+          exit 0
+        fi
+
+        if [[ "${state}" == missing ]]; then
+          # The release skill writes the notes into the annotated tag it pushed, which may differ from
+          # the release tag (player-v1.2.0 releasing v1.2.0 elsewhere); a tag whose message is only its
+          # own name, or a lightweight tag, gets generated notes instead.
+          pushed="${tag}"
+          [[ "${GITHUB_REF_TYPE:-}" == tag ]] && pushed="${GITHUB_REF_NAME}"
+          message=''
+          ref="$(GH_TOKEN="${TAG_READ_TOKEN}" gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${pushed}" 2>/dev/null || true)"
+          if [[ "$(jq -r '.object.type // empty' <<< "${ref}")" == tag ]]; then
+            message="$(GH_TOKEN="${TAG_READ_TOKEN}" gh api "repos/${GITHUB_REPOSITORY}/git/tags/$(jq -r .object.sha <<< "${ref}")" -q .message)"
+          fi
+          message="$(printf '%s\n' "${message}" | sed '/-----BEGIN PGP SIGNATURE-----/,$d')"
+          if [[ -n "${message//[[:space:]]/}" && "${message}" != "${pushed}" ]]; then
+            notes_file="${RUNNER_TEMP}/release-notes.md"
+            printf '%s\n' "${message}" > "${notes_file}"
+            notes=(--notes-file "${notes_file}")
+          else
+            notes=(--generate-notes)
+            [[ -n "${NOTES_START_TAG}" ]] && notes+=(--notes-start-tag "${NOTES_START_TAG}")
+          fi
+          # A release in another repository (GH_REPO) has no such tag yet; gh creates it there.
+          verify=()
+          [[ "${GH_REPO:-${GITHUB_REPOSITORY}}" == "${GITHUB_REPOSITORY}" ]] && verify=(--verify-tag)
+          gh release create "${tag}" --draft ${verify[@]+"${verify[@]}"} --title "${title}" "${notes[@]}"
+        fi
+
+        upload
+        if [[ "${PRERELEASE}" == true ]]; then
+          flags=(--prerelease --latest=false)
+        else
+          flags=(--prerelease=false "--latest=${LATEST}")
+        fi
+        gh release edit "${tag}" --draft=false "${flags[@]}"
+        echo "Published release ${tag}"

@@ -346,7 +346,7 @@ jobs:
         run: (cd dist && sha256sum -- * > SHA256SUMS)
 
       - if: needs.plan.outputs.component != 'all'
-        uses: byhofman/pipeline-templates/.github/actions/upsert-release@v4
+        uses: ./.github/actions/upsert-release
         with:
           tag-prefix: ${{ needs.plan.outputs.component }}/
           title: ${{ needs.plan.outputs.component }} ${{ needs.plan.outputs.version }}
