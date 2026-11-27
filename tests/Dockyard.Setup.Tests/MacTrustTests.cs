@@ -5,7 +5,7 @@ using Dockyard.Hosts;
 
 namespace Dockyard.Setup.Tests;
 
-/// <summary>DOK-20: where a person can approve it, turning HTTPS off and uninstalling take macOS's trust setting for the CA too.</summary>
+/// <summary>#176: where a person can approve it, turning HTTPS off and uninstalling take macOS's trust setting for the CA too.</summary>
 [SupportedOSPlatform("macos")]
 public sealed class MacTrustTests : IDisposable
 {

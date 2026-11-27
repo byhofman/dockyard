@@ -10,7 +10,7 @@ trap 'rm -rf "$work"' EXIT
 
 if ! gh release view index --repo "$repo" >/dev/null 2>&1; then
   gh release create index --repo "$repo" --title "Component index" --latest=false \
-    --notes "components.json names each Dockyard component's latest release. See docs/design/components-and-releases.md."
+    --notes "components.json names each Dockyard component's latest release. See docs/decisions.md, "Components release on their own"."
 fi
 gh release download index --repo "$repo" --pattern components.json --dir "$work" 2>/dev/null || echo '{}' > "$work/components.json"
 
