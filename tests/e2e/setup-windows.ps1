@@ -1,6 +1,6 @@
 <#
   End to end on a Windows machine with WSL 2, as an administrator:
-    setup-windows.ps1 -Dockyard <dockyard-windows-x64.exe, with Dockyard.Tray.zip, Dockyard.Dashboard.zip and the image next to it>
+    setup-windows.ps1 -Dockyard <dockyard-windows-x64.exe, with Dockyard.Tray.zip, Dockyard.Dashboard.zip and the image next to it; the dashboard carries its own setup>
     setup-windows.ps1 -OneLiner <url of install.ps1>
 #>
 param([string]$Dockyard, [string]$OneLiner, [string]$Screenshots = (Join-Path $PSScriptRoot '../../screenshots'))

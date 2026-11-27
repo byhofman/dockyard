@@ -21,7 +21,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
 
     public static IReadOnlyList<ComponentInfo> Catalog { get; } =
     [
-        new(nameof(Component.DockyardCli), Updates.Title(Component.DockyardCli), RequiredBecause: "it installs and updates everything else here. Uninstall removes it.", RequiredFlag: "dockyard-cli"),
+        new(nameof(Component.DockyardCli), Updates.Title(Component.DockyardCli), Flag: "cli", Note: "The dockyard command. It or the dashboard has to stay: either one updates and uninstalls Dockyard."),
         new("LinuxEngine", "Docker Engine (Linux VM)", RequiredBecause: "it runs your containers, and it is the only engine here. Uninstall removes it.", RequiredFlag: "linux-engine"),
         new(nameof(Component.DockerCli), "Docker CLI", RequiredBecause: "the engine, Compose and Buildx are used through it.", RequiredFlag: "docker-cli"),
         new("Compose", "Docker Compose", Flag: "compose", Note: "Needs the Docker CLI. The dashboard's Compose actions use it."),
@@ -33,7 +33,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard", Note: "Optional. Opens from the menu bar."),
     ];
 
-    public bool IsInstalled => File.Exists(MacLayout.VmConfig) && File.Exists(MacLayout.Docker);
+    public bool IsInstalled => MacLayout.IsInstalled(File.Exists);
 
     public Task<bool> IsRunning(string engine) => vm.IsRunning();
     public Task Start(string engine) => vm.Start();
@@ -62,6 +62,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
     public async Task<bool> Update(Action<string> log, IReadOnlyList<(string Component, Release? Release)> components)
     {
         var tools = Tools;
+        var restart = false;
         foreach (var (component, release) in components)
         {
             if (Core.Tools.Find(component) is { } tool)
@@ -71,15 +72,26 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
             }
             switch (component)
             {
-                case ComponentRules.DashboardId when release is not null: await parts.AddDashboard(log, release.Tag); break;
                 case "LinuxEngine": await vm.Update(log); break;
+                // The command, and dockyard-host and the VM files with it where no bundle brings its own.
                 case nameof(Component.DockyardCli):
-                    await parts.SelfUpdate(log, engineOnly: !HasDashboard, release?.Tag);
-                    return true;
+                    await parts.PlaceCli(log, release?.Tag);
+                    if (!MacLayout.HasBundleHelper)
+                    {
+                        await parts.PlaceEngineParts(log, release?.Tag, refreshVm: true);
+                        await vm.PrepareForInstall(log);
+                    }
+                    restart = true;
+                    break;
             }
         }
+        if (MacLayout.BundleUpdate(components) is { } bundle)
+        {
+            await parts.UpdateBundle(log, bundle.Tag);
+            restart = true;
+        }
         await MacSetup.FindBrewPlugins(log, tools);
-        return false;
+        return restart;
     }
 
     public bool RunsFromInstallLocation => MacSetup.RunsFromInstallLocation;
@@ -89,14 +101,33 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
 
     public async Task<bool> SetDashboard(Action<string> log, bool installed)
     {
-        if (installed) await parts.AddDashboard(log);
-        else await parts.RemoveDashboard(log);
+        if (!installed)
+        {
+            await parts.RemoveDashboard(log);
+            return false;
+        }
+        var hadBundle = MacComponents.HasBundle;
+        await parts.AddDashboard(log);
+        if (!hadBundle)
+        {
+            // The bundle's helper replaces the one in ~/.dockyard, which the host's launch agent still names.
+            await vm.PrepareForInstall(log);
+            await vm.ApplyEngineConfiguration(log);
+            await MacSetup.AddLoginItem(log);
+        }
         return false;
     }
 
     public async Task<bool> SetComponent(Action<string> log, string component, bool installed, bool removeData = false)
     {
         if (component == ComponentRules.DashboardId) return await SetDashboard(log, installed);
+        if (component == nameof(Component.DockyardCli))
+        {
+            if (installed) await parts.PlaceCli(log);
+            else MacComponents.RemoveCli(log);
+            await Setup.LinkCli(log, installed);
+            return false;
+        }
         if (component == ComponentRules.TrayId)
         {
             if (installed) await MacSetup.AddLoginItem(log);

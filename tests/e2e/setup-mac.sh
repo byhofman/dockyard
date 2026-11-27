@@ -1,6 +1,6 @@
 #!/bin/sh
 # End to end on a Mac, in a throwaway home that is deleted afterwards: nothing outside it changes.
-#   DOCKYARD=<dockyard-macos-arm64> sh setup-mac.sh        the dockyard command from a build, the app's zips next to it
+#   DOCKYARD=<dockyard-macos-arm64> sh setup-mac.sh        the dockyard command from a build, the app's zip and the helper next to it
 #   ONELINER=<url of install-mac.sh> sh setup-mac.sh       the published one-liner
 # A sudo that refuses keeps the silent setup from changing /etc or installing Rosetta, whatever this user may do.
 # ADMIN=1 leaves sudo alone and checks what needs an administrator: only for a throwaway machine such as a CI runner.
@@ -22,6 +22,7 @@ export PATH="$home/shim:$PATH"
 app="$home/Applications/Dockyard.app"
 macos="$app/Contents/MacOS"
 docker="$home/.dockyard/bin/docker"
+cli="$home/.dockyard/cli/dockyard"
 
 stop_engine() {
   [ -S "$home/.dockyard/run/vm.sock" ] || return 0
@@ -49,7 +50,7 @@ setup() {
   if [ -n "${ONELINER:-}" ]; then curl -fsSL "$ONELINER" | sh -s -- "$@"; else "$DOCKYARD" setup "$@" --assets "$(dirname "$DOCKYARD")"; fi
 }
 dockyard() {
-  if [ -n "${ONELINER:-}" ]; then "$macos/dockyard-cli" "$@"; else "$DOCKYARD" "$@"; fi
+  if [ -n "${ONELINER:-}" ]; then "$cli" "$@"; else "$DOCKYARD" "$@"; fi
 }
 
 fingerprint() {
@@ -73,7 +74,8 @@ unset XDG_CONFIG_HOME
 setup --silent --without dashboard --no-start --source dockyard
 check "the tray is the app's executable" test -x "$macos/Dockyard"
 check "with the libraries it links" sh -c "ls '$macos'/*.dylib >/dev/null 2>&1"
-check "the command too" test -x "$macos/dockyard-cli"
+check "the command is an app of its own, not in the bundle" test -x "$cli"
+check "and not inside the bundle" missing "$macos/dockyard-cli"
 check "the VM helper too" test -x "$macos/dockyard-host"
 check "no dashboard" missing "$macos/Dockyard Dashboard"
 check "docker CLI" test -x "$docker"
@@ -83,7 +85,7 @@ if grep -q "$macos/Dockyard" "$home/Library/LaunchAgents/com.byhofman.dockyard.p
 if [ "$("$docker" context show)" = dockyard ]; then ok "docker context selected"; else fail "docker context"; fi
 if codesign -d --entitlements - "$macos/dockyard-host" 2>/dev/null | grep -q com.apple.security.virtualization; then ok "the helper kept its entitlement"; else fail "entitlement"; fi
 if "$macos/Dockyard" --version >/dev/null; then ok "the installed tray still starts after re-signing"; else fail "tray --version"; fi
-if "$macos/dockyard-cli" --version >/dev/null; then ok "and the installed command"; else fail "dockyard-cli --version"; fi
+if "$cli" --version >/dev/null; then ok "and the installed command"; else fail "dockyard-cli --version"; fi
 
 if [ -n "${BOOT:-}" ]; then
   echo "== the engine boots and holds data"
@@ -97,7 +99,7 @@ fi
 if [ -n "${ADMIN:-}" ]; then
   echo "== what needs an administrator"
   check "the PATH entry" test -f /etc/paths.d/dockyard
-  if [ "$(readlink /usr/local/bin/dockyard)" = "$macos/dockyard-cli" ]; then ok "/usr/local/bin/dockyard is the installed command"; else fail "/usr/local/bin/dockyard: $(ls -la /usr/local/bin/dockyard 2>&1)"; fi
+  if [ "$(readlink /usr/local/bin/dockyard)" = "$cli" ]; then ok "/usr/local/bin/dockyard is the installed command"; else fail "/usr/local/bin/dockyard: $(ls -la /usr/local/bin/dockyard 2>&1)"; fi
   if [ "$(readlink /var/run/docker.sock)" = "$home/.dockyard/docker.sock" ]; then ok "/var/run/docker.sock points at Dockyard"; else fail "/var/run/docker.sock: $(ls -la /var/run/docker.sock 2>&1)"; fi
   check "and comes back after a restart" test -f /Library/LaunchDaemons/com.byhofman.dockyard.socket.plist
   sudo rm -f /var/run/docker.sock

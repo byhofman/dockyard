@@ -2,7 +2,7 @@
 Type=Application
 Name=Dockyard Dashboard
 Comment=Containers, images, volumes, networks, clusters, and Dockyard's setup, tools and settings
-Exec=/usr/lib/dockyard/dockyard-dashboard
+Exec=/usr/lib/dockyard-dashboard/dockyard-dashboard
 Icon=dockyard
 Terminal=false
 Categories=Development;System;

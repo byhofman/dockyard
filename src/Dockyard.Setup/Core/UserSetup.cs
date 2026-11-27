@@ -104,16 +104,21 @@ static partial class UserSetup
         return HostProxySettings.WithoutPorts(proxy, unreachable);
     }
 
-    // The CLI finishes the setup after the restart, and opens the dashboard at Tools when that was chosen.
-    public static void ResumeAfterReboot(bool dashboard, Action<string> log)
+    // The app that ran setup finishes it after the restart, and opens the dashboard at Tools when that was chosen.
+    public static void ResumeAfterReboot(RunningApp app, bool openDashboard, Action<string> log)
     {
         using var key = Registry.CurrentUser.CreateSubKey(RunOnceKey);
-        key.SetValue(Paths.AppName, ResumeCommand(dashboard, Updates.LocalAssets));
+        key.SetValue(Paths.AppName, ResumeCommand(app, openDashboard, Updates.LocalAssets));
         log("Setup carries on by itself after the restart");
     }
 
-    public static string ResumeCommand(bool dashboard, string? assets) =>
-        $"\"{Paths.DockyardCliExe}\" setup --resume{(dashboard ? " --open-dashboard" : "")}{(assets is null ? "" : $" --assets {Shell.Quote(assets)}")}";
+    // The installed copy runs then, so an app that setup left out hands it to the one that stays.
+    internal static RunningApp ResumeApp(RunningApp running, bool cli, bool dashboard) =>
+        running == RunningApp.Dashboard && dashboard || !cli ? RunningApp.Dashboard : RunningApp.Cli;
+
+    public static string ResumeCommand(RunningApp app, bool openDashboard, string? assets) =>
+        (app == RunningApp.Dashboard ? $"\"{Paths.DashboardExe}\" --setup --silent --resume" : $"\"{Paths.DockyardCliExe}\" setup --resume")
+        + (openDashboard ? " --open-dashboard" : "") + (assets is null ? "" : $" --assets {Shell.Quote(assets)}");
 
     static void SetMirroredNetworking(Action<string> log)
     {

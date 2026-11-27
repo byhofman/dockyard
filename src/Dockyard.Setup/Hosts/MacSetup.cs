@@ -8,12 +8,14 @@ namespace Dockyard.Hosts;
 [SupportedOSPlatform("macos")]
 sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm, ToolComponents tools)
 {
-    public static bool RunsFromInstallLocation => Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory) == Path.TrimEndingDirectorySeparator(MacLayout.AppBase);
+    public static bool RunsFromBundle => Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory) == Path.TrimEndingDirectorySeparator(MacLayout.AppBase);
+    public static bool RunsFromInstallLocation => RunsFromBundle || Paths.Self == MacLayout.CliExe;
 
     public async Task Install(Action<string> log, InstallRequest request, IEngineHost host)
     {
         log(InstallPhases.Start(InstallPhases.Dockyard));
-        await InstallBundle(log, request.Dashboard);
+        var cli = !request.Without.Contains(nameof(Component.DockyardCli));
+        await PlaceApps(log, request.Dashboard, request.Tray, cli);
 
         log(InstallPhases.Start(InstallPhases.MacTools));
         if (tools.Packages is null) log("The tools come from Dockyard, in " + MacLayout.BinDir);
@@ -26,7 +28,7 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
         await FindBrewPlugins(log, tools);
 
         log(InstallPhases.Start(InstallPhases.Administrator));
-        await AdministratorSteps(log, request.Silent);
+        await AdministratorSteps(log, request.Silent, cli);
         await InstallCredentialHelper(log);
         LinkUserSocket(log);
 
@@ -122,13 +124,12 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
 
     Task RemoveApp(Action<string> log, bool removeData, IReadOnlyList<string> bundles)
     {
-        if (Directory.Exists(MacLayout.BinDir)) Directory.Delete(MacLayout.BinDir, recursive: true);
         foreach (var plugin in new[] { "docker-compose", "docker-buildx" })
             MacComponents.RemovePlugin(plugin);
-        foreach (var bundle in bundles)
+        foreach (var path in MacLayout.AppFilesToRemove(bundles, Paths.Self))
         {
-            try { Directory.Delete(bundle, recursive: true); }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { log($"{bundle} could not be removed ({e.Message}); move it to the Trash"); }
+            try { if (Directory.Exists(path)) Directory.Delete(path, recursive: true); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { log($"{path} could not be removed ({e.Message}); move it to the Trash"); }
         }
         if (removeData)
         {
@@ -139,47 +140,38 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
         return Task.CompletedTask;
     }
 
-    // Puts the app bundle where it belongs: this process's own bundle (a disk image or a translocated copy), or, for the
-    // dockyard command run from a download, the bundle from its release or --assets. The login item and vm.json point at
-    // it, so it has to stay there. Nothing under ~/.dockyard is touched.
-    async Task InstallBundle(Action<string> log, bool dashboard)
+    // The link needs an administrator: without one, the link is left pointing nowhere and the next setup or the uninstall
+    // takes it back.
+    public async Task LinkCli(Action<string> log, bool linked)
     {
-        if (RunsFromInstallLocation)
+        var script = linked ? MacLayout.InstallCliLink(MacLayout.CliExe) : MacLayout.RemoveCliLink;
+        if (!linked && new FileInfo(MacLayout.CliLink).LinkTarget != MacLayout.CliExe) return;
+        if ((await runner.Run("sudo", "-n", "/bin/sh", "-c", script)).ExitCode == 0
+            || linked && (await runner.Run("/usr/bin/osascript", MacLayout.AdminShell(script))).ExitCode == 0) return;
+        log(linked
+            ? $"The dockyard command is in {MacLayout.CliExe}; running dockyard setup with an administrator's approval adds it to {MacLayout.CliLink}"
+            : $"{MacLayout.CliLink} still points at the removed command; the next setup or the uninstall takes it back");
+    }
+
+    // The bundle when the dashboard or the tray is wanted and none is there yet, or when an app runs from one somewhere else
+    // (a disk image or a translocated copy); an installed bundle is otherwise the dashboard's to update. The CLI goes in
+    // ~/.dockyard/cli, and without a bundle the engine's parts go in ~/.dockyard too.
+    async Task PlaceApps(Action<string> log, bool dashboard, bool tray, bool cli)
+    {
+        var running = MacLayout.Bundle(AppContext.BaseDirectory);
+        if (running is not null && !RunsFromBundle) await components.PlaceBundle(log, running);
+        else if (!MacComponents.HasBundle && MacLayout.WantsBundle(dashboard, tray)) await components.PlaceBundle(log, fromBundle: null);
+        if (MacComponents.HasBundle)
         {
             if (MacComponents.HasDashboard && !dashboard) await components.RemoveDashboard(log);
             else if (!MacComponents.HasDashboard && dashboard) await components.AddDashboard(log);
-            return;
         }
 
-        string? downloaded = null;
-        try
-        {
-            var source = MacLayout.Bundle(AppContext.BaseDirectory);
-            if (source is null)
-            {
-                log("Downloading Dockyard.app");
-                downloaded = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
-                var zip = await Updates.ReleaseAssetOrLocal(MacLayout.ZipAsset(engineOnly: !dashboard), downloaded, tag: null);
-                await runner.Check("/usr/bin/ditto", "-x", "-k", zip, downloaded);
-                source = Path.Combine(downloaded, "Dockyard.app");
-            }
-            var target = MacLayout.InstallLocation(AppContext.BaseDirectory, MacLayout.UserApplications);
-            var incoming = target + ".new";
-            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-            if (Directory.Exists(incoming)) Directory.Delete(incoming, recursive: true);
-            await runner.Check("/usr/bin/ditto", source, incoming);
-            await runner.Run("/usr/bin/xattr", "-dr", "com.apple.quarantine", incoming);
-            // Only that install's tray: its VM keeps running, and a Dockyard somewhere else is none of this setup's business.
-            await runner.Run("/usr/bin/pkill", "-f", Path.Combine(target, "Contents", "MacOS", "Dockyard"));
-            if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
-            Directory.Move(incoming, target);
-            log($"Installed {target}");
-        }
-        finally
-        {
-            if (downloaded is not null && Directory.Exists(downloaded)) Directory.Delete(downloaded, recursive: true);
-        }
-        if (!dashboard) await components.RemoveDashboard(log);
+        if (cli) await components.PlaceCli(log);
+        else MacComponents.RemoveCli(log);
+
+        if (MacLayout.HasBundleHelper) MacComponents.RemoveEngineParts(log);
+        else await components.PlaceEngineParts(log);
     }
 
     static MacLayout.SocketUse SystemSocketUse()
@@ -190,7 +182,7 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
 
     // Rosetta, the PATH entry and /var/run/docker.sock need an administrator. A silent setup shows no dialog: then it needs
     // passwordless sudo, and without that the rest of Dockyard still works and the log says what is left.
-    async Task AdministratorSteps(Action<string> log, bool silent)
+    async Task AdministratorSteps(Action<string> log, bool silent, bool cli)
     {
         List<string> steps = [];
         List<string> what = [];
@@ -217,10 +209,16 @@ sealed class MacSetup(ICommandRunner runner, MacComponents components, MacVm vm,
             steps.Add(MacLayout.InstallSocketDaemon(plist));
             what.Add($"making {MacLayout.SystemSocket} point at Dockyard");
         }
-        if (new FileInfo(MacLayout.CliLink).LinkTarget != MacLayout.CliExe)
+        var cliLink = new FileInfo(MacLayout.CliLink).LinkTarget;
+        if (cli && cliLink != MacLayout.CliExe)
         {
             steps.Add(MacLayout.InstallCliLink(MacLayout.CliExe));
             what.Add($"adding the dockyard command to {MacLayout.CliLink}");
+        }
+        else if (!cli && cliLink == MacLayout.CliExe)
+        {
+            steps.Add(MacLayout.RemoveCliLink);
+            what.Add($"taking the dockyard command out of {MacLayout.CliLink}");
         }
         if (!File.Exists(MacLayout.DomainResolver))
         {

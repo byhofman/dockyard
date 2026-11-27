@@ -64,9 +64,29 @@ sealed class SetupSettings : CommandSettings
 
     public override ValidationResult Validate()
     {
-        if (Source is not null && ToolSourceArgument.Parse(Source) is null) return ValidationResult.Error("--source is dockyard or package-manager");
-        if (Assets is not null && !Directory.Exists(Assets)) return ValidationResult.Error("--assets needs a folder that exists");
-        return ValidationResult.Success();
+        SetupArguments.Parse(Arguments(), out var problems);
+        return problems.Count == 0 ? ValidationResult.Success() : ValidationResult.Error(problems[0]);
+    }
+
+    public IReadOnlyList<string> Arguments()
+    {
+        var args = new List<string>();
+        void Switch(bool on, string name) { if (on) args.Add(name); }
+        void Value(string name, string? value) { if (value is not null) args.AddRange([name, value]); }
+
+        Switch(Silent, "--silent");
+        foreach (var name in With) Value("--with", name);
+        foreach (var name in Without) Value("--without", name);
+        Value("--source", Source);
+        Switch(TrustHttps, "--trust-https");
+        Switch(KubectlShell, "--kubectl-shell");
+        Switch(NoStart, "--no-start");
+        Value("--image", Image);
+        Switch(RemoveData, "--remove-data");
+        Value("--assets", Assets);
+        Switch(Resume, "--resume");
+        Switch(OpenDashboard, "--open-dashboard");
+        return args;
     }
 }
 
@@ -74,29 +94,24 @@ sealed class SetupCommand(CliEnvironment env) : AsyncCommand<SetupSettings>
 {
     public override async Task<int> ExecuteAsync(CommandContext context, SetupSettings s, CancellationToken cancellation)
     {
-        var asks = !s.Silent && !s.Resume;
+        var parsed = SetupArguments.Parse(s.Arguments(), out _);
+        var asks = !parsed.Silent;
         if (asks && !env.HasTerminal)
         {
             env.Error.WriteLine("Setup asks which components you want, and there is no terminal to ask in: run dockyard setup in a terminal, or add --silent to install without asking.");
             return DockyardSetup.WrongArguments;
         }
-        if (s.Assets is not null) DockyardSetup.LocalAssets = Path.GetFullPath(s.Assets);
+        if (parsed.Assets is not null) DockyardSetup.LocalAssets = parsed.Assets;
 
         using var setup = env.Setup();
-        IReadOnlyList<string> with = Names.Split(s.With);
-        IReadOnlyList<string> without = Names.Split(s.Without);
-        if (asks && env.HasTerminal && with.Count == 0 && without.Count == 0)
-            (with, without) = Ask(setup);
-
-        var request = new SetupRequest(with, without, ToolSourceArgument.Parse(s.Source), s.TrustHttps, s.KubectlShell, s.Silent || s.Resume, s.Resume)
+        var request = parsed with { Headless = !env.HasDesktop };
+        if (asks && env.HasTerminal && request.With.Count == 0 && request.Without.Count == 0)
         {
-            Start = !s.NoStart,
-            Image = s.Image,
-            RemoveData = s.RemoveData,
-            Headless = !env.HasDesktop,
-        };
+            var (with, without) = Ask(setup);
+            request = request with { With = with, Without = without };
+        }
         var code = await setup.Setup(request, new ProgressRenderer(env.Console, env.Error), cancellation);
-        if (code == DockyardSetup.Ok && (s.OpenDashboard || asks && env.HasDesktop && setup.HasDashboard))
+        if (code == DockyardSetup.Ok && (parsed.OpenDashboard || asks && env.HasDesktop && setup.HasDashboard))
             env.Dashboard.Open(setup.DashboardExe, "tools");
         return code;
     }
@@ -212,6 +227,10 @@ sealed class UpdateCommand(CliEnvironment env) : AsyncCommand<UpdateSettings>
 
 sealed class UninstallSettings : CommandSettings
 {
+    [CommandOption("--silent")]
+    [Description("Do not ask anything, also in a terminal")]
+    public bool Silent { get; init; }
+
     [CommandOption("--remove-data")]
     [Description("Remove the images and containers too; they stay otherwise")]
     public bool RemoveData { get; init; }
@@ -222,7 +241,7 @@ sealed class UninstallCommand(CliEnvironment env) : AsyncCommand<UninstallSettin
     public override async Task<int> ExecuteAsync(CommandContext context, UninstallSettings s, CancellationToken cancellation)
     {
         using var setup = env.Setup();
-        await setup.Uninstall(s.RemoveData, new ProgressRenderer(env.Console, env.Error), silent: !env.HasTerminal);
+        await setup.Uninstall(s.RemoveData, new ProgressRenderer(env.Console, env.Error), silent: SetupArguments.Silent(s.Silent, env.HasTerminal));
         return 0;
     }
 }

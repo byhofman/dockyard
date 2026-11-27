@@ -7,7 +7,7 @@ public sealed class ComponentRulesTests
 {
     static readonly IReadOnlyList<ComponentInfo> Catalog =
     [
-        new("DockyardCli", "Dockyard CLI", RequiredBecause: "it installs everything", RequiredFlag: "dockyard-cli"),
+        new("DockyardCli", "Dockyard CLI", Flag: "cli"),
         new("DockerCli", "Docker CLI", RequiredBecause: "the rest uses it", RequiredFlag: "docker-cli"),
         new("Engine", "Windows engine", Flag: "windows-engine", IsEngine: true),
         new("LinuxEngine", "Linux engine", Flag: "linux-engine", IsEngine: true),
@@ -21,7 +21,25 @@ public sealed class ComponentRulesTests
     {
         var why = ComponentRules.WhyNotRemovable(Catalog, "DockerCli", new HashSet<string> { "DockerCli", "Engine", "LinuxEngine" });
         Assert.Contains("the rest uses it", why);
-        Assert.Contains("it installs everything", ComponentRules.WhyNotRemovable(Catalog, "DockyardCli", new HashSet<string>()));
+    }
+
+    [Fact]
+    public void Either_app_can_go_while_the_other_stays_but_not_the_last_one()
+    {
+        Assert.Null(ComponentRules.WhyNotRemovable(Catalog, "DockyardCli", new HashSet<string> { "DockyardCli", ComponentRules.DashboardId }));
+        Assert.Null(ComponentRules.WhyNotRemovable(Catalog, ComponentRules.DashboardId, new HashSet<string> { "DockyardCli", ComponentRules.DashboardId }));
+        Assert.Equal(ComponentRules.LastAppReason, ComponentRules.WhyNotRemovable(Catalog, "DockyardCli", new HashSet<string> { "DockyardCli", "Tray" }));
+        Assert.Equal(ComponentRules.LastAppReason, ComponentRules.WhyNotRemovable(Catalog, ComponentRules.DashboardId, new HashSet<string> { ComponentRules.DashboardId }));
+    }
+
+    [Fact]
+    public void A_silent_request_keeps_at_least_one_app()
+    {
+        Assert.Empty(ComponentRules.Problems(Catalog, [], ["cli"], []));
+        Assert.Empty(ComponentRules.Problems(Catalog, [], ["dashboard"], []));
+        Assert.Equal([ComponentRules.LastAppReason], ComponentRules.Problems(Catalog, [], ["cli", "dashboard"], []));
+        Assert.Equal([ComponentRules.LastAppReason], ComponentRules.Problems(Catalog, [], ["cli"], [ComponentRules.DashboardId]));
+        Assert.Empty(ComponentRules.Problems(Catalog, ["dashboard"], ["cli"], [ComponentRules.DashboardId]));
     }
 
     [Fact]
@@ -51,27 +69,30 @@ public sealed class ComponentRulesTests
     }
 
     [Fact]
-    public void The_Dockyard_CLI_is_required_and_the_tray_and_dashboard_can_go()
+    public void Neither_the_CLI_nor_the_dashboard_is_required_and_the_tray_can_go()
     {
 #pragma warning disable CA1416 // Only the catalogs, which are plain data on any system.
         foreach (var catalog in new[] { WindowsHost.Catalog, MacHost.Catalog, LinuxHost.Catalog })
 #pragma warning restore CA1416
         {
             var present = catalog.Select(c => c.Id).ToHashSet();
-            Assert.Equal("DockyardCli", catalog[0].Id);
-            Assert.NotNull(catalog[0].RequiredBecause);
-            Assert.Contains("required", ComponentRules.Problems(catalog, [], ["dockyard-cli"], [])[0]);
-            Assert.NotNull(ComponentRules.WhyNotRemovable(catalog, "DockyardCli", present));
+            var cli = catalog.Single(c => c.Id == "DockyardCli");
+            Assert.Null(cli.RequiredBecause);
+            Assert.Equal("cli", cli.Flag);
+            Assert.True(cli.Default);
 
-            foreach (var id in new[] { "Tray", ComponentRules.DashboardId })
+            foreach (var id in new[] { "DockyardCli", "Tray", ComponentRules.DashboardId })
             {
-                var component = catalog.Single(c => c.Id == id);
-                Assert.True(component.IsOptional);
+                Assert.True(catalog.Single(c => c.Id == id).IsOptional);
                 Assert.Null(ComponentRules.WhyNotRemovable(catalog, id, present));
             }
+            Assert.Empty(ComponentRules.Problems(catalog, [], ["cli"], []));
             Assert.Empty(ComponentRules.Problems(catalog, [], ["tray", "dashboard"], []));
+            Assert.Equal([ComponentRules.LastAppReason], ComponentRules.Problems(catalog, [], ["cli", "dashboard"], []));
             Assert.Equal(["Tray"], ComponentRules.Removed(catalog, [], [], ["tray"]));
+            Assert.Equal(["DockyardCli"], ComponentRules.Removed(catalog, [], [], ["cli"]));
         }
+        Assert.Contains("cli", ComponentRules.KnownFlags);
     }
 
     [Fact]

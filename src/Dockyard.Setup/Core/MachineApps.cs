@@ -137,9 +137,8 @@ static class MachineApps
         log($"Installed {Paths.HostExe}");
     }
 
-    // The dockyard command, the component every install has: a console program, so cmd and PowerShell wait for it and get
-    // its output. In a folder of its own, where it is the only dockyard on the PATH. Without it nothing else can be
-    // installed or updated, so a failed download fails the setup.
+    // The dockyard command: a console program, so cmd and PowerShell wait for it and get its output. In a folder of its own,
+    // where it is the only dockyard on the PATH. A failed download fails the setup that chose it.
     public static async Task InstallCli(Action<string> log, string? file)
     {
         var download = Path.Combine(Paths.AppDir, $".download-{Guid.NewGuid():N}");
@@ -167,9 +166,18 @@ static class MachineApps
         AddToMachinePath(Paths.CommandDir);
     }
 
+    // Moved aside, not deleted: it may be the very program that asks, and Windows lets a running program be renamed only.
+    public static void RemoveCli(Action<string> log)
+    {
+        RemoveFromMachinePath(Paths.CommandDir);
+        if (!File.Exists(Paths.DockyardCliExe)) return;
+        InUseFiles.MoveAside(Paths.DockyardCliExe);
+        log($"Removed {Paths.DockyardCliExe}");
+    }
+
     // The dockyard command that runs setup is the one installed, as on macOS and Linux: DOCKYARD_VERSION pins it, and a
     // first install needs no download for it. From the tray or the dashboard, which are not it, the folder --assets names
-    // or else the CLI's latest release.
+    // or else the CLI's own release.
     public static string? CliFile(string? runningCli, string? assetsDir) =>
         runningCli ?? (assetsDir is null ? null : Directory.EnumerateFiles(assetsDir).FirstOrDefault(f => Regex.IsMatch(Path.GetFileName(f), Updates.CliAssetPattern)));
 

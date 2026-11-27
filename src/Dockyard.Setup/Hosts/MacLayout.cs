@@ -42,27 +42,83 @@ static class MacLayout
     public static string TestcontainersLine => $"docker.host=unix://{DockerSocket}";
     public static string UserApplications => Path.Combine(Home, "Applications");
 
-    // Where the app belongs: where it already is when that is an Applications folder, otherwise ~/Applications.
-    public static string InstallLocation(string baseDirectory, string userApplications)
+    // Where the app belongs: where it already is when that is an Applications folder, otherwise the bundle that is installed
+    // (the dashboard's disk image puts it in /Applications), and ~/Applications only for a new one.
+    public static string InstallLocation(string baseDirectory, string userApplications, string? existing = null)
     {
         var bundle = Bundle(baseDirectory);
         var folder = bundle is null ? null : Path.GetDirectoryName(bundle);
-        return folder == "/Applications" || folder == userApplications ? bundle! : Path.Combine(userApplications, "Dockyard.app");
+        return folder == "/Applications" || folder == userApplications ? bundle! : existing ?? Path.Combine(userApplications, "Dockyard.app");
     }
+
+    // The login item's bundle, then /Applications, then ~/Applications.
+    public static string? ExistingBundle(string? launchAgentPlist, string userApplications, string systemApplications = "/Applications")
+    {
+        List<string> candidates = [];
+        if (LoginItemBundle(launchAgentPlist) is { } login) candidates.Add(login);
+        candidates.Add(Path.Combine(systemApplications, "Dockyard.app"));
+        candidates.Add(Path.Combine(userApplications, "Dockyard.app"));
+        return candidates.FirstOrDefault(IsDockyardBundle);
+    }
+
+    static string? LoginItemBundle(string? launchAgentPlist) =>
+        launchAgentPlist is not null && Regex.Match(launchAgentPlist, @"<string>([^<]+\.app)/Contents/MacOS/Dockyard</string>") is { Success: true } login
+            ? login.Groups[1].Value : null;
+
+    static string? ExistingBundleHere() =>
+        ExistingBundle(File.Exists(LaunchAgent) ? File.ReadAllText(LaunchAgent) : null, UserApplications);
+
+    // The bundle the batch updates: one for the tray and the dashboard together, and none without a release for it.
+    public static Release? BundleUpdate(IEnumerable<(string Component, Release? Release)> batch) =>
+        batch.Where(c => c.Component is ComponentRules.DashboardId or ComponentRules.TrayId).Select(c => c.Release).FirstOrDefault(r => r is not null);
+
+    public static string BundleLocation => InstallLocation(AppContext.BaseDirectory, UserApplications, ExistingBundleHere());
 
     // The files of the app that is or will be installed. The bare dockyard-macos-arm64 a one-liner downloads is no bundle,
     // and it installs into ~/Applications like any other run.
-    public static string AppBase => AppBaseFor(AppContext.BaseDirectory, UserApplications);
-    public static string AppBaseFor(string baseDirectory, string userApplications) =>
-        Path.Combine(InstallLocation(baseDirectory, userApplications), "Contents", "MacOS");
+    public static string AppBase => AppBaseFor(AppContext.BaseDirectory, UserApplications, ExistingBundleHere());
+    public static string AppBaseFor(string baseDirectory, string userApplications, string? existing = null) =>
+        Path.Combine(InstallLocation(baseDirectory, userApplications, existing), "Contents", "MacOS");
 
-    // The bundle's own executable is the tray.
+    // The bundle's own executable is the tray. The bundle holds the tray, the dashboard and the engine's parts; the CLI is
+    // an app of its own outside it, so either can go without the other.
     public static string InstalledExe => Path.Combine(AppBase, "Dockyard");
-    public static string CliExe => Path.Combine(AppBase, "dockyard-cli");
-    public static string Helper => Path.Combine(AppBase, "dockyard-host");
-    public static string Assets => Directory.Exists(Path.Combine(AppBase, "..", "Resources", "vm"))
-        ? Path.GetFullPath(Path.Combine(AppBase, "..", "Resources", "vm"))
-        : Path.Combine(AppBase, "vm");
+    public static string CliDir => Path.Combine(DataDir, "cli");
+    public static string CliExe => Path.Combine(CliDir, "dockyard");
+    public static bool IsInstalled(Func<string, bool> exists) =>
+        exists(VmConfig) && exists(Docker) && ThisApp.EitherInstalled(exists, CliExe, Path.Combine(AppBase, DashboardName));
+
+    // Without the tray and the dashboard there is no bundle, and the engine's parts are the CLI's: dockyard-host and the VM
+    // files in ~/.dockyard. With a bundle its own come first.
+    public static bool WantsBundle(bool dashboard, bool tray) => dashboard || tray;
+    public static string OwnHostDir => Path.Combine(DataDir, "host");
+    public static string OwnHelper => Path.Combine(OwnHostDir, "dockyard-host");
+    public static string OwnAssets => Path.Combine(DataDir, "vm");
+    public static string HelperWhere(Func<string, bool> exists, string appBase) =>
+        exists(Path.Combine(appBase, "dockyard-host")) ? Path.Combine(appBase, "dockyard-host") : OwnHelper;
+    public static string AssetsWhere(Func<string, bool> directoryExists, string appBase)
+    {
+        var resources = Path.GetFullPath(Path.Combine(appBase, "..", "Resources", "vm"));
+        return directoryExists(resources) ? resources
+            : directoryExists(Path.Combine(appBase, "vm")) ? Path.Combine(appBase, "vm")
+            : OwnAssets;
+    }
+    public static string Helper => HelperWhere(File.Exists, AppBase);
+    public static string Assets => AssetsWhere(Directory.Exists, AppBase);
+    public static bool HasBundleHelper => File.Exists(Path.Combine(AppBase, "dockyard-host"));
+
+    // Each from the release of the component that owns it: the bundle is the dashboard's, the command and dockyard-host
+    // the CLI's, and the VM files the engine's.
+    public const string BundleZip = @"^Dockyard-[\d.]+-macos\.zip$";
+    public const string CliAsset = @"^dockyard-macos-arm64$";
+    public const string HostAsset = @"^dockyard-host-macos-arm64$";
+
+    // The running app goes last, so that it is there to finish an uninstall that stopped halfway.
+    public static IReadOnlyList<string> AppFilesToRemove(IReadOnlyList<string> bundles, string running)
+    {
+        string[] all = [BinDir, OwnHostDir, OwnAssets, .. bundles, CliDir];
+        return [.. all.OrderBy(path => running.StartsWith(path + "/", StringComparison.Ordinal))];
+    }
     public static string LaunchAgent => Path.Combine(Home, "Library", "LaunchAgents", LaunchAgentLabel + ".plist");
 
     // dockyard-host runs the VM under launchd, so the engine does not depend on the tray or the dashboard being open. It is started on
@@ -187,7 +243,7 @@ static class MacLayout
     // is left alone when taking it back.
     public const string CliLink = "/usr/local/bin/dockyard";
     public static string InstallCliLink(string exe) => $"mkdir -p /usr/local/bin && ln -sfn {Shell.ShQuote(exe)} {CliLink}";
-    public static string RemoveCliLink => $"case \"$(readlink {CliLink})\" in */Dockyard.app/Contents/MacOS/dockyard-cli) rm -f {CliLink} ;; esac";
+    public static string RemoveCliLink => $"case \"$(readlink {CliLink})\" in */.dockyard/cli/dockyard) rm -f {CliLink} ;; esac";
 
     // brewBin: where Homebrew's copy is, for when the tool came from there and this user has no copy of Dockyard's.
     public static string Wrapper(string uid, string binDir, string command, string? brewBin = null) =>
@@ -216,10 +272,8 @@ static class MacLayout
 
     public const string RemovePathsEntry = "rm -f /etc/paths.d/dockyard; rm -rf /usr/local/dockyard";
 
-    public static string ZipAsset(bool engineOnly) => engineOnly ? @"^Dockyard-[\d.]+-macos-engine-only\.zip$" : @"^Dockyard-[\d.]+-macos\.zip$";
-
     // Only the dashboard's own file: the bundle's executable is the tray, which links the same Avalonia and Skia dylibs, so
-    // they ship in the engine-only edition too and stay when the dashboard goes.
+    // they stay when the dashboard goes.
     public static IEnumerable<string> DashboardFiles(string macosDir) =>
         !Directory.Exists(macosDir) ? [] : Directory.GetFiles(macosDir).Where(f => Path.GetFileName(f) == DashboardName);
 
@@ -261,9 +315,7 @@ static class MacLayout
         List<string> candidates = [];
         foreach (var folder in new[] { userApplications, systemApplications })
             candidates.AddRange(new[] { "Dockyard.app", "Dockyard.app.new", "Dockyard.app.old" }.Select(name => Path.Combine(folder, name)));
-        if (launchAgentPlist is not null
-            && Regex.Match(launchAgentPlist, @"<string>([^<]+\.app)/Contents/MacOS/Dockyard</string>") is { Success: true } login)
-            candidates.Add(login.Groups[1].Value);
+        if (LoginItemBundle(launchAgentPlist) is { } login) candidates.Add(login);
         return candidates.Distinct().Where(IsDockyardBundle).ToList();
     }
 

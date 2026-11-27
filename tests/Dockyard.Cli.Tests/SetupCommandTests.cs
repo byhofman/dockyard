@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using Dockyard.Hosts;
 using Dockyard.Setup;
 
@@ -119,6 +118,38 @@ public sealed class SetupCommandTests
         Assert.Equal("linux.tar", request.Image);
         Assert.DoesNotContain("start", h.Host.Calls);
         Assert.Empty(h.Launcher.Sections);
+    }
+
+    [Theory]
+    [InlineData("--source", "brew", "--source is dockyard or package-manager")]
+    [InlineData("--assets", "/no/such/folder", "--assets needs a folder that exists")]
+    public void Setup_options_the_library_parser_rejects_exit_2_with_its_message(string option, string value, string message)
+    {
+        using var h = new CliHarness(Catalog);
+
+        Assert.Equal(2, h.Run("setup", "--silent", option, value));
+        Assert.Contains(message, h.Error);
+        Assert.Empty(h.Host.Requests);
+    }
+
+    [Fact]
+    public void Setup_sends_what_the_library_parser_reads_from_the_same_options()
+    {
+        string[] options = ["--silent", "--with", "kind", "--without", "tray,dashboard", "--source", "package-manager", "--trust-https", "--kubectl-shell", "--no-start", "--image", "linux.tar"];
+        var parsed = SetupArguments.Parse(options, out var problems);
+        Assert.Empty(problems);
+        using var h = new CliHarness(Catalog) { HasTerminal = false, HasDesktop = true };
+
+        Assert.Equal(0, h.Run(["setup", .. options]));
+
+        var request = Assert.Single(h.Host.Requests);
+        Assert.Equal(parsed.Silent, request.Silent);
+        Assert.Equal(parsed.TrustHttps, request.TrustHttps);
+        Assert.Equal(parsed.Image, request.Image);
+        Assert.Equal(parsed.Without, ["tray", "dashboard"]);
+        Assert.False(request.Tray);
+        Assert.False(request.Dashboard);
+        Assert.DoesNotContain("start", h.Host.Calls);
     }
 
     [Fact]
@@ -262,11 +293,15 @@ public sealed class SetupCommandTests
     }
 
     [Fact]
-    public void Desktop_detection_follows_the_platform()
+    public void Uninstall_asks_only_in_a_terminal_and_never_with_silent()
     {
-        Assert.False(Session.HasDesktop(OSPlatform.Linux, interactive: true, _ => null));
-        Assert.True(Session.HasDesktop(OSPlatform.Linux, interactive: true, name => name == "WAYLAND_DISPLAY" ? "wayland-0" : null));
-        Assert.True(Session.HasDesktop(OSPlatform.OSX, interactive: true, _ => null));
-        Assert.False(Session.HasDesktop(OSPlatform.OSX, interactive: true, name => name == "SSH_CONNECTION" ? "1.2.3.4 22 5.6.7.8 22" : null));
+        using var h = new CliHarness(Catalog) { HasTerminal = true };
+        h.Host.Installed = true;
+        Assert.Equal(0, h.Run("uninstall"));
+        Assert.False(h.Host.UninstalledSilently);
+
+        h.Host.Installed = true;
+        Assert.Equal(0, h.Run("uninstall", "--silent"));
+        Assert.True(h.Host.UninstalledSilently);
     }
 }

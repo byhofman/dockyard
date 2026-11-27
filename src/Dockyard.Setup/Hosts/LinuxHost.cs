@@ -9,7 +9,6 @@ namespace Dockyard.Hosts;
 sealed class LinuxHost : IEngineHost
 {
     public const string Engine = "linux";
-    const string PolkitRule = "/etc/polkit-1/rules.d/50-dockyard.rules";
 
     readonly ICommandRunner runner;
     readonly LinuxComponents components;
@@ -40,7 +39,7 @@ sealed class LinuxHost : IEngineHost
     // The tray and the dashboard need a display: without one a new install leaves them out unless asked.
     public static IReadOnlyList<ComponentInfo> CatalogFor(bool desktop) =>
     [
-        new(nameof(Component.DockyardCli), Updates.Title(Component.DockyardCli), RequiredBecause: "it installs and updates everything else here. Uninstall removes it.", RequiredFlag: "dockyard-cli"),
+        new(nameof(Component.DockyardCli), Updates.Title(Component.DockyardCli), Flag: "cli", Note: "The dockyard command. It or the dashboard has to stay: either one updates and uninstalls Dockyard."),
         new("Engine", "Docker Engine & CLI", RequiredBecause: "it is what Dockyard starts and stops. It stays yours to remove with your package manager, also after uninstalling Dockyard.", RequiredFlag: "linux-engine"),
         new("Compose", "Docker Compose", Flag: "compose", Note: "Needs Docker. The dashboard's Compose actions use it."),
         new("Buildx", "Docker Buildx", Flag: "buildx", Note: "Needs Docker. docker build uses it."),
@@ -48,11 +47,10 @@ sealed class LinuxHost : IEngineHost
         Core.Tools.Kubectl.Component,
         Core.Tools.Helm.Component,
         new(ComponentRules.TrayId, "Dockyard tray", Flag: "tray", Note: "Optional. Keeps the engine in the system tray and starts at login.", Default: desktop),
-        new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard", Note: "Optional. Its package is versioned with Dockyard, so updating it updates both.", Default: desktop),
+        new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard", Note: "Optional. A package of its own, with its own tray, so the dockyard command can go without it.", Default: desktop),
     ];
 
-    // The polkit rules folder is closed to normal users, so setup leaves a marker they can see.
-    public bool IsInstalled => File.Exists("/etc/dockyard/installed") || File.Exists(PolkitRule);
+    public bool IsInstalled => LinuxLayout.IsInstalled(File.Exists);
 
     public async Task<bool> IsRunning(string engine) =>
         (await runner.Run("systemctl", "is-active", "--quiet", "docker.service")).ExitCode == 0;
@@ -117,7 +115,7 @@ sealed class LinuxHost : IEngineHost
             _ => id.StartsWith("opensuse", StringComparison.Ordinal) ? "zypper" : null,
         }).FirstOrDefault(f => f is not null));
         return component is "Engine" or "Compose" or "Buildx" ? family
-            : LinuxLayout.InstallDir == LinuxLayout.PackageDir ? family : "Dockyard";
+            : LinuxComponents.IsPackagedApp(component) ? family : "Dockyard";
     }
 
     public Task<Version?> Installed(string component) => Tool(component) is { } tool ? tools.Installed(tool) : components.Installed(component);
@@ -126,6 +124,12 @@ sealed class LinuxHost : IEngineHost
     public async Task<bool> SetComponent(Action<string> log, string component, bool installed, bool removeData = false)
     {
         if (component == ComponentRules.DashboardId) return await SetDashboard(log, installed);
+        if (component == nameof(Component.DockyardCli))
+        {
+            await components.SetCli(log, installed);
+            await setup.FollowTray(log);
+            return false;
+        }
         if (component == ComponentRules.TrayId)
         {
             await setup.SetTray(log, installed);
@@ -147,27 +151,20 @@ sealed class LinuxHost : IEngineHost
         if (components.Any(c => c.Component is "Engine" or "Compose" or "Buildx")) await this.components.UpdateDockerPackages(log);
         foreach (var (component, _) in components)
             if (Tool(component) is { } tool) await tools.Install(log, tool);
-        var (app, dashboard) = AppUpdate(components, LinuxComponents.IsTarball);
-        if (app is not null)
-        {
-            await this.components.StopApps();
-            await this.components.InstallApp(log, HasDashboard, app.Tag);
-            StartApp();
-            return true;
-        }
-        if (dashboard is not null) await this.components.UpdateDashboard(log);
-        return false;
+        var apps = AppUpdates(components);
+        if (apps.Count == 0) return false;
+        await this.components.StopApps();
+        foreach (var (component, tag) in apps)
+            if (component == ComponentRules.DashboardId) await this.components.UpdateDashboard(log, tag);
+            else await this.components.UpdateCli(log, tag);
+        await setup.FollowTray(log);
+        StartApp();
+        return apps.Any(a => a.Component == ((IEngineHost)this).SelfComponent);
     }
 
-    // The command's release brings the dashboard of its version along; the dashboard by itself comes from its own, except
-    // in the tarball, where its update is the command's tarball.
-    internal static (Release? App, Release? Dashboard) AppUpdate(IReadOnlyList<(string Component, Release? Release)> components, bool tarball)
-    {
-        var app = components.FirstOrDefault(c => c.Component == nameof(Component.DockyardCli)).Release;
-        var dashboard = components.FirstOrDefault(c => c.Component == ComponentRules.DashboardId).Release;
-        if (app is null && tarball) (app, dashboard) = (dashboard, null);
-        return app is not null ? (app, null) : (null, dashboard);
-    }
+    // Each app is a package or tarball of its own, from its own release.
+    internal static IReadOnlyList<(string Component, string Tag)> AppUpdates(IReadOnlyList<(string Component, Release? Release)> components) =>
+        [.. components.Where(c => c.Component is nameof(Component.DockyardCli) or ComponentRules.DashboardId && c.Release is not null).Select(c => (c.Component, c.Release!.Tag))];
 
     public bool RunsFromInstallLocation => LinuxComponents.RunsFromInstallLocation;
 
@@ -177,6 +174,7 @@ sealed class LinuxHost : IEngineHost
     public async Task<bool> SetDashboard(Action<string> log, bool installed)
     {
         await components.SetDashboard(log, installed);
+        await setup.FollowTray(log);
         return false;
     }
 

@@ -276,4 +276,17 @@ if [ "$container" -eq 1 ] && [ "$ID" != arch ]; then
   out="$(su dockyard-e2e -c "$as_user" 2>&1)" && fail "exited 0 without root"
   echo "$out" | grep -q "needs root" && ok "non-zero with a clear message" || fail "message was: $out"
 fi
+
+if [ "$container" -eq 0 ] && [ -n "${DOCKYARD:-}" ]; then
+  echo "== the dashboard on its own, without the dockyard command"
+  dockyard uninstall
+  unpack="$(mktemp -d)"
+  tar -xzf "$(ls "$(dirname "$DOCKYARD")"/dockyard-dashboard-*-linux-x64.tar.gz)" -C "$unpack"
+  "$unpack/dockyard-dashboard/dockyard-dashboard" --setup --silent --no-start --without cli
+  check "the dashboard in place" test -x /usr/lib/dockyard-dashboard/dockyard-dashboard
+  check "with its own tray" test -x /usr/lib/dockyard-dashboard/dockyard-tray
+  check "no dockyard command" missing /usr/bin/dockyard
+  check "setup ran" test -f "$marker"
+  rm -rf "$unpack"
+fi
 echo "All good."

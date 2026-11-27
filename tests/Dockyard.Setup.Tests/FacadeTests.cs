@@ -144,6 +144,42 @@ public sealed class FacadeTests : IDisposable
         Assert.Null(app.Flag);
     }
 
+    static IReadOnlyList<ComponentInfo> Apps => [new("DockyardCli", "Dockyard CLI", Flag: "cli"), new("Tray", "Dockyard tray", Flag: "tray"), new(ComponentRules.DashboardId, "Dashboard", Flag: "dashboard")];
+
+    [Fact]
+    public async Task The_dashboard_can_remove_the_CLI_and_the_CLI_the_dashboard_but_never_the_last_app()
+    {
+        var both = new FakeHost { Installed = true, Dashboard = true, SelfComponent = ComponentRules.DashboardId, Components = Apps };
+        var rows = For(both).Components();
+        Assert.True(rows.Single(r => r.Id == "DockyardCli").CanRemove);
+        Assert.False(rows.Single(r => r.Id == ComponentRules.DashboardId).CanRemove);
+        await For(both).Remove("cli", removeData: false, progress);
+        Assert.Equal(["remove DockyardCli"], both.Calls);
+
+        var cliOnly = new FakeHost { Installed = true, Dashboard = false, Components = Apps };
+        Assert.False(For(cliOnly).Components().Single(r => r.Id == "DockyardCli").CanRemove);
+        var refused = await Assert.ThrowsAsync<InvalidOperationException>(() => For(cliOnly).Remove("cli", removeData: false, progress));
+        Assert.Equal(ComponentRules.LastAppReason, refused.Message);
+    }
+
+    [Theory]
+    [InlineData(true, false, null, true)]
+    [InlineData(false, true, null, true)]
+    [InlineData(true, false, "dashboard", false)]
+    [InlineData(false, false, null, false)]
+    public async Task Setup_without_the_CLI_is_refused_when_no_dashboard_would_be_left(bool installed, bool headless, string? with, bool refused)
+    {
+        var host = new FakeHost { Installed = installed, Dashboard = false, Components = Apps };
+        var request = new SetupRequest(with is null ? [] : [with], ["cli"], null, false, false, Silent: true, Resume: false) { Start = false, Headless = headless };
+        var code = await For(host).Setup(request, progress, CancellationToken.None);
+        if (refused)
+        {
+            Assert.Equal(DockyardSetup.WrongArguments, code);
+            Assert.Contains(progress.All, p => p.Line == ComponentRules.LastAppReason);
+        }
+        else Assert.NotEqual(DockyardSetup.WrongArguments, code);
+    }
+
     [Fact]
     public void Dockyard_itself_is_the_dockyard_command_on_every_system_and_not_the_tray() =>
         Assert.Equal("DockyardCli", For(new FakeHost { Installed = true }).SelfId);
@@ -159,14 +195,26 @@ public sealed class FacadeTests : IDisposable
         Assert.Equal([expected], host.Calls);
     }
 
-    DockyardSetup FromApp(FakeHost host, string app, List<IReadOnlyList<string>> handedOff) =>
-        new(host, settings.Settings, new ShellProfiles((_, _) => { }, () => [])) { Caller = app, HandOff = handedOff.Add };
+    const string DashboardExe = "/apps/dockyard-dashboard";
+
+    // Both apps installed unless the test says otherwise; what is handed over is written down as "exe args".
+    DockyardSetup FromApp(FakeHost host, string app, List<string> handedOff, params string[] installed)
+    {
+        host.DashboardExe = DashboardExe;
+        string[] present = installed.Length > 0 ? installed : [Paths.DockyardCliExe, DashboardExe];
+        return new(host, settings.Settings, new ShellProfiles((_, _) => { }, () => []))
+        {
+            Caller = app,
+            HandOff = (exe, args) => handedOff.Add($"{exe} {string.Join(' ', args)}"),
+            AppExists = present.Contains,
+        };
+    }
 
     [Fact]
-    public async Task From_the_dashboard_its_own_update_and_dockyard_itself_go_to_a_dockyard_command_of_their_own_and_it_exits()
+    public async Task From_the_dashboard_its_own_update_and_dockyard_itself_go_to_the_dashboard_itself_and_it_exits()
     {
         var host = new FakeHost { Installed = true, Newest = new Version(2, 0, 0) };
-        List<IReadOnlyList<string>> handedOff = [];
+        List<string> handedOff = [];
         var setup = FromApp(host, ComponentRules.DashboardId, handedOff);
         var exits = 0;
         setup.ExitRequested += () => exits++;
@@ -174,15 +222,43 @@ public sealed class FacadeTests : IDisposable
         await setup.Update(["DockyardCli", "Tray", ComponentRules.DashboardId], progress);
 
         Assert.Equal(["update Tray"], host.Calls);
-        Assert.Equal(["update", ComponentRules.DashboardId, "DockyardCli"], Assert.Single(handedOff));
+        Assert.Equal([$"{DashboardExe} --update {ComponentRules.DashboardId} DockyardCli"], handedOff);
         Assert.Equal(1, exits);
     }
 
     [Fact]
-    public async Task From_the_tray_removing_the_tray_goes_to_a_dockyard_command_and_the_tray_exits()
+    public async Task From_the_dashboard_without_the_cli_everything_it_hands_over_goes_to_itself()
+    {
+        var host = new FakeHost { Installed = true, Newest = new Version(2, 0, 0) };
+        List<string> handedOff = [];
+        var setup = FromApp(host, ComponentRules.DashboardId, handedOff, DashboardExe);
+
+        await setup.Update([ComponentRules.DashboardId], progress);
+
+        Assert.Equal([$"{DashboardExe} --update {ComponentRules.DashboardId}"], handedOff);
+    }
+
+    [Fact]
+    public async Task From_the_dashboard_removing_the_dashboard_goes_to_the_cli_which_stays()
+    {
+        var host = new FakeHost { Installed = true, Dashboard = true };
+        List<string> handedOff = [];
+        var setup = FromApp(host, ComponentRules.DashboardId, handedOff);
+        var exits = 0;
+        setup.ExitRequested += () => exits++;
+
+        await setup.Remove("dashboard", removeData: false, progress);
+
+        Assert.Empty(host.Calls);
+        Assert.Equal([$"{Paths.DockyardCliExe} component remove dashboard"], handedOff);
+        Assert.Equal(1, exits);
+    }
+
+    [Fact]
+    public async Task From_the_tray_removing_the_tray_goes_to_the_dashboard_else_the_cli_and_the_tray_exits()
     {
         var host = new FakeHost { Installed = true };
-        List<IReadOnlyList<string>> handedOff = [];
+        List<string> handedOff = [];
         var setup = FromApp(host, "Tray", handedOff);
         var exits = 0;
         setup.ExitRequested += () => exits++;
@@ -190,22 +266,26 @@ public sealed class FacadeTests : IDisposable
         await setup.Remove("tray", removeData: false, progress);
 
         Assert.Empty(host.Calls);
-        Assert.Equal(["component", "remove", "tray"], Assert.Single(handedOff));
+        Assert.Equal([$"{DashboardExe} --component remove tray"], handedOff);
         Assert.Equal(1, exits);
+
+        List<string> onlyCli = [];
+        await FromApp(new FakeHost { Installed = true }, "Tray", onlyCli, Paths.DockyardCliExe).Remove("tray", removeData: false, progress);
+        Assert.Equal([$"{Paths.DockyardCliExe} component remove tray"], onlyCli);
     }
 
     [Fact]
     public async Task An_app_whose_update_of_dockyard_itself_leaves_it_running_hands_the_update_over_and_stays()
     {
         var host = new FakeHost { Installed = true, SelfUpdateStopsApps = false };
-        List<IReadOnlyList<string>> handedOff = [];
+        List<string> handedOff = [];
         var setup = FromApp(host, "Tray", handedOff);
         var exits = 0;
         setup.ExitRequested += () => exits++;
 
         await setup.Update(["DockyardCli"], progress);
 
-        Assert.Equal(["update", "DockyardCli"], Assert.Single(handedOff));
+        Assert.Equal([$"{DashboardExe} --update DockyardCli"], handedOff);
         Assert.Equal(0, exits);
     }
 
@@ -214,7 +294,7 @@ public sealed class FacadeTests : IDisposable
     {
         var host = new FakeHost { Installed = true };
         List<IReadOnlyList<string>> handedOff = [];
-        var setup = new DockyardSetup(host, settings.Settings, new ShellProfiles((_, _) => { }, () => [])) { Caller = null, HandOff = handedOff.Add };
+        var setup = new DockyardSetup(host, settings.Settings, new ShellProfiles((_, _) => { }, () => [])) { Caller = null, HandOff = (_, args) => handedOff.Add(args) };
 
         await setup.Update(["DockyardCli", ComponentRules.DashboardId], progress);
         await setup.Remove("tray", removeData: false, progress);

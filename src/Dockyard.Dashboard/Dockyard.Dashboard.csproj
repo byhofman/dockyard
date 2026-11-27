@@ -35,6 +35,8 @@
   <ItemGroup>
     <ProjectReference Include="..\Dockyard.Engine\Dockyard.Engine.csproj" />
     <ProjectReference Include="..\Dockyard.Kind\Dockyard.Kind.csproj" />
+    <!-- Carries the install payloads as the CLI does: publish with -p:GuestBundle=… -p:HostExe=… and Dockyard.Setup embeds
+         them, which Native AOT keeps. -->
     <ProjectReference Include="..\Dockyard.Setup\Dockyard.Setup.csproj" />
     <Using Include="Dockyard.Kind" />
   </ItemGroup>

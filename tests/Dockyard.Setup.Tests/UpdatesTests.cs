@@ -6,8 +6,8 @@ using Dockyard.Hosts;
 
 namespace Dockyard.Setup.Tests;
 
-// Classes that swap Updates.Http or Updates.InstalledCli, which are static, run alone: a facade made by a test running
-// next to them would point InstalledCli at its own host.
+// Classes that swap Updates.Http or Updates.InstalledComponent, which are static, run alone: a facade made by a test running
+// next to them would point InstalledComponent at its own host.
 [CollectionDefinition(nameof(SharedHttp), DisableParallelization = true)]
 public sealed class SharedHttp;
 
@@ -19,11 +19,17 @@ public sealed class UpdatesTests : IDisposable
     readonly FakeGitHub github = new();
     readonly string dir = Directory.CreateTempSubdirectory().FullName;
 
-    public UpdatesTests() => Updates.Http = new HttpClient(github);
+    public UpdatesTests()
+    {
+        Updates.Http = new HttpClient(github);
+        Updates.InstalledComponent = _ => Task.FromResult<Version?>(null);
+    }
 
     public void Dispose()
     {
         Updates.Http = original;
+        Updates.InstalledComponent = _ => Task.FromResult<Version?>(null);
+        Updates.LocalAssets = null;
         Directory.Delete(dir, recursive: true);
     }
 
@@ -78,14 +84,93 @@ public sealed class UpdatesTests : IDisposable
         Assert.Equal(matches, System.Text.RegularExpressions.Regex.IsMatch(asset, Updates.TrayZipPattern));
 
     [Fact]
-    public async Task Without_a_cli_release_in_the_index_nothing_is_downloaded()
+    public async Task Without_its_component_in_the_index_nothing_is_downloaded()
     {
         github.Serve($"{Base}/download/index/components.json", """{ "tray": { "version": "1.1.0", "tag": "tray/1.1.0" } }""");
-        Updates.InstalledCli = () => Task.FromResult<Version?>(null);
 
-        var e = await Assert.ThrowsAsync<InvalidOperationException>(() => Updates.DownloadReleaseAsset(Updates.ImageAsset, dir, isPattern: true, tag: null));
+        var e = await Assert.ThrowsAsync<InvalidOperationException>(() => Updates.DownloadComponentAsset(Updates.EngineComponent, Updates.ImageAsset, dir));
 
-        Assert.Contains("No Dockyard release found", e.Message);
+        Assert.Contains("which engine release is the latest", e.Message);
+    }
+
+    [Fact]
+    public async Task An_asset_comes_from_the_installed_release_of_the_component_that_owns_it()
+    {
+        github.Serve($"{Base}/download/index/components.json", """{ "cli": { "version": "3.0.0", "tag": "cli/3.0.0" }, "dashboard": { "version": "3.0.0", "tag": "dashboard/3.0.0" } }""");
+        ServeRelease("dashboard/1.1.0", "Dockyard.Dashboard.zip", "installed dashboard");
+        Updates.InstalledComponent = c => Task.FromResult<Version?>(c == Updates.DashboardComponent ? new Version(1, 1, 0) : new Version(2, 0, 0));
+
+        var file = await Updates.DownloadComponentAsset(Updates.DashboardComponent, Updates.DashboardZipPattern, dir);
+
+        Assert.Equal("installed dashboard", File.ReadAllText(file));
+        Assert.DoesNotContain(github.Requested, url => url.Contains("/cli/"));
+    }
+
+    [Fact]
+    public async Task A_component_that_is_not_there_comes_from_its_latest_release()
+    {
+        github.Serve($"{Base}/download/index/components.json", """{ "cli": { "version": "2.0.0", "tag": "cli/2.0.0" }, "engine": { "version": "1.4.0", "tag": "engine/1.4.0" } }""");
+        ServeRelease("engine/1.4.0", "dockyard-vm-1.4.0-aarch64.tar.gz", "vm");
+        Updates.InstalledComponent = c => Task.FromResult<Version?>(c == Updates.CliComponent ? new Version(2, 0, 0) : null);
+
+        var file = await Updates.DownloadComponentAsset(Updates.EngineComponent, Updates.VmAsset, dir);
+
+        Assert.Equal("vm", File.ReadAllText(file));
+    }
+
+    [Fact]
+    public async Task The_latest_release_of_a_component_that_is_not_there_waits_for_what_it_requires()
+    {
+        github.Serve($"{Base}/download/index/components.json", """{ "cli": { "version": "2.0.0", "tag": "cli/2.0.0" }, "engine": { "version": "1.4.0", "tag": "engine/1.4.0", "requires": { "cli": "3.0.0" } } }""");
+        ServeRelease("engine/1.4.0", "dockyard-vm-1.4.0-aarch64.tar.gz", "vm");
+        Updates.InstalledComponent = c => Task.FromResult<Version?>(c == Updates.CliComponent ? new Version(2, 0, 0) : null);
+
+        var e = await Assert.ThrowsAsync<InvalidOperationException>(() => Updates.DownloadComponentAsset(Updates.EngineComponent, Updates.VmAsset, dir));
+
+        Assert.Contains("cli 3.0.0", e.Message);
+        Assert.DoesNotContain(github.Requested, url => url.Contains("engine/1.4.0/dockyard-vm"));
+    }
+
+    [Fact]
+    public async Task A_local_asset_wins_over_what_the_latest_release_requires()
+    {
+        github.Serve($"{Base}/download/index/components.json", """{ "engine": { "version": "1.4.0", "tag": "engine/1.4.0", "requires": { "cli": "3.0.0" } } }""");
+        File.WriteAllText(Path.Combine(dir, "dockyard-vm-1.4.0-aarch64.tar.gz"), "local");
+        var target = Directory.CreateTempSubdirectory().FullName;
+        Updates.LocalAssets = dir;
+        Updates.InstalledComponent = c => Task.FromResult<Version?>(c == Updates.CliComponent ? new Version(2, 0, 0) : null);
+        try { Assert.Equal("local", File.ReadAllText(await Updates.DownloadComponentAsset(Updates.EngineComponent, Updates.VmAsset, target))); }
+        finally { Directory.Delete(target, recursive: true); }
+    }
+
+    [Fact]
+    public async Task A_named_release_wins_over_the_installed_one_and_over_local_files()
+    {
+        ServeRelease("tray/1.3.0", "Dockyard.Tray.zip", "named");
+        File.WriteAllText(Path.Combine(dir, "Dockyard.Tray.zip"), "local");
+        var target = Directory.CreateTempSubdirectory().FullName;
+        Updates.LocalAssets = dir;
+        Updates.InstalledComponent = _ => Task.FromResult<Version?>(new Version(1, 0, 0));
+        try
+        {
+            Assert.Equal("named", File.ReadAllText(await Updates.DownloadComponentAsset(Updates.TrayComponent, Updates.TrayZipPattern, target, tag: "tray/1.3.0")));
+            Assert.Equal("local", File.ReadAllText(await Updates.DownloadComponentAsset(Updates.TrayComponent, Updates.TrayZipPattern, Path.Combine(target, "again"))));
+        }
+        finally { Directory.Delete(target, recursive: true); }
+    }
+
+    [Fact]
+    public async Task An_update_waits_until_every_component_it_requires_is_new_enough()
+    {
+        github.Serve($"{Base}/download/index/components.json",
+            """{ "dashboard": { "version": "2.0.0", "tag": "dashboard/2.0.0", "requires": { "cli": "2.0.0", "tray": "1.5.0" } } }""");
+        ServeRelease("dashboard/2.0.0", "Dockyard.Dashboard.zip", "dashboard");
+        Dictionary<string, Version> installed = new() { [Updates.CliComponent] = new(2, 0, 0), [Updates.TrayComponent] = new(1, 4, 0) };
+        Updates.InstalledComponent = c => Task.FromResult<Version?>(installed.GetValueOrDefault(c));
+
+        Assert.Null(await Updates.LatestComponentAsset(Updates.DashboardComponent, Updates.DashboardZipPattern));
+        installed[Updates.TrayComponent] = new(1, 5, 0);
+        Assert.Equal("dashboard/2.0.0", (await Updates.LatestComponentAsset(Updates.DashboardComponent, Updates.DashboardZipPattern))!.Tag);
     }
 
     [Fact]
@@ -93,7 +178,7 @@ public sealed class UpdatesTests : IDisposable
     {
         ServeRelease("cli/1.2.3", "dockyard-linux-1.2.3-x86_64.tar.gz", "image");
 
-        var file = await Updates.DownloadReleaseAsset(Updates.ImageAsset, dir, isPattern: true, tag: "cli/1.2.3");
+        var file = await Updates.DownloadComponentAsset(Updates.EngineComponent, Updates.ImageAsset, dir, tag: "cli/1.2.3");
 
         Assert.Equal("image", File.ReadAllText(file));
         Assert.DoesNotContain(github.Requested, url => url.Contains("api.github.com"));
@@ -104,7 +189,7 @@ public sealed class UpdatesTests : IDisposable
     {
         ServeRelease("cli/1.2.3", "dockyard-windows-x64.exe", "tampered", sums: $"{Sum("original")}  dockyard-windows-x64.exe\n");
 
-        var e = await Assert.ThrowsAsync<InvalidOperationException>(() => Updates.DownloadReleaseAsset("dockyard-windows-x64.exe", dir, tag: "cli/1.2.3"));
+        var e = await Assert.ThrowsAsync<InvalidOperationException>(() => Updates.DownloadComponentAsset(Updates.CliComponent, Updates.CliAssetPattern, dir, tag: "cli/1.2.3"));
 
         Assert.Contains("Checksum mismatch", e.Message);
         Assert.Empty(Directory.GetFiles(dir));
@@ -115,9 +200,9 @@ public sealed class UpdatesTests : IDisposable
     {
         ServeRelease("cli/1.2.3", "dockyard-windows-x64.exe", "app");
 
-        var e = await Assert.ThrowsAsync<InvalidOperationException>(() => Updates.DownloadReleaseAsset("other.zip", dir, tag: "cli/1.2.3"));
+        var e = await Assert.ThrowsAsync<InvalidOperationException>(() => Updates.DownloadComponentAsset(Updates.CliComponent, @"^other\.zip$", dir, tag: "cli/1.2.3"));
 
-        Assert.Equal("Release cli/1.2.3 has no other.zip", e.Message);
+        Assert.Equal(@"Release cli/1.2.3 has no ^other\.zip$", e.Message);
     }
 
     [Theory]
@@ -137,7 +222,7 @@ public sealed class UpdatesTests : IDisposable
     [Fact]
     public async Task Any_other_failure_names_what_could_not_be_fetched()
     {
-        var e = await Assert.ThrowsAsync<HttpRequestException>(() => Updates.DownloadReleaseAsset("dockyard-windows-x64.exe", dir, tag: "cli/9.9.9"));
+        var e = await Assert.ThrowsAsync<HttpRequestException>(() => Updates.DownloadComponentAsset(Updates.CliComponent, Updates.CliAssetPattern, dir, tag: "cli/9.9.9"));
 
         Assert.False(Updates.IsRateLimited(e));
         Assert.Equal($"Could not get {Base}/download/cli/9.9.9/SHA256SUMS: github.com answered 404 (NotFound).", e.Message);

@@ -42,7 +42,7 @@ sealed class WindowsHost : IEngineHost
 
     public static IReadOnlyList<ComponentInfo> CatalogFor(bool desktop) =>
     [
-        new(nameof(Component.DockyardCli), Updates.Title(Component.DockyardCli), RequiredBecause: "it installs and updates everything else here, and the tray and the dashboard use it. Uninstall removes it.", RequiredFlag: "dockyard-cli"),
+        new(nameof(Component.DockyardCli), Updates.Title(Component.DockyardCli), Flag: "cli", Note: "The dockyard command. It or the dashboard has to stay: either one updates and uninstalls Dockyard."),
         new(nameof(Component.DockerCli), Updates.Title(Component.DockerCli), RequiredBecause: "both engines, Compose and Buildx are used through it.", RequiredFlag: "docker-cli"),
         new(nameof(Component.Engine), Updates.Title(Component.Engine), Flag: "windows-engine", Note: "Windows containers. Its images stay when you remove it. One engine has to stay.", IsEngine: true),
         new(nameof(Component.LinuxEngine), Updates.Title(Component.LinuxEngine), CheckNeedsEngine: Linux, Flag: "linux-engine", Note: "Linux containers. Its images stay when you remove it. One engine has to stay.", IsEngine: true),
@@ -56,7 +56,8 @@ sealed class WindowsHost : IEngineHost
     ];
 
     public bool IsInstalled => IsInstalledWhere(File.Exists);
-    internal static bool IsInstalledWhere(Func<string, bool> exists) => exists(Paths.InstalledMarker);
+    internal static bool IsInstalledWhere(Func<string, bool> exists) =>
+        exists(Paths.InstalledMarker) && ThisApp.EitherInstalled(exists, Paths.DockyardCliExe, Paths.DashboardExe);
     public ICaKeyStore CaKeys => new DpapiCaKey(((IEngineHost)this).CaDirectory);
 
     public Task<bool> IsRunning(string engine) => Task.Run(() => engine == Linux ? wsl.IsRunning() : WindowsServiceEngine.IsRunning());
@@ -251,7 +252,8 @@ sealed class WindowsHost : IEngineHost
         {
             // WSL does not work until the restart its install asked for, and the rest of setup needs WSL.
             log($"The Linux engine has to wait for the restart ({ex.Message})");
-            UserSetup.ResumeAfterReboot(request.Dashboard, log);
+            var app = UserSetup.ResumeApp(ThisApp.Current, MachineSetup.InstallsCli(request.Without), request.Dashboard);
+            UserSetup.ResumeAfterReboot(app, request.Dashboard, log);
             return true;
         }
         await FindWingetPlugins(log);

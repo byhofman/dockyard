@@ -40,10 +40,10 @@ jobs:
             if [ "$component" = all ] || [ "$component" = "$c" ]; then echo "$c=true"; else echo "$c=false"; fi >> "$GITHUB_OUTPUT"
           done
 
-  # The agent and scripts for an engine that already exists; the CLI embeds them.
+  # The agent and scripts for an engine that already exists; both apps embed them.
   guest:
     needs: [plan]
-    if: needs.plan.outputs.cli == 'true'
+    if: needs.plan.outputs.cli == 'true' || needs.plan.outputs.dashboard == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -63,7 +63,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        if: needs.plan.outputs.cli == 'true'
+        if: needs.plan.outputs.cli == 'true' || needs.plan.outputs.dashboard == 'true'
         with:
           name: guest
           path: guest
@@ -72,15 +72,19 @@ jobs:
         shell: pwsh
         run: dotnet test --solution Dockyard.slnx
 
+      - name: Host
+        if: needs.plan.outputs.cli == 'true' || needs.plan.outputs.dashboard == 'true'
+        shell: pwsh
+        run: dotnet publish src/Dockyard.Host/Dockyard.Host.csproj -c Release -r win-x64 -o out/host -p:Version=${{ needs.plan.outputs.version }} -warnaserror
+
       - name: CLI
         if: needs.plan.outputs.cli == 'true'
         shell: pwsh
         run: |
-          dotnet publish src/Dockyard.Host/Dockyard.Host.csproj -c Release -r win-x64 -o out/host -p:Version=${{ needs.plan.outputs.version }} -warnaserror
           dotnet publish src/Dockyard.Cli/Dockyard.Cli.csproj -c Release -r win-x64 -o out/cli -p:Version=${{ needs.plan.outputs.version }} -p:GuestBundle="$PWD/guest/dockyard-guest-guest-x86_64.tar.gz" -p:HostExe="$PWD/out/host/dockyard-host.exe" -warnaserror
           Copy-Item out/cli/dockyard-cli.exe out/dockyard-windows-x64.exe
 
-      # Also for a CLI release: the Windows end-to-end test installs the tray and the dashboard from this build.
+      # Also for a CLI release: the Windows end-to-end test installs the tray from this build.
       - name: Tray
         if: needs.plan.outputs.tray == 'true' || needs.plan.outputs.cli == 'true'
         shell: pwsh
@@ -89,11 +93,12 @@ jobs:
           # With Skia's native libraries: an AOT exe alone cannot draw its icon without the dashboard's copies next to it.
           Compress-Archive -Path out/tray/*.exe, out/tray/*.dll -DestinationPath out/Dockyard.Tray.zip
 
+      # Also for a CLI release: the Windows end-to-end test installs the dashboard from this build.
       - name: Dashboard
         if: needs.plan.outputs.dashboard == 'true' || needs.plan.outputs.cli == 'true'
         shell: pwsh
         run: |
-          dotnet publish src/Dockyard.Dashboard/Dockyard.Dashboard.csproj -c Release -r win-x64 -o out/dashboard -p:Version=${{ needs.plan.outputs.version }} -warnaserror
+          dotnet publish src/Dockyard.Dashboard/Dockyard.Dashboard.csproj -c Release -r win-x64 -o out/dashboard -p:Version=${{ needs.plan.outputs.version }} -p:GuestBundle="$PWD/guest/dockyard-guest-guest-x86_64.tar.gz" -p:HostExe="$PWD/out/host/dockyard-host.exe" -warnaserror
           Compress-Archive -Path out/dashboard/*.exe, out/dashboard/*.dll -DestinationPath out/Dockyard.Dashboard.zip
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -115,7 +120,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        if: needs.plan.outputs.cli == 'true'
+        if: needs.plan.outputs.cli == 'true' || needs.plan.outputs.dashboard == 'true'
         with:
           name: guest
           path: guest
@@ -145,24 +150,29 @@ jobs:
               pkg --config "packaging/linux/$1.yaml" --packager "$2" --target out/
           }
           mkdir -p out
-          # On Linux the tray ships with the CLI, in its package and its tarball; it has no asset of its own.
-          if [ "$CLI" = true ]; then
-            dotnet publish src/Dockyard.Cli/Dockyard.Cli.csproj -c Release -r linux-x64 -o dist/linux/cli -p:Version="$VERSION" -p:GuestBundle="$PWD/guest/dockyard-guest-guest-x86_64.tar.gz" -warnaserror
+          # Each app has its own tray and libraries on Linux: a folder, a package and a tarball of its own.
+          if [ "$CLI" = true ] || [ "$DASHBOARD" = true ]; then
             dotnet publish src/Dockyard.Tray/Dockyard.Tray.csproj -c Release -r linux-x64 -o dist/linux/tray -p:Version="$VERSION" -warnaserror
           fi
+          if [ "$CLI" = true ]; then
+            dotnet publish src/Dockyard.Cli/Dockyard.Cli.csproj -c Release -r linux-x64 -o dist/linux/cli -p:Version="$VERSION" -p:GuestBundle="$PWD/guest/dockyard-guest-guest-x86_64.tar.gz" -warnaserror
+          fi
           if [ "$CLI" = true ] || [ "$DASHBOARD" = true ]; then
-            dotnet publish src/Dockyard.Dashboard/Dockyard.Dashboard.csproj -c Release -r linux-x64 -o dist/linux/dashboard -p:Version="$VERSION" -warnaserror
+            dotnet publish src/Dockyard.Dashboard/Dockyard.Dashboard.csproj -c Release -r linux-x64 -o dist/linux/dashboard -p:Version="$VERSION" -p:GuestBundle="$PWD/guest/dockyard-guest-guest-x86_64.tar.gz" -warnaserror
           fi
           rm -f dist/linux/*/*.pdb
           if [ "$CLI" = true ]; then
             cp dist/linux/cli/dockyard-cli out/dockyard-linux-x64
             # setup links ~/.local/bin/dockyard to Dockyard/dockyard-cli.
             mkdir -p out/Dockyard
-            cp dist/linux/cli/dockyard-cli dist/linux/tray/dockyard-tray dist/linux/tray/libSkiaSharp.so dist/linux/tray/libHarfBuzzSharp.so dist/linux/dashboard/dockyard-dashboard out/Dockyard/
+            cp dist/linux/cli/dockyard-cli dist/linux/tray/dockyard-tray dist/linux/tray/libSkiaSharp.so dist/linux/tray/libHarfBuzzSharp.so out/Dockyard/
             tar -czf "out/Dockyard-$VERSION-linux-x64.tar.gz" -C out Dockyard
             for packager in deb rpm; do nfpm dockyard "$packager"; done
           fi
           if [ "$DASHBOARD" = true ]; then
+            mkdir -p out/dockyard-dashboard
+            cp dist/linux/dashboard/dockyard-dashboard dist/linux/tray/dockyard-tray dist/linux/tray/libSkiaSharp.so dist/linux/tray/libHarfBuzzSharp.so out/dockyard-dashboard/
+            tar -czf "out/dockyard-dashboard-$VERSION-linux-x64.tar.gz" -C out dockyard-dashboard
             for packager in deb rpm; do nfpm dockyard-dashboard "$packager"; done
           fi
 
@@ -173,6 +183,7 @@ jobs:
           path: |
             out/dockyard-linux-x64
             out/Dockyard-*-linux-x64.tar.gz
+            out/dockyard-dashboard-*-linux-x64.tar.gz
             out/*.deb
             out/*.rpm
 
@@ -227,7 +238,7 @@ jobs:
 
   macos:
     needs: [plan, vm-image]
-    if: ${{ !cancelled() && needs.plan.outputs.cli == 'true' }}
+    if: ${{ !cancelled() && (needs.plan.outputs.cli == 'true' || needs.plan.outputs.dashboard == 'true') }}
     runs-on: macos-15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -246,9 +257,9 @@ jobs:
           name: vm-image
           path: vm-image
 
-      # A CLI release without an engine bundles the VM of the latest engine release.
+      # A release without an engine bundles the VM of the latest engine release.
       - name: The engine's VM image
-        if: needs.vm-image.result != 'success' && needs.plan.outputs.cli == 'true'
+        if: needs.vm-image.result != 'success'
         env:
           GH_TOKEN: ${{ github.token }}
         run: sh scripts/component-assets.sh engine vm-image 'dockyard-vm-*-aarch64.tar.gz'
@@ -256,15 +267,24 @@ jobs:
       - name: Publish and bundle
         env:
           VERSION: ${{ needs.plan.outputs.version }}
+          CLI: ${{ needs.plan.outputs.cli }}
         run: |
           mkdir -p out
-          dotnet publish src/Dockyard.Cli/Dockyard.Cli.csproj -c Release -r osx-arm64 -o dist/cli -p:Version="$VERSION" -warnaserror
-          cp dist/cli/dockyard-cli out/dockyard-macos-arm64
+          if [ "$CLI" = true ]; then
+            dotnet publish src/Dockyard.Cli/Dockyard.Cli.csproj -c Release -r osx-arm64 -o dist/cli -p:Version="$VERSION" -warnaserror
+            cp dist/cli/dockyard-cli out/dockyard-macos-arm64
+          fi
+          # The bundle is the dashboard's: the CLI is its own asset and is not inside.
           dotnet publish src/Dockyard.Tray/Dockyard.Tray.csproj -c Release -r osx-arm64 -o dist/macos -p:Version="$VERSION" -warnaserror
           dotnet publish src/Dockyard.Dashboard/Dockyard.Dashboard.csproj -c Release -r osx-arm64 -o dist/macos -p:Version="$VERSION" -warnaserror
-          cp dist/cli/dockyard-cli dist/macos/dockyard-cli
           swift build -c release --package-path macos/DockyardVM
           cp macos/DockyardVM/.build/release/dockyard-host dist/macos/
+          if [ "$CLI" = true ]; then
+            # A plain signed file runs the VM outside a bundle, for a CLI without the dashboard.
+            cp dist/macos/dockyard-host out/dockyard-host-macos-arm64
+            codesign --force --sign - --entitlements macos/DockyardVM/dockyard-host.entitlements out/dockyard-host-macos-arm64
+            codesign -d --entitlements - out/dockyard-host-macos-arm64 | grep -q com.apple.security.virtualization
+          fi
           mkdir -p dist/macos/vm && tar -xzf vm-image/dockyard-vm-*-aarch64.tar.gz -C dist/macos/vm
           rm -f dist/macos/*.pdb
           sh packaging/macos/build-app.sh "$VERSION" dist/macos out
@@ -277,6 +297,7 @@ jobs:
             out/Dockyard-*-macos*.zip
             out/Dockyard-*-macos*.dmg
             out/dockyard-macos-arm64
+            out/dockyard-host-macos-arm64
 
   setup-windows:
     needs: [plan, windows, image]

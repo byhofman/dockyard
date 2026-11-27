@@ -3,40 +3,51 @@ using Dockyard.Core;
 
 namespace Dockyard.Hosts;
 
-// What Dockyard installs on a Linux host: its own app and dashboard (as packages, or a tarball where there is no apt or
-// dnf), the Docker packages it keeps up to date and their plugins.
+// What Dockyard installs on a Linux host: its two apps, each as a package or, where there is no apt or dnf, as a tarball,
+// and the Docker packages it keeps up to date and their plugins.
 [SupportedOSPlatform("linux")]
 sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
 {
     static readonly string[] Packages = ["docker-ce", "docker-ce-cli", "containerd.io", "docker-buildx-plugin", "docker-compose-plugin"];
 
-    public static bool RunsFromInstallLocation => string.Equals(
-        Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory), LinuxLayout.InstallDir, StringComparison.Ordinal);
+    public static bool RunsFromInstallLocation =>
+        new[] { LinuxLayout.CliDir, LinuxLayout.DashboardDir }.Contains(Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory), StringComparer.Ordinal);
 
     public static bool HasDashboard => File.Exists(LinuxLayout.Dashboard);
+    public static bool HasCli => File.Exists(LinuxLayout.CliExe);
 
     public async Task<Version?> Installed(string component) => component switch
     {
         "Engine" => Updates.ParseVersion((await runner.Run("dockerd", "--version")).Output),
         "Compose" => Updates.ParseVersion((await runner.Run("docker", "compose", "version", "--short")).Output),
         "Buildx" => Updates.ParseVersion((await runner.Run("docker", "buildx", "version")).Output),
-        nameof(Component.DockyardCli) => await InstalledAppVersion(),
-        ComponentRules.TrayId => File.Exists(LinuxSetup.AutostartFile) ? await InstalledAppVersion() : null,
-        ComponentRules.DashboardId => await InstalledDashboardVersion(),
+        nameof(Component.DockyardCli) => HasCli ? await AppVersion(App.Cli) : null,
+        // The tray came with an app, and is as new as the app whose tray the autostart runs.
+        ComponentRules.TrayId => File.Exists(LinuxSetup.AutostartFile) && File.Exists(LinuxLayout.InstalledExe)
+            ? await AppVersion(LinuxLayout.InstalledExe.StartsWith(LinuxLayout.DashboardDir + "/", StringComparison.Ordinal) ? App.Dashboard : App.Cli)
+            : null,
+        ComponentRules.DashboardId => HasDashboard ? Updates.ParseVersion((await runner.Run(LinuxLayout.Dashboard, "--version")).Output) : null,
         _ => null,
     };
 
-    async Task<Version?> InstalledDashboardVersion() =>
-        HasDashboard ? Updates.ParseVersion((await runner.Run(LinuxLayout.Dashboard, "--version")).Output) : null;
+    enum App { Cli, Dashboard }
+
+    static string Dir(App app) => app == App.Cli ? LinuxLayout.CliDir : LinuxLayout.DashboardDir;
+    static bool IsPackaged(App app) => Dir(app) == (app == App.Cli ? LinuxLayout.PackageDir : LinuxLayout.DashboardPackageDir);
+    static string PackageName(App app) => app == App.Cli ? "dockyard" : "dockyard-dashboard";
+
+    public static bool IsPackagedApp(string component) => IsPackaged(component == ComponentRules.DashboardId ? App.Dashboard : App.Cli);
 
     // Setup runs from a download and can be newer than what is installed.
-    async Task<Version?> InstalledAppVersion()
+    async Task<Version?> AppVersion(App app)
     {
-        if (!File.Exists(LinuxLayout.InstalledExe)) return null;
-        if (LinuxLayout.InstallDir == LinuxLayout.HomeDir)
-            return File.Exists(LinuxLayout.VersionFile) ? Updates.ParseVersion(await File.ReadAllTextAsync(LinuxLayout.VersionFile)) : null;
-        var dpkg = await root.TryRun("dpkg-query", "-W", "-f", "${Version}", "dockyard");
-        return Updates.ParseVersion(dpkg is { ExitCode: 0 } ? dpkg.Output : (await root.TryRun("rpm", "-q", "--qf", "%{VERSION}", "dockyard"))?.Output);
+        if (!IsPackaged(app))
+        {
+            var file = LinuxLayout.VersionFileIn(Dir(app));
+            return File.Exists(file) ? Updates.ParseVersion(await File.ReadAllTextAsync(file)) : null;
+        }
+        var dpkg = await root.TryRun("dpkg-query", "-W", "-f", "${Version}", PackageName(app));
+        return Updates.ParseVersion(dpkg is { ExitCode: 0 } ? dpkg.Output : (await root.TryRun("rpm", "-q", "--qf", "%{VERSION}", PackageName(app)))?.Output);
     }
 
     public static async Task<Release?> Latest(string component) => component switch
@@ -44,22 +55,10 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
         "Engine" => Updates.LinuxDocker,
         "Compose" => Updates.LinuxCompose,
         "Buildx" => Updates.LinuxBuildx,
-        // One package holds the command and the tray, so the update is the command's.
         nameof(Component.DockyardCli) => await Updates.LatestComponentAsset(Updates.CliComponent, LinuxLayout.AppPackage("apt")),
-        ComponentRules.DashboardId => IsTarball
-            ? TarballDashboardLatest(await Updates.LatestComponentAsset(Updates.CliComponent, LinuxLayout.Tarball), TarballVersion())
-            : await Updates.LatestComponentAsset(Updates.DashboardComponent, LinuxLayout.DashboardPackage("apt")),
+        ComponentRules.DashboardId => await Updates.LatestComponentAsset(Updates.DashboardComponent, LinuxLayout.DashboardPackage("apt")),
         _ => null,
     };
-
-    // Neither apt nor dnf: the app is the CLI's tarball in the user's home, the dashboard included.
-    public static bool IsTarball => LinuxLayout.InstallDir == LinuxLayout.HomeDir;
-
-    static Version? TarballVersion() => File.Exists(LinuxLayout.VersionFile) ? Updates.ParseVersion(File.ReadAllText(LinuxLayout.VersionFile)) : null;
-
-    // The dashboard's own release has only packages, so in the tarball it is as new as the command it came with.
-    internal static Release? TarballDashboardLatest(Release? cliLatest, Version? installedCli) =>
-        cliLatest is not null && (installedCli is null || cliLatest.Version > installedCli) ? cliLatest : null;
 
     public async Task UpdateDockerPackages(Action<string> log)
     {
@@ -111,75 +110,83 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
 
     public Task StopDashboard() => runner.StopMatching("/dockyard-dashboard$");
 
-    // The package or tarball holds the command, the tray and the dashboard, so the running ones go before it is replaced.
+    // Each app's package or tarball holds a tray, so the running ones go before one is replaced.
     public async Task StopApps()
     {
         await runner.StopMatching("/dockyard-tray$");
         await StopDashboard();
     }
 
-    // From the dashboard's own release, as a package; the app stays as it is.
-    public async Task UpdateDashboard(Action<string> log)
+    public Task UpdateCli(Action<string> log, string? tag) => Place(log, App.Cli, tag);
+    public Task UpdateDashboard(Action<string> log, string? tag) => Place(log, App.Dashboard, tag);
+
+    public async Task SetCli(Action<string> log, bool installed)
     {
-        await StopDashboard();
-        var os = OsRelease.Parse(await File.ReadAllTextAsync("/etc/os-release"));
-        await InstallPackages(log, os.PackageManager, app: false, dashboard: true, tag: null);
+        if (installed) await Place(log, App.Cli, tag: null);
+        else await Remove(log, App.Cli);
     }
 
     public async Task SetDashboard(Action<string> log, bool installed)
     {
         await StopDashboard();
-        var os = OsRelease.Parse(await File.ReadAllTextAsync("/etc/os-release"));
-        if (LinuxLayout.InstallDir == LinuxLayout.HomeDir)
-        {
-            if (installed) await InstallFromTarball(log, dashboard: true, tag: null);
-            else
-            {
-                foreach (var name in LinuxLayout.DashboardFiles) File.Delete(Path.Combine(LinuxLayout.HomeDir, name));
-                log("Removed the dashboard");
-            }
-            return;
-        }
-        if (installed)
-        {
-            var withApp = await Updates.BringsCliAlong();
-            await InstallPackages(log, os.PackageManager, app: withApp, dashboard: true, tag: null);
-        }
-        else await RemoveDashboardPackage(log, os.PackageManager);
+        if (installed) await Place(log, App.Dashboard, tag: null);
+        else await Remove(log, App.Dashboard);
     }
 
-    // Puts the app in place. A copy running from where it is installed only has to line up the dashboard.
-    public async Task InstallApp(Action<string> log, bool dashboard, string? tag)
+    // Puts the apps chosen in place and takes the others away; one running from where it is installed stays as it is.
+    public async Task InstallApps(Action<string> log, bool cli, bool dashboard)
+    {
+        var change = LinuxLayout.AppsToChange(ThisApp.Current, RunsFromInstallLocation, cli, HasCli, dashboard, HasDashboard);
+        if (change.PlaceCli) await Place(log, App.Cli, tag: null);
+        if (change.PlaceDashboard) await Place(log, App.Dashboard, tag: null);
+        if (change.RemoveDashboard) await Remove(log, App.Dashboard);
+        if (change.RemoveCli) await Remove(log, App.Cli);
+    }
+
+    async Task Place(Action<string> log, App app, string? tag)
     {
         var os = OsRelease.Parse(await File.ReadAllTextAsync("/etc/os-release"));
-        var replace = tag is not null || !RunsFromInstallLocation;
-        if (!os.HasPackages)
-        {
-            if (replace) await InstallFromTarball(log, dashboard, tag);
-            else if (HasDashboard != dashboard) await SetDashboard(log, dashboard);
-            return;
-        }
-        if (replace) await InstallPackages(log, os.PackageManager, app: true, dashboard, tag);
-        if (HasDashboard && !dashboard) await RemoveDashboardPackage(log, os.PackageManager);
-        else if (!HasDashboard && dashboard) await InstallPackages(log, os.PackageManager, app: false, dashboard: true, tag);
+        if (os.HasPackages) await InstallPackage(log, os.PackageManager, app, tag);
+        else await InstallFromTarball(log, app, tag);
     }
 
-    async Task InstallPackages(Action<string> log, string? packageManager, bool app, bool dashboard, string? tag)
+    async Task Remove(Action<string> log, App app)
+    {
+        if (IsPackaged(app))
+        {
+            var os = OsRelease.Parse(await File.ReadAllTextAsync("/etc/os-release"));
+            string[] command = os.PackageManager == "dnf"
+                ? ["dnf", "-y", "-q", "remove", PackageName(app)]
+                : ["env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "remove", "-y", "-qq", PackageName(app)];
+            var r = await root.RunElevated(command);
+            foreach (var line in LinuxRoot.Lines(r.Output + r.Error).TakeLast(4)) log("  " + line);
+            if (r.ExitCode != 0) throw new InvalidOperationException($"Removing {PackageName(app)} failed ({r.ExitCode}): {LinuxRoot.Lines(r.Error).LastOrDefault()}");
+        }
+        else
+        {
+            var dir = app == App.Cli ? LinuxLayout.HomeDir : LinuxLayout.DashboardHomeDir;
+            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+            if (app == App.Cli && new FileInfo(LinuxLayout.HomeLink).LinkTarget is not null) File.Delete(LinuxLayout.HomeLink);
+        }
+        log(app == App.Cli ? "Removed the dockyard command" : "Removed the dashboard");
+    }
+
+    async Task InstallPackage(Action<string> log, string? packageManager, App app, string? tag)
     {
         var dir = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
         try
         {
-            List<string> packages = [];
-            log("Downloading Dockyard");
-            if (app) packages.Add(await Updates.ReleaseAssetOrLocal(LinuxLayout.AppPackage(packageManager), dir, tag));
-            if (dashboard) packages.Add(await Updates.DownloadComponentAsset(Updates.DashboardComponent, LinuxLayout.DashboardPackage(packageManager), dir));
+            log($"Downloading {PackageName(app)}");
+            var package = app == App.Cli
+                ? await Updates.DownloadComponentAsset(Updates.CliComponent, LinuxLayout.AppPackage(packageManager), dir, tag)
+                : await Updates.DownloadComponentAsset(Updates.DashboardComponent, LinuxLayout.DashboardPackage(packageManager), dir, tag);
             // apt hands local packages to its unprivileged _apt user.
             File.SetUnixFileMode(dir, (UnixFileMode)0b111_101_101);
-            foreach (var package in packages) File.SetUnixFileMode(package, (UnixFileMode)0b110_100_100);
+            File.SetUnixFileMode(package, (UnixFileMode)0b110_100_100);
             string[] command = packageManager == "dnf"
-                ? ["dnf", "-y", "-q", "install", .. packages]
-                : ["env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y", "-qq", "--allow-downgrades", .. packages];
-            log($"Installing {string.Join(", ", packages.Select(Path.GetFileName))}");
+                ? ["dnf", "-y", "-q", "install", package]
+                : ["env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y", "-qq", "--allow-downgrades", package];
+            log($"Installing {Path.GetFileName(package)}");
             var r = await root.RunElevated(command);
             foreach (var line in LinuxRoot.Lines(r.Output + r.Error).TakeLast(4)) log("  " + line);
             if (r.ExitCode != 0) throw new InvalidOperationException($"{command[0]} failed ({r.ExitCode}): {LinuxRoot.Lines(r.Error).LastOrDefault()}");
@@ -190,39 +197,31 @@ sealed class LinuxComponents(ICommandRunner runner, LinuxRoot root)
         }
     }
 
-    async Task RemoveDashboardPackage(Action<string> log, string? packageManager)
-    {
-        string[] command = packageManager == "dnf"
-            ? ["dnf", "-y", "-q", "remove", "dockyard-dashboard"]
-            : ["env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "remove", "-y", "-qq", "dockyard-dashboard"];
-        var r = await root.RunElevated(command);
-        foreach (var line in LinuxRoot.Lines(r.Output + r.Error).TakeLast(4)) log("  " + line);
-        if (r.ExitCode != 0) throw new InvalidOperationException($"Removing the dashboard failed ({r.ExitCode}): {LinuxRoot.Lines(r.Error).LastOrDefault()}");
-        log("Removed the dashboard");
-    }
-
-    // Neither apt nor dnf: the release's tarball in the user's home, no root needed for the app itself.
-    async Task InstallFromTarball(Action<string> log, bool dashboard, string? tag)
+    // Neither apt nor dnf: the app's tarball in the user's home, no root needed for the app itself.
+    async Task InstallFromTarball(Action<string> log, App app, string? tag)
     {
         var dir = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
+        var home = app == App.Cli ? LinuxLayout.HomeDir : LinuxLayout.DashboardHomeDir;
         try
         {
-            log("Downloading Dockyard");
-            var tarball = await Updates.ReleaseAssetOrLocal(LinuxLayout.Tarball, dir, tag);
-            await runner.Check("tar", "-xzf", tarball, "-C", dir);
-            Directory.CreateDirectory(LinuxLayout.HomeDir);
-            foreach (var file in Directory.GetFiles(Path.Combine(dir, "Dockyard")))
+            log($"Downloading {PackageName(app)}");
+            var tarball = app == App.Cli
+                ? await Updates.DownloadComponentAsset(Updates.CliComponent, LinuxLayout.Tarball, dir, tag)
+                : await Updates.DownloadComponentAsset(Updates.DashboardComponent, LinuxLayout.DashboardTarball, dir, tag);
+            var extracted = Path.Combine(dir, "extracted");
+            Directory.CreateDirectory(extracted);
+            await runner.Check("tar", "-xzf", tarball, "-C", extracted);
+            var folder = Directory.GetDirectories(extracted).Single();
+            Directory.CreateDirectory(home);
+            foreach (var file in Directory.GetFiles(folder)) File.Move(file, Path.Combine(home, Path.GetFileName(file)), overwrite: true);
+            await File.WriteAllTextAsync(LinuxLayout.VersionFileIn(home), Updates.ParseVersion(Path.GetFileName(tarball))?.ToString() ?? "");
+            if (app == App.Cli)
             {
-                var name = Path.GetFileName(file);
-                if (dashboard || !LinuxLayout.DashboardFiles.Contains(name)) File.Move(file, Path.Combine(LinuxLayout.HomeDir, name), overwrite: true);
+                Directory.CreateDirectory(Path.GetDirectoryName(LinuxLayout.HomeLink)!);
+                File.Delete(LinuxLayout.HomeLink);
+                File.CreateSymbolicLink(LinuxLayout.HomeLink, Path.Combine(home, LinuxLayout.Cli));
             }
-            if (!dashboard)
-                foreach (var name in LinuxLayout.DashboardFiles) File.Delete(Path.Combine(LinuxLayout.HomeDir, name));
-            await File.WriteAllTextAsync(LinuxLayout.VersionFile, Updates.ParseVersion(Path.GetFileName(tarball))?.ToString() ?? "");
-            Directory.CreateDirectory(Path.GetDirectoryName(LinuxLayout.HomeLink)!);
-            File.Delete(LinuxLayout.HomeLink);
-            File.CreateSymbolicLink(LinuxLayout.HomeLink, Path.Combine(LinuxLayout.HomeDir, LinuxLayout.Cli));
-            log($"Installed {LinuxLayout.HomeDir}");
+            log($"Installed {home}");
         }
         finally
         {

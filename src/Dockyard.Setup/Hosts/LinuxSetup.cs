@@ -21,7 +21,7 @@ sealed class LinuxSetup(LinuxRoot root, LinuxComponents components, ToolComponen
     {
         log(InstallPhases.Start(InstallPhases.Dockyard));
         if (LinuxComponents.HasDashboard && !request.Dashboard) await components.StopDashboard();
-        await components.InstallApp(log, request.Dashboard, tag: null);
+        await components.InstallApps(log, cli: !request.Without.Contains(nameof(Component.DockyardCli)), request.Dashboard);
         log(InstallPhases.Start(InstallPhases.DockerEngine));
         await InstallWithAgent(log);
         if (Environment.UserName == "root")
@@ -68,6 +68,15 @@ sealed class LinuxSetup(LinuxRoot root, LinuxComponents components, ToolComponen
         }
     }
 
+    // The autostart runs the tray of an app that is there: after one app goes, the other's.
+    public async Task FollowTray(Action<string> log)
+    {
+        if (!File.Exists(AutostartFile) || Environment.UserName == "root") return;
+        if (await File.ReadAllTextAsync(AutostartFile) == DesktopEntry.Autostart(LinuxLayout.InstalledExe)) return;
+        await WriteAutostart();
+        log($"{Paths.AppName} autostarts {LinuxLayout.InstalledExe} at login");
+    }
+
     public async Task Uninstall(Action<string> log, bool removeData, bool silent, IEngineHost host)
     {
         if (File.Exists(AutostartFile)) File.Delete(AutostartFile);
@@ -75,10 +84,12 @@ sealed class LinuxSetup(LinuxRoot root, LinuxComponents components, ToolComponen
         await Https.Disable(host, Settings.Load(), log, silent);
         if (Directory.Exists(Paths.SettingsDir)) Directory.Delete(Paths.SettingsDir, recursive: true);
         if (removeData) log("Images and containers belong to the system's Docker and were kept; docker system prune removes them");
-        // The CLI last, as a package in the script or as the tarball's folder: it is what finishes an uninstall that stopped halfway.
+        // Both apps' packages in the script, then the tarballs' folders, the running app's last: it is what finishes an
+        // uninstall that stopped halfway.
         await UninstallWithConfig(log);
-        if (Directory.Exists(LinuxLayout.HomeDir)) Directory.Delete(LinuxLayout.HomeDir, recursive: true);
         if (new FileInfo(LinuxLayout.HomeLink).LinkTarget is not null) File.Delete(LinuxLayout.HomeLink);
+        foreach (var dir in LinuxLayout.HomeDirsToRemove(Paths.Self))
+            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
     }
 
     // The setup script runs as root but has no JSON tools, so the merged file is prepared here and handed to it.
