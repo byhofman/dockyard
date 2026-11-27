@@ -653,5 +653,15 @@
       <Setter Property="MinHeight" Value="34" />
       <Setter Property="Padding" Value="12,0" />
     </Style>
+    <!-- Avalonia draws Windows' caption buttons with a full-screen one, which Windows apps do not have and which would sit
+         on the gear: the row keeps room for minimize, maximize and close only. -->
+    <Style Selector=":is(Control)#PART_FullScreenButton">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <!-- The top row shows the logo and name itself: the drawn title would sit on top of them. The window keeps its Title for
+         the taskbar and Alt+Tab. -->
+    <Style Selector="WindowDrawnDecorations TextBlock">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
   </Application.Styles>
 </Application>
