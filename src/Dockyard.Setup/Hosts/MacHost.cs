@@ -94,6 +94,9 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
         return restart;
     }
 
+    // The dockyard command is a file of its own in ~/.dockyard/cli, outside Dockyard.app with the tray and the dashboard.
+    public bool SelfUpdateStops(string app) => false;
+
     public bool RunsFromInstallLocation => MacSetup.RunsFromInstallLocation;
 
     public bool HasDashboard => MacComponents.HasDashboard;

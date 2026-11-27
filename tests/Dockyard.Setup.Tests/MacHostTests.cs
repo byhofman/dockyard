@@ -344,6 +344,16 @@ public sealed class MacInstallTests : IDisposable
         Assert.Empty(MacLayout.DashboardFiles(dir));
     }
 
+    [Theory]
+    [InlineData(ComponentRules.DashboardId)]
+    [InlineData(ComponentRules.TrayId)]
+    public void Updating_the_dockyard_command_leaves_the_apps_running(string app)
+    {
+        IEngineHost host = new MacHost(new FakeRunner());
+
+        Assert.False(host.SelfUpdateStops(app));
+    }
+
     [Fact]
     [SupportedOSPlatform("macos")]
     public async Task Starting_an_engine_that_already_answers_starts_no_second_helper()
