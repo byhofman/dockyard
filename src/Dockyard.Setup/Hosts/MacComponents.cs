@@ -52,7 +52,7 @@ sealed class MacComponents(ICommandRunner runner)
             {
                 log("Downloading the dashboard");
                 downloaded = Path.Combine(Path.GetTempPath(), $"dockyard-{Guid.NewGuid():N}");
-                var zip = await Updates.DownloadReleaseAsset(MacLayout.ZipAsset(engineOnly: false), downloaded, isPattern: true, tag);
+                var zip = await Updates.ReleaseAssetOrLocal(MacLayout.ZipAsset(engineOnly: false), downloaded, tag);
                 await runner.Check("/usr/bin/ditto", "-x", "-k", zip, downloaded);
                 source = Path.Combine(downloaded, "Dockyard.app", "Contents", "MacOS");
             }
@@ -70,7 +70,7 @@ sealed class MacComponents(ICommandRunner runner)
         }
         finally
         {
-            if (downloaded is not null) Directory.Delete(downloaded, recursive: true);
+            if (downloaded is not null && Directory.Exists(downloaded)) Directory.Delete(downloaded, recursive: true);
         }
     }
 
