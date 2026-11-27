@@ -16,6 +16,8 @@ static class CliApp
             c.SetApplicationName("dockyard");
             c.SetApplicationVersion(Commands.Version);
             c.PropagateExceptions();
+            // Without it Spectre drops an unknown option and runs the command anyway: setup --withot kind installs.
+            c.UseStrictParsing();
             c.Settings.Console = env.Console;
             c.Settings.Registrar.RegisterInstance(env);
             c.AddBranch("cluster", b =>

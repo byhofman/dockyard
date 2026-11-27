@@ -13,6 +13,18 @@ public sealed class SetupCommandTests
         new(Dockyard.Core.ComponentRules.DashboardId, "Dashboard", Flag: "dashboard"),
     ];
 
+    [Theory]
+    [InlineData("setup", "--silent", "--typo")]
+    [InlineData("component", "add", "kind", "--typo")]
+    public void An_unknown_option_is_refused_and_nothing_is_installed(params string[] args)
+    {
+        using var h = new CliHarness(Catalog) { HasTerminal = false, HasDesktop = false };
+
+        Assert.Equal(2, h.Run(args));
+
+        Assert.Empty(h.Host.Requests);
+    }
+
     [Fact]
     public void Setup_without_a_terminal_or_display_and_without_silent_asks_for_silent()
     {
