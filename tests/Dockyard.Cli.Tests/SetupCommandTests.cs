@@ -299,7 +299,7 @@ public sealed class SetupCommandTests
 
         Assert.Equal(0, h.Run("update", "--check"));
 
-        var lines = h.Output.Split('\n');
+        var lines = h.Output.ReplaceLineEndings("\n").Split('\n');
         Assert.Matches("^COMPONENT +INSTALLED +NEWEST +SOURCE +STATUS$", lines[0]);
         Assert.Matches("^kind +[0-9.]+ +2\\.0\\.0 +.+ +update available$", Assert.Single(lines, l => l.StartsWith("kind")));
         Assert.DoesNotContain(h.Host.Calls, c => c.StartsWith("update"));
