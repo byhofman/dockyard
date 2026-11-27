@@ -13,6 +13,19 @@ public sealed class LinuxHostTests
         Assert.False(LinuxLayout.IsInstalled(new HashSet<string>([LinuxLayout.CliExe, LinuxLayout.Dashboard]).Contains));
     }
 
+    [Fact]
+    public void A_packaged_install_without_the_tray_is_found_by_its_CLI_or_its_dashboard()
+    {
+        var cli = Path.Combine(LinuxLayout.PackageDir, LinuxLayout.Cli);
+        var dashboard = Path.Combine(LinuxLayout.PackageDir, LinuxLayout.DashboardName);
+        Assert.Equal(LinuxLayout.PackageDir, LinuxLayout.InstallDirWhere(path => path == cli));
+        Assert.Equal(LinuxLayout.PackageDir, LinuxLayout.InstallDirWhere(path => path == dashboard));
+        Assert.Equal(LinuxLayout.HomeDir, LinuxLayout.InstallDirWhere(_ => false));
+        Assert.True(LinuxLayout.IsInstalled(new HashSet<string>([LinuxLayout.InstalledMarker, cli]).Contains));
+        Assert.True(LinuxLayout.IsInstalled(new HashSet<string>([LinuxLayout.PolkitRule, dashboard]).Contains));
+        Assert.False(LinuxLayout.IsInstalled(new HashSet<string>([cli, dashboard]).Contains));
+    }
+
     [Theory]
     [InlineData("ID=ubuntu\nID_LIKE=debian\nVERSION_CODENAME=noble\nUBUNTU_CODENAME=noble\n", "ubuntu", "apt", "noble")]
     [InlineData("ID=debian\nVERSION_CODENAME=bookworm\n", "debian", "apt", "bookworm")]

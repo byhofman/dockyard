@@ -8,7 +8,7 @@ static class ComponentRules
     public const string DashboardId = "Dashboard";
     public const string TrayId = "Tray";
     public const string LastAppReason = "Dockyard needs an app to update and uninstall it: keep the CLI or the dashboard";
-    static readonly string[] Apps = [nameof(Component.DockyardCli), DashboardId];
+    static string[] Apps => ThisApp.Components;
 
     // Every name --with and --without accept on any system. Whether it exists on this one is a host's catalog's business.
     public static readonly string[] KnownFlags = ["cli", "dashboard", "tray", "compose", "buildx", "kind", "kubectl", "helm", "linux-engine", "windows-engine"];

@@ -57,7 +57,7 @@ sealed class WindowsHost : IEngineHost
 
     public bool IsInstalled => IsInstalledWhere(File.Exists);
     internal static bool IsInstalledWhere(Func<string, bool> exists) =>
-        exists(Paths.InstalledMarker) && (exists(Paths.DockyardCliExe) || exists(Paths.DashboardExe));
+        exists(Paths.InstalledMarker) && ThisApp.EitherInstalled(exists, Paths.DockyardCliExe, Paths.DashboardExe);
     public ICaKeyStore CaKeys => new DpapiCaKey(((IEngineHost)this).CaDirectory);
 
     public Task<bool> IsRunning(string engine) => Task.Run(() => engine == Linux ? wsl.IsRunning() : WindowsServiceEngine.IsRunning());

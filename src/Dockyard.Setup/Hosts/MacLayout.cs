@@ -60,7 +60,7 @@ static class MacLayout
     public static string InstalledExe => Path.Combine(AppBase, "Dockyard");
     public static string CliExe => Path.Combine(AppBase, "dockyard-cli");
     public static bool IsInstalled(Func<string, bool> exists) =>
-        exists(VmConfig) && exists(Docker) && (exists(CliExe) || exists(Path.Combine(AppBase, DashboardName)));
+        exists(VmConfig) && exists(Docker) && ThisApp.EitherInstalled(exists, CliExe, Path.Combine(AppBase, DashboardName));
     public static string Helper => Path.Combine(AppBase, "dockyard-host");
     public static string Assets => Directory.Exists(Path.Combine(AppBase, "..", "Resources", "vm"))
         ? Path.GetFullPath(Path.Combine(AppBase, "..", "Resources", "vm"))

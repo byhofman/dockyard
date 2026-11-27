@@ -19,6 +19,13 @@ static class ThisApp
 
     public static bool IsApp(RunningApp app) => app is RunningApp.Cli or RunningApp.Dashboard;
 
+    // The two apps' components, of which at least one stays.
+    public static readonly string[] Components = [nameof(Component.DockyardCli), ComponentRules.DashboardId];
+
+    // Dockyard is installed only with an app in place to update and uninstall it; each host knows where its two go.
+    public static bool EitherInstalled(Func<string, bool> exists, string cliExe, string dashboardExe) =>
+        exists(cliExe) || exists(dashboardExe);
+
     // Dockyard itself for updates and the installed version. The tray is part of neither app, so it goes by whichever is
     // installed, the dashboard first: at least one of the two always stays.
     public static string SelfComponent(RunningApp app, bool hasDashboard) => app switch
