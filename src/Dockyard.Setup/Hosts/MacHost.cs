@@ -62,6 +62,7 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
     public async Task<bool> Update(Action<string> log, IReadOnlyList<(string Component, Release? Release)> components)
     {
         var tools = Tools;
+        var restart = false;
         foreach (var (component, release) in components)
         {
             if (Core.Tools.Find(component) is { } tool)
@@ -71,9 +72,6 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
             }
             switch (component)
             {
-                case ComponentRules.DashboardId:
-                    await parts.UpdateBundle(log, release?.Tag);
-                    return true;
                 case "LinuxEngine": await vm.Update(log); break;
                 // The command, and dockyard-host and the VM files with it where no bundle brings its own.
                 case nameof(Component.DockyardCli):
@@ -83,11 +81,17 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
                         await parts.PlaceEngineParts(log, release?.Tag, refreshVm: true);
                         await vm.PrepareForInstall(log);
                     }
-                    return true;
+                    restart = true;
+                    break;
             }
         }
+        if (MacLayout.BundleUpdate(components) is { } bundle)
+        {
+            await parts.UpdateBundle(log, bundle.Tag);
+            restart = true;
+        }
         await MacSetup.FindBrewPlugins(log, tools);
-        return false;
+        return restart;
     }
 
     public bool RunsFromInstallLocation => MacSetup.RunsFromInstallLocation;
@@ -97,8 +101,20 @@ sealed class MacHost(ICommandRunner runner, Func<bool>? ping = null, Func<bool>?
 
     public async Task<bool> SetDashboard(Action<string> log, bool installed)
     {
-        if (installed) await parts.AddDashboard(log);
-        else await parts.RemoveDashboard(log);
+        if (!installed)
+        {
+            await parts.RemoveDashboard(log);
+            return false;
+        }
+        var hadBundle = MacComponents.HasBundle;
+        await parts.AddDashboard(log);
+        if (!hadBundle)
+        {
+            // The bundle's helper replaces the one in ~/.dockyard, which the host's launch agent still names.
+            await vm.PrepareForInstall(log);
+            await vm.ApplyEngineConfiguration(log);
+            await MacSetup.AddLoginItem(log);
+        }
         return false;
     }
 

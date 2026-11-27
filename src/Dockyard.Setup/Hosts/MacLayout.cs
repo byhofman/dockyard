@@ -42,19 +42,43 @@ static class MacLayout
     public static string TestcontainersLine => $"docker.host=unix://{DockerSocket}";
     public static string UserApplications => Path.Combine(Home, "Applications");
 
-    // Where the app belongs: where it already is when that is an Applications folder, otherwise ~/Applications.
-    public static string InstallLocation(string baseDirectory, string userApplications)
+    // Where the app belongs: where it already is when that is an Applications folder, otherwise the bundle that is installed
+    // (the dashboard's disk image puts it in /Applications), and ~/Applications only for a new one.
+    public static string InstallLocation(string baseDirectory, string userApplications, string? existing = null)
     {
         var bundle = Bundle(baseDirectory);
         var folder = bundle is null ? null : Path.GetDirectoryName(bundle);
-        return folder == "/Applications" || folder == userApplications ? bundle! : Path.Combine(userApplications, "Dockyard.app");
+        return folder == "/Applications" || folder == userApplications ? bundle! : existing ?? Path.Combine(userApplications, "Dockyard.app");
     }
+
+    // The login item's bundle, then /Applications, then ~/Applications.
+    public static string? ExistingBundle(string? launchAgentPlist, string userApplications, string systemApplications = "/Applications")
+    {
+        List<string> candidates = [];
+        if (LoginItemBundle(launchAgentPlist) is { } login) candidates.Add(login);
+        candidates.Add(Path.Combine(systemApplications, "Dockyard.app"));
+        candidates.Add(Path.Combine(userApplications, "Dockyard.app"));
+        return candidates.FirstOrDefault(IsDockyardBundle);
+    }
+
+    static string? LoginItemBundle(string? launchAgentPlist) =>
+        launchAgentPlist is not null && Regex.Match(launchAgentPlist, @"<string>([^<]+\.app)/Contents/MacOS/Dockyard</string>") is { Success: true } login
+            ? login.Groups[1].Value : null;
+
+    static string? ExistingBundleHere() =>
+        ExistingBundle(File.Exists(LaunchAgent) ? File.ReadAllText(LaunchAgent) : null, UserApplications);
+
+    // The bundle the batch updates: one for the tray and the dashboard together, and none without a release for it.
+    public static Release? BundleUpdate(IEnumerable<(string Component, Release? Release)> batch) =>
+        batch.Where(c => c.Component is ComponentRules.DashboardId or ComponentRules.TrayId).Select(c => c.Release).FirstOrDefault(r => r is not null);
+
+    public static string BundleLocation => InstallLocation(AppContext.BaseDirectory, UserApplications, ExistingBundleHere());
 
     // The files of the app that is or will be installed. The bare dockyard-macos-arm64 a one-liner downloads is no bundle,
     // and it installs into ~/Applications like any other run.
-    public static string AppBase => AppBaseFor(AppContext.BaseDirectory, UserApplications);
-    public static string AppBaseFor(string baseDirectory, string userApplications) =>
-        Path.Combine(InstallLocation(baseDirectory, userApplications), "Contents", "MacOS");
+    public static string AppBase => AppBaseFor(AppContext.BaseDirectory, UserApplications, ExistingBundleHere());
+    public static string AppBaseFor(string baseDirectory, string userApplications, string? existing = null) =>
+        Path.Combine(InstallLocation(baseDirectory, userApplications, existing), "Contents", "MacOS");
 
     // The bundle's own executable is the tray. The bundle holds the tray, the dashboard and the engine's parts; the CLI is
     // an app of its own outside it, so either can go without the other.
@@ -291,9 +315,7 @@ static class MacLayout
         List<string> candidates = [];
         foreach (var folder in new[] { userApplications, systemApplications })
             candidates.AddRange(new[] { "Dockyard.app", "Dockyard.app.new", "Dockyard.app.old" }.Select(name => Path.Combine(folder, name)));
-        if (launchAgentPlist is not null
-            && Regex.Match(launchAgentPlist, @"<string>([^<]+\.app)/Contents/MacOS/Dockyard</string>") is { Success: true } login)
-            candidates.Add(login.Groups[1].Value);
+        if (LoginItemBundle(launchAgentPlist) is { } login) candidates.Add(login);
         return candidates.Distinct().Where(IsDockyardBundle).ToList();
     }
 

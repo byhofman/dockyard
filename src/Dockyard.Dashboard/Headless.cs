@@ -1,4 +1,5 @@
 using Dockyard.Setup;
+using Dockyard.Shared;
 
 namespace Dockyard.Dashboard;
 
@@ -32,7 +33,8 @@ sealed record Launch(
     bool HasDesktop,
     Func<bool> HasTerminal,
     Action AttachConsole,
-    Func<string?, int> Window)
+    Func<string?, int> Window,
+    Action<string> OpenDashboard)
 {
     // The console is read only once it is attached: a Windows app that looks at it before has none, and keeps none.
     public static Launch ForThisMachine(Func<string?, int>? window = null) => new(
@@ -44,7 +46,22 @@ sealed record Launch(
         DockyardSetup.HasDesktop,
         () => DockyardSetup.HasTerminal,
         DockyardSetup.AttachParentConsole,
-        window ?? (_ => 0));
+        window ?? (_ => 0),
+        OpenInNewProcess);
+
+    // A process of its own, so that this one can exit when the setup is done.
+    static void OpenInNewProcess(string section)
+    {
+        if (LocalPipe.TrySend(LocalPipe.DashboardName, $"show {section}") || Environment.ProcessPath is null) return;
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath, ["--section", section]) { UseShellExecute = false })?.Dispose();
+        }
+        catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            Console.Error.WriteLine($"The dashboard could not be opened: {e.Message}");
+        }
+    }
 
     sealed class LateWriter(Func<TextWriter> target) : TextWriter
     {
@@ -73,7 +90,11 @@ static class Headless
             switch (command.Action)
             {
                 case AppAction.Setup:
-                    return setup.Setup(command.Setup with { Headless = !launch.HasDesktop }, progress, CancellationToken.None).GetAwaiter().GetResult();
+                {
+                    var code = setup.Setup(command.Setup with { Headless = !launch.HasDesktop }, progress, CancellationToken.None).GetAwaiter().GetResult();
+                    if (code == DockyardSetup.Ok && command.Setup.OpenDashboard) launch.OpenDashboard("tools");
+                    return code;
+                }
                 case AppAction.Update:
                     setup.Update(command.Components.Count == 0 ? null : command.Components, progress).GetAwaiter().GetResult();
                     break;

@@ -215,9 +215,18 @@ static partial class Updates
             File.Copy(local, copy, overwrite: true);
             return copy;
         }
-        var release = ReleaseTag(component, await VersionOf(component), tag) ?? (await LatestComponent(component))?.Tag
-            ?? throw new InvalidOperationException($"Could not read which {component} release is the latest (components.json on the release tagged index); check the connection to github.com, or pass the files with --assets");
+        var release = ReleaseTag(component, await VersionOf(component), tag) ?? (await LatestRequirementsMet(component)).Tag;
         return await DownloadReleaseAsset(release, assetPattern, targetDir);
+    }
+
+    // The index holds one release per component, so the newest one that fits is the latest, or none.
+    static async Task<ComponentEntry> LatestRequirementsMet(string component)
+    {
+        var entry = await LatestComponent(component)
+            ?? throw new InvalidOperationException($"Could not read which {component} release is the latest (components.json on the release tagged index); check the connection to github.com, or pass the files with --assets");
+        if (await RequirementsMet(entry)) return entry;
+        var needed = string.Join(", ", entry.Requires.Select(r => $"{r.Key} {r.Value}"));
+        throw new InvalidOperationException($"The latest {component} release needs {needed}; update that first, then try again");
     }
 
     internal static string? ReleaseTag(string component, Version? version, string? tag) =>

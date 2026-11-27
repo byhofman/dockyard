@@ -119,6 +119,31 @@ public sealed class UpdatesTests : IDisposable
     }
 
     [Fact]
+    public async Task The_latest_release_of_a_component_that_is_not_there_waits_for_what_it_requires()
+    {
+        github.Serve($"{Base}/download/index/components.json", """{ "cli": { "version": "2.0.0", "tag": "cli/2.0.0" }, "engine": { "version": "1.4.0", "tag": "engine/1.4.0", "requires": { "cli": "3.0.0" } } }""");
+        ServeRelease("engine/1.4.0", "dockyard-vm-1.4.0-aarch64.tar.gz", "vm");
+        Updates.InstalledComponent = c => Task.FromResult<Version?>(c == Updates.CliComponent ? new Version(2, 0, 0) : null);
+
+        var e = await Assert.ThrowsAsync<InvalidOperationException>(() => Updates.DownloadComponentAsset(Updates.EngineComponent, Updates.VmAsset, dir));
+
+        Assert.Contains("cli 3.0.0", e.Message);
+        Assert.DoesNotContain(github.Requested, url => url.Contains("engine/1.4.0/dockyard-vm"));
+    }
+
+    [Fact]
+    public async Task A_local_asset_wins_over_what_the_latest_release_requires()
+    {
+        github.Serve($"{Base}/download/index/components.json", """{ "engine": { "version": "1.4.0", "tag": "engine/1.4.0", "requires": { "cli": "3.0.0" } } }""");
+        File.WriteAllText(Path.Combine(dir, "dockyard-vm-1.4.0-aarch64.tar.gz"), "local");
+        var target = Directory.CreateTempSubdirectory().FullName;
+        Updates.LocalAssets = dir;
+        Updates.InstalledComponent = c => Task.FromResult<Version?>(c == Updates.CliComponent ? new Version(2, 0, 0) : null);
+        try { Assert.Equal("local", File.ReadAllText(await Updates.DownloadComponentAsset(Updates.EngineComponent, Updates.VmAsset, target))); }
+        finally { Directory.Delete(target, recursive: true); }
+    }
+
+    [Fact]
     public async Task A_named_release_wins_over_the_installed_one_and_over_local_files()
     {
         ServeRelease("tray/1.3.0", "Dockyard.Tray.zip", "named");

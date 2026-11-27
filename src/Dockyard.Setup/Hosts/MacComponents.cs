@@ -39,8 +39,9 @@ sealed class MacComponents(ICommandRunner runner)
             await File.ReadAllTextAsync(Path.Combine(MacLayout.Assets, "dockyard-release"))) is { } bundled
             ? new Release(bundled, bundled.ToString(), null) : null,
         nameof(Component.DockyardCli) => await Updates.LatestComponentAsset(Updates.CliComponent, MacLayout.CliAsset),
-        // The bundle holds the dashboard with the tray and the engine's parts, so its update is the whole bundle.
-        ComponentRules.DashboardId => await Updates.LatestComponentAsset(Updates.DashboardComponent, MacLayout.BundleZip),
+        // The bundle holds the dashboard with the tray and the engine's parts, so its update is the whole bundle, with or
+        // without the dashboard.
+        ComponentRules.DashboardId or ComponentRules.TrayId => await Updates.LatestComponentAsset(Updates.DashboardComponent, MacLayout.BundleZip),
         _ => null,
     };
 
@@ -61,7 +62,7 @@ sealed class MacComponents(ICommandRunner runner)
                 await runner.Check("/usr/bin/ditto", "-x", "-k", zip, downloaded);
                 source = Path.Combine(downloaded, "Dockyard.app");
             }
-            var target = MacLayout.InstallLocation(AppContext.BaseDirectory, MacLayout.UserApplications);
+            var target = MacLayout.BundleLocation;
             var incoming = target + ".new";
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             if (Directory.Exists(incoming)) Directory.Delete(incoming, recursive: true);

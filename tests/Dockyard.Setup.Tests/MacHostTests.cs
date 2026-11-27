@@ -278,6 +278,55 @@ public sealed class MacInstallTests : IDisposable
     }
 
     [Fact]
+    public void An_installed_bundle_is_found_by_the_login_item_then_in_applications_then_in_the_users_applications()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix paths");
+        var root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string Make(string folder)
+            {
+                var bundle = Path.Combine(root, folder, "Dockyard.app");
+                Directory.CreateDirectory(Path.Combine(bundle, "Contents"));
+                File.WriteAllText(Path.Combine(bundle, "Contents", "Info.plist"), $"<string>{MacLayout.BundleId}</string>");
+                return bundle;
+            }
+            var user = Path.Combine(root, "user");
+            var system = Path.Combine(root, "system");
+            Assert.Null(MacLayout.ExistingBundle(null, user, system));
+
+            var inUser = Make("user");
+            Assert.Equal(inUser, MacLayout.ExistingBundle(null, user, system));
+
+            var inSystem = Make("system");
+            Assert.Equal(inSystem, MacLayout.ExistingBundle(null, user, system));
+            var loginItem = MacLayout.LaunchAgentPlist(Path.Combine(inUser, "Contents", "MacOS", "Dockyard"));
+            Assert.Equal(inUser, MacLayout.ExistingBundle(loginItem, user, system));
+            Assert.Equal(inSystem, MacLayout.ExistingBundle(MacLayout.LaunchAgentPlist("/gone/Dockyard.app/Contents/MacOS/Dockyard"), user, system));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Theory]
+    [InlineData("/Users/a/Downloads/", "/Applications/Dockyard.app/Contents/MacOS")]
+    [InlineData("/Applications/Dockyard.app/Contents/MacOS/", "/Applications/Dockyard.app/Contents/MacOS")]
+    public void The_bare_command_works_on_the_bundle_that_is_already_installed(string baseDirectory, string expected)
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix paths");
+        Assert.Equal(expected, MacLayout.AppBaseFor(baseDirectory, "/Users/a/Applications", "/Applications/Dockyard.app"));
+    }
+
+    [Fact]
+    public void The_bundle_is_updated_once_whichever_of_its_parts_is_in_the_batch_and_only_with_a_release()
+    {
+        var release = new Release(new Version(2, 0, 0), "dashboard/2.0.0", null);
+        Assert.Same(release, MacLayout.BundleUpdate([(ComponentRules.TrayId, release), (ComponentRules.DashboardId, release)]));
+        Assert.Same(release, MacLayout.BundleUpdate([("Compose", null), (ComponentRules.TrayId, release)]));
+        Assert.Null(MacLayout.BundleUpdate([(ComponentRules.DashboardId, null), (nameof(Component.DockyardCli), release)]));
+        Assert.Null(MacLayout.BundleUpdate([]));
+    }
+
+    [Fact]
     public void Bundle_version_comes_from_the_installed_info_plist()
     {
         const string plist = "<key>CFBundleShortVersionString</key>\n  <string>1.2.3</string>";

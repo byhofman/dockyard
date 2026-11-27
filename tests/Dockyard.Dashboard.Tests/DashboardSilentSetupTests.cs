@@ -39,6 +39,7 @@ public sealed class DashboardSilentSetupTests
         public StringWriter Out { get; } = new();
         public StringWriter Error { get; } = new();
         public List<string?> Windows { get; } = [];
+        public List<string> Opened { get; } = [];
         public List<string[]> Workers { get; } = [];
         public int Attached { get; private set; }
         public bool SetupCreated { get; private set; }
@@ -54,7 +55,8 @@ public sealed class DashboardSilentSetupTests
             HasDesktop: HasDesktop,
             HasTerminal: () => HasTerminal,
             AttachConsole: () => Attached++,
-            Window: section => { Windows.Add(section); return 0; }));
+            Window: section => { Windows.Add(section); return 0; },
+            OpenDashboard: section => Opened.Add(section)));
     }
 
     [Fact]
@@ -99,6 +101,21 @@ public sealed class DashboardSilentSetupTests
         Assert.DoesNotContain("slow network", h.Out.ToString());
         Assert.Contains("slow network", h.Error.ToString());
         Assert.Contains("gone wrong", h.Error.ToString());
+    }
+
+    [Theory]
+    [InlineData(DockyardSetup.Ok, true, true)]
+    [InlineData(DockyardSetup.Ok, false, false)]
+    [InlineData(DockyardSetup.RebootRequired, true, false)]
+    public void A_resume_opens_the_dashboard_at_tools_only_after_success_when_asked(int code, bool openDashboard, bool opens)
+    {
+        var h = new Harness();
+        h.Setup.Code = code;
+
+        h.Run(openDashboard ? ["--setup", "--silent", "--resume", "--open-dashboard"] : ["--setup", "--silent", "--resume"]);
+
+        Assert.Equal(opens ? ["tools"] : [], h.Opened);
+        Assert.Empty(h.Windows);
     }
 
     [Fact]
