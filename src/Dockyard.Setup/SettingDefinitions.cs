@@ -71,7 +71,7 @@ public static class SettingDefinitions
 
     static string KubectlShellDescription => $"Adds k, completion, {ShellSetup.DoAndNowHere} to {Profiles}. Off takes them out again.";
 
-    static string DockctxDescription => $"Adds dockctx, short for dockyard ctx, to {Profiles} while the dockyard command is installed. Off takes it out again.";
+    static string DockctxDescription => $"dockctx for dockyard ctx in {Profiles}, while the dockyard command is installed. Off takes it out.";
 
     static string Profiles => OperatingSystem.IsWindows() ? "your PowerShell profiles and Git Bash's .bashrc"
         : OperatingSystem.IsMacOS() ? "your .zshrc" : "your .bashrc and .zshrc";
