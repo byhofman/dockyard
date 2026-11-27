@@ -11,6 +11,7 @@ public static class SettingDefinitions
     public const string StartEngineAtLogon = "start-engine-at-logon";
     public const string StopOtherEngineOnSwitch = "stop-other-engine-on-switch";
     public const string KubectlShell = "kubectl-shell";
+    public const string Dockctx = "dockctx";
     public const string Source = "source";
     public const string EngineFilePrefix = "engine-file:";
     public const string On = "on";
@@ -61,17 +62,19 @@ public static class SettingDefinitions
             all.Add(new(EngineFilePrefix + engine.Id, $"{engine.Name} engine settings", EngineFileDescription(engine.Id),
                 SettingKind.EngineFile, null, LinuxEngineOnly: false, NeedsAdmin: engine.Id == EngineSettings.Windows, EngineGroup));
         all.Add(new(KubectlShell, "Set up kubectl in my shell", KubectlShellDescription, SettingKind.Toggle, null, LinuxEngineOnly: false, NeedsAdmin: false, ShellGroup));
+        all.Add(new(Dockctx, "dockctx in my shell", DockctxDescription, SettingKind.Toggle, null, LinuxEngineOnly: false, NeedsAdmin: false, ShellGroup));
         all.Add(new(Source, "Download source", "Where docker, kind, kubectl and helm come from. Changing it moves them at once.",
             SettingKind.Choice, [ToolSource.PackageManager.Argument(), ToolSource.Dockyard.Argument()], LinuxEngineOnly: false, NeedsAdmin: false, ToolsGroup,
             ChoiceTitles: [PackageManager, DockyardSource]));
         return all;
     }
 
-    static string KubectlShellDescription =>
-        $"Adds k, completion, {ShellSetup.DoAndNowHere} to " +
-        (OperatingSystem.IsWindows() ? "your PowerShell profiles and Git Bash's .bashrc"
-            : OperatingSystem.IsMacOS() ? "your .zshrc" : "your .bashrc and .zshrc") +
-        ". Off takes them out again.";
+    static string KubectlShellDescription => $"Adds k, completion, {ShellSetup.DoAndNowHere} to {Profiles}. Off takes them out again.";
+
+    static string DockctxDescription => $"Adds dockctx, short for dockyard ctx, to {Profiles} while the dockyard command is installed. Off takes it out again.";
+
+    static string Profiles => OperatingSystem.IsWindows() ? "your PowerShell profiles and Git Bash's .bashrc"
+        : OperatingSystem.IsMacOS() ? "your .zshrc" : "your .bashrc and .zshrc";
 
     static string EngineFileDescription(string engine) => engine == EngineSettings.Windows
         ? "C:\\ProgramData\\docker\\config\\daemon.json. Applying asks for administrator approval and restarts the engine if it runs."

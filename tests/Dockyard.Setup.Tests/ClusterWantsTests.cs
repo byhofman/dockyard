@@ -16,7 +16,7 @@ public sealed class ClusterWantsTests : IDisposable
     }
 
     DockyardSetup For(FakeHost host, IClusterAgent? clusterAgent) =>
-        new(host, settings.Settings, new ShellProfiles((_, _) => { }, () => [])) { ClusterAgent = () => clusterAgent, ClusterFolder = folder };
+        new(host, settings.Settings, new ShellProfiles((_, _, _) => { }, _ => [])) { ClusterAgent = () => clusterAgent, ClusterFolder = folder };
 
     const string Yaml = "kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nnodes:\n- role: control-plane\n";
 

@@ -16,6 +16,8 @@ sealed class Settings
     public ToolSource Source { get; set; } = ToolSource.PackageManager;
     // k, completion, $do and $now in the shell's profile.
     public bool KubectlShell { get; set; }
+    // dockctx in the shell's profile while the dockyard command is installed.
+    public bool Dockctx { get; set; } = true;
 
     string file = Paths.SettingsFile;
     JsonObject loaded = [];
@@ -59,6 +61,7 @@ sealed class Settings
         ContainerDomains = current.ContainerDomains;
         Source = current.Source;
         KubectlShell = current.KubectlShell;
+        Dockctx = current.Dockctx;
         loaded = current.loaded;
     }
 

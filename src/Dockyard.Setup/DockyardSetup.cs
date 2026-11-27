@@ -8,10 +8,10 @@ using Dockyard.Kind;
 
 namespace Dockyard.Setup;
 
-// The kubectl block in the shell's profiles: written or taken out, and which profiles did not get it.
-internal sealed record ShellProfiles(Action<bool, Action<string>> Apply, Func<IReadOnlyList<string>> Missing)
+// Dockyard's blocks in the shell's profiles: written or taken out, and which profiles did not get one.
+internal sealed record ShellProfiles(Action<ShellSetup.Part, bool, Action<string>> Apply, Func<ShellSetup.Part, IReadOnlyList<string>> Missing)
 {
-    public static ShellProfiles User { get; } = new(ShellSetup.TryApply, () => ShellSetup.Missing().ToList());
+    public static ShellProfiles User { get; } = new(ShellSetup.TryApply, part => ShellSetup.Missing(part).ToList());
 }
 
 public sealed record UpdateStatus(ComponentRow Row, string? Error);
@@ -241,7 +241,7 @@ public sealed partial class DockyardSetup : IDisposable
         if (installed) settings.RemovedComponents.Remove(component.Id);
         else if (!settings.RemovedComponents.Contains(component.Id)) settings.RemovedComponents.Add(component.Id);
         settings.Save();
-        if (component.Id == nameof(Component.Kubectl)) ApplyShell(log);
+        if (component.Id is nameof(Component.Kubectl) or nameof(Component.DockyardCli)) ApplyShell(log);
     }
 
     // ids null updates everything the index has a newer release of.
@@ -474,7 +474,7 @@ public sealed partial class DockyardSetup : IDisposable
     public async Task Uninstall(bool removeData, IProgress<SetupProgress> progress, bool silent = false)
     {
         var log = Log(progress);
-        shell.Apply(false, log);
+        foreach (var part in Enum.GetValues<ShellSetup.Part>()) shell.Apply(part, false, log);
         await host.Uninstall(log, removeData, silent);
         log(removeData ? "Dockyard was removed, with its images and containers." : "Dockyard was removed. Images and containers were kept.");
     }
@@ -502,18 +502,24 @@ public sealed partial class DockyardSetup : IDisposable
     [GeneratedRegex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")]
     private static partial Regex ClusterName();
 
-    // Checks the profiles afterwards: a profile that did not get the block (Controlled Folder Access, a read-only file) turns
-    // the setting off again, so it never says on while k does not work. Never into root's profile from a setup run with sudo.
+    // Checks the profiles afterwards: a profile that did not get a block (Controlled Folder Access, a read-only file) turns
+    // its setting off again, so it never says on while k or dockctx does not work. Never into root's profile from a setup
+    // run with sudo.
     internal void ApplyShell(Action<string> log)
     {
         if (Environment.UserName == "root") return;
-        var enabled = settings.KubectlShell && !settings.RemovedComponents.Contains(nameof(Component.Kubectl));
-        shell.Apply(enabled, log);
+        ApplyShell(ShellSetup.Part.Kubectl, settings.KubectlShell && !settings.RemovedComponents.Contains(nameof(Component.Kubectl)), () => settings.KubectlShell = false, log);
+        ApplyShell(ShellSetup.Part.Dockctx, settings.Dockctx && !settings.RemovedComponents.Contains(nameof(Component.DockyardCli)), () => settings.Dockctx = false, log);
+    }
+
+    void ApplyShell(ShellSetup.Part part, bool enabled, Action turnOff, Action<string> log)
+    {
+        shell.Apply(part, enabled, log);
         if (!enabled) return;
-        var missing = shell.Missing();
+        var missing = shell.Missing(part);
         if (missing.Count == 0) return;
-        log($"kubectl could not be set up in {string.Join(" and ", missing)}, so the setting is off again");
-        settings.KubectlShell = false;
+        log($"{ShellSetup.Name(part)} could not be set up in {string.Join(" and ", missing)}, so the setting is off again");
+        turnOff();
         settings.Save();
     }
 
