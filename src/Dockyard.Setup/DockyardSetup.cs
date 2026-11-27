@@ -324,6 +324,9 @@ public sealed partial class DockyardSetup : IDisposable
     // Makes it the current context, as kubectl config use-context does.
     public void UseKubeContext(string name) => Kubeconfig().Use(name);
 
+    // Writes a kubeconfig holding only this context, with its certificates inlined, for a shell of its own. The caller deletes the file.
+    public string WriteContextKubeconfig(string context) => Kubeconfig().WriteContext(context);
+
     // Tells the engine's agent what every cluster's definition wants, after each change to one. With no Linux engine
     // running, as when only the Windows engine is, nothing is told: the agent keeps what it was told last. An agent that
     // answers with an error throws, since then nothing keeps the cloud provider, the forwarders or NFS running.

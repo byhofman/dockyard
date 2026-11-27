@@ -16,6 +16,7 @@ interface ITrayActions
     // The dashboard at a section, or where it was left when null.
     void OpenDashboard(string? section);
     void UseKubeContext(string name);
+    void OpenShell(string context);
     void Quit();
 }
 
@@ -51,6 +52,7 @@ sealed class TrayMenu
     readonly TrayMenuItem beforeQuit = new() { IsSeparator = true };
     readonly TrayMenuItem[] dashboardItems;
     IReadOnlyList<string> shownKubeContexts = [];
+    IReadOnlyList<string> shownShellContexts = [];
     IReadOnlyList<TrayContainer> shownContainers = [];
     TrayEngine? toggled;
 
@@ -59,6 +61,7 @@ sealed class TrayMenu
         this.actions = actions;
         Containers = new TrayMenuItem { Header = "Containers", IsVisible = false };
         KubeContexts = new TrayMenuItem { Header = "Kubernetes context", IsVisible = false };
+        ShellContexts = new TrayMenuItem { Header = "Open a shell on…", IsVisible = false };
         dashboardItems =
         [
             new TrayMenuItem { Header = "Open dashboard", Click = () => actions.OpenDashboard(null) },
@@ -71,11 +74,12 @@ sealed class TrayMenu
 
     public TrayMenuItem Containers { get; }
     public TrayMenuItem KubeContexts { get; }
+    public TrayMenuItem ShellContexts { get; }
     TrayMenuItem Quit { get; }
     readonly List<TrayMenuItem> engines = [];
 
     // Every item in order, shown or not.
-    public IReadOnlyList<TrayMenuItem> Items => [status, toggle, .. engines, afterEngines, Containers, KubeContexts, betweenBlocks, .. dashboardItems, beforeQuit, Quit];
+    public IReadOnlyList<TrayMenuItem> Items => [status, toggle, .. engines, afterEngines, Containers, KubeContexts, ShellContexts, betweenBlocks, .. dashboardItems, beforeQuit, Quit];
     public IReadOnlyList<TrayMenuItem> Visible => Items.Where(i => i.IsVisible).ToList();
     public TrayImage Icon { get; private set; } = new(TrayLevel.Stopped, null, false);
     public string Tooltip { get; private set; } = "Dockyard";
@@ -110,6 +114,7 @@ sealed class TrayMenu
         Containers.IsVisible = containers.Count > 0;
 
         SyncKubeContexts(state.KubeContexts ?? [], state.KubeContext);
+        SyncShellContexts(state.KubeContexts ?? []);
 
         var hasBlock = containers.Count > 0 || KubeContexts.IsVisible;
         foreach (var item in dashboardItems) item.IsVisible = state.HasDashboard;
@@ -151,6 +156,17 @@ sealed class TrayMenu
         }
         foreach (var item in KubeContexts.Items) item.IsChecked = item.Header == current;
         KubeContexts.IsVisible = contexts.Count > 0;
+    }
+
+    void SyncShellContexts(IReadOnlyList<string> contexts)
+    {
+        if (!contexts.SequenceEqual(shownShellContexts))
+        {
+            shownShellContexts = contexts;
+            ShellContexts.Items.Clear();
+            ShellContexts.Items.AddRange(contexts.Select(c => new TrayMenuItem { Header = c, Click = () => actions.OpenShell(c) }));
+        }
+        ShellContexts.IsVisible = contexts.Count > 0;
     }
 
     TrayMenuItem ContainerItem(TrayContainer container)

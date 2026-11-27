@@ -14,6 +14,7 @@ public sealed class TrayMenuTests
         public void OpenWeb(int port) => Calls.Add($"web {port}");
         public void OpenDashboard(string? section) => Calls.Add($"dashboard {section}");
         public void UseKubeContext(string name) => Calls.Add($"kube {name}");
+        public void OpenShell(string context) => Calls.Add($"shell {context}");
         public void Quit() => Calls.Add("quit");
     }
 
@@ -70,6 +71,26 @@ public sealed class TrayMenuTests
 
         Assert.Equal(["kube b"], actions.Calls);
         Assert.Equal([false, true], Item(menu, "Kubernetes context").Items.Select(i => i.IsChecked == true));
+    }
+
+    [Fact]
+    public void The_shell_submenu_has_an_item_per_context_that_opens_a_shell_on_it()
+    {
+        var (menu, actions) = Menu(State(kube: ["a", "b"], kubeCurrent: "a"));
+
+        var submenu = Item(menu, "Open a shell on…");
+        submenu.Items[1].Click!();
+
+        Assert.Equal(["a", "b"], submenu.Items.Select(i => i.Header));
+        Assert.Equal(["shell b"], actions.Calls);
+    }
+
+    [Fact]
+    public void Without_contexts_there_is_no_shell_submenu()
+    {
+        var (menu, _) = Menu(State(kube: []));
+
+        Assert.DoesNotContain(menu.Visible, i => i.Header == "Open a shell on…");
     }
 
     [Fact]
