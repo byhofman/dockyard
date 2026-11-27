@@ -401,6 +401,7 @@ public sealed class FacadeTests : IDisposable
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows only");
         settings.Settings.RemovedComponents = [nameof(Component.LinuxEngine)];
+        settings.Settings.Save();
         var setup = For(new WindowsHost(new FakeRunner()));
 
         var refused = await Assert.ThrowsAsync<InvalidOperationException>(() => setup.SetSetting("container-domains", "on", progress));

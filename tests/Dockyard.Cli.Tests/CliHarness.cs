@@ -49,6 +49,8 @@ sealed class CliHarness : IDisposable
             ColorSystem = ColorSystemSupport.NoColors,
             Interactive = InteractionSupport.Yes,
             Out = new AnsiConsoleOutput(output),
+            // Spectre's CI enrichers turn interactivity off on build servers, and these tests drive the prompts.
+            Enrichment = new ProfileEnrichment { UseDefaultEnrichers = false },
         });
         console.Profile.Width = 200;
         Console = new ScriptedConsole(console, Keys);
