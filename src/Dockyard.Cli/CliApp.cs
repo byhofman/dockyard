@@ -73,8 +73,6 @@ static class CliApp
             });
             c.AddCommand<HttpsCommand>("https").WithDescription("Trusted HTTPS for container domains, with Dockyard's own certificate authority: on or off.");
             c.AddCommand<ImportCommand>("import").WithDescription("Copies images, volumes and containers from Docker Desktop, which keeps them.");
-            c.AddCommand<CtxCommand>("ctx").WithDescription("Opens a shell on one kube context, with a kubeconfig of its own that goes when the shell closes; your current context stays as it is.")
-                .WithExample("ctx", "dev");
             c.AddCommand<VersionCommand>("version").WithDescription("Prints this command's version.");
         });
         return app;
